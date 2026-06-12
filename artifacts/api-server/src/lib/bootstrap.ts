@@ -147,10 +147,16 @@ async function ensureDefaultAdmin(client: pg.Client): Promise<void> {
   // subscription/company management console without being blocked by the
   // company_id NULL → "No tenant context" guard. company_id stays NULL — that
   // is correct and intentional for the cross-tenant super_admin.
+  // ON CONFLICT target must match an actual unique constraint/index.
+  // After the per-company migration:
+  //   - UNIQUE(username)                              → DROPPED
+  //   - UNIQUE(company_id, username)                  → covers tenant users
+  //   - UNIQUE(username) WHERE (company_id IS NULL)   → covers super_admin (partial index)
+  // Use the partial-index form so PostgreSQL can resolve the conflict target.
   const result = await client.query(
     `INSERT INTO public.users (username, password_hash, role, name, is_active)
      VALUES ($1, $2, $3, $4, true)
-     ON CONFLICT (username) DO UPDATE
+     ON CONFLICT (username) WHERE (company_id IS NULL) DO UPDATE
        SET role = CASE
              WHEN EXCLUDED.role = 'super_admin' AND public.users.role != 'super_admin'
                THEN 'super_admin'
