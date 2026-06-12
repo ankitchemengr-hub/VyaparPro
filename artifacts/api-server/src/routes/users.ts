@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { eq, and } from "drizzle-orm";
-import { db, usersTable, entitiesTable } from "@workspace/db";
+import { db, pool, usersTable, entitiesTable } from "@workspace/db";
 import {
   CreateUserBody,
   UpdateUserBody,
@@ -41,6 +41,53 @@ function toPublic(u: typeof usersTable.$inferSelect) {
   };
 }
 
+// Extract best-effort client IP from request headers (proxy-aware).
+function getClientIp(req: Request): string {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (typeof forwarded === "string") return forwarded.split(",")[0].trim();
+  return (req as any).ip ?? (req.socket as any)?.remoteAddress ?? "unknown";
+}
+
+// Write a user-management audit entry. Fire-and-forget — never throws so that
+// an audit-log failure never rolls back the actual operation.
+async function writeAuditLog(params: {
+  companyId: number;
+  action: string;
+  description: string;
+  actorId: number;
+  actorName: string;
+  targetUsername: string;
+  targetUserId: number;
+  oldRole?: string | null;
+  newRole?: string | null;
+  ipAddress: string;
+}): Promise<void> {
+  try {
+    const metadata = JSON.stringify({
+      targetUsername: params.targetUsername,
+      targetUserId: params.targetUserId,
+      oldRole: params.oldRole ?? null,
+      newRole: params.newRole ?? null,
+      ipAddress: params.ipAddress,
+    });
+    await pool.query(
+      `INSERT INTO audit_log (company_id, action, description, user_id, user_name, metadata)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        params.companyId,
+        params.action,
+        params.description,
+        params.actorId,
+        params.actorName,
+        metadata,
+      ]
+    );
+  } catch (err) {
+    // Log but never propagate — audit must not break the primary operation.
+    console.error("[audit_log] write failed", err);
+  }
+}
+
 // GET /users — only users within the caller's company.
 router.get("/users", requireAdmin, async (req, res): Promise<void> => {
   const companyId = getCompanyId(req);
@@ -60,6 +107,7 @@ router.post("/users", requireAdmin, async (req, res): Promise<void> => {
     return;
   }
   const companyId = getCompanyId(req);
+  const session = (req as any).session;
   const { password, name, role, entityId } = parsed.data;
   const username = parsed.data.username.trim();
   if (username.length < 3) {
@@ -110,6 +158,19 @@ router.post("/users", requireAdmin, async (req, res): Promise<void> => {
       })
       .returning();
     res.status(201).json(toPublic(created));
+
+    // Audit: new user created.
+    await writeAuditLog({
+      companyId,
+      action: "user_created",
+      description: `User "${username}" created with role "${role}"`,
+      actorId: session?.userId ?? 0,
+      actorName: session?.name ?? session?.username ?? "Unknown",
+      targetUsername: username,
+      targetUserId: created.id,
+      newRole: role,
+      ipAddress: getClientIp(req),
+    });
   } catch (err: any) {
     // Race condition: another admin may have just inserted the same username.
     if (err?.code === "23505") {
@@ -182,6 +243,56 @@ router.patch("/users/:id", requireAdmin, async (req, res): Promise<void> => {
     .returning();
 
   res.json(toPublic(updated));
+
+  // --- Audit entries (one per changed dimension) ---
+  const ip = getClientIp(req);
+  const actorId: number = session?.userId ?? 0;
+  const actorName: string = session?.name ?? session?.username ?? "Unknown";
+
+  if (parsed.data.password !== undefined && parsed.data.password.length > 0) {
+    await writeAuditLog({
+      companyId,
+      action: "password_changed",
+      description: `Password changed for user "${existing.username}" by "${actorName}"`,
+      actorId,
+      actorName,
+      targetUsername: existing.username,
+      targetUserId: existing.id,
+      oldRole: existing.role,
+      ipAddress: ip,
+    });
+  }
+
+  if (parsed.data.role !== undefined && parsed.data.role !== existing.role) {
+    await writeAuditLog({
+      companyId,
+      action: "role_changed",
+      description: `Role changed for "${existing.username}": "${existing.role}" → "${parsed.data.role}"`,
+      actorId,
+      actorName,
+      targetUsername: existing.username,
+      targetUserId: existing.id,
+      oldRole: existing.role,
+      newRole: parsed.data.role,
+      ipAddress: ip,
+    });
+  }
+
+  if (parsed.data.isActive !== undefined && parsed.data.isActive !== existing.isActive) {
+    const action = parsed.data.isActive ? "user_activated" : "user_deactivated";
+    const verb = parsed.data.isActive ? "activated" : "deactivated";
+    await writeAuditLog({
+      companyId,
+      action,
+      description: `User "${existing.username}" was ${verb} by "${actorName}"`,
+      actorId,
+      actorName,
+      targetUsername: existing.username,
+      targetUserId: existing.id,
+      oldRole: existing.role,
+      ipAddress: ip,
+    });
+  }
 });
 
 export default router;

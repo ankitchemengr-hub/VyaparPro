@@ -311,6 +311,32 @@ router.post("/subscriptions/create", async (req, res): Promise<void> => {
 
     const { rows } = await pool.query(`${SELECT_JOIN} WHERE s.id = $1`, [subRes.rows[0].id]);
     res.status(201).json(mapRow(rows[0]));
+
+    // Audit: log admin user creation (fire-and-forget, outside the transaction).
+    if (adminUsername) {
+      const session = (req as any).session;
+      const forwarded = (req.headers["x-forwarded-for"] as string | undefined);
+      const ip = forwarded ? forwarded.split(",")[0].trim() : ((req as any).ip ?? "unknown");
+      try {
+        await pool.query(
+          `INSERT INTO audit_log (company_id, action, description, user_id, user_name, metadata)
+           VALUES ($1, 'subscription_admin_created', $2, $3, $4, $5)`,
+          [
+            companyId,
+            `Admin user "${adminUsername}" created for new company "${body.companyName}"`,
+            session?.userId ?? 0,
+            session?.name ?? session?.username ?? "Super Admin",
+            JSON.stringify({
+              targetUsername: adminUsername,
+              newRole: "admin",
+              ipAddress: ip,
+            }),
+          ]
+        );
+      } catch (auditErr) {
+        console.error("[audit_log] subscription_admin_created write failed", auditErr);
+      }
+    }
   } catch (err) {
     await client.query("ROLLBACK");
     // Unique-violation on username (race between the duplicate check and insert)

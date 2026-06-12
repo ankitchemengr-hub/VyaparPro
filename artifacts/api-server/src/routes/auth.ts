@@ -307,4 +307,102 @@ router.put("/auth/permissions", async (req, res): Promise<void> => {
   }
 });
 
+// GET /auth/audit-log — user-management audit trail, super_admin only.
+// Returns password changes, role changes, user creation/activation events across
+// ALL companies. Regular admins/users cannot access this endpoint.
+// Optional query params: ?company_id=N  ?action=password_changed  ?limit=500
+router.get("/auth/audit-log", async (req, res): Promise<void> => {
+  const session = (req as any).session;
+  if (!session?.userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  // Re-check role from DB — never trust a potentially stale cookie.
+  const [caller] = await db
+    .select({ role: usersTable.role, isActive: usersTable.isActive })
+    .from(usersTable)
+    .where(eq(usersTable.id, session.userId));
+  if (!caller || !caller.isActive || caller.role !== "super_admin") {
+    res.status(403).json({ error: "Super admin access required" });
+    return;
+  }
+
+  const USER_MANAGEMENT_ACTIONS = [
+    "user_created",
+    "password_changed",
+    "role_changed",
+    "user_activated",
+    "user_deactivated",
+    "subscription_admin_created",
+  ];
+
+  const filterAction = String(req.query.action ?? "").trim();
+  const filterCompany = Number(req.query.company_id ?? 0);
+  const limit = Math.min(Number(req.query.limit ?? 500), 2000);
+
+  // Build dynamic WHERE clause.
+  const params: (string | number | string[])[] = [];
+  const conditions: string[] = [];
+
+  // Always restrict to user-management action types.
+  const actionList = filterAction && USER_MANAGEMENT_ACTIONS.includes(filterAction)
+    ? [filterAction]
+    : USER_MANAGEMENT_ACTIONS;
+  params.push(actionList);
+  conditions.push(`action = ANY($${params.length})`);
+
+  if (filterCompany > 0) {
+    params.push(filterCompany);
+    conditions.push(`company_id = $${params.length}`);
+  }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  params.push(limit);
+
+  const { rows } = await pool.query(
+    `SELECT
+       al.id,
+       al.company_id,
+       c.name AS company_name,
+       al.action,
+       al.description,
+       al.user_id       AS actor_id,
+       al.user_name     AS actor_name,
+       al.metadata,
+       al.created_at
+     FROM audit_log al
+     LEFT JOIN companies c ON c.id = al.company_id
+     ${where}
+     ORDER BY al.created_at DESC
+     LIMIT $${params.length}`,
+    params
+  );
+
+  res.json(
+    rows.map((r) => {
+      let meta: Record<string, unknown> = {};
+      try {
+        meta = typeof r.metadata === "string" ? JSON.parse(r.metadata) : {};
+      } catch {
+        // malformed metadata — return empty
+      }
+      return {
+        id: Number(r.id),
+        companyId: Number(r.company_id),
+        companyName: r.company_name ?? null,
+        action: r.action,
+        description: r.description ?? null,
+        actorId: Number(r.actor_id),
+        actorName: r.actor_name ?? null,
+        targetUsername: (meta.targetUsername as string) ?? null,
+        targetUserId: (meta.targetUserId as number) ?? null,
+        oldRole: (meta.oldRole as string) ?? null,
+        newRole: (meta.newRole as string) ?? null,
+        ipAddress: (meta.ipAddress as string) ?? null,
+        createdAt: new Date(r.created_at).toISOString(),
+      };
+    })
+  );
+});
+
 export default router;
