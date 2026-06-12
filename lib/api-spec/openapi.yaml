@@ -1,22 +1,32 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Shradha Oil Center ERP API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
-    description: Health operations
+  - name: auth
+  - name: products
+  - name: entities
+  - name: invoices
+  - name: payments
+  - name: rewards
+  - name: manufacturing
+  - name: dashboard
+  - name: reports
+  - name: subscriptions
+  - name: settings
+  - name: system
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,13 +34,5017 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # SYSTEM
+  /system/config:
+    get:
+      operationId: getSystemConfig
+      tags: [system]
+      summary: Get deployment/system config (public)
+      responses:
+        "200":
+          description: System config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemConfig"
+
+  /system/companies:
+    get:
+      operationId: getCompanies
+      tags: [system]
+      summary: List all tenant companies (super_admin only)
+      responses:
+        "200":
+          description: Companies
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CompanyOption"
+        "403":
+          description: Super admin access required
+
+  /system/companies-public:
+    get:
+      operationId: getPublicCompanies
+      tags: [system]
+      summary: List tenant companies for the login screen company switcher (public)
+      responses:
+        "200":
+          description: Companies
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CompanyOption"
+
+  /system/active-company:
+    post:
+      operationId: setActiveCompany
+      tags: [system]
+      summary: Switch the super_admin into a company (super_admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetActiveCompanyInput"
+      responses:
+        "200":
+          description: Active company set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActiveCompany"
+        "403":
+          description: Super admin access required
+        "404":
+          description: Company not found
+
+  # AUTH
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSession"
+        "401":
+          description: Invalid credentials
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Logout
+      responses:
+        "204":
+          description: Logged out
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current session
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSession"
+        "401":
+          description: Not authenticated
+
+  /auth/permissions:
+    get:
+      operationId: getRolePermissions
+      tags: [auth]
+      summary: Get role permissions matrix
+      responses:
+        "200":
+          description: Permissions matrix
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RolePermission"
+
+    put:
+      operationId: updateRolePermissions
+      tags: [auth]
+      summary: Update role permissions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RolePermissionsUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RolePermission"
+
+  # SETTINGS (admin only)
+  /settings:
+    get:
+      operationId: getAppSettings
+      tags: [settings]
+      summary: Get application settings (default invoice template, etc.)
+      responses:
+        "200":
+          description: App settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppSettings"
+    put:
+      operationId: updateAppSettings
+      tags: [settings]
+      summary: Update application settings (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppSettingsUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppSettings"
+        "403":
+          description: Admin access required
+
+  /print-settings:
+    get:
+      operationId: getPrintSettings
+      tags: [settings]
+      summary: Get per-company invoice print settings (merged with defaults)
+      responses:
+        "200":
+          description: Print settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrintSettings"
+    put:
+      operationId: updatePrintSettings
+      tags: [settings]
+      summary: Update per-company invoice print settings (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PrintSettingsUpdate"
+      responses:
+        "200":
+          description: Updated print settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrintSettings"
+        "403":
+          description: Admin access required
+
+  /number-series:
+    get:
+      operationId: listNumberSeries
+      tags: [settings]
+      summary: List document number series configs (invoice / order / quotation)
+      responses:
+        "200":
+          description: Number series list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/NumberSeries"
+
+  /number-series/{seriesType}:
+    put:
+      operationId: updateNumberSeries
+      tags: [settings]
+      summary: Update a document number series config (admin only)
+      parameters:
+        - name: seriesType
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [invoice, order, quotation]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NumberSeriesUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NumberSeries"
+        "403":
+          description: Admin access required
+
+  /system/backup-settings:
+    get:
+      operationId: getBackupSettings
+      tags: [system]
+      summary: Get automatic-backup cadence preferences (admin only)
+      responses:
+        "200":
+          description: Backup settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackupSettings"
+        "403":
+          description: Admin access required
+    put:
+      operationId: updateBackupSettings
+      tags: [system]
+      summary: Update automatic-backup cadence preferences (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BackupSettingsUpdate"
+      responses:
+        "200":
+          description: Updated backup settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackupSettings"
+        "403":
+          description: Admin access required
+
+  /system/backups:
+    get:
+      operationId: listBackups
+      tags: [system]
+      summary: List backup history (admin only)
+      responses:
+        "200":
+          description: Backup history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BackupHistoryItem"
+        "403":
+          description: Admin access required
+
+  /system/restore:
+    post:
+      operationId: restoreBackup
+      tags: [system]
+      summary: Restore company data from an uploaded backup package (admin only, destructive)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RestoreBackupInput"
+      responses:
+        "200":
+          description: Restore completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RestoreResult"
+        "400":
+          description: Invalid or mismatched backup package
+        "403":
+          description: Admin access required
+
+  /system/reset:
+    post:
+      operationId: resetCompanyData
+      tags: [system]
+      summary: Wipe all company business data to start fresh (admin only, destructive)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResetDataInput"
+      responses:
+        "200":
+          description: Reset completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResetResult"
+        "400":
+          description: Confirmation token missing or incorrect
+        "403":
+          description: Admin access required
+
+  /gstin-lookup:
+    get:
+      operationId: lookupGstin
+      tags: [settings]
+      summary: Fetch business details for a GSTIN (optional external provider)
+      parameters:
+        - name: gstin
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Lookup result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GstinLookupResult"
+
+  # USER ACCOUNTS (admin only)
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: List all user accounts (admin only)
+      responses:
+        "200":
+          description: Users list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UserAccount"
+        "403":
+          description: Admin access required
+    post:
+      operationId: createUser
+      tags: [users]
+      summary: Create a new user account (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserAccount"
+        "409":
+          description: Username already taken
+
+  /users/{id}:
+    patch:
+      operationId: updateUser
+      tags: [users]
+      summary: Update a user account — rename, change role, reset password, toggle active, or relink entity (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserAccount"
+
+  # PRODUCTS / INVENTORY
+  /products:
+    get:
+      operationId: listProducts
+      tags: [products]
+      summary: List products
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: group
+          in: query
+          schema:
+            type: string
+        - name: brand
+          in: query
+          schema:
+            type: string
+        - name: forSale
+          in: query
+          schema:
+            type: boolean
+        - name: forManufacturing
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Products list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+
+    post:
+      operationId: createProduct
+      tags: [products]
+      summary: Create product
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+
+  /products/{id}:
+    get:
+      operationId: getProduct
+      tags: [products]
+      summary: Get product
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "404":
+          description: Not found
+
+    patch:
+      operationId: updateProduct
+      tags: [products]
+      summary: Update product
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+
+    delete:
+      operationId: deleteProduct
+      tags: [products]
+      summary: Delete product
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /products/{id}/stock-movements:
+    get:
+      operationId: getProductStockMovements
+      tags: [products]
+      summary: Get stock movement history
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Movements
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StockMovement"
+
+    post:
+      operationId: createStockMovement
+      tags: [products]
+      summary: Create stock movement
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StockMovementInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockMovement"
+
+  /products/groups:
+    get:
+      operationId: listProductGroups
+      tags: [products]
+      summary: List product groups
+      responses:
+        "200":
+          description: Groups
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /products/brands:
+    get:
+      operationId: listBrands
+      tags: [products]
+      summary: List brands
+      responses:
+        "200":
+          description: Brands
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  # ENTITIES (customers, vendors, workers, salesmen)
+  /entities:
+    get:
+      operationId: listEntities
+      tags: [entities]
+      summary: List entities
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [customer, vendor, worker, salesman]
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: mobile
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Entities
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Entity"
+
+    post:
+      operationId: createEntity
+      tags: [entities]
+      summary: Create entity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EntityInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entity"
+
+  /entities/lookup:
+    get:
+      operationId: lookupEntityByMobile
+      tags: [entities]
+      summary: Lookup entity by mobile
+      parameters:
+        - name: mobile
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Entity or null
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntityLookup"
+
+  /entities/{id}:
+    get:
+      operationId: getEntity
+      tags: [entities]
+      summary: Get entity
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Entity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entity"
+
+    patch:
+      operationId: updateEntity
+      tags: [entities]
+      summary: Update entity
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EntityUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entity"
+
+  /entities/{id}/ledger:
+    get:
+      operationId: getEntityLedger
+      tags: [entities]
+      summary: Get customer ledger
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Ledger
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntityLedger"
+    post:
+      operationId: createLedgerAdjustment
+      tags: [entities]
+      summary: Add a manual credit/debit adjustment to a customer ledger
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LedgerAdjustmentInput"
+      responses:
+        "201":
+          description: Created ledger entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LedgerEntry"
+
+  # INVOICES
+  /invoices:
+    get:
+      operationId: listInvoices
+      tags: [invoices]
+      summary: List invoices
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: customerId
+          in: query
+          schema:
+            type: integer
+        - name: salesmanId
+          in: query
+          schema:
+            type: integer
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [gst, non_gst]
+        - name: month
+          in: query
+          schema:
+            type: string
+        - name: year
+          in: query
+          schema:
+            type: integer
+        - name: dateFrom
+          in: query
+          description: Inclusive start date (YYYY-MM-DD) for invoice date filter
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+        - name: dateTo
+          in: query
+          description: Inclusive end date (YYYY-MM-DD) for invoice date filter
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, saved, cancelled]
+      responses:
+        "200":
+          description: Invoices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Invoice"
+
+    post:
+      operationId: createInvoice
+      tags: [invoices]
+      summary: Create invoice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvoiceInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+
+  /invoices/{id}:
+    get:
+      operationId: getInvoice
+      tags: [invoices]
+      summary: Get invoice
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Invoice
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+
+    patch:
+      operationId: updateInvoice
+      tags: [invoices]
+      summary: Update invoice
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvoiceUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+
+    delete:
+      operationId: deleteInvoice
+      tags: [invoices]
+      summary: Delete invoice
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # PAYMENTS
+  /payments:
+    get:
+      operationId: listPayments
+      tags: [payments]
+      summary: List payments
+      parameters:
+        - name: customerId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, approved, rejected]
+      responses:
+        "200":
+          description: Payments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Payment"
+
+    post:
+      operationId: logPayment
+      tags: [payments]
+      summary: Log a payment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+
+  /payments/{id}/approve:
+    post:
+      operationId: approvePayment
+      tags: [payments]
+      summary: Approve payment (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Approved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+
+  /payments/{id}/reject:
+    post:
+      operationId: rejectPayment
+      tags: [payments]
+      summary: Reject payment (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Rejected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+
+  # ACCOUNTS (Cash / UPI / Bank)
+  /accounts:
+    get:
+      operationId: listAccounts
+      tags: [accounts]
+      summary: List all accounts
+      responses:
+        "200":
+          description: Accounts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Account"
+    post:
+      operationId: createAccount
+      tags: [accounts]
+      summary: Create a new account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+
+  /accounts/{id}:
+    put:
+      operationId: updateAccount
+      tags: [accounts]
+      summary: Update an account
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+    delete:
+      operationId: deleteAccount
+      tags: [accounts]
+      summary: Delete (deactivate) an account
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # CASH BOOK — salesman cash collection
+  /cashbook:
+    get:
+      operationId: getCashbook
+      tags: [accounts]
+      summary: Get cash book summary (per-salesman pending cash + account balances)
+      responses:
+        "200":
+          description: Cashbook summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CashbookSummary"
+
+  /account-transactions:
+    get:
+      operationId: listAccountTransactions
+      tags: [accounts]
+      summary: List account transactions (cash in/out)
+      parameters:
+        - name: accountId
+          in: query
+          schema:
+            type: integer
+        - name: direction
+          in: query
+          schema:
+            type: string
+            enum: [in, out]
+        - name: from
+          in: query
+          schema:
+            type: string
+        - name: to
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AccountTransaction"
+    post:
+      operationId: createAccountTransaction
+      tags: [accounts]
+      summary: Record a Payment In or Payment Out against an account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountTransactionInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountTransaction"
+
+  /cashbook/collect:
+    post:
+      operationId: collectCashFromSalesman
+      tags: [accounts]
+      summary: Record cash collected from a salesman and deposit into an account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CollectCashInput"
+      responses:
+        "200":
+          description: Collected
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [collectedCount, totalAmount, account]
+                properties:
+                  collectedCount:
+                    type: integer
+                  totalAmount:
+                    type: number
+                  account:
+                    $ref: "#/components/schemas/Account"
+
+  # REWARD SCHEMES
+  /reward-schemes:
+    get:
+      operationId: listRewardSchemes
+      tags: [rewards]
+      summary: List reward schemes
+      responses:
+        "200":
+          description: Schemes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RewardScheme"
+
+    post:
+      operationId: createRewardScheme
+      tags: [rewards]
+      summary: Create reward scheme
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RewardSchemeInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RewardScheme"
+
+  /reward-schemes/{id}:
+    patch:
+      operationId: updateRewardScheme
+      tags: [rewards]
+      summary: Update scheme
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RewardSchemeUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RewardScheme"
+
+    delete:
+      operationId: deleteRewardScheme
+      tags: [rewards]
+      summary: Delete scheme
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /reward-progress:
+    get:
+      operationId: listRewardProgress
+      tags: [rewards]
+      summary: List reward progress for customers
+      parameters:
+        - name: customerId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Progress list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RewardProgress"
+
+  /reward-progress/{id}/disburse:
+    post:
+      operationId: disburseReward
+      tags: [rewards]
+      summary: Settle and disburse reward (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Disbursed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RewardProgress"
+
+  # MANUFACTURING
+  /boms:
+    get:
+      operationId: listBoms
+      tags: [manufacturing]
+      summary: List bills of materials
+      responses:
+        "200":
+          description: BOMs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Bom"
+
+    post:
+      operationId: createBom
+      tags: [manufacturing]
+      summary: Create BOM
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BomInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Bom"
+
+  /boms/{id}:
+    get:
+      operationId: getBom
+      tags: [manufacturing]
+      summary: Get BOM
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: BOM
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Bom"
+
+    patch:
+      operationId: updateBom
+      tags: [manufacturing]
+      summary: Update BOM
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BomUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Bom"
+
+  /workload:
+    get:
+      operationId: listWorkloadCards
+      tags: [manufacturing]
+      summary: List workload pipeline cards
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, processing, done]
+      responses:
+        "200":
+          description: Cards
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WorkloadCard"
+
+    post:
+      operationId: createWorkloadCard
+      tags: [manufacturing]
+      summary: Create workload card
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkloadCardInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkloadCard"
+
+  /purchases:
+    get:
+      operationId: listPurchases
+      tags: [purchases]
+      summary: List purchase bills
+      parameters:
+        - name: vendorId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Purchases
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Purchase"
+    post:
+      operationId: createPurchase
+      tags: [purchases]
+      summary: Create a purchase bill (atomic; adds stock + vendor payable)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePurchaseInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Purchase"
+
+  /purchases/{id}:
+    get:
+      operationId: getPurchase
+      tags: [purchases]
+      summary: Get a purchase bill with line items
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Purchase
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Purchase"
+
+  /manufacturing/assemble:
+    post:
+      operationId: assembleItem
+      tags: [manufacturing]
+      summary: Atomically assemble a finished product from a BOM
+      description: >
+        Runs a BOM recipe in a single SERIALIZABLE transaction: creates a
+        completed workload card, debits all required raw materials, credits the
+        finished product stock, and writes stock movements. All-or-nothing —
+        if any step fails (e.g. insufficient raw material) nothing is committed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssembleItemInput"
+      responses:
+        "201":
+          description: Assembly committed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkloadCard"
+        "400":
+          description: Invalid request (bad BOM, non-positive batches, etc.)
+        "409":
+          description: Insufficient raw material to assemble
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                  shortages:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        materialProductId: { type: integer }
+                        materialProductName: { type: string }
+                        required: { type: number }
+                        available: { type: number }
+                        unit: { type: string }
+
+  /workload/{id}:
+    patch:
+      operationId: updateWorkloadCard
+      tags: [manufacturing]
+      summary: Update workload card status/assignment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkloadCardUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkloadCard"
+
+  # DASHBOARD / ANALYTICS
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      summary: Dashboard KPI summary
+      responses:
+        "200":
+          description: Summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+
+  /dashboard/recent-invoices:
+    get:
+      operationId: getRecentInvoices
+      tags: [dashboard]
+      summary: Recent invoices for activity feed
+      responses:
+        "200":
+          description: Recent invoices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InvoiceSummary"
+
+  /dashboard/low-stock:
+    get:
+      operationId: getLowStockAlerts
+      tags: [dashboard]
+      summary: Low stock product alerts
+      responses:
+        "200":
+          description: Low stock items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LowStockAlert"
+
+  /dashboard/top-products:
+    get:
+      operationId: getTopProducts
+      tags: [dashboard]
+      summary: Top selling products
+      responses:
+        "200":
+          description: Top products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TopProduct"
+
+  /dashboard/capital:
+    get:
+      operationId: getCapitalSnapshot
+      tags: [dashboard]
+      summary: Admin-only capital + day-over-day growth
+      responses:
+        "200":
+          description: Capital snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CapitalSnapshot"
+        "403":
+          description: Forbidden
+
+  /dashboard/sales-trend:
+    get:
+      operationId: getSalesTrend
+      tags: [dashboard]
+      summary: Monthly sales trend data
+      responses:
+        "200":
+          description: Sales trend
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SalesTrendPoint"
+
+  # REPORTS
+  /reports/ledger:
+    get:
+      operationId: getLedgerReport
+      tags: [reports]
+      summary: Ledger report
+      parameters:
+        - name: entityId
+          in: query
+          schema:
+            type: integer
+        - name: from
+          in: query
+          schema:
+            type: string
+        - name: to
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Ledger entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LedgerEntry"
+
+  /reports/audit-log:
+    get:
+      operationId: getAuditLog
+      tags: [reports]
+      summary: System audit log
+      responses:
+        "200":
+          description: Audit entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AuditEntry"
+
+  /reports/sales:
+    get:
+      operationId: getSalesReport
+      tags: [reports]
+      summary: Sales report (invoices with totals)
+      parameters:
+        - { name: from, in: query, schema: { type: string } }
+        - { name: to, in: query, schema: { type: string } }
+        - { name: type, in: query, schema: { type: string, enum: [all, gst, non_gst] } }
+        - { name: customerId, in: query, schema: { type: integer } }
+        - { name: search, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Sales report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SalesReport"
+
+  /reports/sales/item-wise:
+    get:
+      operationId: getItemWiseSalesReport
+      tags: [reports]
+      summary: Item-wise sales report
+      parameters:
+        - { name: from, in: query, schema: { type: string } }
+        - { name: to, in: query, schema: { type: string } }
+        - { name: type, in: query, schema: { type: string, enum: [all, gst, non_gst] } }
+        - { name: search, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Item-wise sales
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemWiseSalesReport"
+
+  /reports/sales/customer-wise:
+    get:
+      operationId: getCustomerWiseSalesReport
+      tags: [reports]
+      summary: Customer-wise sales report
+      parameters:
+        - { name: from, in: query, schema: { type: string } }
+        - { name: to, in: query, schema: { type: string } }
+        - { name: type, in: query, schema: { type: string, enum: [all, gst, non_gst] } }
+        - { name: search, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Customer-wise sales
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerWiseSalesReport"
+
+  /reports/production:
+    get:
+      operationId: getProductionReport
+      tags: [reports]
+      summary: Production / manufacturing completion report
+      parameters:
+        - { name: from, in: query, schema: { type: string } }
+        - { name: to, in: query, schema: { type: string } }
+        - { name: search, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Production report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductionReport"
+
+  /reports/tax:
+    get:
+      operationId: getTaxReport
+      tags: [reports]
+      summary: Input vs output GST tax report
+      parameters:
+        - { name: from, in: query, schema: { type: string } }
+        - { name: to, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Tax report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaxReport"
+
+  /reports/profit-loss:
+    get:
+      operationId: getProfitLossReport
+      tags: [reports]
+      summary: Profit & Loss report
+      parameters:
+        - { name: from, in: query, schema: { type: string } }
+        - { name: to, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Profit & Loss
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfitLossReport"
+
+  /reports/commission:
+    get:
+      operationId: getCommissionReport
+      tags: [reports]
+      summary: Salesman commission report (liters sold x per-liter commission)
+      description: |
+        Admin sees all salesmen; a salesman sees only their own commission.
+        Commission accrues on delivered sales = invoice line liters * product commissionPerLiter.
+      parameters:
+        - { name: from, in: query, schema: { type: string } }
+        - { name: to, in: query, schema: { type: string } }
+        - { name: salesmanId, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: Commission report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommissionReport"
+
+  /search:
+    get:
+      operationId: globalSearch
+      tags: [dashboard]
+      summary: Global search across entities, invoices, products
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResults"
+
+  # WORKERS
+  /workers:
+    get:
+      operationId: listWorkers
+      tags: [workers]
+      summary: List workers
+      parameters:
+        - name: includeInactive
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Workers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Worker"
+    post:
+      operationId: createWorker
+      tags: [workers]
+      summary: Create worker
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkerInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Worker"
+
+  /workers/{id}:
+    patch:
+      operationId: updateWorker
+      tags: [workers]
+      summary: Update worker
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkerInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Worker"
+    delete:
+      operationId: deleteWorker
+      tags: [workers]
+      summary: Deactivate worker
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /workers/{id}/ledger:
+    get:
+      operationId: getWorkerLedger
+      tags: [workers]
+      summary: Get worker ledger (attendance + payments + balance)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Ledger
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkerLedger"
+
+  /worker-attendance:
+    get:
+      operationId: listWorkerAttendance
+      tags: [workers]
+      summary: List attendance for a given date
+      parameters:
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Attendance rows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WorkerAttendance"
+    post:
+      operationId: upsertWorkerAttendance
+      tags: [workers]
+      summary: Mark / update attendance for a worker on a date
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkerAttendanceInput"
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkerAttendance"
+
+  /worker-payments:
+    post:
+      operationId: createWorkerPayment
+      tags: [workers]
+      summary: Record a payment made to a worker
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkerPaymentInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkerPayment"
+
+  # EXPENSES
+  /expense-categories:
+    get:
+      operationId: listExpenseCategories
+      tags: [expenses]
+      summary: List expense categories
+      responses:
+        "200":
+          description: Categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ExpenseCategory"
+    post:
+      operationId: createExpenseCategory
+      tags: [expenses]
+      summary: Create expense category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExpenseCategoryInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExpenseCategory"
+
+  /expense-categories/{id}:
+    delete:
+      operationId: deleteExpenseCategory
+      tags: [expenses]
+      summary: Deactivate expense category
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /expenses:
+    get:
+      operationId: listExpenses
+      tags: [expenses]
+      summary: List expenses
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+        - name: to
+          in: query
+          schema:
+            type: string
+        - name: categoryId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Expenses
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExpenseList"
+    post:
+      operationId: createExpense
+      tags: [expenses]
+      summary: Record an expense
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExpenseInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Expense"
+
+  /expenses/{id}:
+    delete:
+      operationId: deleteExpense
+      tags: [expenses]
+      summary: Delete an expense
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /customer-orders:
+    get:
+      operationId: listCustomerOrders
+      tags: [customer-orders]
+      summary: List customer orders (admin sees all, customer sees own)
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, processing, production, ready_for_dispatch, dispatched, delivered, done, cancelled]
+      responses:
+        "200":
+          description: Orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CustomerOrder"
+    post:
+      operationId: createCustomerOrder
+      tags: [customer-orders]
+      summary: Place a new order (customer)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerOrderInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerOrder"
+
+  /customer-orders/{id}:
+    get:
+      operationId: getCustomerOrder
+      tags: [customer-orders]
+      summary: Get a single customer order with line items
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Order detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerOrderDetail"
+
+  /customer-orders/{id}/status:
+    patch:
+      operationId: updateCustomerOrderStatus
+      tags: [customer-orders]
+      summary: Admin updates the order status (processing auto-creates workload cards)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerOrderStatusUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerOrder"
+
+  # SUBSCRIPTIONS (SaaS module)
+  /subscriptions/dashboard:
+    get:
+      operationId: getSubscriptionDashboard
+      tags: [subscriptions]
+      summary: Subscription dashboard widgets (active, expired, expiring, MRR, ARR)
+      responses:
+        "200":
+          description: Dashboard stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionDashboard"
+
+  /subscriptions/charts:
+    get:
+      operationId: getSubscriptionCharts
+      tags: [subscriptions]
+      summary: Subscription chart series (monthly revenue, growth, expiry trend)
+      responses:
+        "200":
+          description: Chart series
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionCharts"
+
+  /subscriptions/alerts:
+    get:
+      operationId: getSubscriptionAlerts
+      tags: [subscriptions]
+      summary: List automated subscription alerts
+      responses:
+        "200":
+          description: Alerts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SubscriptionAlert"
+
+  /subscriptions/expiring:
+    get:
+      operationId: getExpiringSubscriptions
+      tags: [subscriptions]
+      summary: List subscriptions expiring within a window
+      parameters:
+        - name: days
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Expiring subscriptions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SubscriptionListItem"
+
+  /subscriptions:
+    get:
+      operationId: listSubscriptions
+      tags: [subscriptions]
+      summary: List all subscriptions with company details
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Subscriptions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SubscriptionListItem"
+
+  /subscriptions/create:
+    post:
+      operationId: createSubscription
+      tags: [subscriptions]
+      summary: Create a company and its subscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSubscriptionInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionListItem"
+
+  /subscriptions/{id}/renew:
+    put:
+      operationId: renewSubscription
+      tags: [subscriptions]
+      summary: Renew a subscription (extend by plan period, mark paid)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Renewed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionListItem"
+
+  /subscriptions/{id}/plan:
+    put:
+      operationId: changeSubscriptionPlan
+      tags: [subscriptions]
+      summary: Upgrade or downgrade the subscription plan
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePlanInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionListItem"
+
+  /subscriptions/{id}/suspend:
+    put:
+      operationId: suspendSubscription
+      tags: [subscriptions]
+      summary: Suspend a subscription account
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Suspended
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionListItem"
+
+  /subscriptions/{id}/activate:
+    put:
+      operationId: activateSubscription
+      tags: [subscriptions]
+      summary: Re-activate a suspended subscription account
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Activated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionListItem"
+
+  /subscriptions/{id}:
+    put:
+      operationId: updateSubscription
+      tags: [subscriptions]
+      summary: Edit a tenant company and its subscription details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSubscriptionInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionListItem"
+        "400":
+          description: Invalid input
+        "404":
+          description: Subscription not found
+    delete:
+      operationId: deleteSubscription
+      tags: [subscriptions]
+      summary: Permanently delete a tenant company, its subscription and all its data (destructive)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteSubscriptionResult"
+        "404":
+          description: Subscription not found
+
 components:
   schemas:
+    SubscriptionListItem:
+      type: object
+      required: [id, companyId, companyName, planName, subscriptionStartDate, subscriptionEndDate, subscriptionAmount, paymentStatus, subscriptionStatus, daysRemaining]
+      properties:
+        id:
+          type: integer
+        companyId:
+          type: integer
+        companyName:
+          type: string
+        ownerName:
+          type: ["string", "null"]
+        mobile:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        planName:
+          type: string
+        subscriptionStartDate:
+          type: string
+        subscriptionEndDate:
+          type: string
+        subscriptionAmount:
+          type: number
+        paymentStatus:
+          type: string
+          enum: [paid, pending, overdue]
+        subscriptionStatus:
+          type: string
+          enum: [active, expired, suspended]
+        lastPaymentDate:
+          type: ["string", "null"]
+        nextDueDate:
+          type: ["string", "null"]
+        daysRemaining:
+          type: integer
+
+    SubscriptionDashboard:
+      type: object
+      required: [totalActive, totalExpired, totalSuspended, expiringIn7Days, expiringIn30Days, mrr, arr, totalCompanies]
+      properties:
+        totalActive:
+          type: integer
+        totalExpired:
+          type: integer
+        totalSuspended:
+          type: integer
+        expiringIn7Days:
+          type: integer
+        expiringIn30Days:
+          type: integer
+        mrr:
+          type: number
+        arr:
+          type: number
+        totalCompanies:
+          type: integer
+
+    SubscriptionCharts:
+      type: object
+      required: [monthlyRevenue, subscriptionGrowth, expiryTrend]
+      properties:
+        monthlyRevenue:
+          type: array
+          items:
+            type: object
+            required: [month, revenue]
+            properties:
+              month:
+                type: string
+              revenue:
+                type: number
+        subscriptionGrowth:
+          type: array
+          items:
+            type: object
+            required: [month, total]
+            properties:
+              month:
+                type: string
+              total:
+                type: integer
+        expiryTrend:
+          type: array
+          items:
+            type: object
+            required: [month, expiring]
+            properties:
+              month:
+                type: string
+              expiring:
+                type: integer
+
+    SubscriptionAlert:
+      type: object
+      required: [id, companyId, subscriptionId, companyName, alertType, message, daysRemaining, isRead, createdAt]
+      properties:
+        id:
+          type: integer
+        companyId:
+          type: integer
+        subscriptionId:
+          type: integer
+        companyName:
+          type: string
+        alertType:
+          type: string
+        message:
+          type: string
+        daysRemaining:
+          type: integer
+        isRead:
+          type: boolean
+        createdAt:
+          type: string
+
+    CreateSubscriptionInput:
+      type: object
+      required: [companyName, planName, subscriptionAmount, subscriptionStartDate]
+      properties:
+        companyName:
+          type: string
+        ownerName:
+          type: ["string", "null"]
+        mobile:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        planName:
+          type: string
+          enum: [monthly, quarterly, half_yearly, yearly]
+        subscriptionAmount:
+          type: number
+        subscriptionStartDate:
+          type: string
+        paymentStatus:
+          type: string
+          enum: [paid, pending, overdue]
+        adminUsername:
+          type: ["string", "null"]
+          description: >-
+            Optional login username for the new company's admin account. When
+            provided together with adminPassword, an active admin user scoped to
+            the new company is created so the company can log in immediately.
+        adminPassword:
+          type: ["string", "null"]
+          description: Login password for the new company's admin account.
+
+    ChangePlanInput:
+      type: object
+      required: [planName, subscriptionAmount]
+      properties:
+        planName:
+          type: string
+          enum: [monthly, quarterly, half_yearly, yearly]
+        subscriptionAmount:
+          type: number
+
+    UpdateSubscriptionInput:
+      type: object
+      required: [companyName, planName, subscriptionAmount, subscriptionStartDate, subscriptionEndDate, paymentStatus]
+      properties:
+        companyName:
+          type: string
+        ownerName:
+          type: ["string", "null"]
+        mobile:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        planName:
+          type: string
+          enum: [monthly, quarterly, half_yearly, yearly]
+        subscriptionAmount:
+          type: number
+        subscriptionStartDate:
+          type: string
+        subscriptionEndDate:
+          type: string
+        paymentStatus:
+          type: string
+          enum: [paid, pending, overdue]
+
+    DeleteSubscriptionResult:
+      type: object
+      required: [message, companyName]
+      properties:
+        message:
+          type: string
+        companyName:
+          type: string
+
     HealthStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+
+    LoginInput:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+        companyId:
+          type: ["integer", "null"]
+          description: >-
+            Optional company selected via the login screen's hidden "Switch
+            Company" feature. Lets a user sign into a company other than this
+            deployment's locked default, but only into the company their own
+            account belongs to.
+
+    AuthSession:
+      type: object
+      required: [id, username, role, name]
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        role:
+          type: string
+          enum: [super_admin, admin, salesman, store, manufacturing, accountant, customer]
+        name:
+          type: string
+        customerId:
+          type: ["integer", "null"]
+        companyId:
+          type: ["integer", "null"]
+        activeCompanyId:
+          type: ["integer", "null"]
+
+    CompanyOption:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        logo:
+          type: ["string", "null"]
+
+    SetActiveCompanyInput:
+      type: object
+      required: [companyId]
+      properties:
+        companyId:
+          type: ["integer", "null"]
+
+    ActiveCompany:
+      type: object
+      required: [activeCompanyId, company]
+      properties:
+        activeCompanyId:
+          type: ["integer", "null"]
+        company:
+          type: ["object", "null"]
+          required: [id, name]
+          properties:
+            id:
+              type: integer
+            name:
+              type: string
+            logo:
+              type: ["string", "null"]
+
+    SystemConfig:
+      type: object
+      required: [multiCompanyMode, company]
+      properties:
+        multiCompanyMode:
+          type: boolean
+        company:
+          type: ["object", "null"]
+          required: [id, name]
+          properties:
+            id:
+              type: integer
+            name:
+              type: string
+            logo:
+              type: ["string", "null"]
+
+    UserAccount:
+      type: object
+      required: [id, username, name, role, isActive, createdAt]
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+          enum: [admin, salesman, store, manufacturing, accountant, customer]
+        entityId:
+          type: ["integer", "null"]
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+
+    CreateUserInput:
+      type: object
+      required: [username, password, role]
+      description: |
+        Creates a login account. `name` falls back to the linked entity's name when omitted
+        and an `entityId` is provided. Link a salesman/worker/customer entity via `entityId`
+        so the login is associated with their ledger and invoice attribution.
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 32
+        password:
+          type: string
+          minLength: 4
+        name:
+          type: string
+        role:
+          type: string
+          enum: [admin, salesman, store, manufacturing, accountant, customer]
+        entityId:
+          type: ["integer", "null"]
+
+    UpdateUserInput:
+      type: object
+      description: All fields optional. Send only the fields you want to change. Set `password` to a non-empty string to reset it.
+      properties:
+        name:
+          type: string
+        role:
+          type: string
+          enum: [admin, salesman, store, manufacturing, accountant, customer]
+        isActive:
+          type: boolean
+        entityId:
+          type: ["integer", "null"]
+        password:
+          type: string
+          minLength: 4
+
+    RolePermission:
+      type: object
+      required: [role, feature, allowed]
+      properties:
+        id:
+          type: integer
+        role:
+          type: string
+        feature:
+          type: string
+        allowed:
+          type: boolean
+
+    RolePermissionsUpdate:
+      type: object
+      required: [permissions]
+      properties:
+        permissions:
+          type: array
+          items:
+            type: object
+            required: [role, feature, allowed]
+            properties:
+              role:
+                type: string
+              feature:
+                type: string
+              allowed:
+                type: boolean
+
+    AppSettings:
+      type: object
+      required: [defaultInvoiceTemplate]
+      properties:
+        defaultInvoiceTemplate:
+          type: ["string", "null"]
+
+    AppSettingsUpdate:
+      type: object
+      properties:
+        defaultInvoiceTemplate:
+          type: string
+
+    RestoreBackupInput:
+      type: object
+      required:
+        - format
+        - tables
+      properties:
+        format:
+          type: string
+        version:
+          type: integer
+        companyId:
+          type: integer
+        companyName:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        counts:
+          type: object
+          additionalProperties: true
+        tables:
+          type: object
+          additionalProperties: true
+      additionalProperties: true
+    RestoreResult:
+      type: object
+      required:
+        - message
+        - restored
+      properties:
+        message:
+          type: string
+        restored:
+          type: object
+          additionalProperties:
+            type: integer
+    ResetDataInput:
+      type: object
+      required:
+        - confirm
+      properties:
+        confirm:
+          type: string
+    ResetResult:
+      type: object
+      required:
+        - message
+        - cleared
+      properties:
+        message:
+          type: string
+        cleared:
+          type: object
+          additionalProperties:
+            type: integer
+    BackupSettings:
+      type: object
+      required:
+        - dailyEnabled
+        - weeklyEnabled
+        - monthlyEnabled
+        - lastDailyAt
+        - lastWeeklyAt
+        - lastMonthlyAt
+      properties:
+        dailyEnabled:
+          type: boolean
+        weeklyEnabled:
+          type: boolean
+        monthlyEnabled:
+          type: boolean
+        lastDailyAt:
+          type: ["string", "null"]
+          format: date-time
+        lastWeeklyAt:
+          type: ["string", "null"]
+          format: date-time
+        lastMonthlyAt:
+          type: ["string", "null"]
+          format: date-time
+    BackupSettingsUpdate:
+      type: object
+      properties:
+        dailyEnabled:
+          type: boolean
+        weeklyEnabled:
+          type: boolean
+        monthlyEnabled:
+          type: boolean
+    BackupHistoryItem:
+      type: object
+      required:
+        - id
+        - fileName
+        - sizeBytes
+        - type
+        - tableCounts
+        - createdBy
+        - createdByName
+        - createdAt
+      properties:
+        id:
+          type: integer
+        fileName:
+          type: string
+        sizeBytes:
+          type: integer
+        type:
+          type: string
+          enum: [manual, daily, weekly, monthly]
+        tableCounts:
+          type: object
+          additionalProperties:
+            type: integer
+        createdBy:
+          type: integer
+        createdByName:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+    PrintSettings:
+      type: object
+      required:
+        - defaultTemplate
+        - copies
+        - copyLabels
+        - colorMode
+        - showLogo
+        - showQr
+        - showBankDetails
+        - showSignature
+        - showAmountInWords
+        - showHsn
+        - showLtrColumn
+        - showBoxColumn
+        - showTerms
+        - fillerRows
+        - companyName
+        - addressLine
+        - contact
+        - email
+        - gstin
+        - footerNote
+        - terms
+        - bankName
+        - bankAccount
+        - bankIfsc
+        - bankBranch
+        - upiId
+        - printerA4
+        - printerA5
+        - thermalWidth
+      properties:
+        defaultTemplate:
+          type: string
+        copies:
+          type: integer
+        copyLabels:
+          type: boolean
+        colorMode:
+          type: string
+          enum: [color, bw]
+        showLogo:
+          type: boolean
+        showQr:
+          type: boolean
+        showBankDetails:
+          type: boolean
+        showSignature:
+          type: boolean
+        showAmountInWords:
+          type: boolean
+        showHsn:
+          type: boolean
+        showLtrColumn:
+          type: boolean
+        showBoxColumn:
+          type: boolean
+        showTerms:
+          type: boolean
+        fillerRows:
+          type: boolean
+        companyName:
+          type: string
+        addressLine:
+          type: string
+        contact:
+          type: string
+        email:
+          type: string
+        gstin:
+          type: string
+        footerNote:
+          type: string
+        terms:
+          type: array
+          items:
+            type: string
+        bankName:
+          type: string
+        bankAccount:
+          type: string
+        bankIfsc:
+          type: string
+        bankBranch:
+          type: string
+        upiId:
+          type: string
+        printerA4:
+          type: string
+        printerA5:
+          type: string
+        thermalWidth:
+          type: string
+          enum: ["58mm", "72mm"]
+
+    PrintSettingsUpdate:
+      type: object
+      properties:
+        defaultTemplate:
+          type: string
+        copies:
+          type: integer
+        copyLabels:
+          type: boolean
+        colorMode:
+          type: string
+          enum: [color, bw]
+        showLogo:
+          type: boolean
+        showQr:
+          type: boolean
+        showBankDetails:
+          type: boolean
+        showSignature:
+          type: boolean
+        showAmountInWords:
+          type: boolean
+        showHsn:
+          type: boolean
+        showLtrColumn:
+          type: boolean
+        showBoxColumn:
+          type: boolean
+        showTerms:
+          type: boolean
+        fillerRows:
+          type: boolean
+        companyName:
+          type: string
+        addressLine:
+          type: string
+        contact:
+          type: string
+        email:
+          type: string
+        gstin:
+          type: string
+        footerNote:
+          type: string
+        terms:
+          type: array
+          items:
+            type: string
+        bankName:
+          type: string
+        bankAccount:
+          type: string
+        bankIfsc:
+          type: string
+        bankBranch:
+          type: string
+        upiId:
+          type: string
+        printerA4:
+          type: string
+        printerA5:
+          type: string
+        thermalWidth:
+          type: string
+          enum: ["58mm", "72mm"]
+
+    NumberSeries:
+      type: object
+      required: [seriesType, prefix, includeYear, includeMonth, yearFormat, separator, padding, startNumber, nextNumber, resetRule]
+      properties:
+        seriesType:
+          type: string
+          enum: [invoice, order, quotation]
+        prefix:
+          type: string
+        includeYear:
+          type: boolean
+        includeMonth:
+          type: boolean
+        yearFormat:
+          type: string
+          enum: [calendar, fiscal]
+        separator:
+          type: string
+        padding:
+          type: integer
+        startNumber:
+          type: integer
+        nextNumber:
+          type: integer
+        resetRule:
+          type: string
+          enum: [never, daily, monthly, yearly, fiscal]
+        periodKey:
+          type: ["string", "null"]
+        preview:
+          type: string
+
+    NumberSeriesUpdate:
+      type: object
+      properties:
+        prefix:
+          type: string
+        includeYear:
+          type: boolean
+        includeMonth:
+          type: boolean
+        yearFormat:
+          type: string
+          enum: [calendar, fiscal]
+        separator:
+          type: string
+        padding:
+          type: integer
+        startNumber:
+          type: integer
+        nextNumber:
+          type: integer
+        resetRule:
+          type: string
+          enum: [never, daily, monthly, yearly, fiscal]
+
+    GstinLookupResult:
+      type: object
+      required: [found]
+      properties:
+        found:
+          type: boolean
+        gstin:
+          type: string
+        legalName:
+          type: string
+        tradeName:
+          type: string
+        address:
+          type: string
+        state:
+          type: string
+        pinCode:
+          type: string
+        error:
+          type: string
+
+    Product:
+      type: object
+      required: [id, name, group, brand, itemCode, unit, purchasePrice, retailPrice, wholesalePrice, mrp, currentStock, pricingBasis, notForSale, addForManufacturing]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        printName:
+          type: ["string", "null"]
+        group:
+          type: string
+        brand:
+          type: string
+        itemCode:
+          type: string
+        unit:
+          type: string
+        purchasePrice:
+          type: number
+        retailPrice:
+          type: number
+        wholesalePrice:
+          type: number
+        mrp:
+          type: number
+        minSalePrice:
+          type: ["number", "null"]
+        currentStock:
+          type: number
+        openingStock:
+          type: ["number", "null"]
+        openingStockValue:
+          type: ["number", "null"]
+        pricingBasis:
+          type: string
+          enum: [manual, fixed_margin]
+        wholesaleMargin:
+          type: ["number", "null"]
+        retailMargin:
+          type: ["number", "null"]
+        hsnCode:
+          type: ["string", "null"]
+        taxRate:
+          type: ["number", "null"]
+        commissionPerLiter:
+          type: ["number", "null"]
+        litersPerBox:
+          type: ["number", "null"]
+        unitsPerBox:
+          type: ["number", "null"]
+        notForSale:
+          type: boolean
+        addForManufacturing:
+          type: boolean
+        minStockThreshold:
+          type: ["number", "null"]
+        imageUrl:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    ProductInput:
+      type: object
+      required: [name, group, brand, itemCode, unit, purchasePrice, retailPrice, wholesalePrice, mrp]
+      properties:
+        name:
+          type: string
+        printName:
+          type: string
+        group:
+          type: string
+        brand:
+          type: string
+        itemCode:
+          type: string
+        unit:
+          type: string
+        purchasePrice:
+          type: number
+        retailPrice:
+          type: number
+        wholesalePrice:
+          type: number
+        mrp:
+          type: number
+        minSalePrice:
+          type: number
+        openingStock:
+          type: number
+        openingStockValue:
+          type: number
+        pricingBasis:
+          type: string
+          enum: [manual, fixed_margin]
+        wholesaleMargin:
+          type: number
+        retailMargin:
+          type: number
+        hsnCode:
+          type: string
+        taxRate:
+          type: number
+        commissionPerLiter:
+          type: number
+        litersPerBox:
+          type: number
+        unitsPerBox:
+          type: number
+        notForSale:
+          type: boolean
+        addForManufacturing:
+          type: boolean
+        minStockThreshold:
+          type: number
+        imageUrl:
+          type: string
+
+    ProductUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        printName:
+          type: string
+        group:
+          type: string
+        brand:
+          type: string
+        itemCode:
+          type: string
+        unit:
+          type: string
+        purchasePrice:
+          type: number
+        retailPrice:
+          type: number
+        wholesalePrice:
+          type: number
+        mrp:
+          type: number
+        minSalePrice:
+          type: number
+        pricingBasis:
+          type: string
+        wholesaleMargin:
+          type: number
+        retailMargin:
+          type: number
+        hsnCode:
+          type: string
+        taxRate:
+          type: number
+        litersPerBox:
+          type: number
+        unitsPerBox:
+          type: number
+        notForSale:
+          type: boolean
+        addForManufacturing:
+          type: boolean
+        minStockThreshold:
+          type: number
+        imageUrl:
+          type: string
+        commissionPerLiter:
+          type: number
+
+    StockMovement:
+      type: object
+      required: [id, productId, type, quantity, reason, createdAt]
+      properties:
+        id:
+          type: integer
+        productId:
+          type: integer
+        type:
+          type: string
+          enum: [inward, outward, adjustment, manufacturing_consume, manufacturing_produce, damage]
+        quantity:
+          type: number
+        reason:
+          type: string
+        referenceId:
+          type: ["integer", "null"]
+        referenceType:
+          type: ["string", "null"]
+        userId:
+          type: integer
+        createdAt:
+          type: string
+
+    StockMovementInput:
+      type: object
+      required: [type, quantity, reason]
+      properties:
+        type:
+          type: string
+          enum: [inward, outward, adjustment, manufacturing_consume, manufacturing_produce, damage]
+        quantity:
+          type: number
+        reason:
+          type: string
+        referenceId:
+          type: integer
+        referenceType:
+          type: string
+
+    Entity:
+      type: object
+      required: [id, type, name, mobile]
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+          enum: [customer, vendor, worker, salesman]
+        name:
+          type: string
+        mobile:
+          type: string
+        gstin:
+          type: ["string", "null"]
+        address:
+          type: ["string", "null"]
+        city:
+          type: ["string", "null"]
+        state:
+          type: ["string", "null"]
+        district:
+          type: ["string", "null"]
+        area:
+          type: ["string", "null"]
+        pinCode:
+          type: ["string", "null"]
+        gpsLocation:
+          type: ["string", "null"]
+        pricingTier:
+          type: ["string", "null"]
+          enum: [retail, wholesale, null]
+        outstandingBalance:
+          type: number
+        creditLimit:
+          type: ["number", "null"]
+        userId:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+
+    EntityInput:
+      type: object
+      required: [type, mobile]
+      description: |
+        `name` is optional ONLY for retail customers (walk-ins) — if omitted, the server
+        generates a label like "Retail Customer (98765 43210)". For wholesale customers,
+        vendors, workers, and salesmen the name is required.
+      properties:
+        type:
+          type: string
+          enum: [customer, vendor, worker, salesman]
+        name:
+          type: string
+        mobile:
+          type: string
+        gstin:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        district:
+          type: string
+        area:
+          type: string
+        pinCode:
+          type: string
+        gpsLocation:
+          type: string
+        pricingTier:
+          type: string
+          enum: [retail, wholesale]
+        creditLimit:
+          type: number
+
+    EntityUpdate:
+      type: object
+      properties:
+        type:
+          type: string
+        name:
+          type: string
+        mobile:
+          type: string
+        gstin:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        district:
+          type: string
+        area:
+          type: string
+        pinCode:
+          type: string
+        gpsLocation:
+          type: string
+        pricingTier:
+          type: string
+        creditLimit:
+          type: number
+
+    EntityLookup:
+      type: object
+      required: [found]
+      properties:
+        found:
+          type: boolean
+        entity:
+          $ref: "#/components/schemas/Entity"
+
+    EntityLedger:
+      type: object
+      required: [entity, outstandingBalance, entries]
+      properties:
+        entity:
+          $ref: "#/components/schemas/Entity"
+        outstandingBalance:
+          type: number
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/LedgerEntry"
+
+    LedgerEntry:
+      type: object
+      required: [id, date, description, debit, credit, balance, type]
+      properties:
+        id:
+          type: integer
+        date:
+          type: string
+        description:
+          type: string
+        debit:
+          type: number
+        credit:
+          type: number
+        balance:
+          type: number
+        type:
+          type: string
+          enum: [invoice, payment, adjustment]
+        referenceId:
+          type: ["integer", "null"]
+        referenceNo:
+          type: ["string", "null"]
+        attachmentUrl:
+          type: ["string", "null"]
+        createdByName:
+          type: ["string", "null"]
+
+    LedgerAdjustmentInput:
+      type: object
+      required: [direction, amount]
+      properties:
+        direction:
+          type: string
+          enum: [debit, credit]
+        amount:
+          type: number
+        notes:
+          type: ["string", "null"]
+        attachmentUrl:
+          type: ["string", "null"]
+
+    Invoice:
+      type: object
+      required: [id, invoiceNo, invoiceDate, invoiceType, customerId, subtotal, totalTax, grandTotal, status]
+      properties:
+        id:
+          type: integer
+        invoiceNo:
+          type: string
+        invoiceDate:
+          type: string
+        dueDate:
+          type: ["string", "null"]
+        invoiceType:
+          type: string
+          enum: [gst, non_gst]
+        customerId:
+          type: ["integer", "null"]
+        customerName:
+          type: ["string", "null"]
+        customerGstin:
+          type: ["string", "null"]
+        billingAddress:
+          type: ["string", "null"]
+        shippingAddress:
+          type: ["string", "null"]
+        placeOfSupply:
+          type: string
+        salesmanId:
+          type: ["integer", "null"]
+        salesmanName:
+          type: ["string", "null"]
+        poNumber:
+          type: ["string", "null"]
+        eWayBillNo:
+          type: ["string", "null"]
+        subtotal:
+          type: number
+        totalDiscount:
+          type: number
+        totalTax:
+          type: number
+        cgst:
+          type: number
+        sgst:
+          type: number
+        igst:
+          type: number
+        freight:
+          type: number
+        roundOff:
+          type: number
+        grandTotal:
+          type: number
+        amountPaid:
+          type: number
+        balanceDue:
+          type: number
+        status:
+          type: string
+          enum: [draft, saved, cancelled]
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoiceItem"
+        createdAt:
+          type: string
+
+    InvoiceItem:
+      type: object
+      required: [id, invoiceId, productId, productName, qty, unit, rate, amount]
+      properties:
+        id:
+          type: integer
+        invoiceId:
+          type: integer
+        productId:
+          type: integer
+        productName:
+          type: string
+        hsnCode:
+          type: ["string", "null"]
+        qty:
+          type: number
+        qtyBoxes:
+          type: ["number", "null"]
+        totalLiters:
+          type: ["number", "null"]
+        unit:
+          type: string
+        rate:
+          type: number
+        mrp:
+          type: number
+        discountPct:
+          type: number
+        discountAmt:
+          type: number
+        taxPct:
+          type: number
+        cessPct:
+          type: number
+        netPrice:
+          type: number
+        amount:
+          type: number
+
+    InvoiceInput:
+      type: object
+      required: [invoiceType, invoiceDate, placeOfSupply, items]
+      properties:
+        invoiceType:
+          type: string
+          enum: [gst, non_gst]
+        invoiceDate:
+          type: string
+        dueDate:
+          type: string
+        customerId:
+          type: integer
+        customerName:
+          type: string
+        contactNo:
+          type: string
+        customerGstin:
+          type: string
+        billingAddress:
+          type: string
+        shippingAddress:
+          type: string
+        placeOfSupply:
+          type: string
+        salesmanId:
+          type: integer
+        poNumber:
+          type: string
+        eWayBillNo:
+          type: string
+        freight:
+          type: number
+        roundOff:
+          type: number
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoiceItemInput"
+
+    InvoiceItemInput:
+      type: object
+      required: [productId, qty, unit, rate, mrp]
+      properties:
+        productId:
+          type: integer
+        qty:
+          type: number
+        qtyBoxes:
+          type: number
+        litersPerBox:
+          type: number
+        unit:
+          type: string
+        rate:
+          type: number
+        mrp:
+          type: number
+        discountPct:
+          type: number
+        discountAmt:
+          type: number
+        taxPct:
+          type: number
+        cessPct:
+          type: number
+
+    InvoiceUpdate:
+      type: object
+      description: |
+        Update an existing invoice. Two modes:
+        - Header-only patch: send only status/dueDate (no stock or ledger impact).
+        - Full edit: include `items` to fully replace line items, totals, customer, freight, etc.
+          The server reverses the previous stock movements and ledger entry inside a SERIALIZABLE
+          transaction and re-applies them with the new payload.
+      properties:
+        status:
+          type: string
+          enum: [draft, saved, cancelled]
+        dueDate:
+          type: string
+        invoiceType:
+          type: string
+          enum: [gst, non_gst]
+        invoiceDate:
+          type: string
+        customerId:
+          type: ["integer", "null"]
+        customerName:
+          type: ["string", "null"]
+        customerGstin:
+          type: ["string", "null"]
+        billingAddress:
+          type: ["string", "null"]
+        shippingAddress:
+          type: ["string", "null"]
+        placeOfSupply:
+          type: string
+        salesmanId:
+          type: ["integer", "null"]
+        poNumber:
+          type: ["string", "null"]
+        eWayBillNo:
+          type: ["string", "null"]
+        freight:
+          type: number
+        roundOff:
+          type: number
+        items:
+          type: array
+          description: When present, fully replaces line items and triggers stock/ledger reversal+reapply.
+          items:
+            $ref: "#/components/schemas/InvoiceItemInput"
+
+    InvoiceSummary:
+      type: object
+      required: [id, invoiceNo, invoiceDate, customerName, grandTotal, status]
+      properties:
+        id:
+          type: integer
+        invoiceNo:
+          type: string
+        invoiceDate:
+          type: string
+        customerName:
+          type: ["string", "null"]
+        grandTotal:
+          type: number
+        status:
+          type: string
+
+    Payment:
+      type: object
+      required: [id, customerId, amount, mode, status, createdAt]
+      properties:
+        id:
+          type: integer
+        receiptId:
+          type: string
+        customerId:
+          type: integer
+        customerName:
+          type: ["string", "null"]
+        salesmanId:
+          type: ["integer", "null"]
+        salesmanName:
+          type: ["string", "null"]
+        amount:
+          type: number
+        mode:
+          type: string
+          enum: [cash, cheque, upi, bank_transfer, other]
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        approvedAt:
+          type: ["string", "null"]
+        accountId:
+          type: ["integer", "null"]
+        accountName:
+          type: ["string", "null"]
+        collectedAt:
+          type: ["string", "null"]
+
+    PaymentInput:
+      type: object
+      required: [amount, mode]
+      properties:
+        customerId:
+          type: integer
+          description: Omit for walk-in / cash sales — server resolves to a Walk-in Customer entity.
+        amount:
+          type: number
+        mode:
+          type: string
+          enum: [cash, cheque, upi, bank_transfer, other]
+        notes:
+          type: string
+        accountId:
+          type: integer
+
+    Account:
+      type: object
+      required: [id, name, type, openingBalance, currentBalance, isActive, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        type:
+          type: string
+          enum: [cash, upi, bank]
+        identifier:
+          type: ["string", "null"]
+        openingBalance:
+          type: number
+        currentBalance:
+          type: number
+        isActive:
+          type: boolean
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    AccountInput:
+      type: object
+      required: [name, type]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [cash, upi, bank]
+        identifier:
+          type: string
+        openingBalance:
+          type: number
+        notes:
+          type: string
+        isActive:
+          type: boolean
+
+    SalesmanCashSummary:
+      type: object
+      required: [salesmanId, salesmanName, pendingCash, paymentCount]
+      properties:
+        salesmanId:
+          type: integer
+        salesmanName:
+          type: string
+        pendingCash:
+          type: number
+        paymentCount:
+          type: integer
+
+    CashbookSummary:
+      type: object
+      required: [salesmen, totalPendingCash, accounts]
+      properties:
+        salesmen:
+          type: array
+          items:
+            $ref: "#/components/schemas/SalesmanCashSummary"
+        totalPendingCash:
+          type: number
+        accounts:
+          type: array
+          items:
+            $ref: "#/components/schemas/Account"
+
+    CollectCashInput:
+      type: object
+      required: [salesmanId, accountId, amount]
+      properties:
+        salesmanId:
+          type: integer
+        accountId:
+          type: integer
+        amount:
+          type: number
+        notes:
+          type: string
+
+    AccountTransaction:
+      type: object
+      required: [id, accountId, direction, amount, mode, createdAt]
+      properties:
+        id:
+          type: integer
+        receiptNo:
+          type: ["string", "null"]
+        accountId:
+          type: integer
+        accountName:
+          type: ["string", "null"]
+        direction:
+          type: string
+          enum: [in, out]
+        amount:
+          type: number
+        mode:
+          type: string
+          enum: [cash, upi, bank_transfer, cheque, other]
+        partyName:
+          type: ["string", "null"]
+        partyMobile:
+          type: ["string", "null"]
+        partyEntityId:
+          type: ["integer", "null"]
+        notes:
+          type: ["string", "null"]
+        createdById:
+          type: ["integer", "null"]
+        createdByName:
+          type: ["string", "null"]
+        createdByRole:
+          type: ["string", "null"]
+        balanceAfter:
+          type: ["number", "null"]
+        createdAt:
+          type: string
+
+    AccountTransactionInput:
+      type: object
+      required: [accountId, direction, amount, mode]
+      properties:
+        accountId:
+          type: integer
+        direction:
+          type: string
+          enum: [in, out]
+        amount:
+          type: number
+          minimum: 0.01
+        mode:
+          type: string
+          enum: [cash, upi, bank_transfer, cheque, other]
+        partyName:
+          type: string
+        partyMobile:
+          type: string
+        partyEntityId:
+          type: integer
+        notes:
+          type: string
+
+    RewardScheme:
+      type: object
+      required: [id, productId, targetLiters, rewardType, rewardValue, startDate, endDate, isActive]
+      properties:
+        id:
+          type: integer
+        schemeName:
+          type: ["string", "null"]
+        productId:
+          type: integer
+        productName:
+          type: ["string", "null"]
+        targetLiters:
+          type: number
+        rewardType:
+          type: string
+          enum: [free_gift, cash_discount, percentage_cashback]
+        rewardValue:
+          type: string
+        startDate:
+          type: string
+        endDate:
+          type: string
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+
+    RewardSchemeInput:
+      type: object
+      required: [productId, targetLiters, rewardType, rewardValue, startDate, endDate]
+      properties:
+        schemeName:
+          type: string
+        productId:
+          type: integer
+        targetLiters:
+          type: number
+        rewardType:
+          type: string
+          enum: [free_gift, cash_discount, percentage_cashback]
+        rewardValue:
+          type: string
+        startDate:
+          type: string
+        endDate:
+          type: string
+
+    RewardSchemeUpdate:
+      type: object
+      properties:
+        schemeName:
+          type: string
+        targetLiters:
+          type: number
+        rewardType:
+          type: string
+        rewardValue:
+          type: string
+        startDate:
+          type: string
+        endDate:
+          type: string
+        isActive:
+          type: boolean
+
+    RewardProgress:
+      type: object
+      required: [id, schemeId, customerId, litersAchieved, isRewardAchieved, isDisbursed]
+      properties:
+        id:
+          type: integer
+        schemeId:
+          type: integer
+        customerId:
+          type: integer
+        customerName:
+          type: ["string", "null"]
+        productName:
+          type: ["string", "null"]
+        targetLiters:
+          type: number
+        litersAchieved:
+          type: number
+        progressPct:
+          type: number
+        isRewardAchieved:
+          type: boolean
+        isDisbursed:
+          type: boolean
+        rewardType:
+          type: string
+        rewardValue:
+          type: string
+        schemeEndDate:
+          type: string
+
+    Bom:
+      type: object
+      required: [id, finishedProductId, items]
+      properties:
+        id:
+          type: integer
+        finishedProductId:
+          type: integer
+        finishedProductName:
+          type: ["string", "null"]
+        outputQuantity:
+          type: number
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/BomItem"
+        createdAt:
+          type: string
+
+    BomItem:
+      type: object
+      required: [id, bomId, materialProductId, quantity]
+      properties:
+        id:
+          type: integer
+        bomId:
+          type: integer
+        materialProductId:
+          type: integer
+        materialProductName:
+          type: ["string", "null"]
+        quantity:
+          type: number
+        unit:
+          type: string
+
+    BomInput:
+      type: object
+      required: [finishedProductId, outputQuantity, items]
+      properties:
+        finishedProductId:
+          type: integer
+        outputQuantity:
+          type: number
+        items:
+          type: array
+          items:
+            type: object
+            required: [materialProductId, quantity, unit]
+            properties:
+              materialProductId:
+                type: integer
+              quantity:
+                type: number
+              unit:
+                type: string
+
+    BomUpdate:
+      type: object
+      properties:
+        outputQuantity:
+          type: number
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              materialProductId:
+                type: integer
+              quantity:
+                type: number
+              unit:
+                type: string
+
+    WorkloadCard:
+      type: object
+      required: [id, productId, targetQty, status, createdAt]
+      properties:
+        id:
+          type: integer
+        productId:
+          type: integer
+        productName:
+          type: ["string", "null"]
+        productImageUrl:
+          type: ["string", "null"]
+        targetQty:
+          type: number
+        status:
+          type: string
+          enum: [pending, processing, done]
+        workerId:
+          type: ["integer", "null"]
+        workerName:
+          type: ["string", "null"]
+        orderType:
+          type: string
+          enum: [low_stock_alert, manual_order, customer_backorder, production]
+        referenceOrderId:
+          type: ["integer", "null"]
+        startedAt:
+          type: ["string", "null"]
+        completedAt:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    PurchaseItem:
+      type: object
+      required: [productId, productName, qty, unit, rate, amount]
+      properties:
+        id: { type: integer }
+        productId: { type: integer }
+        productName: { type: string }
+        hsnCode: { type: ["string", "null"] }
+        qty: { type: string }
+        unit: { type: string }
+        rate: { type: string }
+        discountPct: { type: string }
+        discountAmt: { type: string }
+        taxPct: { type: string }
+        amount: { type: string }
+
+    Purchase:
+      type: object
+      required: [id, billNo, billDate, billType, placeOfSupply, subtotal, grandTotal, status]
+      properties:
+        id: { type: integer }
+        billNo: { type: string }
+        vendorBillNo: { type: ["string", "null"] }
+        billDate: { type: string }
+        dueDate: { type: ["string", "null"] }
+        billType:
+          type: string
+          enum: [gst, non_gst]
+        vendorId: { type: ["integer", "null"] }
+        vendorName: { type: ["string", "null"] }
+        vendorGstin: { type: ["string", "null"] }
+        placeOfSupply: { type: string }
+        notes: { type: ["string", "null"] }
+        subtotal: { type: string }
+        totalDiscount: { type: string }
+        totalTax: { type: string }
+        cgst: { type: string }
+        sgst: { type: string }
+        igst: { type: string }
+        freight: { type: string }
+        roundOff: { type: string }
+        grandTotal: { type: string }
+        amountPaid: { type: string }
+        balanceDue: { type: string }
+        status: { type: string }
+        createdAt: { type: string }
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PurchaseItem"
+
+    CreatePurchaseInput:
+      type: object
+      required: [billType, items]
+      properties:
+        vendorBillNo: { type: string }
+        billDate: { type: string }
+        dueDate: { type: string }
+        billType:
+          type: string
+          enum: [gst, non_gst]
+        vendorId: { type: integer }
+        vendorName: { type: string }
+        vendorGstin: { type: string }
+        placeOfSupply: { type: string }
+        notes: { type: string }
+        freight: { type: number }
+        roundOff: { type: number }
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [productId, qty, unit, rate]
+            properties:
+              productId: { type: integer }
+              qty: { type: number }
+              unit: { type: string }
+              rate: { type: number }
+              discountPct: { type: number }
+              discountAmt: { type: number }
+              taxPct: { type: number }
+
+    AssembleItemInput:
+      type: object
+      required: [bomId, batches]
+      properties:
+        bomId:
+          type: integer
+          description: BOM (recipe) to execute
+        batches:
+          type: number
+          description: Number of recipe batches to assemble (must be > 0)
+          minimum: 0.001
+
+    WorkloadCardInput:
+      type: object
+      required: [productId, targetQty, orderType]
+      properties:
+        productId:
+          type: integer
+        targetQty:
+          type: number
+        orderType:
+          type: string
+          enum: [low_stock_alert, manual_order, customer_backorder, production]
+        workerId:
+          type: integer
+        referenceOrderId:
+          type: integer
+
+    WorkloadCardUpdate:
       type: object
       properties:
         status:
           type: string
-      required:
-        - status
+          enum: [pending, processing, done]
+        workerId:
+          type: integer
+        targetQty:
+          type: number
+          description: |
+            Final produced quantity. Only used when transitioning status to
+            'done' — overrides the card's original targetQty so the worker can
+            confirm what actually came off the line. Must be > 0.
+          minimum: 0.001
 
+    DashboardSummary:
+      type: object
+      required: [totalSalesThisMonth, totalOutstanding, invoicesThisMonth, lowStockCount, pendingPayments, activeWorkloadCards]
+      properties:
+        totalSalesThisMonth:
+          type: number
+        totalOutstanding:
+          type: number
+        invoicesThisMonth:
+          type: integer
+        lowStockCount:
+          type: integer
+        pendingPayments:
+          type: integer
+        activeWorkloadCards:
+          type: integer
+        totalProductsInStock:
+          type: integer
+        totalCustomers:
+          type: integer
+
+    LowStockAlert:
+      type: object
+      required: [id, name, currentStock, minStockThreshold]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        currentStock:
+          type: number
+        minStockThreshold:
+          type: number
+        unit:
+          type: string
+
+    TopProduct:
+      type: object
+      required: [productId, productName, totalQtySold, totalRevenue]
+      properties:
+        productId:
+          type: integer
+        productName:
+          type: string
+        totalQtySold:
+          type: number
+        totalRevenue:
+          type: number
+
+    CustomerOrder:
+      type: object
+      required: [id, customerName, status, totalItems, totalAmount, createdAt]
+      properties:
+        id:
+          type: integer
+        orderNo:
+          type: ["string", "null"]
+        userId:
+          type: ["integer", "null"]
+        entityId:
+          type: ["integer", "null"]
+        customerName:
+          type: string
+        customerMobile:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [pending, processing, production, ready_for_dispatch, dispatched, delivered, done, cancelled]
+        isDraft:
+          type: boolean
+        totalItems:
+          type: integer
+        totalAmount:
+          type: number
+        notes:
+          type: ["string", "null"]
+        adminRemarks:
+          type: ["string", "null"]
+        vehicleNumber:
+          type: ["string", "null"]
+        driverName:
+          type: ["string", "null"]
+        dispatchDate:
+          type: ["string", "null"]
+        dispatchStatus:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: ["string", "null"]
+
+    CustomerOrderItem:
+      type: object
+      required: [id, orderId, productId, productName, qty, unitPrice, lineTotal]
+      properties:
+        id:
+          type: integer
+        orderId:
+          type: integer
+        productId:
+          type: integer
+        productName:
+          type: string
+        unit:
+          type: ["string", "null"]
+        qty:
+          type: number
+        unitPrice:
+          type: number
+        lineTotal:
+          type: number
+        workloadCardId:
+          type: ["integer", "null"]
+
+    CustomerOrderDetail:
+      allOf:
+        - $ref: "#/components/schemas/CustomerOrder"
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/CustomerOrderItem"
+
+    CustomerOrderInput:
+      type: object
+      required: [items]
+      properties:
+        customerName:
+          type: string
+        customerMobile:
+          type: string
+        entityId:
+          type: integer
+        isDraft:
+          type: boolean
+        notes:
+          type: string
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [productId, qty]
+            properties:
+              productId:
+                type: integer
+              qty:
+                type: number
+                minimum: 0.01
+
+    CustomerOrderStatusUpdate:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [pending, processing, production, ready_for_dispatch, dispatched, delivered, done, cancelled]
+        adminRemarks:
+          type: string
+        isDraft:
+          type: boolean
+        vehicleNumber:
+          type: string
+        driverName:
+          type: string
+        dispatchDate:
+          type: string
+
+    CommissionReport:
+      type: object
+      required: [totalCommission, totalLiters, rows]
+      properties:
+        totalCommission:
+          type: number
+        totalLiters:
+          type: number
+        rows:
+          type: array
+          items:
+            type: object
+            required: [salesmanId, salesmanName, liters, commission]
+            properties:
+              salesmanId:
+                type: integer
+              salesmanName:
+                type: string
+              liters:
+                type: number
+              commission:
+                type: number
+              productBreakdown:
+                type: array
+                items:
+                  type: object
+                  required: [productId, productName, liters, commission]
+                  properties:
+                    productId:
+                      type: integer
+                    productName:
+                      type: string
+                    liters:
+                      type: number
+                    commissionPerLiter:
+                      type: number
+                    commission:
+                      type: number
+
+    CapitalSnapshot:
+      type: object
+      required: [inventoryValue, receivable, cashInAccounts, payable, expenses, capital, capitalK, snapshotDate]
+      properties:
+        snapshotDate:
+          type: string
+        inventoryValue:
+          type: number
+        receivable:
+          type: number
+        cashInAccounts:
+          type: number
+        payable:
+          type: number
+        expenses:
+          type: number
+        capital:
+          type: number
+          description: Raw capital value (inventory + receivable + cash - payable - expenses)
+        capitalK:
+          type: number
+          description: Capital divided by 1000 (the value to display)
+        previousCapital:
+          type: ["number", "null"]
+        previousCapitalK:
+          type: ["number", "null"]
+        previousDate:
+          type: ["string", "null"]
+        growth:
+          type: ["number", "null"]
+          description: today capital - yesterday capital (raw rupees)
+        growthK:
+          type: ["number", "null"]
+          description: today capitalK - yesterday capitalK (the value to display)
+
+    SalesTrendPoint:
+      type: object
+      required: [date, totalSales, invoiceCount]
+      properties:
+        date:
+          type: string
+          description: ISO date (YYYY-MM-DD) for this trend point
+        day:
+          type: integer
+        month:
+          type: integer
+        year:
+          type: integer
+        totalSales:
+          type: number
+        invoiceCount:
+          type: integer
+
+    AuditEntry:
+      type: object
+      required: [id, action, userId, createdAt]
+      properties:
+        id:
+          type: integer
+        action:
+          type: string
+        description:
+          type: ["string", "null"]
+        userId:
+          type: integer
+        userName:
+          type: ["string", "null"]
+        metadata:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    SearchResults:
+      type: object
+      required: [products, entities, invoices]
+      properties:
+        products:
+          type: array
+          items:
+            $ref: "#/components/schemas/Product"
+        entities:
+          type: array
+          items:
+            $ref: "#/components/schemas/Entity"
+        invoices:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoiceSummary"
+
+
+    Worker:
+      type: object
+      required: [id, name, dailyWage, isActive, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        phone:
+          type: ["string", "null"]
+        skill:
+          type: ["string", "null"]
+        dailyWage:
+          type: number
+        joinedAt:
+          type: ["string", "null"]
+        isActive:
+          type: boolean
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    WorkerInput:
+      type: object
+      required: [name, dailyWage]
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+        skill:
+          type: string
+        dailyWage:
+          type: number
+        joinedAt:
+          type: string
+        isActive:
+          type: boolean
+        notes:
+          type: string
+
+    WorkerAttendance:
+      type: object
+      required: [id, workerId, date, status, wageAmount, createdAt]
+      properties:
+        id:
+          type: integer
+        workerId:
+          type: integer
+        workerName:
+          type: ["string", "null"]
+        date:
+          type: string
+        status:
+          type: string
+          enum: [present, absent, half_day]
+        wageAmount:
+          type: number
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    WorkerAttendanceInput:
+      type: object
+      required: [workerId, date, status]
+      properties:
+        workerId:
+          type: integer
+        date:
+          type: string
+        status:
+          type: string
+          enum: [present, absent, half_day]
+        notes:
+          type: string
+
+    WorkerPayment:
+      type: object
+      required: [id, workerId, amount, paidOn, paymentMode, createdAt]
+      properties:
+        id:
+          type: integer
+        workerId:
+          type: integer
+        amount:
+          type: number
+        paidOn:
+          type: string
+        paymentMode:
+          type: string
+          enum: [cash, upi, bank]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    WorkerPaymentInput:
+      type: object
+      required: [workerId, amount, paidOn, paymentMode]
+      properties:
+        workerId:
+          type: integer
+        amount:
+          type: number
+        paidOn:
+          type: string
+        paymentMode:
+          type: string
+          enum: [cash, upi, bank]
+        notes:
+          type: string
+
+    WorkerLedgerEntry:
+      type: object
+      required: [date, kind, amount, balance]
+      properties:
+        date:
+          type: string
+        kind:
+          type: string
+          enum: [attendance, payment]
+        status:
+          type: ["string", "null"]
+        amount:
+          type: number
+        balance:
+          type: number
+        notes:
+          type: ["string", "null"]
+
+    WorkerLedger:
+      type: object
+      required: [workerId, workerName, totalEarned, totalPaid, balance, entries]
+      properties:
+        workerId:
+          type: integer
+        workerName:
+          type: string
+        totalEarned:
+          type: number
+        totalPaid:
+          type: number
+        balance:
+          type: number
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkerLedgerEntry"
+
+    ExpenseCategory:
+      type: object
+      required: [id, name, isActive, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+
+    ExpenseCategoryInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+
+    Expense:
+      type: object
+      required: [id, date, categoryName, amount, paymentMode, createdAt]
+      properties:
+        id:
+          type: integer
+        date:
+          type: string
+        categoryId:
+          type: ["integer", "null"]
+        categoryName:
+          type: string
+        amount:
+          type: number
+        paymentMode:
+          type: string
+          enum: [cash, upi, bank]
+        paidTo:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        createdByUserId:
+          type: ["integer", "null"]
+        createdByUserName:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    ExpenseInput:
+      type: object
+      required: [date, categoryId, amount, paymentMode]
+      properties:
+        date:
+          type: string
+        categoryId:
+          type: integer
+        amount:
+          type: number
+        paymentMode:
+          type: string
+          enum: [cash, upi, bank]
+        paidTo:
+          type: string
+        notes:
+          type: string
+
+    ExpenseSummaryRow:
+      type: object
+      required: [categoryName, total]
+      properties:
+        categoryId:
+          type: ["integer", "null"]
+        categoryName:
+          type: string
+        total:
+          type: number
+
+    ExpenseList:
+      type: object
+      required: [items, total, byCategory]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Expense"
+        total:
+          type: number
+        byCategory:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExpenseSummaryRow"
+
+    SalesReportItem:
+      type: object
+      required: [id, invoiceNo, invoiceDate, invoiceType, subtotal, totalTax, grandTotal, status]
+      properties:
+        id: { type: integer }
+        invoiceNo: { type: string }
+        invoiceDate: { type: string }
+        invoiceType: { type: string }
+        customerId: { type: ["integer", "null"] }
+        customerName: { type: ["string", "null"] }
+        customerGstin: { type: ["string", "null"] }
+        placeOfSupply: { type: string }
+        subtotal: { type: number }
+        totalDiscount: { type: number }
+        totalTax: { type: number }
+        cgst: { type: number }
+        sgst: { type: number }
+        igst: { type: number }
+        freight: { type: number }
+        roundOff: { type: number }
+        grandTotal: { type: number }
+        amountPaid: { type: number }
+        balanceDue: { type: number }
+        status: { type: string }
+
+    SalesReportTotals:
+      type: object
+      required: [subtotal, totalTax, cgst, sgst, igst, grandTotal, amountPaid, balanceDue, count]
+      properties:
+        subtotal: { type: number }
+        totalTax: { type: number }
+        cgst: { type: number }
+        sgst: { type: number }
+        igst: { type: number }
+        grandTotal: { type: number }
+        amountPaid: { type: number }
+        balanceDue: { type: number }
+        count: { type: integer }
+
+    SalesReport:
+      type: object
+      required: [items, totals]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/SalesReportItem" }
+        totals: { $ref: "#/components/schemas/SalesReportTotals" }
+
+    ItemWiseSalesRow:
+      type: object
+      required: [productId, productName, unit, invoices, qty, amount, tax, total]
+      properties:
+        productId: { type: integer }
+        productName: { type: string }
+        hsnCode: { type: ["string", "null"] }
+        unit: { type: string }
+        invoices: { type: integer }
+        qty: { type: number }
+        amount: { type: number }
+        tax: { type: number }
+        total: { type: number }
+
+    ItemWiseSalesReport:
+      type: object
+      required: [items, totals]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/ItemWiseSalesRow" }
+        totals:
+          type: object
+          required: [qty, amount, tax, total, count]
+          properties:
+            qty: { type: number }
+            amount: { type: number }
+            tax: { type: number }
+            total: { type: number }
+            count: { type: integer }
+
+    CustomerWiseSalesRow:
+      type: object
+      required: [customerName, invoices, qty, subtotal, tax, total, paid, balance]
+      properties:
+        customerId: { type: ["integer", "null"] }
+        customerName: { type: string }
+        invoices: { type: integer }
+        qty: { type: number }
+        subtotal: { type: number }
+        tax: { type: number }
+        total: { type: number }
+        paid: { type: number }
+        balance: { type: number }
+
+    CustomerWiseSalesReport:
+      type: object
+      required: [items, totals]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/CustomerWiseSalesRow" }
+        totals:
+          type: object
+          required: [qty, subtotal, tax, total, paid, balance, count]
+          properties:
+            qty: { type: number }
+            subtotal: { type: number }
+            tax: { type: number }
+            total: { type: number }
+            paid: { type: number }
+            balance: { type: number }
+            count: { type: integer }
+
+    ProductionReportItem:
+      type: object
+      required: [id, productId, productName, unit, qty, orderType, cost]
+      properties:
+        id: { type: integer }
+        productId: { type: integer }
+        productName: { type: string }
+        unit: { type: string }
+        qty: { type: number }
+        workerName: { type: ["string", "null"] }
+        orderType: { type: string }
+        completedAt: { type: ["string", "null"] }
+        cost: { type: number }
+
+    ProductionSummaryRow:
+      type: object
+      required: [productId, productName, unit, batches, qty, cost]
+      properties:
+        productId: { type: integer }
+        productName: { type: string }
+        unit: { type: string }
+        batches: { type: integer }
+        qty: { type: number }
+        cost: { type: number }
+
+    ProductionReport:
+      type: object
+      required: [items, summary, totals]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/ProductionReportItem" }
+        summary:
+          type: array
+          items: { $ref: "#/components/schemas/ProductionSummaryRow" }
+        totals:
+          type: object
+          required: [qty, cost, count]
+          properties:
+            qty: { type: number }
+            cost: { type: number }
+            count: { type: integer }
+
+    TaxBucket:
+      type: object
+      required: [taxable, cgst, sgst, igst, total]
+      properties:
+        taxable: { type: number }
+        cgst: { type: number }
+        sgst: { type: number }
+        igst: { type: number }
+        total: { type: number }
+
+    TaxRateRow:
+      type: object
+      required: [rate, taxable, tax]
+      properties:
+        rate: { type: number }
+        taxable: { type: number }
+        tax: { type: number }
+
+    TaxReport:
+      type: object
+      required: [output, input, netPayable, outputByRate, inputByRate]
+      properties:
+        output: { $ref: "#/components/schemas/TaxBucket" }
+        input: { $ref: "#/components/schemas/TaxBucket" }
+        netPayable: { type: number }
+        outputByRate:
+          type: array
+          items: { $ref: "#/components/schemas/TaxRateRow" }
+        inputByRate:
+          type: array
+          items: { $ref: "#/components/schemas/TaxRateRow" }
+
+    ProfitLossReport:
+      type: object
+      required: [revenue, cogs, grossProfit, grossMargin, expenses, netProfit, netMargin, salesTax, salesTotal, purchases, expensesByCategory]
+      properties:
+        revenue: { type: number }
+        cogs: { type: number }
+        grossProfit: { type: number }
+        grossMargin: { type: number }
+        expenses: { type: number }
+        netProfit: { type: number }
+        netMargin: { type: number }
+        salesTax: { type: number }
+        salesTotal: { type: number }
+        purchases: { type: number }
+        expensesByCategory:
+          type: array
+          items:
+            type: object
+            required: [categoryName, total]
+            properties:
+              categoryName: { type: string }
+              total: { type: number }
