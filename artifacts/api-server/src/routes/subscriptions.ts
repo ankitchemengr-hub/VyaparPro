@@ -270,15 +270,17 @@ router.post("/subscriptions/create", async (req, res): Promise<void> => {
     await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
 
     if (adminUsername) {
-      const dup = await client.query(
-        `SELECT 1 FROM users WHERE username = $1 LIMIT 1`,
-        [adminUsername]
-      );
-      if (dup.rows.length > 0) {
-        await client.query("ROLLBACK");
-        res.status(409).json({ error: "Username already taken" });
-        return;
-      }
+      // Duplicate check is scoped to the NEW company only.
+      // The company row is inserted below, so at this point companyId does not exist
+      // yet — we check by company name to detect re-creation races, but username
+      // collisions across different companies are now intentionally allowed.
+      // We still check within the to-be-created company by looking at the
+      // pending INSERT: since the company_id won't exist yet, any pre-existing row
+      // with the same (username, company_id) is impossible. The DB constraint
+      // UNIQUE(company_id, username) will enforce it at INSERT time; no pre-check
+      // needed here (we rely on the 23505 catch block below to handle races).
+      // Note: we keep this block intentionally empty to document the decision,
+      // and rely solely on the DB constraint + catch(23505) below.
     }
 
     const companyRes = await client.query(

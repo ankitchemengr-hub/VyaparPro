@@ -2110,11 +2110,23 @@ ALTER TABLE ONLY public.users
 
 
 --
--- Name: users users_username_unique; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: users users_company_username_uq; Type: INDEX; Schema: public; Owner: postgres
+-- Usernames are unique WITHIN a company (not globally). Same username is allowed
+-- across different companies. Super_admin rows (company_id IS NULL) are covered by
+-- the separate partial index below.
 --
 
-ALTER TABLE ONLY public.users
-    ADD CONSTRAINT users_username_unique UNIQUE (username);
+CREATE UNIQUE INDEX users_company_username_uq ON public.users (company_id, username);
+
+
+--
+-- Name: users users_superadmin_username_uq; Type: INDEX; Schema: public; Owner: postgres
+-- Prevents duplicate usernames among super_admin accounts (company_id IS NULL).
+-- PostgreSQL treats NULL != NULL in composite unique indexes, so super_admin rows
+-- need their own partial index.
+--
+
+CREATE UNIQUE INDEX users_superadmin_username_uq ON public.users (username) WHERE (company_id IS NULL);
 
 
 --

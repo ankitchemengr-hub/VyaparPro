@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and } from "drizzle-orm";
+import { eq, and, isNull } from "drizzle-orm";
 import { db, pool } from "@workspace/db";
 import {
   usersTable,
@@ -42,10 +42,30 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   const { username, password, companyId: requestedCompanyId } = parsed.data;
   const switchTarget = requestedCompanyId ?? null;
 
-  const [user] = await db
-    .select()
-    .from(usersTable)
-    .where(eq(usersTable.username, username));
+  // Since usernames are unique per company (not globally), the lookup MUST be
+  // scoped to a specific company. Two strategies:
+  //
+  //   • companyId provided (regular user login): match (username, company_id).
+  //   • No companyId (super_admin login):         match (username, company_id IS NULL).
+  //
+  // This means a regular user MUST select their company on the login screen.
+  // The login form's company picker already sends companyId for all non-super_admin
+  // accounts, so this is transparent to the user.
+  let user: typeof usersTable.$inferSelect | undefined;
+  if (requestedCompanyId != null) {
+    const [found] = await db
+      .select()
+      .from(usersTable)
+      .where(and(eq(usersTable.username, username), eq(usersTable.companyId, requestedCompanyId)));
+    user = found;
+  } else {
+    // No company selected → super_admin only (company_id IS NULL).
+    const [found] = await db
+      .select()
+      .from(usersTable)
+      .where(and(eq(usersTable.username, username), isNull(usersTable.companyId)));
+    user = found;
+  }
 
   if (!user || !checkPassword(password, user.passwordHash)) {
     res.status(401).json({ error: "Invalid credentials" });

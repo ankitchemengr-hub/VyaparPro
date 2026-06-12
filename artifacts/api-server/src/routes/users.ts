@@ -67,13 +67,15 @@ router.post("/users", requireAdmin, async (req, res): Promise<void> => {
     return;
   }
 
-  // Usernames are globally unique across all tenants (it is the login key).
+  // Usernames are unique within a company, not globally. Two companies can both
+  // have a user named "admin" — they are different rows with different company_ids.
+  // Scope the duplicate check to this company only.
   const [existing] = await db
     .select({ id: usersTable.id })
     .from(usersTable)
-    .where(eq(usersTable.username, username));
+    .where(and(eq(usersTable.companyId, companyId), eq(usersTable.username, username)));
   if (existing) {
-    res.status(409).json({ error: "Username already taken" });
+    res.status(409).json({ error: "Username already taken within this company" });
     return;
   }
 
