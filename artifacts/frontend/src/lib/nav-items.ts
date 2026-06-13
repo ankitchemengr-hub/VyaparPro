@@ -20,6 +20,7 @@ import {
   BadgeIndianRupee,
   LayoutGrid,
   DatabaseBackup,
+  Tag,
   type LucideIcon,
 } from "lucide-react";
 
@@ -62,6 +63,7 @@ export const moduleNavItems: NavItem[] = [
   { name: "Expenses", href: "/expenses", icon: Receipt, roles: ["admin", "accountant"], description: "Business expenses" },
   { name: "Reports", href: "/reports", icon: BarChart3, roles: ["admin", "accountant"], description: "Sales, tax, P&L reports" },
   { name: "Subscriptions", href: "/subscriptions", icon: BadgeIndianRupee, roles: ["super_admin"], description: "Tenant subscriptions" },
+  { name: "Price List", href: "/price-list", icon: Tag, roles: ["admin"], description: "Edit product pricing in bulk" },
   { name: "User Accounts", href: "/users", icon: KeyRound, roles: ["admin"], description: "Manage logins" },
   { name: "Settings", href: "/settings", icon: Settings, roles: ["admin"], description: "Role permissions and config" },
   { name: "Backup & Restore", href: "/backup-restore", icon: DatabaseBackup, roles: ["admin"], description: "Backup, restore and reset data" },

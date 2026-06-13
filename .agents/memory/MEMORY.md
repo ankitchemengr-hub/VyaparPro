@@ -1,1 +1,2 @@
 - [Multi-company auth schema](multi-company-auth.md) — per-company UNIQUE(company_id, username) + partial index for super_admin (company_id IS NULL); migration must be applied to live DB manually.
+- [Express route ordering](express-route-ordering.md) — literal-path routes (e.g. /products/bulk-price) must be registered BEFORE param routes (/products/:id) or Express swallows them as param values.

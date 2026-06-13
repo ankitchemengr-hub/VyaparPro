@@ -192,6 +192,69 @@ router.get("/products/:id", async (req, res): Promise<void> => {
   res.json(formatProduct(product));
 });
 
+// PATCH /products/bulk-price  — update pricing for multiple products at once.
+// Must be registered BEFORE PATCH /products/:id so Express does not swallow
+// the literal path segment "bulk-price" as an :id param.
+// Only touches price-related fields; all historical invoice_items are unaffected.
+router.patch("/products/bulk-price", async (req, res): Promise<void> => {
+  try {
+    const { updates } = req.body as {
+      updates: Array<{
+        id: number;
+        purchasePrice?: number;
+        wholesalePrice?: number;
+        retailPrice?: number;
+        hsnCode?: string;
+        taxRate?: number;
+      }>;
+    };
+
+    if (!Array.isArray(updates) || updates.length === 0) {
+      res.status(400).json({ error: "updates must be a non-empty array" });
+      return;
+    }
+
+    const companyId = getCompanyId(req);
+    const ids = updates.map((u) => Number(u.id)).filter((n) => !isNaN(n));
+
+    // Verify all ids belong to this company before writing anything.
+    const owned = await db
+      .select({ id: productsTable.id })
+      .from(productsTable)
+      .where(and(eq(productsTable.companyId, companyId), isNull(productsTable.deletedAt)));
+
+    const ownedSet = new Set(owned.map((r) => r.id));
+    const illegal = ids.filter((id) => !ownedSet.has(id));
+    if (illegal.length > 0) {
+      res.status(403).json({ error: `Products not found in your company: ${illegal.join(", ")}` });
+      return;
+    }
+
+    const results: any[] = [];
+    for (const u of updates) {
+      const patch: Record<string, any> = { updatedAt: new Date() };
+      if (u.purchasePrice !== undefined) patch.purchasePrice = String(u.purchasePrice);
+      if (u.wholesalePrice !== undefined) patch.wholesalePrice = String(u.wholesalePrice);
+      if (u.retailPrice !== undefined) patch.retailPrice = String(u.retailPrice);
+      if (u.hsnCode !== undefined) patch.hsnCode = u.hsnCode;
+      if (u.taxRate !== undefined) patch.taxRate = String(u.taxRate);
+
+      const [updated] = await db
+        .update(productsTable)
+        .set(patch)
+        .where(and(eq(productsTable.companyId, companyId), eq(productsTable.id, Number(u.id))))
+        .returning();
+
+      if (updated) results.push(formatProduct(updated));
+    }
+
+    res.json({ updated: results.length, products: results });
+  } catch (e) {
+    if (handleTenantError(e, res)) return;
+    throw e;
+  }
+});
+
 // PATCH /products/:id
 router.patch("/products/:id", async (req, res): Promise<void> => {
   const params = UpdateProductParams.safeParse(req.params);
@@ -412,6 +475,7 @@ function formatProduct(p: any) {
     minStockThreshold: p.minStockThreshold != null ? Number(p.minStockThreshold) : null,
     imageUrl: p.imageUrl ?? null,
     createdAt: p.createdAt?.toISOString(),
+    updatedAt: p.updatedAt?.toISOString(),
   };
 }
 
