@@ -32,6 +32,58 @@ function checkPassword(plain: string, hash: string): boolean {
   return plain === hash;
 }
 
+// ---------------------------------------------------------------------------
+// Login audit helpers
+// ---------------------------------------------------------------------------
+
+function getClientIp(req: Parameters<typeof router.post>[1]): string {
+  const fwd = (req as any).headers?.["x-forwarded-for"];
+  if (typeof fwd === "string") return fwd.split(",")[0].trim();
+  return (req as any).ip ?? (req as any).socket?.remoteAddress ?? "unknown";
+}
+
+// Fire-and-forget audit writer — never throws; never blocks the login response.
+// company_id = 0 is a sentinel used when the user/company could not be resolved
+// (e.g. wrong credentials with an unknown username). audit_log.company_id has
+// no FK constraint so 0 is safe to store.
+async function writeLoginAudit(params: {
+  username: string;
+  companyId: number;            // 0 = unknown
+  ipAddress: string;
+  success: boolean;
+  reason?: string;              // failure reason; omit on success
+  userId?: number;              // resolved user id on success
+  userName?: string;            // resolved display name on success
+}): Promise<void> {
+  try {
+    const action = params.success ? "login_success" : "login_failure";
+    const description = params.success
+      ? `Successful login for "${params.username}" (company_id=${params.companyId})`
+      : `Failed login for "${params.username}" — ${params.reason ?? "unknown"} (company_id=${params.companyId})`;
+    const metadata = JSON.stringify({
+      username: params.username,
+      companyId: params.companyId,
+      ipAddress: params.ipAddress,
+      success: params.success,
+      reason: params.reason ?? null,
+    });
+    await pool.query(
+      `INSERT INTO audit_log (company_id, action, description, user_id, user_name, metadata)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        params.companyId,
+        action,
+        description,
+        params.userId ?? 0,
+        params.userName ?? params.username,
+        metadata,
+      ]
+    );
+  } catch (err) {
+    console.error("[audit_log] login audit write failed", err);
+  }
+}
+
 // POST /auth/login
 router.post("/auth/login", async (req, res): Promise<void> => {
   const parsed = LoginBody.safeParse(req.body);
@@ -41,6 +93,9 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   }
   const { username, password, companyId: requestedCompanyId } = parsed.data;
   const switchTarget = requestedCompanyId ?? null;
+  const ip = getClientIp(req as any);
+  // Sentinel company_id for audit rows where the company cannot be determined.
+  const auditCompanyId = requestedCompanyId ?? 0;
 
   // Since usernames are unique per company (not globally), the lookup MUST be
   // scoped to a specific company. Two strategies:
@@ -69,57 +124,45 @@ router.post("/auth/login", async (req, res): Promise<void> => {
 
   if (!user || !checkPassword(password, user.passwordHash)) {
     res.status(401).json({ error: "Invalid credentials" });
+    await writeLoginAudit({ username, companyId: auditCompanyId, ipAddress: ip, success: false, reason: "wrong_password" });
     return;
   }
 
   // Inactive accounts are rejected immediately, regardless of role or company.
   if (!user.isActive) {
     res.status(403).json({ error: "Your account has been deactivated. Contact administrator." });
+    await writeLoginAudit({ username, companyId: user.companyId ?? auditCompanyId, ipAddress: ip, success: false, reason: "inactive_account", userId: user.id, userName: user.name });
     return;
   }
 
   // MULTI-COMPANY GUARD: every non-super_admin user MUST be bound to a company.
-  // If company_id is NULL on a regular user it means the account was created
-  // before tenant isolation was enforced (pre-fix bootstrap admin with role
-  // "admin"). Allow it to log in would give them a NULL session company_id and
-  // cause every protected data route to throw "No tenant context" (403) —
-  // a confusing dead-end. Reject here with a clear, actionable message instead.
   if (user.role !== "super_admin" && user.companyId == null) {
     res.status(403).json({
-      error:
-        "Your account is not assigned to any company. Contact the Super Admin to fix this.",
+      error: "Your account is not assigned to any company. Contact the Super Admin to fix this.",
     });
+    await writeLoginAudit({ username, companyId: 0, ipAddress: ip, success: false, reason: "no_company_binding", userId: user.id, userName: user.name });
     return;
   }
 
-  // Login-screen "Switch Company" selection. The hidden switcher lets a user
-  // sign into a company OTHER than this deployment's locked default — but ONLY
-  // into the company their own account belongs to. This bypasses the dedicated
-  // lock for that case; it NEVER grants access to a company the account does not
-  // belong to. The platform super_admin is exempt (it switches in explicitly
-  // after login) so its selection is ignored here.
+  // Login-screen "Switch Company" selection — must match the user's own company.
   if (user.role !== "super_admin" && switchTarget != null) {
     if (user.companyId == null || user.companyId !== switchTarget) {
       res.status(403).json({
         error: "Your account does not belong to the selected company.",
       });
+      await writeLoginAudit({ username, companyId: switchTarget, ipAddress: ip, success: false, reason: "company_mismatch", userId: user.id, userName: user.name });
       return;
     }
   } else if (!isAccountAllowedHere(user.role, user.companyId ?? null)) {
-    // Dedicated single-company deployment lock: when MULTI_COMPANY_MODE=false
-    // only users of the configured DEFAULT_COMPANY_ID (and the platform
-    // super_admin) may sign in here. Enforced server-side via the shared,
-    // fail-closed helper, so a tampered client cannot bypass it and a
-    // misconfigured install denies access rather than falling open.
+    // Dedicated single-company deployment lock.
     res.status(403).json({
       error: "This system is dedicated to another company. You cannot sign in here.",
     });
+    await writeLoginAudit({ username, companyId: user.companyId ?? auditCompanyId, ipAddress: ip, success: false, reason: "deployment_lock", userId: user.id, userName: user.name });
     return;
   }
 
-  // Subscription gating: if this user belongs to a tenant company, block login
-  // when that company's subscription is expired or suspended. The platform
-  // super_admin (companyId NULL) is exempt and never gated.
+  // Subscription gating — block expired/suspended tenant companies.
   if (user.role !== "super_admin" && user.companyId != null) {
     const subRes = await pool.query(
       `SELECT subscription_status, subscription_end_date
@@ -139,23 +182,17 @@ router.post("/auth/login", async (req, res): Promise<void> => {
       res.status(403).json({
         error: "Your subscription has expired. Please contact administrator.",
       });
+      await writeLoginAudit({ username, companyId: user.companyId, ipAddress: ip, success: false, reason: "subscription_expired", userId: user.id, userName: user.name });
       return;
     }
   }
 
-  // Tenant isolation: lock the session's company. A validated "Switch Company"
-  // selection (switchTarget, already proven to match the user's own company)
-  // wins so the user lands in the company they picked. Otherwise dedicated mode
-  // (DEFAULT_COMPANY_ID set) forces every signed-in user onto that company; in
-  // shared mode it falls back to the user's own company. The platform
-  // super_admin is never scoped to a company (it switches in explicitly).
+  // All checks passed — issue session.
   const sessionCompanyId =
     user.role === "super_admin"
       ? null
       : switchTarget ?? getDefaultCompanyId() ?? user.companyId ?? null;
 
-  // Store session — entityId is critical for salesman attribution & ledger
-  // scoping; companyId is the tenant isolation key for every data route.
   (req as any).session = {
     userId: user.id,
     username: user.username,
@@ -163,8 +200,6 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     name: user.name,
     entityId: user.entityId ?? null,
     companyId: sessionCompanyId,
-    // Records a validated "Switch Company" sign-in so requireAuth lets this
-    // regular user into their own company on a dedicated install.
     companySwitch: user.role !== "super_admin" && switchTarget != null,
   };
 
@@ -175,6 +210,16 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     name: user.name,
     customerId: user.entityId ?? null,
     companyId: sessionCompanyId,
+  });
+
+  // Audit success after sending the response.
+  await writeLoginAudit({
+    username,
+    companyId: sessionCompanyId ?? 0,
+    ipAddress: ip,
+    success: true,
+    userId: user.id,
+    userName: user.name,
   });
 });
 
@@ -328,6 +373,8 @@ router.get("/auth/audit-log", async (req, res): Promise<void> => {
   }
 
   const USER_MANAGEMENT_ACTIONS = [
+    "login_success",
+    "login_failure",
     "user_created",
     "password_changed",
     "role_changed",
