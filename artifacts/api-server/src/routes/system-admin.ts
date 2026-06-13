@@ -314,7 +314,19 @@ router.post("/system/restore", requireAdmin, async (req, res): Promise<void> => 
         });
         const colList = cols.map((c) => `"${c}"`).join(", ");
         const placeholders = cols.map((_, i) => `$${i + 1}`).join(", ");
-        await client.query(`INSERT INTO ${table} (${colList}) VALUES (${placeholders})`, values);
+        // ON CONFLICT handling: if the backup row's id is already taken by a
+        // *different* company's row, the WHERE condition (company_id = EXCLUDED.company_id)
+        // won't match, so the insert is silently skipped — no cross-tenant corruption.
+        // If the id belongs to THIS company (e.g. a retry after partial restore), we
+        // overwrite it with the backup value, which is the desired behaviour.
+        const nonIdCols = cols.filter((c) => c !== "id");
+        const conflictClause = cols.includes("id") && nonIdCols.length > 0
+          ? `ON CONFLICT (id) DO UPDATE SET ${nonIdCols.map((c) => `"${c}" = EXCLUDED."${c}"`).join(", ")} WHERE ${table}.company_id = EXCLUDED.company_id`
+          : `ON CONFLICT DO NOTHING`;
+        await client.query(
+          `INSERT INTO ${table} (${colList}) VALUES (${placeholders}) ${conflictClause}`,
+          values,
+        );
         count++;
       }
       restored[table] = count;
