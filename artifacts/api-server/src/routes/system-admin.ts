@@ -314,19 +314,33 @@ router.post("/system/restore", requireAdmin, async (req, res): Promise<void> => 
         });
         const colList = cols.map((c) => `"${c}"`).join(", ");
         const placeholders = cols.map((_, i) => `$${i + 1}`).join(", ");
-        // ON CONFLICT handling: if the backup row's id is already taken by a
-        // *different* company's row, the WHERE condition (company_id = EXCLUDED.company_id)
-        // won't match, so the insert is silently skipped — no cross-tenant corruption.
-        // If the id belongs to THIS company (e.g. a retry after partial restore), we
-        // overwrite it with the backup value, which is the desired behaviour.
         const nonIdCols = cols.filter((c) => c !== "id");
-        const conflictClause = cols.includes("id") && nonIdCols.length > 0
+        const hasId = cols.includes("id");
+        // Primary attempt: insert with the original id.
+        // - If the id is already taken by THIS company's row → upsert (overwrite with backup value).
+        // - If the id is taken by a DIFFERENT company's row → the WHERE condition won't
+        //   match, so the row is NOT written (DO NOTHING branch). We detect this via
+        //   rowCount and fall back to a second insert without the id so the DB assigns
+        //   a fresh one. This guarantees no backup row is silently dropped, at the cost
+        //   of a new primary key for the small number of cross-company collisions.
+        const conflictClause = hasId && nonIdCols.length > 0
           ? `ON CONFLICT (id) DO UPDATE SET ${nonIdCols.map((c) => `"${c}" = EXCLUDED."${c}"`).join(", ")} WHERE ${table}.company_id = EXCLUDED.company_id`
           : `ON CONFLICT DO NOTHING`;
-        await client.query(
+        const result = await client.query(
           `INSERT INTO ${table} (${colList}) VALUES (${placeholders}) ${conflictClause}`,
           values,
         );
+        // Fallback: if nothing was written (cross-company id collision), re-insert
+        // without the id column so the DB assigns a new primary key.
+        if (result.rowCount === 0 && hasId && nonIdCols.length > 0) {
+          const fbColList = nonIdCols.map((c) => `"${c}"`).join(", ");
+          const fbValues = values.filter((_, i) => cols[i] !== "id");
+          const fbPlaceholders = nonIdCols.map((_, i) => `$${i + 1}`).join(", ");
+          await client.query(
+            `INSERT INTO ${table} (${fbColList}) VALUES (${fbPlaceholders})`,
+            fbValues,
+          );
+        }
         count++;
       }
       restored[table] = count;
