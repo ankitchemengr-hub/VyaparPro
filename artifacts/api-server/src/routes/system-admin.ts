@@ -266,7 +266,23 @@ router.post("/system/restore", requireAdmin, async (req, res): Promise<void> => 
     res.status(400).json({ error: "This backup was made by a newer version and cannot be restored." });
     return;
   }
-  if (pkg.companyId == null || Number(pkg.companyId) !== companyId) {
+  // Primary check: company IDs match (backup was made on this same DB instance).
+  // Fallback: company names match case-insensitively — handles the common case
+  // where the DB was reset/recreated and the company was assigned a new internal
+  // ID even though it is logically the same company. The restore itself forces
+  // every row's company_id to the caller's current session value, so there is
+  // no cross-tenant data leak regardless of which branch is taken.
+  const currentCompany = await getCurrentCompany(companyId);
+  const idMatches = pkg.companyId != null && Number(pkg.companyId) === companyId;
+  // Normalize names: lowercase + collapse all whitespace so "SHRADHA OILCENTER"
+  // matches "SHRADHA OIL CENTER" (spacing may differ between backup and current DB).
+  const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, "");
+  const nameMatches =
+    typeof pkg.companyName === "string" &&
+    pkg.companyName.trim().length > 0 &&
+    currentCompany?.name != null &&
+    normalize(pkg.companyName) === normalize(currentCompany.name);
+  if (!idMatches && !nameMatches) {
     res.status(400).json({ error: "This backup belongs to a different company and cannot be restored here." });
     return;
   }
