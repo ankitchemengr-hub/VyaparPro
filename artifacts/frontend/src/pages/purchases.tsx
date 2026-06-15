@@ -205,14 +205,15 @@ function NewPurchaseTab() {
   };
 
   return (
-    <div className="grid gap-6 md:grid-cols-[1fr_300px]">
+    <div className="space-y-4 max-w-5xl">
+      {/* ── Bill Details ── */}
       <Card>
-        <CardHeader>
+        <CardHeader className="pb-3">
           <CardTitle className="text-base">Bill Details</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-5">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
+        <CardContent>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="space-y-1.5 sm:col-span-2">
               <Label>Vendor</Label>
               <div className="flex gap-2">
                 <Select value={vendorId} onValueChange={setVendorId}>
@@ -221,9 +222,7 @@ function NewPurchaseTab() {
                   </SelectTrigger>
                   <SelectContent>
                     {(vendors ?? []).length === 0 && (
-                      <div className="px-2 py-3 text-sm text-muted-foreground">
-                        No vendors yet. Click + to add one.
-                      </div>
+                      <div className="px-2 py-3 text-sm text-muted-foreground">No vendors yet. Click + to add one.</div>
                     )}
                     {(vendors ?? []).map((v: any) => (
                       <SelectItem key={v.id} value={String(v.id)}>
@@ -232,32 +231,25 @@ function NewPurchaseTab() {
                     ))}
                   </SelectContent>
                 </Select>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setVendorDialogOpen(true)}
-                  data-testid="button-add-vendor"
-                  title="Add new vendor"
-                >
+                <Button type="button" variant="outline" size="icon" onClick={() => setVendorDialogOpen(true)}
+                  data-testid="button-add-vendor" title="Add new vendor">
                   <Plus className="w-4 h-4" />
                 </Button>
               </div>
             </div>
-            <div className="space-y-2">
+
+            <div className="space-y-1.5">
               <Label>Vendor Bill #</Label>
-              <Input
-                placeholder="e.g. SUP/2026/119"
-                value={vendorBillNo}
-                onChange={(e) => setVendorBillNo(e.target.value)}
-                data-testid="input-vendor-bill-no"
-              />
+              <Input placeholder="e.g. SUP/2026/119" value={vendorBillNo}
+                onChange={(e) => setVendorBillNo(e.target.value)} data-testid="input-vendor-bill-no" />
             </div>
-            <div className="space-y-2">
+
+            <div className="space-y-1.5">
               <Label>Bill Date</Label>
               <Input type="date" value={billDate} onChange={(e) => setBillDate(e.target.value)} data-testid="input-bill-date" />
             </div>
-            <div className="space-y-2">
+
+            <div className="space-y-1.5">
               <Label>Bill Type</Label>
               <Select value={billType} onValueChange={(v) => setBillType(v as any)}>
                 <SelectTrigger data-testid="select-bill-type"><SelectValue /></SelectTrigger>
@@ -267,162 +259,165 @@ function NewPurchaseTab() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2 md:col-span-2">
+
+            <div className="space-y-1.5">
               <Label>Place of Supply</Label>
               <Input value={placeOfSupply} onChange={(e) => setPlaceOfSupply(e.target.value)} />
-              <p className="text-xs text-muted-foreground">
-                Non-Maharashtra triggers IGST instead of CGST + SGST.
-              </p>
             </div>
           </div>
+          {isInterstate && (
+            <p className="text-xs text-amber-600 mt-2">⚠ Non-Maharashtra — IGST will apply instead of CGST + SGST.</p>
+          )}
+        </CardContent>
+      </Card>
 
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold">Line Items</h3>
-              <Button size="sm" variant="outline" onClick={() => setLines((p) => [...p, emptyLine()])} data-testid="button-add-line">
-                <Plus className="w-4 h-4 mr-1" /> Add Line
-              </Button>
-            </div>
-
-            <div className="rounded-lg border overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="min-w-[220px]">Product</TableHead>
-                    <TableHead className="w-[90px]">Qty</TableHead>
-                    <TableHead className="w-[80px]">Unit</TableHead>
-                    <TableHead className="w-[110px]">Rate</TableHead>
-                    <TableHead className="w-[80px]">Disc %</TableHead>
-                    {isGst && <TableHead className="w-[80px]">GST %</TableHead>}
-                    <TableHead className="w-[110px] text-right">Amount</TableHead>
-                    <TableHead className="w-[40px]"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {lines.map((l, i) => {
-                    const qty = Number(l.qty) || 0;
-                    const rate = Number(l.rate) || 0;
-                    const disc = Number(l.discountPct) || 0;
-                    const taxPct = isGst ? Number(l.taxPct) || 0 : 0;
-                    const base = qty * rate;
-                    const taxable = base - (base * disc / 100);
-                    const amount = taxable + (taxable * taxPct / 100);
-                    return (
-                      <TableRow key={i} data-testid={`line-${i}`}>
-                        <TableCell>
-                          <Select
-                            value={l.productId ? String(l.productId) : ""}
-                            onValueChange={(v) => onPickProduct(i, v)}
-                          >
-                            <SelectTrigger data-testid={`select-product-${i}`}>
-                              <SelectValue placeholder="Pick product" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {(products ?? []).map((p: any) => (
-                                <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            min="0"
-                            step="1"
-                            value={l.qty}
-                            onChange={(e) => updateLine(i, { qty: e.target.value })}
-                            className="w-20 text-right"
-                            data-testid={`input-qty-${i}`}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            value={l.unit}
-                            onChange={(e) => updateLine(i, { unit: e.target.value })}
-                            className="w-16"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={l.rate}
-                            onChange={(e) => updateLine(i, { rate: e.target.value })}
-                            className="w-24 text-right"
-                            data-testid={`input-rate-${i}`}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            min="0"
-                            max="100"
-                            step="0.1"
-                            value={l.discountPct}
-                            onChange={(e) => updateLine(i, { discountPct: e.target.value })}
-                            className="w-16 text-right"
-                          />
-                        </TableCell>
-                        {isGst && (
-                          <TableCell>
-                            <Input
-                              type="number"
-                              min="0"
-                              max="100"
-                              step="0.5"
-                              value={l.taxPct}
-                              onChange={(e) => updateLine(i, { taxPct: e.target.value })}
-                              className="w-16 text-right"
-                            />
-                          </TableCell>
-                        )}
-                        <TableCell className="text-right tabular-nums font-medium">
-                          ₹{amount.toFixed(2)}
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => removeLine(i)}
-                            data-testid={`button-remove-line-${i}`}
-                          >
-                            <Trash2 className="w-4 h-4 text-destructive" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
+      {/* ── Line Items ── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">Line Items</CardTitle>
+            <Button size="sm" variant="outline" onClick={() => setLines((p) => [...p, emptyLine()])} data-testid="button-add-line">
+              <Plus className="w-4 h-4 mr-1" /> Add Line
+            </Button>
           </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="pl-4 min-w-[200px]">Product</TableHead>
+                  <TableHead className="w-24 text-right">Qty</TableHead>
+                  <TableHead className="w-20">Unit</TableHead>
+                  <TableHead className="w-28 text-right">Rate (₹)</TableHead>
+                  <TableHead className="w-20 text-right">Disc%</TableHead>
+                  {isGst && <TableHead className="w-20 text-right">GST%</TableHead>}
+                  <TableHead className="w-28 text-right">Amount</TableHead>
+                  <TableHead className="w-12 pr-4"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {lines.map((l, i) => {
+                  const qty  = Number(l.qty) || 0;
+                  const rate = Number(l.rate) || 0;
+                  const disc = Number(l.discountPct) || 0;
+                  const taxPct = isGst ? Number(l.taxPct) || 0 : 0;
+                  const base   = qty * rate;
+                  const taxable = base - (base * disc / 100);
+                  const amount  = taxable + (taxable * taxPct / 100);
+                  return (
+                    <TableRow key={i} data-testid={`line-${i}`}>
+                      <TableCell className="pl-4">
+                        <Select value={l.productId ? String(l.productId) : ""} onValueChange={(v) => onPickProduct(i, v)}>
+                          <SelectTrigger data-testid={`select-product-${i}`} className="min-w-[180px]">
+                            <SelectValue placeholder="Pick product" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(products ?? []).map((p: any) => (
+                              <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Input type="number" min="0" step="1"
+                          value={l.qty} onChange={(e) => updateLine(i, { qty: e.target.value })}
+                          className="w-20 text-right ml-auto" data-testid={`input-qty-${i}`} />
+                      </TableCell>
+                      <TableCell>
+                        <Input value={l.unit} onChange={(e) => updateLine(i, { unit: e.target.value })} className="w-16" />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Input type="number" min="0" step="0.01"
+                          value={l.rate} onChange={(e) => updateLine(i, { rate: e.target.value })}
+                          className="w-24 text-right ml-auto" data-testid={`input-rate-${i}`} />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Input type="number" min="0" max="100" step="0.1"
+                          value={l.discountPct} onChange={(e) => updateLine(i, { discountPct: e.target.value })}
+                          className="w-16 text-right ml-auto" />
+                      </TableCell>
+                      {isGst && (
+                        <TableCell className="text-right">
+                          <Input type="number" min="0" max="100" step="0.5"
+                            value={l.taxPct} onChange={(e) => updateLine(i, { taxPct: e.target.value })}
+                            className="w-16 text-right ml-auto" />
+                        </TableCell>
+                      )}
+                      <TableCell className="text-right tabular-nums font-semibold pr-4">
+                        ₹{amount.toFixed(2)}
+                      </TableCell>
+                      <TableCell className="pr-4">
+                        <Button size="icon" variant="ghost" onClick={() => removeLine(i)}
+                          data-testid={`button-remove-line-${i}`}>
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Freight / Other Charges</Label>
+      {/* ── Freight, Notes, Summary, Save ── */}
+      <Card>
+        <CardContent className="pt-5 space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label>Freight / Other Charges (₹)</Label>
               <Input type="number" min="0" step="0.01" value={freight} onChange={(e) => setFreight(e.target.value)} />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label>Notes</Label>
               <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional remarks…" />
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-2 border-t md:hidden">
-            <div className="text-sm text-muted-foreground">
-              Grand Total: <span className="text-lg font-bold text-foreground tabular-nums">₹{totals.grand.toFixed(2)}</span>
+          {/* Summary row */}
+          <div className="rounded-lg bg-muted/50 border px-4 py-3 flex flex-wrap gap-x-6 gap-y-2 items-center text-sm">
+            <div className="flex gap-1.5">
+              <span className="text-muted-foreground">Subtotal:</span>
+              <span className="tabular-nums font-medium">₹{totals.subtotal.toFixed(2)}</span>
             </div>
-            <Button
-              disabled={!valid || submitting}
-              onClick={onSubmit}
-            >
-              {submitting ? (
-                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving…</>
-              ) : (
-                <><Save className="w-4 h-4 mr-2" /> Save Purchase</>
-              )}
-            </Button>
+            {totals.totalDiscount > 0 && (
+              <div className="flex gap-1.5">
+                <span className="text-muted-foreground">Discount:</span>
+                <span className="tabular-nums text-destructive">−₹{totals.totalDiscount.toFixed(2)}</span>
+              </div>
+            )}
+            {isGst && totals.totalTax > 0 && (
+              isInterstate
+                ? <div className="flex gap-1.5"><span className="text-muted-foreground">IGST:</span><span className="tabular-nums">₹{totals.totalTax.toFixed(2)}</span></div>
+                : <>
+                    <div className="flex gap-1.5"><span className="text-muted-foreground">CGST:</span><span className="tabular-nums">₹{(totals.totalTax/2).toFixed(2)}</span></div>
+                    <div className="flex gap-1.5"><span className="text-muted-foreground">SGST:</span><span className="tabular-nums">₹{(totals.totalTax/2).toFixed(2)}</span></div>
+                  </>
+            )}
+            {totals.freight > 0 && (
+              <div className="flex gap-1.5">
+                <span className="text-muted-foreground">Freight:</span>
+                <span className="tabular-nums">₹{totals.freight.toFixed(2)}</span>
+              </div>
+            )}
+            <div className="ml-auto flex items-center gap-4">
+              <div>
+                <span className="text-muted-foreground mr-1.5">Grand Total:</span>
+                <span className="text-xl font-bold tabular-nums" data-testid="text-grand-total">₹{totals.grand.toFixed(2)}</span>
+              </div>
+              <Button
+                disabled={!valid || submitting}
+                onClick={onSubmit}
+                data-testid="button-save-purchase"
+                size="lg"
+              >
+                {submitting
+                  ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving…</>
+                  : <><Save className="w-4 h-4 mr-2" /> Save Purchase</>}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -432,48 +427,6 @@ function NewPurchaseTab() {
         onOpenChange={setVendorDialogOpen}
         onCreated={(v) => setVendorId(String(v.id))}
       />
-
-      <Card className="h-fit sticky top-4">
-        <CardHeader>
-          <CardTitle className="text-base">Summary</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <SumRow label="Subtotal" value={totals.subtotal} />
-          {totals.totalDiscount > 0 && <SumRow label="Discount" value={-totals.totalDiscount} muted />}
-          {isGst && (
-            isInterstate
-              ? <SumRow label="IGST" value={totals.totalTax} muted />
-              : <>
-                  <SumRow label="CGST" value={totals.totalTax / 2} muted />
-                  <SumRow label="SGST" value={totals.totalTax / 2} muted />
-                </>
-          )}
-          {totals.freight > 0 && <SumRow label="Freight" value={totals.freight} muted />}
-          <div className="border-t pt-3">
-            <div className="flex justify-between items-baseline">
-              <span className="font-semibold">Grand Total</span>
-              <span className="text-2xl font-bold tabular-nums" data-testid="text-grand-total">
-                ₹{totals.grand.toFixed(2)}
-              </span>
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Payable to vendor on save
-            </p>
-          </div>
-          <Button
-            className="w-full"
-            disabled={!valid || submitting}
-            onClick={onSubmit}
-            data-testid="button-save-purchase"
-          >
-            {submitting ? (
-              <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving…</>
-            ) : (
-              <><Save className="w-4 h-4 mr-2" /> Save Purchase</>
-            )}
-          </Button>
-        </CardContent>
-      </Card>
     </div>
   );
 }
