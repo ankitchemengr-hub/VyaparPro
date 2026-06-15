@@ -223,8 +223,8 @@ router.get("/customer-orders", async (req, res): Promise<void> => {
   if (session.role === "customer" || session.role === "salesman") {
     params.push(session.userId);
     where.push(`user_id = $${params.length}`);
-  } else if (session.role !== "admin" && session.role !== "manufacturing") {
-    // Manufacturing needs to see all orders (e.g. the ready-for-dispatch queue).
+  } else if (session.role !== "admin" && session.role !== "manufacturing" && session.role !== "store") {
+    // Manufacturing and store workers need to see all orders (dispatch queue etc.).
     res.status(403).json({ error: "Forbidden" });
     return;
   }

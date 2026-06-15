@@ -45,7 +45,7 @@ export const topNavItems: NavItem[] = [
 // All operational modules, shown as a grid on the Menu page.
 export const moduleNavItems: NavItem[] = [
   { name: "My Orders", href: "/my-orders", icon: ClipboardList, roles: ["customer"], description: "Track your placed orders" },
-  { name: "Customer Orders", href: "/customer-orders", icon: Inbox, roles: ["admin"], description: "Manage incoming orders" },
+  { name: "Customer Orders", href: "/customer-orders", icon: Inbox, roles: ["admin", "store"], description: "Manage incoming orders" },
   { name: "Salesman Orders", href: "/salesman-orders", icon: ClipboardList, roles: ["salesman"], description: "Create and submit orders" },
   { name: "Billing", href: "/billing", icon: FileText, roles: ["admin", "salesman"], description: "Create GST / non-GST invoices" },
   { name: "Invoices", href: "/invoices", icon: FileText, roles: ["admin", "salesman", "accountant"], description: "Browse and print invoices" },
