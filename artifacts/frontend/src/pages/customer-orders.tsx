@@ -31,7 +31,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Inbox, Eye, Loader2, FileText } from "lucide-react";
+import { Inbox, Eye, Loader2, FileText, Printer } from "lucide-react";
+import { useAuth } from "@/contexts/use-auth";
 
 const STATUSES = [
   "pending",
@@ -61,7 +62,85 @@ function StatusBadge({ status }: { status: string }) {
   return <Badge className={v.className} data-testid={`status-${status}`}>{v.label}</Badge>;
 }
 
+function printOrder(detail: any) {
+  const win = window.open("", "_blank");
+  if (!win) return;
+
+  const itemsHtml = (detail.items ?? [])
+    .map(
+      (it: any) => `
+      <tr>
+        <td style="padding:8px;border:1px solid #ddd;">${it.productName}</td>
+        <td style="padding:8px;border:1px solid #ddd;text-align:right;">${it.qty} ${it.unit ?? ""}</td>
+        <td style="padding:8px;border:1px solid #ddd;text-align:right;">&#x20B9;${Number(it.unitPrice).toLocaleString("en-IN")}</td>
+        <td style="padding:8px;border:1px solid #ddd;text-align:right;font-weight:600;">&#x20B9;${Number(it.lineTotal).toLocaleString("en-IN")}</td>
+      </tr>`,
+    )
+    .join("");
+
+  win.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Order ${detail.orderNo ?? `#${detail.id}`}</title>
+  <style>
+    body{font-family:Arial,sans-serif;padding:28px;color:#111;}
+    h2{margin:0 0 4px;}
+    .sub{color:#555;font-size:13px;margin-bottom:20px;}
+    .grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:20px;}
+    .lbl{color:#6b7280;font-size:11px;text-transform:uppercase;letter-spacing:.5px;}
+    .val{font-weight:600;font-size:14px;margin-top:2px;}
+    table{width:100%;border-collapse:collapse;margin-top:4px;}
+    th{background:#f3f4f6;text-align:left;padding:8px;border:1px solid #ddd;font-size:13px;}
+    td{font-size:13px;}
+    .total-row{text-align:right;font-weight:700;font-size:16px;margin-top:12px;}
+    hr{border:none;border-top:1px solid #e5e7eb;margin:16px 0;}
+  </style>
+</head>
+<body>
+  <h2>Order ${detail.orderNo ?? `#${detail.id}`}</h2>
+  <div class="sub">Printed on ${new Date().toLocaleString("en-IN")}</div>
+  <hr/>
+  <div class="grid">
+    <div>
+      <div class="lbl">Customer</div>
+      <div class="val">${detail.customerName ?? "-"}</div>
+      ${detail.customerMobile ? `<div style="font-size:12px;color:#555;">${detail.customerMobile}</div>` : ""}
+    </div>
+    <div>
+      <div class="lbl">Order Date</div>
+      <div class="val">${new Date(detail.createdAt).toLocaleString("en-IN")}</div>
+    </div>
+    <div>
+      <div class="lbl">Status</div>
+      <div class="val">Completed</div>
+    </div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Product</th>
+        <th style="text-align:right;">Qty</th>
+        <th style="text-align:right;">Unit Price</th>
+        <th style="text-align:right;">Total</th>
+      </tr>
+    </thead>
+    <tbody>${itemsHtml}</tbody>
+  </table>
+  <div class="total-row">Total: &#x20B9;${Number(detail.totalAmount).toLocaleString("en-IN")}</div>
+  <script>window.onload=function(){window.print();}</script>
+</body>
+</html>`);
+  win.document.close();
+}
+
 export default function CustomerOrdersAdmin() {
+  const { user } = useAuth();
+  const role = user?.role ?? "";
+
+  const isAdminOrAccountant = role === "admin" || role === "accountant";
+  const isWorker = role === "store" || role === "manufacturing";
+
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const { data: orders, isLoading } = useListCustomerOrders(
     statusFilter !== "all" ? { status: statusFilter as Status } : undefined,
@@ -312,7 +391,17 @@ export default function CustomerOrdersAdmin() {
                   </p>
                 )}
                 <div className="flex justify-end gap-2">
-                  {(detail.status === "done" || detail.status === "processing") && (
+                  {isWorker && detail.status === "done" && (
+                    <Button
+                      variant="outline"
+                      onClick={() => printOrder(detail)}
+                      data-testid="button-print-order"
+                    >
+                      <Printer className="w-4 h-4 mr-2" />
+                      Print Order
+                    </Button>
+                  )}
+                  {isAdminOrAccountant && (detail.status === "done" || detail.status === "processing") && (
                     <Button
                       variant="default"
                       onClick={goToBilling}
