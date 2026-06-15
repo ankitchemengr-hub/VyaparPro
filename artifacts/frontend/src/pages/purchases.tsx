@@ -1,15 +1,19 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Link } from "wouter";
 import {
   useListPurchases,
   useCreatePurchase,
+  useUpdatePurchase,
+  useGetPurchase,
   useListEntities,
   useCreateEntity,
   useListProducts,
   getListPurchasesQueryKey,
+  getGetPurchaseQueryKey,
   getListProductsQueryKey,
   getListEntitiesQueryKey,
 } from "@workspace/api-client-react";
+import { useAuth } from "@/contexts/use-auth";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,7 +33,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Truck, Plus, Trash2, Loader2, FileText, Save, UserPlus,
+  Truck, Plus, Trash2, Loader2, FileText, Save, UserPlus, Pencil,
 } from "lucide-react";
 
 export default function Purchases() {
@@ -573,7 +577,10 @@ function SumRow({ label, value, muted }: { label: string; value: number; muted?:
 // ------------------------------ HISTORY ------------------------------
 
 function HistoryTab() {
+  const { hasRole } = useAuth();
+  const isAdmin = hasRole(["admin"]);
   const { data: purchases, isLoading } = useListPurchases();
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   if (isLoading) {
     return (
@@ -596,54 +603,369 @@ function HistoryTab() {
   }
 
   return (
-    <Card>
-      <CardContent className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Bill #</TableHead>
-              <TableHead>Date</TableHead>
-              <TableHead>Vendor</TableHead>
-              <TableHead>Vendor Bill</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead className="text-right">Amount</TableHead>
-              <TableHead className="text-right">Balance Due</TableHead>
-              <TableHead>Status</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {purchases.map((p: any) => (
-              <TableRow key={p.id} data-testid={`row-purchase-${p.id}`}>
-                <TableCell className="font-medium">
-                  <Link href={`/customers/${p.vendorId}`} className="hover:underline inline-flex items-center gap-1">
-                    <FileText className="w-3.5 h-3.5" />
-                    {p.billNo}
-                  </Link>
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {new Date(p.billDate).toLocaleDateString("en-IN")}
-                </TableCell>
-                <TableCell>{p.vendorName ?? <span className="text-muted-foreground">—</span>}</TableCell>
-                <TableCell className="text-muted-foreground">{p.vendorBillNo ?? "—"}</TableCell>
-                <TableCell>
-                  <Badge variant={p.billType === "gst" ? "default" : "secondary"}>
-                    {p.billType === "gst" ? "GST" : "Non-GST"}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-right tabular-nums font-medium">
-                  ₹{Number(p.grandTotal).toFixed(2)}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  ₹{Number(p.balanceDue).toFixed(2)}
-                </TableCell>
-                <TableCell>
-                  <Badge variant={p.status === "cancelled" ? "destructive" : "outline"}>{p.status}</Badge>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
+    <>
+      <Card>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Bill #</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Vendor</TableHead>
+                  <TableHead>Vendor Bill</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead className="text-right">Balance Due</TableHead>
+                  <TableHead>Status</TableHead>
+                  {isAdmin && <TableHead className="w-16"></TableHead>}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {purchases.map((p: any) => (
+                  <TableRow key={p.id} data-testid={`row-purchase-${p.id}`}>
+                    <TableCell className="font-medium">
+                      <span className="inline-flex items-center gap-1">
+                        <FileText className="w-3.5 h-3.5" />
+                        {p.billNo}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {new Date(p.billDate).toLocaleDateString("en-IN")}
+                    </TableCell>
+                    <TableCell>{p.vendorName ?? <span className="text-muted-foreground">—</span>}</TableCell>
+                    <TableCell className="text-muted-foreground">{p.vendorBillNo ?? "—"}</TableCell>
+                    <TableCell>
+                      <Badge variant={p.billType === "gst" ? "default" : "secondary"}>
+                        {p.billType === "gst" ? "GST" : "Non-GST"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums font-medium">
+                      ₹{Number(p.grandTotal).toFixed(2)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      ₹{Number(p.balanceDue).toFixed(2)}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={p.status === "cancelled" ? "destructive" : "outline"}>{p.status}</Badge>
+                    </TableCell>
+                    {isAdmin && (
+                      <TableCell>
+                        {p.status !== "cancelled" && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            title="Edit bill"
+                            onClick={() => setEditingId(p.id)}
+                            data-testid={`button-edit-purchase-${p.id}`}
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </TableCell>
+                    )}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {editingId !== null && (
+        <EditPurchaseDialog
+          purchaseId={editingId}
+          open={editingId !== null}
+          onOpenChange={(open) => { if (!open) setEditingId(null); }}
+        />
+      )}
+    </>
+  );
+}
+
+// ------------------------------ EDIT DIALOG ------------------------------
+
+function EditPurchaseDialog({
+  purchaseId,
+  open,
+  onOpenChange,
+}: {
+  purchaseId: number;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const { data: purchase, isLoading } = useGetPurchase(purchaseId, {
+    query: { enabled: open },
+  });
+  const { data: vendors } = useListEntities({ type: "vendor" });
+  const { data: products } = useListProducts({});
+  const update = useUpdatePurchase();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const [vendorId, setVendorId] = useState("");
+  const [vendorBillNo, setVendorBillNo] = useState("");
+  const [billType, setBillType] = useState<"gst" | "non_gst">("gst");
+  const [placeOfSupply, setPlaceOfSupply] = useState("Maharashtra");
+  const [billDate, setBillDate] = useState("");
+  const [notes, setNotes] = useState("");
+  const [freight, setFreight] = useState("0");
+  const [lines, setLines] = useState<Line[]>([emptyLine()]);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Pre-fill when purchase loads
+  useEffect(() => {
+    if (!purchase) return;
+    setVendorId(purchase.vendorId ? String(purchase.vendorId) : "");
+    setVendorBillNo(purchase.vendorBillNo ?? "");
+    setBillType(purchase.billType as "gst" | "non_gst");
+    setPlaceOfSupply(purchase.placeOfSupply ?? "Maharashtra");
+    setBillDate(purchase.billDate ? purchase.billDate.slice(0, 10) : "");
+    setNotes(purchase.notes ?? "");
+    setFreight(purchase.freight ?? "0");
+    if (purchase.items && purchase.items.length > 0) {
+      setLines(purchase.items.map((it: any) => ({
+        productId: it.productId ?? null,
+        productName: it.productName ?? "",
+        unit: it.unit ?? "pcs",
+        qty: it.qty ?? "1",
+        rate: it.rate ?? "0",
+        discountPct: it.discountPct ?? "0",
+        taxPct: it.taxPct ?? "18",
+      })));
+    }
+  }, [purchase]);
+
+  const isGst = billType === "gst";
+  const isInterstate = placeOfSupply !== "Maharashtra";
+
+  const totals = useMemo(() => {
+    let subtotal = 0, totalDiscount = 0, totalTax = 0;
+    for (const l of lines) {
+      const qty = Number(l.qty) || 0;
+      const rate = Number(l.rate) || 0;
+      const disc = Number(l.discountPct) || 0;
+      const taxPct = isGst ? Number(l.taxPct) || 0 : 0;
+      const base = qty * rate;
+      const discAmt = base * disc / 100;
+      const taxable = base - discAmt;
+      const tax = taxable * taxPct / 100;
+      subtotal += taxable;
+      totalDiscount += discAmt;
+      totalTax += tax;
+    }
+    const fr = Number(freight) || 0;
+    return { subtotal, totalDiscount, totalTax, freight: fr, grand: subtotal + totalTax + fr };
+  }, [lines, isGst, freight]);
+
+  const updateLine = (i: number, patch: Partial<Line>) =>
+    setLines((prev) => prev.map((l, idx) => idx === i ? { ...l, ...patch } : l));
+  const removeLine = (i: number) => setLines((prev) => prev.filter((_, idx) => idx !== i));
+
+  const onPickProduct = (i: number, productIdStr: string) => {
+    const prod = (products ?? []).find((p: any) => String(p.id) === productIdStr);
+    if (!prod) return;
+    updateLine(i, {
+      productId: prod.id,
+      productName: prod.name,
+      unit: prod.unit ?? "pcs",
+      rate: String(prod.purchasePrice ?? 0),
+      taxPct: String(prod.taxRate ?? 18),
+    });
+  };
+
+  const valid = vendorId && lines.length > 0 && lines.every((l) => l.productId && Number(l.qty) > 0);
+
+  const onSubmit = async () => {
+    if (!valid) return;
+    setSubmitting(true);
+    try {
+      await update.mutateAsync({
+        id: purchaseId,
+        data: {
+          vendorId: Number(vendorId),
+          vendorBillNo: vendorBillNo || undefined,
+          billDate,
+          billType,
+          placeOfSupply,
+          notes: notes || undefined,
+          freight: Number(freight) || 0,
+          items: lines.map((l) => ({
+            productId: l.productId!,
+            qty: Number(l.qty),
+            unit: l.unit,
+            rate: Number(l.rate),
+            discountPct: Number(l.discountPct) || 0,
+            taxPct: Number(l.taxPct) || 0,
+          })),
+        },
+      });
+      await queryClient.invalidateQueries({ queryKey: getListPurchasesQueryKey() });
+      await queryClient.invalidateQueries({ queryKey: getGetPurchaseQueryKey(purchaseId) });
+      toast({ title: "Purchase updated", description: "Bill and stock have been adjusted." });
+      onOpenChange(false);
+    } catch (err: any) {
+      let desc = err?.message ?? "Server error";
+      try {
+        const body = err?.response ? await err.response.json() : null;
+        if (body?.error) desc = String(body.error).slice(0, 300);
+      } catch {}
+      toast({ title: "Could not update purchase", description: desc, variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Edit Purchase — {purchase?.billNo}</DialogTitle>
+          <DialogDescription>
+            Changes will reverse old stock movements and ledger entries, then re-apply with updated values.
+          </DialogDescription>
+        </DialogHeader>
+
+        {isLoading ? (
+          <div className="py-12 flex justify-center"><Loader2 className="w-6 h-6 animate-spin" /></div>
+        ) : (
+          <div className="space-y-4">
+            {/* Bill Details */}
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label>Vendor</Label>
+                <Select value={vendorId} onValueChange={setVendorId}>
+                  <SelectTrigger><SelectValue placeholder="Select vendor" /></SelectTrigger>
+                  <SelectContent>
+                    {(vendors ?? []).map((v: any) => (
+                      <SelectItem key={v.id} value={String(v.id)}>
+                        {v.name}{v.mobile ? ` · ${v.mobile}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Vendor Bill #</Label>
+                <Input value={vendorBillNo} onChange={(e) => setVendorBillNo(e.target.value)} placeholder="e.g. SUP/2026/119" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Bill Date</Label>
+                <Input type="date" value={billDate} onChange={(e) => setBillDate(e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Bill Type</Label>
+                <Select value={billType} onValueChange={(v) => setBillType(v as any)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="gst">GST</SelectItem>
+                    <SelectItem value="non_gst">Non-GST</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Place of Supply</Label>
+                <Input value={placeOfSupply} onChange={(e) => setPlaceOfSupply(e.target.value)} />
+              </div>
+            </div>
+
+            {/* Line Items */}
+            <div className="rounded-lg border overflow-x-auto">
+              <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/30">
+                <span className="text-sm font-semibold">Line Items</span>
+                <Button size="sm" variant="outline" onClick={() => setLines((p) => [...p, emptyLine()])}>
+                  <Plus className="w-4 h-4 mr-1" /> Add Line
+                </Button>
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="pl-4 min-w-[180px]">Product</TableHead>
+                    <TableHead className="w-24 text-right">Qty</TableHead>
+                    <TableHead className="w-20">Unit</TableHead>
+                    <TableHead className="w-28 text-right">Rate (₹)</TableHead>
+                    <TableHead className="w-20 text-right">Disc%</TableHead>
+                    {isGst && <TableHead className="w-20 text-right">GST%</TableHead>}
+                    <TableHead className="w-28 text-right">Amount</TableHead>
+                    <TableHead className="w-12 pr-4"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {lines.map((l, i) => {
+                    const qty   = Number(l.qty) || 0;
+                    const rate  = Number(l.rate) || 0;
+                    const disc  = Number(l.discountPct) || 0;
+                    const taxPct = isGst ? Number(l.taxPct) || 0 : 0;
+                    const base   = qty * rate;
+                    const taxable = base - (base * disc / 100);
+                    const amount  = taxable + (taxable * taxPct / 100);
+                    return (
+                      <TableRow key={i}>
+                        <TableCell className="pl-4">
+                          <Select value={l.productId ? String(l.productId) : ""} onValueChange={(v) => onPickProduct(i, v)}>
+                            <SelectTrigger className="min-w-[160px]"><SelectValue placeholder="Pick product" /></SelectTrigger>
+                            <SelectContent>
+                              {(products ?? []).map((p: any) => (
+                                <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell><Input type="number" min="0" step="1" value={l.qty} onChange={(e) => updateLine(i, { qty: e.target.value })} className="w-20 text-right ml-auto" /></TableCell>
+                        <TableCell><Input value={l.unit} onChange={(e) => updateLine(i, { unit: e.target.value })} className="w-16" /></TableCell>
+                        <TableCell><Input type="number" min="0" step="0.01" value={l.rate} onChange={(e) => updateLine(i, { rate: e.target.value })} className="w-24 text-right ml-auto" /></TableCell>
+                        <TableCell><Input type="number" min="0" max="100" step="0.1" value={l.discountPct} onChange={(e) => updateLine(i, { discountPct: e.target.value })} className="w-16 text-right ml-auto" /></TableCell>
+                        {isGst && <TableCell><Input type="number" min="0" max="100" step="0.5" value={l.taxPct} onChange={(e) => updateLine(i, { taxPct: e.target.value })} className="w-16 text-right ml-auto" /></TableCell>}
+                        <TableCell className="text-right tabular-nums font-semibold pr-4">₹{amount.toFixed(2)}</TableCell>
+                        <TableCell className="pr-4">
+                          <Button size="icon" variant="ghost" onClick={() => removeLine(i)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Freight + Notes */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Freight / Other Charges (₹)</Label>
+                <Input type="number" min="0" step="0.01" value={freight} onChange={(e) => setFreight(e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Notes</Label>
+                <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional remarks…" />
+              </div>
+            </div>
+
+            {/* Summary bar */}
+            <div className="rounded-lg bg-muted/50 border px-4 py-3 flex flex-wrap gap-x-6 gap-y-2 items-center text-sm">
+              <div className="flex gap-1.5"><span className="text-muted-foreground">Subtotal:</span><span className="tabular-nums font-medium">₹{totals.subtotal.toFixed(2)}</span></div>
+              {totals.totalDiscount > 0 && <div className="flex gap-1.5"><span className="text-muted-foreground">Discount:</span><span className="tabular-nums text-destructive">−₹{totals.totalDiscount.toFixed(2)}</span></div>}
+              {isGst && totals.totalTax > 0 && (
+                isInterstate
+                  ? <div className="flex gap-1.5"><span className="text-muted-foreground">IGST:</span><span className="tabular-nums">₹{totals.totalTax.toFixed(2)}</span></div>
+                  : <><div className="flex gap-1.5"><span className="text-muted-foreground">CGST:</span><span className="tabular-nums">₹{(totals.totalTax/2).toFixed(2)}</span></div><div className="flex gap-1.5"><span className="text-muted-foreground">SGST:</span><span className="tabular-nums">₹{(totals.totalTax/2).toFixed(2)}</span></div></>
+              )}
+              {totals.freight > 0 && <div className="flex gap-1.5"><span className="text-muted-foreground">Freight:</span><span className="tabular-nums">₹{totals.freight.toFixed(2)}</span></div>}
+              <div className="ml-auto flex items-center gap-2">
+                <span className="text-muted-foreground">Grand Total:</span>
+                <span className="text-xl font-bold tabular-nums">₹{totals.grand.toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <DialogFooter className="mt-2">
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>Cancel</Button>
+          <Button disabled={!valid || submitting || isLoading} onClick={onSubmit} data-testid="button-save-edit-purchase">
+            {submitting
+              ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving…</>
+              : <><Save className="w-4 h-4 mr-2" /> Save Changes</>}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

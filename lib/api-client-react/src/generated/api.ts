@@ -5550,6 +5550,49 @@ export const useCreatePurchase = <TError = ErrorType<unknown>,
       return useMutation(getCreatePurchaseMutationOptions(options));
     }
 
+export const getUpdatePurchaseUrl = (id: number) => `/api/purchases/${id}`
+
+export const updatePurchase = async (id: number, updatePurchaseInput: CreatePurchaseInput, options?: RequestInit): Promise<Purchase> => {
+  return customFetch<Purchase>(getUpdatePurchaseUrl(id), {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updatePurchaseInput),
+  });
+}
+
+export const getUpdatePurchaseMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?: UseMutationOptions<Awaited<ReturnType<typeof updatePurchase>>, TError, {id: number; data: BodyType<CreatePurchaseInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updatePurchase>>, TError, {id: number; data: BodyType<CreatePurchaseInput>}, TContext> => {
+  const mutationKey = ['updatePurchase'];
+  const {mutation: mutationOptions, request: requestOptions} = options ?
+    options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+    options : {...options, mutation: {...options.mutation, mutationKey}}
+    : {mutation: {mutationKey}, request: undefined};
+
+  const mutationFn: MutationFunction<Awaited<ReturnType<typeof updatePurchase>>, {id: number; data: BodyType<CreatePurchaseInput>}> = (props) => {
+    const {id, data} = props ?? {};
+    return updatePurchase(id, data, requestOptions);
+  }
+
+  return {mutationFn, ...mutationOptions};
+}
+
+export type UpdatePurchaseMutationResult = NonNullable<Awaited<ReturnType<typeof updatePurchase>>>
+export type UpdatePurchaseMutationBody = BodyType<CreatePurchaseInput>
+export type UpdatePurchaseMutationError = ErrorType<unknown>
+
+export const useUpdatePurchase = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?: UseMutationOptions<Awaited<ReturnType<typeof updatePurchase>>, TError, {id: number; data: BodyType<CreatePurchaseInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationResult<
+  Awaited<ReturnType<typeof updatePurchase>>,
+  TError,
+  {id: number; data: BodyType<CreatePurchaseInput>},
+  TContext
+> => {
+  return useMutation(getUpdatePurchaseMutationOptions(options));
+}
+
 export const getGetPurchaseUrl = (id: number,) => {
 
 

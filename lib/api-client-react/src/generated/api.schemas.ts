@@ -1599,6 +1599,8 @@ export interface CreatePurchaseInput {
   items: CreatePurchaseInputItemsItem[];
 }
 
+export type UpdatePurchaseInput = CreatePurchaseInput;
+
 export interface AssembleItemInput {
   /** BOM (recipe) to execute */
   bomId: number;

@@ -12,6 +12,8 @@ import {
   ListPurchasesQueryParams,
   CreatePurchaseBody,
   GetPurchaseParams,
+  UpdatePurchaseParams,
+  UpdatePurchaseBody,
 } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
 import { getCompanyId } from "../lib/tenant";
@@ -326,6 +328,233 @@ router.post("/purchases", async (req, res): Promise<void> => {
     await client.query("ROLLBACK");
     logger.error({ err }, "Failed to create purchase");
     res.status(500).json({ error: "Failed to create purchase" });
+  } finally {
+    client.release();
+  }
+});
+
+// PUT /purchases/:id  — replace bill: reverse old stock/ledger, re-apply new
+router.put("/purchases/:id", async (req, res): Promise<void> => {
+  const auth = requireSession(req, res, PURCHASE_WRITE_ROLES);
+  if (!auth) return;
+
+  const paramsParsed = UpdatePurchaseParams.safeParse(req.params);
+  if (!paramsParsed.success) {
+    res.status(400).json({ error: paramsParsed.error.message });
+    return;
+  }
+  const bodyParsed = UpdatePurchaseBody.safeParse(req.body);
+  if (!bodyParsed.success) {
+    res.status(400).json({ error: bodyParsed.error.message });
+    return;
+  }
+
+  const companyId = getCompanyId(req);
+  const purchaseId = paramsParsed.data.id;
+  const data = bodyParsed.data;
+
+  if (!data.items || data.items.length === 0) {
+    res.status(400).json({ error: "At least one line item is required" });
+    return;
+  }
+  if (!data.vendorId) {
+    res.status(400).json({ error: "vendorId is required" });
+    return;
+  }
+
+  for (const [idx, it] of data.items.entries()) {
+    const qty = Number(it.qty);
+    const rate = Number(it.rate);
+    const disc = Number(it.discountPct ?? 0);
+    const tax = Number(it.taxPct ?? 0);
+    if (!Number.isFinite(qty) || qty <= 0) {
+      res.status(400).json({ error: `Line ${idx + 1}: qty must be greater than 0` });
+      return;
+    }
+    if (!Number.isFinite(rate) || rate < 0) {
+      res.status(400).json({ error: `Line ${idx + 1}: rate must be 0 or more` });
+      return;
+    }
+    if (disc < 0 || disc > 100 || tax < 0 || tax > 100) {
+      res.status(400).json({ error: `Line ${idx + 1}: discountPct and taxPct must be 0–100` });
+      return;
+    }
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
+
+    // Fetch old purchase
+    const oldRes = await client.query(
+      `SELECT * FROM purchases WHERE company_id = $1 AND id = $2`,
+      [companyId, purchaseId],
+    );
+    if (oldRes.rows.length === 0) {
+      await client.query("ROLLBACK");
+      res.status(404).json({ error: "Purchase not found" });
+      return;
+    }
+    const old = oldRes.rows[0];
+
+    // Fetch old items to reverse stock
+    const oldItemsRes = await client.query(
+      `SELECT product_id, qty FROM purchase_items WHERE company_id = $1 AND purchase_id = $2`,
+      [companyId, purchaseId],
+    );
+
+    // Reverse old stock
+    for (const oldItem of oldItemsRes.rows) {
+      await client.query(
+        `UPDATE products SET current_stock = current_stock - $1 WHERE company_id = $2 AND id = $3`,
+        [oldItem.qty, companyId, oldItem.product_id],
+      );
+    }
+
+    // Reverse old vendor payable
+    const oldVendorId = old.vendor_id;
+    const oldGrandTotal = Number(old.grand_total);
+    if (oldVendorId) {
+      await client.query(
+        `UPDATE entities SET outstanding_balance = outstanding_balance - $1 WHERE company_id = $2 AND id = $3`,
+        [oldGrandTotal, companyId, oldVendorId],
+      );
+    }
+
+    // Delete old ledger entries for this purchase
+    await client.query(
+      `DELETE FROM ledger_entries WHERE company_id = $1 AND type = 'purchase' AND reference_id = $2`,
+      [companyId, purchaseId],
+    );
+
+    // Delete old purchase items
+    await client.query(
+      `DELETE FROM purchase_items WHERE company_id = $1 AND purchase_id = $2`,
+      [companyId, purchaseId],
+    );
+
+    // Validate new vendor
+    const [vendorRow] = await db.select().from(entitiesTable).where(
+      and(eq(entitiesTable.companyId, companyId), eq(entitiesTable.id, data.vendorId!))
+    );
+    if (!vendorRow || vendorRow.type !== "vendor") {
+      await client.query("ROLLBACK");
+      res.status(400).json({ error: "Selected entity is not a vendor" });
+      return;
+    }
+
+    // Recompute totals
+    const isGst = data.billType === "gst";
+    const isInterstate = (data.placeOfSupply ?? "Maharashtra") !== "Maharashtra";
+    let subtotal = 0, totalDiscount = 0, totalTax = 0, cgst = 0, sgst = 0, igst = 0;
+
+    const processed = data.items.map((item) => {
+      const qty = Number(item.qty);
+      const rate = Number(item.rate);
+      const discPct = Number(item.discountPct ?? 0);
+      const discAmt = Number(item.discountAmt ?? 0);
+      const taxPct = isGst ? Number(item.taxPct ?? 0) : 0;
+      const baseAmt = qty * rate;
+      const effectiveDisc = discAmt > 0 ? discAmt : (baseAmt * discPct / 100);
+      const taxableAmt = baseAmt - effectiveDisc;
+      const taxAmt = taxableAmt * taxPct / 100;
+      const amount = taxableAmt + taxAmt;
+      subtotal += taxableAmt;
+      totalDiscount += effectiveDisc;
+      totalTax += taxAmt;
+      if (isGst) {
+        if (isInterstate) igst += taxAmt;
+        else { cgst += taxAmt / 2; sgst += taxAmt / 2; }
+      }
+      return { productId: item.productId, qty, unit: item.unit, rate, discountPct: discPct, discountAmt: effectiveDisc, taxPct, amount };
+    });
+
+    const freight = Number(data.freight ?? 0);
+    const roundOff = Number(data.roundOff ?? 0);
+    const grandTotal = subtotal + totalTax + freight + roundOff;
+    const balanceDue = grandTotal;
+
+    // Update purchase header (keep same bill_no)
+    await client.query(
+      `UPDATE purchases SET
+         vendor_bill_no=$1, bill_date=$2, bill_type=$3, vendor_id=$4, vendor_name=$5,
+         vendor_gstin=$6, place_of_supply=$7, notes=$8, subtotal=$9, total_discount=$10,
+         total_tax=$11, cgst=$12, sgst=$13, igst=$14, freight=$15, round_off=$16,
+         grand_total=$17, balance_due=$18, status='saved'
+       WHERE company_id=$19 AND id=$20`,
+      [
+        data.vendorBillNo ?? null,
+        data.billDate ?? new Date(),
+        data.billType,
+        data.vendorId,
+        data.vendorName ?? vendorRow.name,
+        data.vendorGstin ?? vendorRow.gstin ?? null,
+        data.placeOfSupply ?? "Maharashtra",
+        data.notes ?? null,
+        String(subtotal), String(totalDiscount), String(totalTax),
+        String(cgst), String(sgst), String(igst),
+        String(freight), String(roundOff),
+        String(grandTotal), String(balanceDue),
+        companyId, purchaseId,
+      ],
+    );
+
+    // Insert new items + stock
+    for (const item of processed) {
+      const prodRes = await client.query(
+        `SELECT name FROM products WHERE company_id = $1 AND id = $2`,
+        [companyId, item.productId],
+      );
+      const prodName = prodRes.rows[0]?.name ?? "Unknown";
+      await client.query(
+        `INSERT INTO purchase_items (company_id, purchase_id, product_id, product_name, qty, unit, rate,
+           discount_pct, discount_amt, tax_pct, amount)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        [companyId, purchaseId, item.productId, prodName,
+          String(item.qty), item.unit, String(item.rate),
+          String(item.discountPct), String(item.discountAmt),
+          String(item.taxPct), String(item.amount)],
+      );
+      await client.query(
+        `INSERT INTO stock_movements (company_id, product_id, type, quantity, reason, reference_id, reference_type, user_id)
+         VALUES ($1,$2,'inward',$3,'Purchase edit (re-applied)',$4,'purchase',$5)`,
+        [companyId, item.productId, String(item.qty), purchaseId, auth.userId],
+      );
+      await client.query(
+        `UPDATE products SET current_stock = current_stock + $1 WHERE company_id = $2 AND id = $3`,
+        [String(item.qty), companyId, item.productId],
+      );
+    }
+
+    // New vendor payable + ledger entry
+    await client.query(
+      `UPDATE entities SET outstanding_balance = outstanding_balance + $1 WHERE company_id = $2 AND id = $3`,
+      [grandTotal, companyId, data.vendorId],
+    );
+    const balRes = await client.query(
+      `SELECT outstanding_balance FROM entities WHERE company_id = $1 AND id = $2`,
+      [companyId, data.vendorId],
+    );
+    const newBal = balRes.rows[0].outstanding_balance;
+    await client.query(
+      `INSERT INTO ledger_entries (company_id, entity_id, date, description, debit, credit, balance, type, reference_id, reference_no)
+       VALUES ($1,$2,NOW(),$3,0,$4,$5,'purchase',$6,$7)`,
+      [companyId, data.vendorId, `Purchase ${old.bill_no} (edited)`, grandTotal, newBal, purchaseId, old.bill_no],
+    );
+
+    await client.query("COMMIT");
+
+    const [full] = await db.select().from(purchasesTable).where(
+      and(eq(purchasesTable.companyId, companyId), eq(purchasesTable.id, purchaseId))
+    );
+    const items = await db.select().from(purchaseItemsTable).where(
+      and(eq(purchaseItemsTable.companyId, companyId), eq(purchaseItemsTable.purchaseId, purchaseId))
+    );
+    res.json(formatPurchase(full, items));
+  } catch (err) {
+    await client.query("ROLLBACK");
+    logger.error({ err }, "Failed to update purchase");
+    res.status(500).json({ error: "Failed to update purchase" });
   } finally {
     client.release();
   }

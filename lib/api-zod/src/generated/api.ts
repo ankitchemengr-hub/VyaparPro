@@ -1782,6 +1782,15 @@ export const CreatePurchaseBody = zod.object({
 
 
 /**
+ * @summary Update (replace) a purchase bill — reverses old stock/ledger and re-applies
+ */
+export const UpdatePurchaseParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdatePurchaseBody = CreatePurchaseBody;
+
+/**
  * @summary Get a purchase bill with line items
  */
 export const GetPurchaseParams = zod.object({
