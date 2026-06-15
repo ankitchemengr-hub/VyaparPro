@@ -46,6 +46,8 @@ const STATUSES = [
 ] as const;
 type Status = typeof STATUSES[number];
 
+const FILTER_STATUSES: Status[] = ["pending", "done", "cancelled"];
+
 const STATUS_VARIANTS: Record<string, { label: string; className: string }> = {
   pending: { label: "Pending", className: "bg-amber-100 text-amber-800 hover:bg-amber-100" },
   processing: { label: "Processing", className: "bg-blue-100 text-blue-800 hover:bg-blue-100" },
@@ -228,7 +230,7 @@ export default function CustomerOrdersAdmin() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All statuses</SelectItem>
-            {STATUSES.map((s) => (
+            {FILTER_STATUSES.map((s) => (
               <SelectItem key={s} value={s}>
                 {STATUS_VARIANTS[s].label}
               </SelectItem>
