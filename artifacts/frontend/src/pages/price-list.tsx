@@ -46,8 +46,6 @@ type EditedRow = {
   purchasePrice: string;
   wholesalePrice: string;
   retailPrice: string;
-  hsnCode: string;
-  taxRate: string;
 };
 
 const ALL = "__all__";
@@ -75,8 +73,6 @@ async function bulkUpdatePrices(updates: Array<{
   purchasePrice?: number;
   wholesalePrice?: number;
   retailPrice?: number;
-  hsnCode?: string;
-  taxRate?: number;
 }>) {
   const r = await fetch("/api/products/bulk-price", {
     method: "PATCH",
@@ -194,18 +190,15 @@ export default function PriceList() {
   const handleSaveConfirm = () => {
     const updates = dirtyIds.map((id) => {
       const e = edits[id];
-      const product = products.find((p) => p.id === id)!;
       return {
         id,
         purchasePrice: e?.purchasePrice !== undefined ? numOrNull(e.purchasePrice) : undefined,
         wholesalePrice: e?.wholesalePrice !== undefined ? numOrNull(e.wholesalePrice) : undefined,
         retailPrice: e?.retailPrice !== undefined ? numOrNull(e.retailPrice) : undefined,
-        hsnCode: e?.hsnCode !== undefined ? e.hsnCode : undefined,
-        taxRate: e?.taxRate !== undefined ? numOrNull(e.taxRate) : undefined,
       };
     }).filter((u) => {
       return u.purchasePrice !== undefined || u.wholesalePrice !== undefined ||
-        u.retailPrice !== undefined || u.hsnCode !== undefined || u.taxRate !== undefined;
+        u.retailPrice !== undefined;
     });
 
     if (updates.length === 0) {
@@ -337,7 +330,7 @@ export default function PriceList() {
               onChange={(e) => handleBulkEdit("purchasePrice", e.target.value)} />
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="text-xs text-muted-foreground">Sale ₹</span>
+            <span className="text-xs text-muted-foreground">Wholesale ₹</span>
             <Input type="number" step="0.01" min="0" placeholder="—" className="h-7 w-24 text-sm"
               onChange={(e) => handleBulkEdit("wholesalePrice", e.target.value)} />
           </div>
@@ -345,11 +338,6 @@ export default function PriceList() {
             <span className="text-xs text-muted-foreground">Retail ₹</span>
             <Input type="number" step="0.01" min="0" placeholder="—" className="h-7 w-24 text-sm"
               onChange={(e) => handleBulkEdit("retailPrice", e.target.value)} />
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-muted-foreground">GST %</span>
-            <Input type="number" step="0.01" min="0" placeholder="—" className="h-7 w-20 text-sm"
-              onChange={(e) => handleBulkEdit("taxRate", e.target.value)} />
           </div>
           <Button variant="ghost" size="sm" className="ml-auto" onClick={() => setSelected(new Set())}>
             <X className="h-3.5 w-3.5 mr-1" /> Clear selection
@@ -370,20 +358,18 @@ export default function PriceList() {
                 </button>
               </th>
               <th className="text-left px-3 py-2.5 font-semibold min-w-44">Product</th>
-              <th className="text-left px-3 py-2.5 font-semibold w-28">HSN Code</th>
-              <th className="text-right px-3 py-2.5 font-semibold w-24">GST %</th>
               <th className="text-right px-3 py-2.5 font-semibold w-32">Purchase ₹</th>
-              <th className="text-right px-3 py-2.5 font-semibold w-32">Sale Price ₹</th>
+              <th className="text-right px-3 py-2.5 font-semibold w-32">Wholesale ₹</th>
               <th className="text-right px-3 py-2.5 font-semibold w-32">Retail ₹</th>
               <th className="text-left px-3 py-2.5 font-semibold w-36 text-muted-foreground text-xs">Last Updated</th>
             </tr>
           </thead>
           <tbody>
             {isLoading && (
-              <tr><td colSpan={8} className="text-center py-12 text-muted-foreground">Loading…</td></tr>
+              <tr><td colSpan={6} className="text-center py-12 text-muted-foreground">Loading…</td></tr>
             )}
             {!isLoading && filtered.length === 0 && (
-              <tr><td colSpan={8} className="text-center py-12 text-muted-foreground">No products found</td></tr>
+              <tr><td colSpan={6} className="text-center py-12 text-muted-foreground">No products found</td></tr>
             )}
             {filtered.map((p, idx) => {
               const isSelected = selected.has(p.id);
@@ -416,8 +402,6 @@ export default function PriceList() {
                       {p.brand && <span>· {p.brand}</span>}
                     </div>
                   </td>
-                  <td className="px-3 py-2">{textCell(p.id, "hsnCode", p.hsnCode)}</td>
-                  <td className="px-3 py-2 text-right">{numericCell(p.id, "taxRate", p.taxRate, "")}</td>
                   <td className="px-3 py-2 text-right">{numericCell(p.id, "purchasePrice", p.purchasePrice)}</td>
                   <td className="px-3 py-2 text-right">{numericCell(p.id, "wholesalePrice", p.wholesalePrice)}</td>
                   <td className="px-3 py-2 text-right">{numericCell(p.id, "retailPrice", p.retailPrice)}</td>
