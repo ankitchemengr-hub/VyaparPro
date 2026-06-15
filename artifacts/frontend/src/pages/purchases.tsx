@@ -33,8 +33,69 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Truck, Plus, Trash2, Loader2, FileText, Save, UserPlus, Pencil,
+  Truck, Plus, Trash2, Loader2, FileText, Save, UserPlus, Pencil, ChevronsUpDown, Check,
 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+} from "@/components/ui/command";
+import { cn } from "@/lib/utils";
+
+function ProductCombobox({
+  products,
+  value,
+  onChange,
+  testId,
+}: {
+  products: any[];
+  value: number | null;
+  onChange: (id: string) => void;
+  testId?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = products.find((p) => p.id === value);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="min-w-[180px] justify-between font-normal"
+          data-testid={testId}
+        >
+          <span className="truncate">{selected ? selected.name : "Pick product"}</span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[280px] p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Search product…" />
+          <CommandList className="max-h-60">
+            <CommandEmpty>No product found.</CommandEmpty>
+            <CommandGroup>
+              {products.map((p) => (
+                <CommandItem
+                  key={p.id}
+                  value={p.name}
+                  onSelect={() => {
+                    onChange(String(p.id));
+                    setOpen(false);
+                  }}
+                >
+                  <Check
+                    className={cn("mr-2 h-4 w-4", value === p.id ? "opacity-100" : "opacity-0")}
+                  />
+                  {p.name}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 export default function Purchases() {
   return (
@@ -312,16 +373,12 @@ function NewPurchaseTab() {
                   return (
                     <TableRow key={i} data-testid={`line-${i}`}>
                       <TableCell className="pl-4">
-                        <Select value={l.productId ? String(l.productId) : ""} onValueChange={(v) => onPickProduct(i, v)}>
-                          <SelectTrigger data-testid={`select-product-${i}`} className="min-w-[180px]">
-                            <SelectValue placeholder="Pick product" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {(products ?? []).map((p: any) => (
-                              <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <ProductCombobox
+                          products={products ?? []}
+                          value={l.productId}
+                          onChange={(v) => onPickProduct(i, v)}
+                          testId={`select-product-${i}`}
+                        />
                       </TableCell>
                       <TableCell className="text-right">
                         <Input type="number" min="0" step="1"
@@ -902,14 +959,11 @@ function EditPurchaseDialog({
                     return (
                       <TableRow key={i}>
                         <TableCell className="pl-4">
-                          <Select value={l.productId ? String(l.productId) : ""} onValueChange={(v) => onPickProduct(i, v)}>
-                            <SelectTrigger className="min-w-[160px]"><SelectValue placeholder="Pick product" /></SelectTrigger>
-                            <SelectContent>
-                              {(products ?? []).map((p: any) => (
-                                <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <ProductCombobox
+                            products={products ?? []}
+                            value={l.productId}
+                            onChange={(v) => onPickProduct(i, v)}
+                          />
                         </TableCell>
                         <TableCell><Input type="number" min="0" step="1" value={l.qty} onChange={(e) => updateLine(i, { qty: e.target.value })} className="w-20 text-right ml-auto" /></TableCell>
                         <TableCell><Input value={l.unit} onChange={(e) => updateLine(i, { unit: e.target.value })} className="w-16" /></TableCell>
