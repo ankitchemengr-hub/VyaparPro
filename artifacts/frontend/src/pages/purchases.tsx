@@ -143,7 +143,7 @@ function NewPurchaseTab() {
       productName: p.name,
       unit: p.unit ?? "pcs",
       rate: String(p.purchasePrice ?? p.retailPrice ?? p.wholesalePrice ?? 0),
-      taxPct: String(p.taxPct ?? p.gstPct ?? 18),
+      taxPct: String(p.taxRate ?? p.taxPct ?? p.gstPct ?? 18),
     });
   };
 
@@ -205,7 +205,7 @@ function NewPurchaseTab() {
   };
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+    <div className="grid gap-6 md:grid-cols-[1fr_300px]">
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Bill Details</CardTitle>
@@ -326,9 +326,12 @@ function NewPurchaseTab() {
                         </TableCell>
                         <TableCell>
                           <Input
-                            inputMode="decimal"
+                            type="number"
+                            min="0"
+                            step="1"
                             value={l.qty}
                             onChange={(e) => updateLine(i, { qty: e.target.value })}
+                            className="w-20 text-right"
                             data-testid={`input-qty-${i}`}
                           />
                         </TableCell>
@@ -336,29 +339,41 @@ function NewPurchaseTab() {
                           <Input
                             value={l.unit}
                             onChange={(e) => updateLine(i, { unit: e.target.value })}
+                            className="w-16"
                           />
                         </TableCell>
                         <TableCell>
                           <Input
-                            inputMode="decimal"
+                            type="number"
+                            min="0"
+                            step="0.01"
                             value={l.rate}
                             onChange={(e) => updateLine(i, { rate: e.target.value })}
+                            className="w-24 text-right"
                             data-testid={`input-rate-${i}`}
                           />
                         </TableCell>
                         <TableCell>
                           <Input
-                            inputMode="decimal"
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.1"
                             value={l.discountPct}
                             onChange={(e) => updateLine(i, { discountPct: e.target.value })}
+                            className="w-16 text-right"
                           />
                         </TableCell>
                         {isGst && (
                           <TableCell>
                             <Input
-                              inputMode="decimal"
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.5"
                               value={l.taxPct}
                               onChange={(e) => updateLine(i, { taxPct: e.target.value })}
+                              className="w-16 text-right"
                             />
                           </TableCell>
                         )}
@@ -386,12 +401,28 @@ function NewPurchaseTab() {
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label>Freight / Other Charges</Label>
-              <Input inputMode="decimal" value={freight} onChange={(e) => setFreight(e.target.value)} />
+              <Input type="number" min="0" step="0.01" value={freight} onChange={(e) => setFreight(e.target.value)} />
             </div>
             <div className="space-y-2">
               <Label>Notes</Label>
               <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional remarks…" />
             </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-2 border-t md:hidden">
+            <div className="text-sm text-muted-foreground">
+              Grand Total: <span className="text-lg font-bold text-foreground tabular-nums">₹{totals.grand.toFixed(2)}</span>
+            </div>
+            <Button
+              disabled={!valid || submitting}
+              onClick={onSubmit}
+            >
+              {submitting ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving…</>
+              ) : (
+                <><Save className="w-4 h-4 mr-2" /> Save Purchase</>
+              )}
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -431,7 +462,7 @@ function NewPurchaseTab() {
           </div>
           <Button
             className="w-full"
-            disabled={!valid || submitting || totals.grand <= 0}
+            disabled={!valid || submitting}
             onClick={onSubmit}
             data-testid="button-save-purchase"
           >
