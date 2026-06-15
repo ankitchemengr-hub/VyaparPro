@@ -345,7 +345,13 @@ export default function Subscriptions() {
               </div>
               <div className="space-y-1.5">
                 <Label>Mobile</Label>
-                <Input value={form.mobile} onChange={(e) => setForm({ ...form, mobile: e.target.value })} />
+                <Input
+                  value={form.mobile}
+                  onChange={(e) => setForm({ ...form, mobile: e.target.value.replace(/\D/g, "").slice(0, 10) })}
+                  inputMode="numeric"
+                  maxLength={10}
+                  placeholder="9876543210"
+                />
               </div>
               <div className="col-span-2 space-y-1.5">
                 <Label>Email</Label>
@@ -653,7 +659,13 @@ export default function Subscriptions() {
               </div>
               <div className="space-y-1.5">
                 <Label>Mobile</Label>
-                <Input value={editTarget.mobile} onChange={(e) => setEditTarget({ ...editTarget, mobile: e.target.value })} />
+                <Input
+                  value={editTarget.mobile}
+                  onChange={(e) => setEditTarget({ ...editTarget, mobile: e.target.value.replace(/\D/g, "").slice(0, 10) })}
+                  inputMode="numeric"
+                  maxLength={10}
+                  placeholder="9876543210"
+                />
               </div>
               <div className="col-span-2 space-y-1.5">
                 <Label>Email</Label>

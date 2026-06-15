@@ -476,6 +476,10 @@ function AddVendorDialog({
       toast({ title: "Name and mobile are required", variant: "destructive" });
       return;
     }
+    if (!/^\d{10}$/.test(mobile.trim())) {
+      toast({ title: "Invalid mobile number", description: "Mobile must be exactly 10 digits", variant: "destructive" });
+      return;
+    }
     try {
       const created = await createEntity.mutateAsync({
         data: {
@@ -528,8 +532,10 @@ function AddVendorDialog({
               <Label>Mobile <span className="text-destructive">*</span></Label>
               <Input
                 value={mobile}
-                onChange={(e) => setMobile(e.target.value)}
+                onChange={(e) => setMobile(e.target.value.replace(/\D/g, "").slice(0, 10))}
                 placeholder="9999900001"
+                inputMode="numeric"
+                maxLength={10}
                 data-testid="input-new-vendor-mobile"
               />
             </div>

@@ -280,13 +280,20 @@ export default function Customers() {
                   name="mobile"
                   rules={{
                     required: "Mobile is required",
-                    pattern: { value: /^\d{7,15}$/, message: "Enter a valid mobile number" },
+                    pattern: { value: /^\d{10}$/, message: "Mobile number must be exactly 10 digits" },
                   }}
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Mobile *</FormLabel>
                       <FormControl>
-                        <Input data-testid="input-add-entity-mobile" placeholder="9876543210" inputMode="numeric" {...field} />
+                        <Input
+                          data-testid="input-add-entity-mobile"
+                          placeholder="9876543210"
+                          inputMode="numeric"
+                          maxLength={10}
+                          {...field}
+                          onChange={(e) => field.onChange(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

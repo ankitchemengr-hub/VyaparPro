@@ -254,7 +254,13 @@ function WorkerDialog({ open, onOpenChange, worker }: { open: boolean; onOpenCha
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>Phone</Label>
-              <Input value={form.phone ?? ""} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+              <Input
+                value={form.phone ?? ""}
+                onChange={(e) => setForm({ ...form, phone: e.target.value.replace(/\D/g, "").slice(0, 10) })}
+                inputMode="numeric"
+                maxLength={10}
+                placeholder="9876543210"
+              />
             </div>
             <div>
               <Label>Skill / Role</Label>
