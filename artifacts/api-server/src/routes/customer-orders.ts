@@ -263,7 +263,7 @@ router.get("/customer-orders/:id", async (req, res): Promise<void> => {
       res.status(403).json({ error: "Forbidden" });
       return;
     }
-  } else if (session.role !== "admin") {
+  } else if (session.role !== "admin" && session.role !== "manufacturing" && session.role !== "store") {
     res.status(403).json({ error: "Forbidden" });
     return;
   }
