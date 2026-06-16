@@ -17,6 +17,10 @@ import {
 } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
 import { getCompanyId } from "../lib/tenant";
+import multer from "multer";
+import { mkdirSync, unlinkSync } from "fs";
+import path from "path";
+import { randomBytes } from "crypto";
 
 const router: IRouter = Router();
 
@@ -94,6 +98,54 @@ function formatPurchase(row: any, items: any[]) {
   };
 }
 
+// ---- File upload setup for purchase attachments ----
+const UPLOAD_BASE = path.resolve(process.cwd(), "uploads", "purchase-attachments");
+mkdirSync(UPLOAD_BASE, { recursive: true });
+
+const attachmentStorage = multer.diskStorage({
+  destination: (req: any, _file: any, cb: any) => {
+    const companyId = getCompanyId(req);
+    const purchaseId = req.params.id ?? "tmp";
+    const dir = path.join(UPLOAD_BASE, String(companyId), String(purchaseId));
+    mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (_req: any, file: any, cb: any) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, `${Date.now()}_${randomBytes(6).toString("hex")}${ext}`);
+  },
+});
+
+const attachmentUpload = multer({
+  storage: attachmentStorage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req: any, file: any, cb: any) => {
+    const allowed = ["image/jpeg", "image/png", "application/pdf"];
+    if (allowed.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      (cb as any)(new Error("Only JPG, PNG, or PDF files are allowed"), false);
+    }
+  },
+});
+
+// Ensure purchase_attachments table exists (best-effort at startup)
+pool.query(`
+  CREATE TABLE IF NOT EXISTS purchase_attachments (
+    id SERIAL PRIMARY KEY,
+    company_id INTEGER NOT NULL,
+    purchase_id INTEGER NOT NULL,
+    file_name TEXT NOT NULL,
+    original_name TEXT NOT NULL,
+    mime_type TEXT NOT NULL,
+    file_size INTEGER NOT NULL,
+    file_path TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+  );
+  CREATE INDEX IF NOT EXISTS pa_company_idx ON purchase_attachments(company_id);
+  CREATE INDEX IF NOT EXISTS pa_purchase_idx ON purchase_attachments(purchase_id);
+`).catch((err: any) => logger.warn({ err }, "Could not ensure purchase_attachments table"));
+
 // GET /purchases
 router.get("/purchases", async (req, res): Promise<void> => {
   if (!requireSession(req, res, PURCHASE_READ_ROLES)) return;
@@ -108,6 +160,61 @@ router.get("/purchases", async (req, res): Promise<void> => {
   if (parsed.data.status) conditions.push(eq(purchasesTable.status, parsed.data.status));
   const rows = await db.select().from(purchasesTable).where(and(...conditions)).orderBy(sql`${purchasesTable.createdAt} DESC`);
   res.json(rows.map((r) => formatPurchase(r, [])));
+});
+
+// GET /purchases/report — date + product filtered line-item report
+router.get("/purchases/report", async (req, res): Promise<void> => {
+  const auth = requireSession(req, res, PURCHASE_READ_ROLES);
+  if (!auth) return;
+  const companyId = getCompanyId(req);
+  const { fromDate, toDate, productId } = req.query as Record<string, string | undefined>;
+  const params: any[] = [companyId];
+  const conditions = ["p.company_id = $1", "p.status != 'cancelled'"];
+  if (fromDate) {
+    params.push(fromDate);
+    conditions.push(`p.bill_date >= $${params.length}::date`);
+  }
+  if (toDate) {
+    params.push(toDate);
+    conditions.push(`p.bill_date < ($${params.length}::date + INTERVAL '1 day')`);
+  }
+  if (productId && !isNaN(Number(productId))) {
+    params.push(Number(productId));
+    conditions.push(`pi.product_id = $${params.length}`);
+  }
+  try {
+    const result = await pool.query(
+      `SELECT p.id as purchase_id, p.bill_date, p.vendor_name, p.bill_no, p.vendor_bill_no,
+              p.grand_total, p.bill_type,
+              pi.product_id, pi.product_name, pi.qty, pi.unit,
+              pi.rate, pi.tax_pct, pi.discount_pct, pi.amount
+       FROM purchases p
+       JOIN purchase_items pi ON pi.purchase_id = p.id AND pi.company_id = p.company_id
+       WHERE ${conditions.join(" AND ")}
+       ORDER BY p.bill_date DESC, p.id DESC, pi.id ASC`,
+      params,
+    );
+    res.json(result.rows.map((r: any) => ({
+      purchaseId: r.purchase_id,
+      billDate: r.bill_date,
+      vendorName: r.vendor_name ?? "—",
+      billNo: r.bill_no,
+      vendorBillNo: r.vendor_bill_no ?? "—",
+      productName: r.product_name,
+      productId: r.product_id,
+      qty: String(r.qty),
+      unit: r.unit,
+      rate: String(r.rate),
+      taxPct: String(r.tax_pct),
+      discountPct: String(r.discount_pct),
+      amount: String(r.amount),
+      grandTotal: String(r.grand_total),
+      billType: r.bill_type,
+    })));
+  } catch (err) {
+    logger.error({ err }, "Failed to generate purchase report");
+    res.status(500).json({ error: "Failed to generate report" });
+  }
 });
 
 // GET /purchases/:id
@@ -557,6 +664,125 @@ router.put("/purchases/:id", async (req, res): Promise<void> => {
     res.status(500).json({ error: "Failed to update purchase" });
   } finally {
     client.release();
+  }
+});
+
+// ---- ATTACHMENT ROUTES ----
+
+// GET /purchases/attachments/:attachmentId/file — serve/download file
+router.get("/purchases/attachments/:attachmentId/file", async (req, res): Promise<void> => {
+  const auth = requireSession(req, res, PURCHASE_READ_ROLES);
+  if (!auth) return;
+  const companyId = getCompanyId(req);
+  const id = parseInt(req.params.attachmentId, 10);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  try {
+    const result = await pool.query(
+      `SELECT * FROM purchase_attachments WHERE id = $1 AND company_id = $2`,
+      [id, companyId],
+    );
+    if (!result.rows[0]) { res.status(404).json({ error: "Attachment not found" }); return; }
+    const att = result.rows[0];
+    res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(att.original_name)}"`);
+    res.sendFile(att.file_path);
+  } catch (err) {
+    logger.error({ err }, "Failed to serve attachment");
+    res.status(500).json({ error: "Failed to serve file" });
+  }
+});
+
+// DELETE /purchases/attachments/:attachmentId
+router.delete("/purchases/attachments/:attachmentId", async (req, res): Promise<void> => {
+  const auth = requireSession(req, res, PURCHASE_WRITE_ROLES);
+  if (!auth) return;
+  const companyId = getCompanyId(req);
+  const id = parseInt(req.params.attachmentId, 10);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  try {
+    const result = await pool.query(
+      `DELETE FROM purchase_attachments WHERE id = $1 AND company_id = $2 RETURNING *`,
+      [id, companyId],
+    );
+    if (!result.rows[0]) { res.status(404).json({ error: "Attachment not found" }); return; }
+    try { unlinkSync(result.rows[0].file_path); } catch {}
+    res.json({ success: true });
+  } catch (err) {
+    logger.error({ err }, "Failed to delete attachment");
+    res.status(500).json({ error: "Failed to delete attachment" });
+  }
+});
+
+// POST /purchases/:id/attachments — upload files via multer
+router.post(
+  "/purchases/:id/attachments",
+  (req: any, res: any, next: any) => {
+    attachmentUpload.array("files", 10)(req, res, (err: any) => {
+      if (err) {
+        res.status(400).json({ error: err.message ?? "Upload failed" });
+        return;
+      }
+      next();
+    });
+  },
+  async (req, res): Promise<void> => {
+    const auth = requireSession(req, res, PURCHASE_WRITE_ROLES);
+    if (!auth) return;
+    const companyId = getCompanyId(req);
+    const purchaseId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(purchaseId)) { res.status(400).json({ error: "Invalid id" }); return; }
+    const files = req.files as Express.Multer.File[];
+    if (!files || files.length === 0) { res.status(400).json({ error: "No files uploaded" }); return; }
+    try {
+      const inserted = [];
+      for (const f of files) {
+        const r = await pool.query(
+          `INSERT INTO purchase_attachments
+             (company_id, purchase_id, file_name, original_name, mime_type, file_size, file_path)
+           VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+          [companyId, purchaseId, f.filename, f.originalname, f.mimetype, f.size, f.path],
+        );
+        inserted.push(r.rows[0]);
+      }
+      res.json(inserted.map((r) => ({
+        id: r.id,
+        fileName: r.file_name,
+        originalName: r.original_name,
+        mimeType: r.mime_type,
+        fileSize: r.file_size,
+        createdAt: r.created_at,
+      })));
+    } catch (err) {
+      logger.error({ err }, "Failed to save attachments");
+      res.status(500).json({ error: "Failed to save attachments" });
+    }
+  },
+);
+
+// GET /purchases/:id/attachments — list attachments for a purchase
+router.get("/purchases/:id/attachments", async (req, res): Promise<void> => {
+  const auth = requireSession(req, res, PURCHASE_READ_ROLES);
+  if (!auth) return;
+  const companyId = getCompanyId(req);
+  const purchaseId = parseInt(req.params.id, 10);
+  if (!Number.isFinite(purchaseId)) { res.status(400).json({ error: "Invalid id" }); return; }
+  try {
+    const result = await pool.query(
+      `SELECT * FROM purchase_attachments
+       WHERE purchase_id = $1 AND company_id = $2
+       ORDER BY created_at ASC`,
+      [purchaseId, companyId],
+    );
+    res.json(result.rows.map((r) => ({
+      id: r.id,
+      fileName: r.file_name,
+      originalName: r.original_name,
+      mimeType: r.mime_type,
+      fileSize: r.file_size,
+      createdAt: r.created_at,
+    })));
+  } catch (err) {
+    logger.error({ err }, "Failed to fetch attachments");
+    res.status(500).json({ error: "Failed to fetch attachments" });
   }
 });
 

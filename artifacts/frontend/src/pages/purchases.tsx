@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { Link } from "wouter";
 import {
   useListPurchases,
@@ -34,7 +34,10 @@ import {
 } from "@/components/ui/dialog";
 import {
   Truck, Plus, Trash2, Loader2, FileText, Save, UserPlus, Pencil, ChevronsUpDown, Check,
+  Paperclip, BarChart2, Download, Eye, File as FileIcon, X, FileImage,
 } from "lucide-react";
+import jsPDF from "jspdf";
+import * as XLSX from "xlsx";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
@@ -166,6 +169,7 @@ function NewPurchaseTab() {
   const [freight, setFreight] = useState("0");
   const [lines, setLines] = useState<Line[]>([emptyLine()]);
   const [submitting, setSubmitting] = useState(false);
+  const [savedPurchaseId, setSavedPurchaseId] = useState<number | null>(null);
 
   const productMap = useMemo(() => {
     const m = new Map<number, any>();
@@ -226,7 +230,7 @@ function NewPurchaseTab() {
     setSubmitting(true);
     try {
       const vendor = vendorId ? (vendors ?? []).find((v: any) => String(v.id) === vendorId) : null;
-      await create.mutateAsync({
+      const newPurchase: any = await create.mutateAsync({
         data: {
           billType,
           billDate: new Date(billDate).toISOString(),
@@ -252,6 +256,7 @@ function NewPurchaseTab() {
         queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() }),
         queryClient.invalidateQueries({ queryKey: getListEntitiesQueryKey() }),
       ]);
+      setSavedPurchaseId(newPurchase.id);
       toast({ title: "Purchase saved", description: `Bill recorded. Stock updated, vendor payable booked.` });
       setLines([emptyLine()]);
       setVendorBillNo("");
@@ -488,6 +493,20 @@ function NewPurchaseTab() {
         onOpenChange={setVendorDialogOpen}
         onCreated={(v) => setVendorId(String(v.id))}
       />
+
+      {savedPurchaseId && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Paperclip className="w-4 h-4" />
+              Attachments — Bill #{savedPurchaseId}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <AttachmentsSection purchaseId={savedPurchaseId} />
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
@@ -631,13 +650,434 @@ function SumRow({ label, value, muted }: { label: string; value: number; muted?:
   );
 }
 
+// ------------------------------ ATTACHMENTS SECTION ------------------------------
+
+interface Attachment {
+  id: number;
+  fileName: string;
+  originalName: string;
+  mimeType: string;
+  fileSize: number;
+  createdAt: string;
+}
+
+function AttachmentsSection({ purchaseId }: { purchaseId: number }) {
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
+
+  const loadAttachments = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/purchases/${purchaseId}/attachments`);
+      if (res.ok) setAttachments(await res.json());
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { loadAttachments(); }, [purchaseId]);
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files?.length) return;
+    setUploading(true);
+    const form = new FormData();
+    Array.from(e.target.files).forEach((f) => form.append("files", f));
+    try {
+      const res = await fetch(`/api/purchases/${purchaseId}/attachments`, { method: "POST", body: form });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        toast({ title: "Upload failed", description: body.error ?? "Unknown error", variant: "destructive" });
+      } else {
+        await loadAttachments();
+        toast({ title: "Files uploaded", description: "Attachments saved successfully." });
+      }
+    } catch {
+      toast({ title: "Upload failed", description: "Network error", variant: "destructive" });
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/purchases/attachments/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setAttachments((prev) => prev.filter((a) => a.id !== id));
+        toast({ title: "Attachment deleted" });
+      } else {
+        toast({ title: "Delete failed", variant: "destructive" });
+      }
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const formatSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="text-sm text-muted-foreground">
+          {loading ? "Loading…" : `${attachments.length} file(s) attached`}
+        </span>
+        <Button size="sm" variant="outline" onClick={() => fileRef.current?.click()} disabled={uploading}>
+          {uploading ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Paperclip className="w-4 h-4 mr-1" />}
+          {uploading ? "Uploading…" : "Attach File"}
+        </Button>
+        <input
+          ref={fileRef}
+          type="file"
+          multiple
+          accept=".jpg,.jpeg,.png,.pdf"
+          className="hidden"
+          onChange={handleUpload}
+        />
+      </div>
+      {attachments.length === 0 && !loading && (
+        <p className="text-xs text-muted-foreground text-center py-4 border border-dashed rounded">
+          No attachments. Click "Attach File" to upload JPG, PNG, or PDF files.
+        </p>
+      )}
+      <div className="space-y-2">
+        {attachments.map((a) => (
+          <div key={a.id} className="flex items-center gap-2 p-2 border rounded-md bg-muted/30">
+            {a.mimeType.startsWith("image/") ? (
+              <FileImage className="w-5 h-5 text-blue-500 shrink-0" />
+            ) : (
+              <FileIcon className="w-5 h-5 text-red-500 shrink-0" />
+            )}
+            <span className="text-sm truncate flex-1" title={a.originalName}>{a.originalName}</span>
+            <span className="text-xs text-muted-foreground shrink-0">{formatSize(a.fileSize)}</span>
+            <a
+              href={`/api/purchases/attachments/${a.id}/file`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="View / Download"
+            >
+              <Button size="icon" variant="ghost" className="h-7 w-7">
+                <Eye className="w-3.5 h-3.5" />
+              </Button>
+            </a>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7"
+              disabled={deletingId === a.id}
+              onClick={() => handleDelete(a.id)}
+              title="Delete attachment"
+            >
+              {deletingId === a.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5 text-destructive" />}
+            </Button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AttachmentsDialog({
+  purchaseId,
+  billNo,
+  open,
+  onOpenChange,
+}: {
+  purchaseId: number;
+  billNo: string;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Paperclip className="w-4 h-4" />
+            Attachments — {billNo}
+          </DialogTitle>
+          <DialogDescription>Upload or view JPG, PNG, or PDF files for this purchase.</DialogDescription>
+        </DialogHeader>
+        <AttachmentsSection purchaseId={purchaseId} />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ------------------------------ PURCHASE REPORT ------------------------------
+
+interface ReportRow {
+  purchaseId: number;
+  billDate: string;
+  vendorName: string;
+  billNo: string;
+  vendorBillNo: string;
+  productName: string;
+  qty: string;
+  unit: string;
+  rate: string;
+  taxPct: string;
+  discountPct: string;
+  amount: string;
+  grandTotal: string;
+}
+
+function PurchaseReportDialog({
+  open,
+  onOpenChange,
+  products,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  products: any[];
+}) {
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [productId, setProductId] = useState<string>("");
+  const [rows, setRows] = useState<ReportRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [fetched, setFetched] = useState(false);
+  const { toast } = useToast();
+
+  const fetchReport = async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (fromDate) params.set("fromDate", fromDate);
+      if (toDate) params.set("toDate", toDate);
+      if (productId) params.set("productId", productId);
+      const res = await fetch(`/api/purchases/report?${params}`);
+      if (!res.ok) throw new Error("Failed to fetch report");
+      const data = await res.json();
+      setRows(data);
+      setFetched(true);
+    } catch {
+      toast({ title: "Error", description: "Could not load report", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const totalAmount = rows.reduce((sum, r) => sum + Number(r.amount), 0);
+
+  const handlePrint = () => {
+    const printHTML = `
+      <html><head><title>Purchase Report</title>
+      <style>
+        body { font-family: sans-serif; font-size: 12px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+        th, td { border: 1px solid #ccc; padding: 4px 8px; text-align: left; }
+        th { background: #f3f4f6; font-weight: 600; }
+        td.num { text-align: right; }
+        tfoot td { font-weight: bold; background: #f9fafb; }
+        h2 { margin: 0 0 4px 0; }
+        .sub { color: #666; font-size: 11px; margin-bottom: 8px; }
+      </style></head><body>
+      <h2>Purchase Report</h2>
+      <div class="sub">${fromDate ? `From: ${fromDate}` : ""} ${toDate ? `To: ${toDate}` : ""}</div>
+      <table>
+        <thead><tr>
+          <th>Date</th><th>Bill #</th><th>Vendor</th>
+          <th>Product</th><th>Qty</th><th>Unit</th>
+          <th>Rate ₹</th><th>Tax%</th><th>Amount ₹</th>
+        </tr></thead>
+        <tbody>
+          ${rows.map((r) => `<tr>
+            <td>${new Date(r.billDate).toLocaleDateString("en-IN")}</td>
+            <td>${r.billNo}</td><td>${r.vendorName}</td>
+            <td>${r.productName}</td>
+            <td class="num">${Number(r.qty).toFixed(2)}</td>
+            <td>${r.unit}</td>
+            <td class="num">₹${Number(r.rate).toFixed(2)}</td>
+            <td class="num">${Number(r.taxPct).toFixed(1)}%</td>
+            <td class="num">₹${Number(r.amount).toFixed(2)}</td>
+          </tr>`).join("")}
+        </tbody>
+        <tfoot><tr>
+          <td colspan="8" style="text-align:right">Total</td>
+          <td class="num">₹${totalAmount.toFixed(2)}</td>
+        </tr></tfoot>
+      </table>
+      </body></html>
+    `;
+    const w = window.open("", "_blank");
+    if (!w) return;
+    w.document.write(printHTML);
+    w.document.close();
+    w.focus();
+    w.print();
+  };
+
+  const handlePDF = () => {
+    const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+    doc.setFontSize(14);
+    doc.text("Purchase Report", 40, 40);
+    if (fromDate || toDate) {
+      doc.setFontSize(10);
+      doc.text(`${fromDate ? `From: ${fromDate}` : ""} ${toDate ? `To: ${toDate}` : ""}`.trim(), 40, 58);
+    }
+    const headers = [["Date", "Bill #", "Vendor", "Product", "Qty", "Unit", "Rate ₹", "Tax%", "Amount ₹"]];
+    const body = rows.map((r) => [
+      new Date(r.billDate).toLocaleDateString("en-IN"),
+      r.billNo, r.vendorName, r.productName,
+      Number(r.qty).toFixed(2), r.unit,
+      Number(r.rate).toFixed(2),
+      `${Number(r.taxPct).toFixed(1)}%`,
+      Number(r.amount).toFixed(2),
+    ]);
+    (doc as any).autoTable({
+      head: headers,
+      body,
+      startY: fromDate || toDate ? 70 : 55,
+      foot: [["", "", "", "", "", "", "", "Total", totalAmount.toFixed(2)]],
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [243, 244, 246], textColor: [0, 0, 0] },
+    });
+    doc.save(`purchase-report-${fromDate || "all"}.pdf`);
+  };
+
+  const handleExcel = () => {
+    const wsData = [
+      ["Date", "Bill #", "Vendor Bill #", "Vendor", "Product", "Qty", "Unit", "Rate", "Tax%", "Amount"],
+      ...rows.map((r) => [
+        new Date(r.billDate).toLocaleDateString("en-IN"),
+        r.billNo, r.vendorBillNo, r.vendorName, r.productName,
+        Number(r.qty), r.unit, Number(r.rate), Number(r.taxPct), Number(r.amount),
+      ]),
+      ["", "", "", "", "", "", "", "", "Total", totalAmount],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Purchase Report");
+    XLSX.writeFile(wb, `purchase-report-${fromDate || "all"}.xlsx`);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <BarChart2 className="w-5 h-5" />
+            Purchase Report
+          </DialogTitle>
+          <DialogDescription>Filter by date range and/or item to generate a report.</DialogDescription>
+        </DialogHeader>
+
+        <div className="flex flex-wrap gap-3 items-end border-b pb-4">
+          <div className="space-y-1">
+            <Label className="text-xs">From Date</Label>
+            <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="w-36 h-8 text-sm" />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">To Date</Label>
+            <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="w-36 h-8 text-sm" />
+          </div>
+          <div className="space-y-1 min-w-[200px]">
+            <Label className="text-xs">Item / Product</Label>
+            <Select value={productId} onValueChange={setProductId}>
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue placeholder="All Products" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">All Products</SelectItem>
+                {products.map((p: any) => (
+                  <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button size="sm" onClick={fetchReport} disabled={loading}>
+            {loading ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <BarChart2 className="w-4 h-4 mr-1.5" />}
+            Generate
+          </Button>
+          {fetched && rows.length > 0 && (
+            <div className="flex gap-2 ml-auto">
+              <Button size="sm" variant="outline" onClick={handlePrint}>
+                <FileText className="w-4 h-4 mr-1.5" /> Print
+              </Button>
+              <Button size="sm" variant="outline" onClick={handlePDF}>
+                <Download className="w-4 h-4 mr-1.5" /> PDF
+              </Button>
+              <Button size="sm" variant="outline" onClick={handleExcel}>
+                <Download className="w-4 h-4 mr-1.5" /> Excel
+              </Button>
+            </div>
+          )}
+        </div>
+
+        <div className="flex-1 overflow-auto">
+          {!fetched && (
+            <div className="text-center py-16 text-muted-foreground text-sm">
+              Set filters above and click <strong>Generate</strong> to load the report.
+            </div>
+          )}
+          {fetched && rows.length === 0 && (
+            <div className="text-center py-16 text-muted-foreground text-sm">
+              No purchases found for the selected filters.
+            </div>
+          )}
+          {rows.length > 0 && (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Bill #</TableHead>
+                  <TableHead>Vendor</TableHead>
+                  <TableHead>Product</TableHead>
+                  <TableHead className="text-right">Qty</TableHead>
+                  <TableHead>Unit</TableHead>
+                  <TableHead className="text-right">Rate ₹</TableHead>
+                  <TableHead className="text-right">Tax%</TableHead>
+                  <TableHead className="text-right">Amount ₹</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((r, i) => (
+                  <TableRow key={i}>
+                    <TableCell className="text-sm">{new Date(r.billDate).toLocaleDateString("en-IN")}</TableCell>
+                    <TableCell className="text-sm font-medium">{r.billNo}</TableCell>
+                    <TableCell className="text-sm">{r.vendorName}</TableCell>
+                    <TableCell className="text-sm">{r.productName}</TableCell>
+                    <TableCell className="text-right tabular-nums text-sm">{Number(r.qty).toFixed(2)}</TableCell>
+                    <TableCell className="text-sm">{r.unit}</TableCell>
+                    <TableCell className="text-right tabular-nums text-sm">₹{Number(r.rate).toFixed(2)}</TableCell>
+                    <TableCell className="text-right tabular-nums text-sm">{Number(r.taxPct).toFixed(1)}%</TableCell>
+                    <TableCell className="text-right tabular-nums text-sm font-medium">₹{Number(r.amount).toFixed(2)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+              <tfoot>
+                <TableRow className="font-bold border-t-2">
+                  <TableCell colSpan={8} className="text-right text-sm">Total</TableCell>
+                  <TableCell className="text-right tabular-nums">₹{totalAmount.toFixed(2)}</TableCell>
+                </TableRow>
+              </tfoot>
+            </Table>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ------------------------------ HISTORY ------------------------------
 
 function HistoryTab() {
   const { hasRole } = useAuth();
   const isAdmin = hasRole(["admin"]);
   const { data: purchases, isLoading } = useListPurchases();
+  const { data: products } = useListProducts({});
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [attachmentsFor, setAttachmentsFor] = useState<{ id: number; billNo: string } | null>(null);
 
   if (isLoading) {
     return (
@@ -661,6 +1101,13 @@ function HistoryTab() {
 
   return (
     <>
+      <div className="flex justify-end mb-3">
+        <Button variant="outline" size="sm" onClick={() => setReportOpen(true)}>
+          <BarChart2 className="w-4 h-4 mr-1.5" />
+          Purchase Report
+        </Button>
+      </div>
+
       <Card>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -675,7 +1122,7 @@ function HistoryTab() {
                   <TableHead className="text-right">Amount</TableHead>
                   <TableHead className="text-right">Balance Due</TableHead>
                   <TableHead>Status</TableHead>
-                  {isAdmin && <TableHead className="w-16"></TableHead>}
+                  <TableHead className="w-20"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -706,9 +1153,17 @@ function HistoryTab() {
                     <TableCell>
                       <Badge variant={p.status === "cancelled" ? "destructive" : "outline"}>{p.status}</Badge>
                     </TableCell>
-                    {isAdmin && (
-                      <TableCell>
-                        {p.status !== "cancelled" && (
+                    <TableCell>
+                      <span className="inline-flex items-center gap-0.5">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          title="Attachments"
+                          onClick={() => setAttachmentsFor({ id: p.id, billNo: p.billNo })}
+                        >
+                          <Paperclip className="w-4 h-4" />
+                        </Button>
+                        {isAdmin && p.status !== "cancelled" && (
                           <Button
                             size="icon"
                             variant="ghost"
@@ -719,8 +1174,8 @@ function HistoryTab() {
                             <Pencil className="w-4 h-4" />
                           </Button>
                         )}
-                      </TableCell>
-                    )}
+                      </span>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -734,6 +1189,21 @@ function HistoryTab() {
           purchaseId={editingId}
           open={editingId !== null}
           onOpenChange={(open) => { if (!open) setEditingId(null); }}
+        />
+      )}
+
+      <PurchaseReportDialog
+        open={reportOpen}
+        onOpenChange={setReportOpen}
+        products={products ?? []}
+      />
+
+      {attachmentsFor && (
+        <AttachmentsDialog
+          purchaseId={attachmentsFor.id}
+          billNo={attachmentsFor.billNo}
+          open={true}
+          onOpenChange={(v) => { if (!v) setAttachmentsFor(null); }}
         />
       )}
     </>
