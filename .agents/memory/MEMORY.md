@@ -1,2 +1,3 @@
-- [Multi-company auth schema](multi-company-auth.md) — per-company UNIQUE(company_id, username) + partial index for super_admin (company_id IS NULL); migration must be applied to live DB manually.
-- [Express route ordering](express-route-ordering.md) — literal-path routes (e.g. /products/bulk-price) must be registered BEFORE param routes (/products/:id) or Express swallows them as param values.
+- [Express route ordering](express-route-ordering.md) — literal paths before param routes in purchases.ts
+- [Multi-company auth](multi-company-auth.md) — per-company session isolation, role-based access
+- [Artifact recovery](artifact-recovery.md) — how to restore deleted artifacts and restart services
