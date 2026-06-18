@@ -1345,13 +1345,21 @@ function AssembleTab({
 }
 
 // --------------------------- DISPATCH TAB ---------------------------
-// Lists customer orders that have been marked ready_for_dispatch. Each row
-// captures vehicle/driver/date and marks the order dispatched.
+// Two-stage view:
+//   Stage 1 — "In Production" (status=production or processing): shows orders
+//             coming out of manufacturing so the user can mark them
+//             ready_for_dispatch.
+//   Stage 2 — "Ready For Dispatch": vehicle/driver form + Mark Dispatched.
 
 function DispatchTab() {
-  const { data: orders, isLoading } = useListCustomerOrders({
-    status: "ready_for_dispatch" as any,
-  });
+  const { data: productionOrders, isLoading: loadingProd } =
+    useListCustomerOrders({ status: "production" as any });
+  const { data: processingOrders, isLoading: loadingProc } =
+    useListCustomerOrders({ status: "processing" as any });
+  const { data: readyOrders, isLoading: loadingReady } = useListCustomerOrders(
+    { status: "ready_for_dispatch" as any },
+  );
+
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const updateStatus = useUpdateCustomerOrderStatus();
@@ -1363,6 +1371,14 @@ function DispatchTab() {
     >
   >({});
   const [busyId, setBusyId] = useState<number | null>(null);
+
+  const isLoading = loadingProd || loadingProc || loadingReady;
+
+  // Combine production + processing into one "in production" list
+  const inProductionOrders = [
+    ...(productionOrders ?? []),
+    ...(processingOrders ?? []),
+  ];
 
   const getForm = (id: number) =>
     forms[id] ?? { vehicleNumber: "", driverName: "", dispatchDate: "" };
@@ -1378,6 +1394,35 @@ function DispatchTab() {
     }));
   };
 
+  const invalidateOrders = () =>
+    queryClient.invalidateQueries({
+      queryKey: getListCustomerOrdersQueryKey(),
+    });
+
+  const handleMarkReady = async (id: number) => {
+    setBusyId(id);
+    try {
+      await updateStatus.mutateAsync({
+        id,
+        data: { status: "ready_for_dispatch" },
+      });
+      await invalidateOrders();
+      toast({
+        title: "Marked ready for dispatch",
+        description: "Order moved to the dispatch queue.",
+      });
+    } catch (err: any) {
+      let desc = err?.message ?? "Server error";
+      try {
+        const body = err?.response ? await err.response.json() : null;
+        if (body?.error) desc = String(body.error).slice(0, 300);
+      } catch {}
+      toast({ title: "Failed", description: desc, variant: "destructive" });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const handleDispatch = async (id: number) => {
     const form = getForm(id);
     setBusyId(id);
@@ -1391,13 +1436,8 @@ function DispatchTab() {
           dispatchDate: form.dispatchDate || undefined,
         },
       });
-      await queryClient.invalidateQueries({
-        queryKey: getListCustomerOrdersQueryKey(),
-      });
-      toast({
-        title: "Order dispatched",
-        description: "Marked as dispatched.",
-      });
+      await invalidateOrders();
+      toast({ title: "Order dispatched", description: "Marked as dispatched." });
     } catch (err: any) {
       toast({
         title: "Dispatch failed",
@@ -1417,113 +1457,189 @@ function DispatchTab() {
     );
   }
 
-  if (!orders || orders.length === 0) {
+  const totalOrders =
+    inProductionOrders.length + (readyOrders?.length ?? 0);
+
+  if (totalOrders === 0) {
     return (
       <div className="text-center py-12 border border-dashed rounded-lg">
         <Inbox className="mx-auto h-12 w-12 text-muted-foreground opacity-20 mb-4" />
-        <h3 className="text-lg font-medium">No orders ready for dispatch</h3>
+        <h3 className="text-lg font-medium">No orders in the dispatch pipeline</h3>
         <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto">
-          Orders appear here once they are marked ready for dispatch. Enter
-          vehicle and driver details and mark them dispatched.
+          Orders in Processing or Production will appear here so you can mark
+          them Ready for Dispatch, then enter vehicle details and dispatch them.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold flex items-center gap-2">
-            <Truck className="w-5 h-5 text-primary" />
-            Ready For Dispatch
-          </h2>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Enter vehicle and driver details, then mark each order dispatched.
-          </p>
-        </div>
-        <Badge variant="secondary" data-testid="badge-dispatch-count">
-          {orders.length} order{orders.length === 1 ? "" : "s"}
-        </Badge>
-      </div>
+    <div className="space-y-6">
+      {/* ── Stage 1: In Production ── */}
+      {inProductionOrders.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-semibold flex items-center gap-2">
+                <Factory className="w-4 h-4 text-blue-600" />
+                In Production
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Production is done? Click "Mark Ready" to move the order to
+                the dispatch queue.
+              </p>
+            </div>
+            <Badge variant="secondary">
+              {inProductionOrders.length} order
+              {inProductionOrders.length === 1 ? "" : "s"}
+            </Badge>
+          </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {orders.map((o: any) => {
-          const form = getForm(o.id);
-          const isBusy = busyId === o.id;
-          return (
-            <Card key={o.id} data-testid={`dispatch-row-${o.id}`}>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center justify-between gap-2">
-                  <span className="line-clamp-1">{o.customerName}</span>
-                  <span className="text-xs font-mono text-muted-foreground">
-                    {o.orderNo ?? `#${o.id}`}
-                  </span>
-                </CardTitle>
-                <div className="flex items-center justify-between text-sm text-muted-foreground">
-                  <span>
-                    {o.totalItems} item{o.totalItems === 1 ? "" : "s"}
-                  </span>
-                  <span className="font-medium text-foreground">
-                    ₹{Number(o.totalAmount).toLocaleString("en-IN")}
-                  </span>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor={`vehicle-${o.id}`}>Vehicle Number</Label>
-                  <Input
-                    id={`vehicle-${o.id}`}
-                    value={form.vehicleNumber}
-                    onChange={(e) =>
-                      setField(o.id, "vehicleNumber", e.target.value)
-                    }
-                    placeholder="MH-12-AB-1234"
-                    data-testid={`input-vehicle-${o.id}`}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor={`driver-${o.id}`}>Driver Name</Label>
-                  <Input
-                    id={`driver-${o.id}`}
-                    value={form.driverName}
-                    onChange={(e) =>
-                      setField(o.id, "driverName", e.target.value)
-                    }
-                    placeholder="Driver name"
-                    data-testid={`input-driver-${o.id}`}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor={`date-${o.id}`}>Dispatch Date</Label>
-                  <Input
-                    id={`date-${o.id}`}
-                    type="date"
-                    value={form.dispatchDate}
-                    onChange={(e) =>
-                      setField(o.id, "dispatchDate", e.target.value)
-                    }
-                    data-testid={`input-dispatch-date-${o.id}`}
-                  />
-                </div>
-                <Button
-                  className="w-full"
-                  disabled={isBusy}
-                  onClick={() => handleDispatch(o.id)}
-                  data-testid={`button-dispatch-${o.id}`}
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {inProductionOrders.map((o: any) => {
+              const isBusy = busyId === o.id;
+              return (
+                <Card
+                  key={o.id}
+                  className="border-blue-200 dark:border-blue-900"
+                  data-testid={`production-row-${o.id}`}
                 >
-                  {isBusy ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <Truck className="w-4 h-4 mr-2" />
-                  )}
-                  Mark Dispatched
-                </Button>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm flex items-center justify-between gap-2">
+                      <span className="line-clamp-1">{o.customerName}</span>
+                      <span className="text-xs font-mono text-muted-foreground">
+                        {o.orderNo ?? `#${o.id}`}
+                      </span>
+                    </CardTitle>
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>
+                        {o.totalItems} item{o.totalItems === 1 ? "" : "s"}
+                      </span>
+                      <span className="font-medium text-foreground">
+                        ₹{Number(o.totalAmount).toLocaleString("en-IN")}
+                      </span>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <Button
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                      disabled={isBusy}
+                      onClick={() => handleMarkReady(o.id)}
+                      data-testid={`button-mark-ready-${o.id}`}
+                    >
+                      {isBusy ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <PackageCheck className="w-4 h-4 mr-2" />
+                      )}
+                      Mark Ready for Dispatch
+                    </Button>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Stage 2: Ready for Dispatch ── */}
+      {(readyOrders?.length ?? 0) > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-semibold flex items-center gap-2">
+                <Truck className="w-4 h-4 text-primary" />
+                Ready For Dispatch
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Enter vehicle and driver details, then mark each order
+                dispatched.
+              </p>
+            </div>
+            <Badge variant="secondary" data-testid="badge-dispatch-count">
+              {readyOrders!.length} order{readyOrders!.length === 1 ? "" : "s"}
+            </Badge>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {readyOrders!.map((o: any) => {
+              const form = getForm(o.id);
+              const isBusy = busyId === o.id;
+              return (
+                <Card key={o.id} data-testid={`dispatch-row-${o.id}`}>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center justify-between gap-2">
+                      <span className="line-clamp-1">{o.customerName}</span>
+                      <span className="text-xs font-mono text-muted-foreground">
+                        {o.orderNo ?? `#${o.id}`}
+                      </span>
+                    </CardTitle>
+                    <div className="flex items-center justify-between text-sm text-muted-foreground">
+                      <span>
+                        {o.totalItems} item{o.totalItems === 1 ? "" : "s"}
+                      </span>
+                      <span className="font-medium text-foreground">
+                        ₹{Number(o.totalAmount).toLocaleString("en-IN")}
+                      </span>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`vehicle-${o.id}`}>Vehicle Number</Label>
+                      <Input
+                        id={`vehicle-${o.id}`}
+                        value={form.vehicleNumber}
+                        onChange={(e) =>
+                          setField(o.id, "vehicleNumber", e.target.value)
+                        }
+                        placeholder="MH-12-AB-1234"
+                        data-testid={`input-vehicle-${o.id}`}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`driver-${o.id}`}>Driver Name</Label>
+                      <Input
+                        id={`driver-${o.id}`}
+                        value={form.driverName}
+                        onChange={(e) =>
+                          setField(o.id, "driverName", e.target.value)
+                        }
+                        placeholder="Driver name"
+                        data-testid={`input-driver-${o.id}`}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`date-${o.id}`}>Dispatch Date</Label>
+                      <Input
+                        id={`date-${o.id}`}
+                        type="date"
+                        value={form.dispatchDate}
+                        onChange={(e) =>
+                          setField(o.id, "dispatchDate", e.target.value)
+                        }
+                        data-testid={`input-dispatch-date-${o.id}`}
+                      />
+                    </div>
+                    <Button
+                      className="w-full"
+                      disabled={isBusy}
+                      onClick={() => handleDispatch(o.id)}
+                      data-testid={`button-dispatch-${o.id}`}
+                    >
+                      {isBusy ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Truck className="w-4 h-4 mr-2" />
+                      )}
+                      Mark Dispatched
+                    </Button>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
