@@ -212,7 +212,7 @@ router.post("/payments/:id/approve", async (req, res): Promise<void> => {
     return;
   }
 
-  const body = req.body as { accountId?: number };
+  const body = (req.body ?? {}) as { accountId?: number };
 
   const client = await pool.connect();
   try {

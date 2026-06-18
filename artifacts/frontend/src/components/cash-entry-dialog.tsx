@@ -22,8 +22,20 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { ArrowDownCircle, ArrowUpCircle, Loader2, UserCheck, X } from "lucide-react";
+import { ArrowDownCircle, ArrowUpCircle, Loader2, UserCheck, X, Hash } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+async function fetchReceiptPreview(): Promise<string | null> {
+  try {
+    const res = await fetch("/api/number-series", { credentials: "include" });
+    if (!res.ok) return null;
+    const list: any[] = await res.json();
+    const item = list.find((s: any) => s.seriesType === "payment_receipt");
+    return item?.preview ?? null;
+  } catch {
+    return null;
+  }
+}
 
 function useDebounced<T>(value: T, ms = 250): T {
   const [v, setV] = useState(value);
@@ -58,6 +70,7 @@ export function CashEntryDialog({
   const [partyMobile, setPartyMobile] = useState("");
   const [partyEntityId, setPartyEntityId] = useState<number | null>(null);
   const [notes, setNotes] = useState("");
+  const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
 
   // dropdown state for name autocomplete
   const [nameOpen, setNameOpen] = useState(false);
@@ -105,6 +118,10 @@ export function CashEntryDialog({
       setNotes("");
       setNameOpen(false);
       setMobileOpen(false);
+      setReceiptPreview(null);
+      if (direction === "in") {
+        fetchReceiptPreview().then(setReceiptPreview);
+      }
     }
   }, [open, direction, accounts]);
 
@@ -180,6 +197,12 @@ export function CashEntryDialog({
           <DialogTitle className="flex items-center gap-2">
             <Icon className={`w-5 h-5 ${isIn ? "text-green-600" : "text-rose-600"}`} />
             {isIn ? "Payment In" : "Payment Out"}
+            {isIn && receiptPreview && (
+              <span className="ml-auto flex items-center gap-1 text-xs font-normal bg-amber-50 text-amber-800 border border-amber-200 rounded px-2 py-0.5">
+                <Hash className="w-3 h-3" />
+                {receiptPreview}
+              </span>
+            )}
           </DialogTitle>
           <DialogDescription>
             {isIn
