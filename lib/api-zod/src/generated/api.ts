@@ -944,7 +944,7 @@ export const ListInvoicesQueryParams = zod.object({
   "search": zod.coerce.string().optional(),
   "customerId": zod.coerce.number().optional(),
   "salesmanId": zod.coerce.number().optional(),
-  "type": zod.enum(['gst', 'non_gst']).optional(),
+  "type": zod.enum(['gst', 'non_gst', 'quotation', 'proforma_invoice', 'bill_of_supply', 'delivery_challan', 'sale_order']).optional(),
   "month": zod.coerce.string().optional(),
   "year": zod.coerce.number().optional(),
   "dateFrom": zod.coerce.string().regex(listInvoicesQueryDateFromRegExp).optional().describe('Inclusive start date (YYYY-MM-DD) for invoice date filter'),
@@ -957,7 +957,7 @@ export const ListInvoicesResponseItem = zod.object({
   "invoiceNo": zod.string(),
   "invoiceDate": zod.string(),
   "dueDate": zod.string().nullish(),
-  "invoiceType": zod.enum(['gst', 'non_gst']),
+  "invoiceType": zod.enum(['gst', 'non_gst', 'quotation', 'proforma_invoice', 'bill_of_supply', 'delivery_challan', 'sale_order']),
   "customerId": zod.number().nullable(),
   "customerName": zod.string().nullish(),
   "customerGstin": zod.string().nullish(),
@@ -1008,7 +1008,7 @@ export const ListInvoicesResponse = zod.array(ListInvoicesResponseItem)
  * @summary Create invoice
  */
 export const CreateInvoiceBody = zod.object({
-  "invoiceType": zod.enum(['gst', 'non_gst']),
+  "invoiceType": zod.enum(['gst', 'non_gst', 'quotation', 'proforma_invoice', 'bill_of_supply', 'delivery_challan', 'sale_order']),
   "invoiceDate": zod.string(),
   "dueDate": zod.string().optional(),
   "customerId": zod.number().optional(),
@@ -1051,7 +1051,7 @@ export const GetInvoiceResponse = zod.object({
   "invoiceNo": zod.string(),
   "invoiceDate": zod.string(),
   "dueDate": zod.string().nullish(),
-  "invoiceType": zod.enum(['gst', 'non_gst']),
+  "invoiceType": zod.enum(['gst', 'non_gst', 'quotation', 'proforma_invoice', 'bill_of_supply', 'delivery_challan', 'sale_order']),
   "customerId": zod.number().nullable(),
   "customerName": zod.string().nullish(),
   "customerGstin": zod.string().nullish(),
@@ -1107,7 +1107,7 @@ export const UpdateInvoiceParams = zod.object({
 export const UpdateInvoiceBody = zod.object({
   "status": zod.enum(['draft', 'saved', 'cancelled']).optional(),
   "dueDate": zod.string().optional(),
-  "invoiceType": zod.enum(['gst', 'non_gst']).optional(),
+  "invoiceType": zod.enum(['gst', 'non_gst', 'quotation', 'proforma_invoice', 'bill_of_supply', 'delivery_challan', 'sale_order']).optional(),
   "invoiceDate": zod.string().optional(),
   "customerId": zod.number().nullish(),
   "customerName": zod.string().nullish(),
@@ -1140,7 +1140,7 @@ export const UpdateInvoiceResponse = zod.object({
   "invoiceNo": zod.string(),
   "invoiceDate": zod.string(),
   "dueDate": zod.string().nullish(),
-  "invoiceType": zod.enum(['gst', 'non_gst']),
+  "invoiceType": zod.enum(['gst', 'non_gst', 'quotation', 'proforma_invoice', 'bill_of_supply', 'delivery_challan', 'sale_order']),
   "customerId": zod.number().nullable(),
   "customerName": zod.string().nullish(),
   "customerGstin": zod.string().nullish(),
@@ -2026,7 +2026,7 @@ export const GetAuditLogResponse = zod.array(GetAuditLogResponseItem)
 export const GetSalesReportQueryParams = zod.object({
   "from": zod.coerce.string().optional(),
   "to": zod.coerce.string().optional(),
-  "type": zod.enum(['all', 'gst', 'non_gst']).optional(),
+  "type": zod.enum(['all', 'gst', 'non_gst', 'quotation', 'proforma_invoice', 'bill_of_supply', 'delivery_challan', 'sale_order']).optional(),
   "customerId": zod.coerce.number().optional(),
   "search": zod.coerce.string().optional()
 })
@@ -2074,7 +2074,7 @@ export const GetSalesReportResponse = zod.object({
 export const GetItemWiseSalesReportQueryParams = zod.object({
   "from": zod.coerce.string().optional(),
   "to": zod.coerce.string().optional(),
-  "type": zod.enum(['all', 'gst', 'non_gst']).optional(),
+  "type": zod.enum(['all', 'gst', 'non_gst', 'quotation', 'proforma_invoice', 'bill_of_supply', 'delivery_challan', 'sale_order']).optional(),
   "search": zod.coerce.string().optional()
 })
 
@@ -2106,7 +2106,7 @@ export const GetItemWiseSalesReportResponse = zod.object({
 export const GetCustomerWiseSalesReportQueryParams = zod.object({
   "from": zod.coerce.string().optional(),
   "to": zod.coerce.string().optional(),
-  "type": zod.enum(['all', 'gst', 'non_gst']).optional(),
+  "type": zod.enum(['all', 'gst', 'non_gst', 'quotation', 'proforma_invoice', 'bill_of_supply', 'delivery_challan', 'sale_order']).optional(),
   "search": zod.coerce.string().optional()
 })
 

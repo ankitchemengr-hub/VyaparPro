@@ -122,7 +122,7 @@ router.post("/invoices", async (req, res): Promise<void> => {
     let igst = 0;
 
     const isInterstate = data.placeOfSupply !== "Maharashtra";
-    const isGst = data.invoiceType === "gst";
+    const isGst = data.invoiceType === "gst" || data.invoiceType === "proforma_invoice";
 
     const processedItems = data.items.map((item) => {
       const qty = Number(item.qty);
@@ -457,7 +457,7 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
     }
 
     // 3. Recalculate new totals from new payload (same logic as POST /invoices)
-    const isGst = (data.invoiceType ?? existing.invoice_type) === "gst";
+    const isGst = ["gst", "proforma_invoice"].includes(data.invoiceType ?? existing.invoice_type);
     const placeOfSupply = data.placeOfSupply ?? existing.place_of_supply;
     const isInterstate = placeOfSupply !== "Maharashtra";
     let subtotal = 0, totalDiscount = 0, totalTax = 0, cgst = 0, sgst = 0, igst = 0;
