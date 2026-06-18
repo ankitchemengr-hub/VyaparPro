@@ -123,6 +123,7 @@ router.post("/invoices", async (req, res): Promise<void> => {
 
     const isInterstate = data.placeOfSupply !== "Maharashtra";
     const isGst = data.invoiceType === "gst" || data.invoiceType === "proforma_invoice";
+    const isQuotation = data.invoiceType === "quotation";
 
     const processedItems = data.items.map((item) => {
       const qty = Number(item.qty);
@@ -173,7 +174,7 @@ router.post("/invoices", async (req, res): Promise<void> => {
     const freight = Number(data.freight ?? 0);
     const roundOff = Number(data.roundOff ?? 0);
     const grandTotal = subtotal + totalTax + freight + roundOff;
-    const balanceDue = grandTotal;
+    const balanceDue = isQuotation ? 0 : grandTotal;
 
     // Get salesman name
     let salesmanName: string | null = null;
@@ -254,22 +255,24 @@ router.post("/invoices", async (req, res): Promise<void> => {
         ]
       );
 
-      // Stock movement (always via stock_movements)
-      await client.query(
-        `INSERT INTO stock_movements (company_id, product_id, type, quantity, reason, reference_id, reference_type, user_id)
-         VALUES ($1, $2, 'outward', $3, 'Invoice sale', $4, 'invoice', $5)`,
-        [companyId, item.productId, item.qty, invRow.id, session?.userId ?? 1]
-      );
+      if (!isQuotation) {
+        // Stock movement (outward)
+        await client.query(
+          `INSERT INTO stock_movements (company_id, product_id, type, quantity, reason, reference_id, reference_type, user_id)
+           VALUES ($1, $2, 'outward', $3, 'Invoice sale', $4, 'invoice', $5)`,
+          [companyId, item.productId, item.qty, invRow.id, session?.userId ?? 1]
+        );
 
-      // Reduce product stock
-      await client.query(
-        `UPDATE products SET current_stock = current_stock - $1 WHERE id = $2 AND company_id = $3`,
-        [item.qty, item.productId, companyId]
-      );
+        // Reduce product stock
+        await client.query(
+          `UPDATE products SET current_stock = current_stock - $1 WHERE id = $2 AND company_id = $3`,
+          [item.qty, item.productId, companyId]
+        );
+      }
     }
 
-    // Update customer outstanding balance & ledger
-    if (data.customerId) {
+    // Update customer outstanding balance & ledger (quotations don't affect outstanding)
+    if (data.customerId && !isQuotation) {
       await client.query(
         `UPDATE entities SET outstanding_balance = outstanding_balance + $1 WHERE id = $2 AND company_id = $3`,
         [grandTotal, data.customerId, companyId]
@@ -427,22 +430,28 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
       return;
     }
 
-    // 1. Reverse old line-item stock movements (inward)
+    // Determine if this is a quotation (before or after edit — either way skip stock/ledger)
+    const isQuotationEdit = (data.invoiceType ?? existing.invoice_type) === "quotation";
+    const wasQuotation = existing.invoice_type === "quotation";
+
+    // 1. Reverse old line-item stock movements (inward) — skip for quotations
     const oldItemsRes = await client.query(`SELECT * FROM invoice_items WHERE invoice_id = $1 AND company_id = $2`, [invoiceId, companyId]);
-    for (const oi of oldItemsRes.rows) {
-      await client.query(
-        `INSERT INTO stock_movements (company_id, product_id, type, quantity, reason, reference_id, reference_type, user_id)
-         VALUES ($1, $2, 'inward', $3, $4, $5, 'invoice_edit_reversal', $6)`,
-        [companyId, oi.product_id, oi.qty, `Invoice ${existing.invoice_no} edit — reverse old qty`, invoiceId, session?.userId ?? 1]
-      );
-      await client.query(`UPDATE products SET current_stock = current_stock + $1 WHERE id = $2 AND company_id = $3`, [oi.qty, oi.product_id, companyId]);
+    if (!wasQuotation) {
+      for (const oi of oldItemsRes.rows) {
+        await client.query(
+          `INSERT INTO stock_movements (company_id, product_id, type, quantity, reason, reference_id, reference_type, user_id)
+           VALUES ($1, $2, 'inward', $3, $4, $5, 'invoice_edit_reversal', $6)`,
+          [companyId, oi.product_id, oi.qty, `Invoice ${existing.invoice_no} edit — reverse old qty`, invoiceId, session?.userId ?? 1]
+        );
+        await client.query(`UPDATE products SET current_stock = current_stock + $1 WHERE id = $2 AND company_id = $3`, [oi.qty, oi.product_id, companyId]);
+      }
     }
     await client.query(`DELETE FROM invoice_items WHERE invoice_id = $1 AND company_id = $2`, [invoiceId, companyId]);
 
-    // 2. Reverse old customer outstanding + ledger entry (if there was a customer)
+    // 2. Reverse old customer outstanding + ledger entry — skip for quotations
     const oldGrandTotal = Number(existing.grand_total);
     const oldCustomerId: number | null = existing.customer_id;
-    if (oldCustomerId) {
+    if (oldCustomerId && !wasQuotation) {
       await client.query(
         `UPDATE entities SET outstanding_balance = outstanding_balance - $1 WHERE id = $2 AND company_id = $3`,
         [oldGrandTotal, oldCustomerId, companyId]
@@ -496,7 +505,7 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
     const roundOff = Number(data.roundOff ?? existing.round_off ?? 0);
     const newGrandTotal = subtotal + totalTax + freight + roundOff;
     const amountPaid = Number(existing.amount_paid ?? 0);
-    const balanceDue = newGrandTotal - amountPaid;
+    const balanceDue = isQuotationEdit ? 0 : newGrandTotal - amountPaid;
 
     // 4. Update invoice header + new totals
     const dueDateVal = data.dueDate === undefined
@@ -558,7 +567,7 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
       ]
     );
 
-    // 5. Insert new line items + outward stock movements
+    // 5. Insert new line items + outward stock movements (skip stock for quotations)
     for (const item of processedItems) {
       const prodName = (await db.select({ name: productsTable.name }).from(productsTable).where(and(eq(productsTable.companyId, companyId), eq(productsTable.id, item.productId))))[0]?.name ?? "Unknown";
       await client.query(
@@ -566,17 +575,19 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
         [companyId, invoiceId, item.productId, prodName, null, item.qty, item.qtyBoxesVal, item.totalLitersVal, item.unit, item.rate, item.mrp, item.discountPct, item.discountAmt, item.taxPct, item.cessPct, item.netPrice, item.amount]
       );
-      await client.query(
-        `INSERT INTO stock_movements (company_id, product_id, type, quantity, reason, reference_id, reference_type, user_id)
-         VALUES ($1, $2, 'outward', $3, $4, $5, 'invoice_edit', $6)`,
-        [companyId, item.productId, item.qty, `Invoice ${existing.invoice_no} edit — new qty`, invoiceId, session?.userId ?? 1]
-      );
-      await client.query(`UPDATE products SET current_stock = current_stock - $1 WHERE id = $2 AND company_id = $3`, [item.qty, item.productId, companyId]);
+      if (!isQuotationEdit) {
+        await client.query(
+          `INSERT INTO stock_movements (company_id, product_id, type, quantity, reason, reference_id, reference_type, user_id)
+           VALUES ($1, $2, 'outward', $3, $4, $5, 'invoice_edit', $6)`,
+          [companyId, item.productId, item.qty, `Invoice ${existing.invoice_no} edit — new qty`, invoiceId, session?.userId ?? 1]
+        );
+        await client.query(`UPDATE products SET current_stock = current_stock - $1 WHERE id = $2 AND company_id = $3`, [item.qty, item.productId, companyId]);
+      }
     }
 
-    // 6. Apply new customer outstanding + ledger entry (if new customer set)
+    // 6. Apply new customer outstanding + ledger entry (skip for quotations)
     const newCustomerId: number | null = data.customerId === undefined ? oldCustomerId : data.customerId;
-    if (newCustomerId) {
+    if (newCustomerId && !isQuotationEdit) {
       await client.query(
         `UPDATE entities SET outstanding_balance = outstanding_balance + $1 WHERE id = $2 AND company_id = $3`,
         [newGrandTotal, newCustomerId, companyId]

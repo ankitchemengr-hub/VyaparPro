@@ -404,8 +404,12 @@ export default function Billing() {
           queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
           setSaved(true);
           setSavedInvoice(invoice);
-          setPaymentAmount(finalTotal);
-          toast({ title: `Invoice ${invoice.invoiceNo} saved`, description: "Now record payment received." });
+          if (invoice.invoiceType !== "quotation") {
+            setPaymentAmount(finalTotal);
+            toast({ title: `Invoice ${invoice.invoiceNo} saved`, description: "Now record payment received." });
+          } else {
+            toast({ title: `Quotation ${invoice.invoiceNo} saved`, description: "No stock or payment changes made." });
+          }
         },
         onError: async (err: any) => {
           let desc = err?.message ?? "Save failed";
@@ -477,7 +481,7 @@ export default function Billing() {
               <CheckCircle className="w-10 h-10 text-green-500 shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-3 flex-wrap">
-                  <h2 className="text-xl font-bold">Invoice Saved</h2>
+                  <h2 className="text-xl font-bold">{savedInvoice.invoiceType === "quotation" ? "Quotation Saved" : "Invoice Saved"}</h2>
                   <Badge className="font-mono bg-green-600 text-white border-transparent">
                     {savedInvoice.invoiceNo}
                   </Badge>
@@ -490,10 +494,10 @@ export default function Billing() {
                 )}
                 <div className="mt-2 flex items-center gap-6 text-sm">
                   <div>
-                    <span className="text-muted-foreground">Invoice Total</span>
+                    <span className="text-muted-foreground">{savedInvoice.invoiceType === "quotation" ? "Quotation Total" : "Invoice Total"}</span>
                     <div className="text-2xl font-bold text-primary">₹{finalTotal.toLocaleString()}</div>
                   </div>
-                  {customer && Number(customer.outstandingBalance) + finalTotal > 0 && (
+                  {savedInvoice.invoiceType !== "quotation" && customer && Number(customer.outstandingBalance) + finalTotal > 0 && (
                     <div>
                       <span className="text-muted-foreground">New Outstanding</span>
                       <div className="text-lg font-bold text-destructive">
@@ -510,8 +514,20 @@ export default function Billing() {
           </CardContent>
         </Card>
 
-        {/* Payment collection */}
-        {!paymentDone && !paymentSkipped ? (
+        {/* Payment collection — hidden for quotations */}
+        {savedInvoice.invoiceType === "quotation" ? (
+          <Card className="border-blue-500/20 bg-blue-500/5">
+            <CardContent className="pt-5 pb-4">
+              <div className="flex items-center gap-3 text-muted-foreground">
+                <CheckCircle className="w-5 h-5 shrink-0 text-blue-500" />
+                <div>
+                  <p className="text-sm font-medium text-foreground">Quotation only — no stock or payment changes</p>
+                  <p className="text-xs mt-0.5">Convert to a GST or Non-GST invoice when the order is confirmed.</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ) : !paymentDone && !paymentSkipped ? (
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
@@ -788,7 +804,7 @@ export default function Billing() {
             data-testid="button-save-invoice"
           >
             {(createInvoice.isPending || updateInvoice.isPending) ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-            {isEditMode ? "Update Invoice" : "Save Invoice"}
+            {isEditMode ? "Update Invoice" : invoiceType === "quotation" ? "Save Quotation" : "Save Invoice"}
           </Button>
           <Button variant="outline" onClick={() => window.print()} data-testid="button-print-invoice">
             <Printer className="w-4 h-4 mr-2" /> Print
