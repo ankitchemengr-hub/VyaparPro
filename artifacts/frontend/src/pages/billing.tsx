@@ -92,9 +92,10 @@ function billedUnits(i: { qty: number; qtyMode: QtyMode; unitsPerBox: number }):
 }
 
 // Per-line liters, derived from the billed base-unit quantity.
+// litersPerBox in the catalog means liters per individual unit (e.g. 1 for a 1L bottle, 5 for a 5L can).
 function lineLiters(i: { qty: number; qtyMode: QtyMode; unit: string; unitsPerBox: number; litersPerBox: number }): number {
   const units = billedUnits(i);
-  if (i.unitsPerBox > 0 && i.litersPerBox > 0) return units * (i.litersPerBox / i.unitsPerBox);
+  if (i.litersPerBox > 0) return units * i.litersPerBox;
   const u = String(i.unit ?? "").toLowerCase();
   if (u === "ltr" || u === "l" || u === "liter" || u === "litre" || u === "liters" || u === "litres") {
     return units;
