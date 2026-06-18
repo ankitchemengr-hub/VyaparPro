@@ -184,12 +184,12 @@ export default function Billing() {
           return {
             productId: p.id,
             name: p.name,
-            unit: p.unit,
+            unit: p.unit ?? "QTY",
             qty,
             qtyMode: "unit" as QtyMode,
             unitsPerBox: resolvePack(p),
-            rate,
-            mrp: p.mrp,
+            rate: Number(rate ?? 0),
+            mrp: Number(p.mrp ?? 0),
             taxPct: invoiceType === "gst" ? (p.taxRate ?? 18) : 0,
             discountPct: 0,
             discountAmt: 0,
@@ -297,9 +297,9 @@ export default function Billing() {
         qty: billedUnits(i),
         ...(i.qtyMode === "box" && i.unitsPerBox > 0 ? { qtyBoxes: i.qty } : {}),
         ...(i.litersPerBox > 0 ? { litersPerBox: i.litersPerBox } : {}),
-        unit: i.unit,
-        rate: i.rate,
-        mrp: i.mrp,
+        unit: i.unit ?? "QTY",
+        rate: i.rate ?? 0,
+        mrp: i.mrp ?? 0,
         taxPct: invoiceType === "gst" ? i.taxPct : 0,
         discountPct: i.discountPct,
         discountAmt: i.discountAmt,
@@ -337,8 +337,10 @@ export default function Billing() {
           setPaymentAmount(finalTotal);
           toast({ title: `Invoice ${invoice.invoiceNo} saved`, description: "Now record payment received." });
         },
-        onError: () => {
-          toast({ title: "Failed to save invoice", variant: "destructive" });
+        onError: async (err: any) => {
+          let desc = err?.message ?? "Save failed";
+          try { const j = await err?.response?.json?.(); if (j?.error) desc = String(j.error).slice(0, 300); } catch {}
+          toast({ title: "Failed to save invoice", description: desc, variant: "destructive" });
         },
       }
     );
