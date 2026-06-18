@@ -261,8 +261,10 @@ export const UpdatePrintSettingsResponse = zod.object({
 /**
  * @summary List document number series configs (invoice / order / quotation)
  */
+export const DocSeriesType = zod.enum(['invoice', 'order', 'quotation', 'gst_invoice', 'bill_of_supply', 'proforma_invoice', 'sale_return', 'delivery_challan', 'payment_receipt', 'sale_order', 'purchase_order', 'purchase_invoice', 'purchase_return']);
+
 export const ListNumberSeriesResponseItem = zod.object({
-  "seriesType": zod.enum(['invoice', 'order', 'quotation']),
+  "seriesType": DocSeriesType,
   "prefix": zod.string(),
   "includeYear": zod.boolean(),
   "includeMonth": zod.boolean(),
@@ -273,6 +275,7 @@ export const ListNumberSeriesResponseItem = zod.object({
   "nextNumber": zod.number(),
   "resetRule": zod.enum(['never', 'daily', 'monthly', 'yearly', 'fiscal']),
   "periodKey": zod.string().nullish(),
+  "formatString": zod.string().nullish(),
   "preview": zod.string().optional()
 })
 export const ListNumberSeriesResponse = zod.array(ListNumberSeriesResponseItem)
@@ -282,7 +285,7 @@ export const ListNumberSeriesResponse = zod.array(ListNumberSeriesResponseItem)
  * @summary Update a document number series config (admin only)
  */
 export const UpdateNumberSeriesParams = zod.object({
-  "seriesType": zod.enum(['invoice', 'order', 'quotation'])
+  "seriesType": DocSeriesType
 })
 
 export const UpdateNumberSeriesBody = zod.object({
@@ -294,11 +297,12 @@ export const UpdateNumberSeriesBody = zod.object({
   "padding": zod.number().optional(),
   "startNumber": zod.number().optional(),
   "nextNumber": zod.number().optional(),
-  "resetRule": zod.enum(['never', 'daily', 'monthly', 'yearly', 'fiscal']).optional()
+  "resetRule": zod.enum(['never', 'daily', 'monthly', 'yearly', 'fiscal']).optional(),
+  "formatString": zod.string().optional()
 })
 
 export const UpdateNumberSeriesResponse = zod.object({
-  "seriesType": zod.enum(['invoice', 'order', 'quotation']),
+  "seriesType": DocSeriesType,
   "prefix": zod.string(),
   "includeYear": zod.boolean(),
   "includeMonth": zod.boolean(),
@@ -309,6 +313,7 @@ export const UpdateNumberSeriesResponse = zod.object({
   "nextNumber": zod.number(),
   "resetRule": zod.enum(['never', 'daily', 'monthly', 'yearly', 'fiscal']),
   "periodKey": zod.string().nullish(),
+  "formatString": zod.string().nullish(),
   "preview": zod.string().optional()
 })
 

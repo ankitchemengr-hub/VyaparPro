@@ -1,27 +1,32 @@
-// Configurable document-number generation (invoice / order / quotation).
+// Configurable document-number generation.
 //
-// A series is assembled from enabled tokens joined by `separator`:
-//   [prefix] [year] [month] [paddedSeq]
-// The sequence resets according to `resetRule` (never/daily/monthly/yearly/fiscal).
+// Two modes:
+//   1. Format-string mode: a template like "REC/MM/SEQ" with token substitution.
+//      Tokens: SEQ, YY, YYYY, MM, MMM, FY.
+//   2. Structured mode (legacy): prefix + year + month + paddedSeq joined by separator.
 //
-// `generateSeriesNumber` MUST be called with a pg client that is already inside a
-// transaction — it does SELECT ... FOR UPDATE on the series row so concurrent
-// callers cannot hand out duplicate numbers.
+// generateSeriesNumber MUST be called with a pg client already inside a transaction —
+// it does SELECT ... FOR UPDATE so concurrent callers cannot hand out duplicate numbers.
 
-export type SeriesType = "invoice" | "order" | "quotation";
+export type SeriesType =
+  | "invoice" | "order" | "quotation"
+  | "gst_invoice" | "bill_of_supply" | "proforma_invoice"
+  | "sale_return" | "delivery_challan" | "payment_receipt"
+  | "sale_order" | "purchase_order" | "purchase_invoice" | "purchase_return";
 
 interface SeriesRow {
   seriesType: SeriesType;
   prefix: string;
   includeYear: boolean;
   includeMonth: boolean;
-  yearFormat: string; // calendar | fiscal
+  yearFormat: string;
   separator: string;
   padding: number;
   startNumber: number;
   nextNumber: number;
-  resetRule: string; // never | daily | monthly | yearly | fiscal
+  resetRule: string;
   periodKey: string | null;
+  formatString: string | null;
 }
 
 function mapRow(r: any): SeriesRow {
@@ -37,10 +42,10 @@ function mapRow(r: any): SeriesRow {
     nextNumber: Number(r.next_number ?? 1),
     resetRule: r.reset_rule ?? "monthly",
     periodKey: r.period_key ?? null,
+    formatString: r.format_string ?? null,
   };
 }
 
-// Indian fiscal year runs Apr 1 -> Mar 31, labelled "2024-25".
 export function fiscalYearLabel(d: Date): string {
   const y = d.getFullYear();
   const startYear = d.getMonth() >= 3 ? y : y - 1;
@@ -53,19 +58,46 @@ export function computePeriodKey(resetRule: string, d: Date): string {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   switch (resetRule) {
-    case "daily":
-      return `${y}${m}${day}`;
-    case "monthly":
-      return `${y}${m}`;
-    case "yearly":
-      return `${y}`;
-    case "fiscal":
-      return fiscalYearLabel(d);
-    default:
-      return "ALL";
+    case "daily":   return `${y}${m}${day}`;
+    case "monthly": return `${y}${m}`;
+    case "yearly":  return `${y}`;
+    case "fiscal":  return fiscalYearLabel(d);
+    default:        return "ALL";
   }
 }
 
+const MONTH_ABBR = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+
+// Build a number from a format-string template like "REC/MM/SEQ" or "INV/YYYY/MM/SEQ".
+// Tokens (in substitution order to avoid partial matches):
+//   YYYY → 4-digit year   YY → 2-digit year
+//   MMM  → month abbrev   MM → 2-digit month
+//   FY   → fiscal year label (e.g. 26-27)
+//   SEQ  → sequence number (optionally zero-padded by `padding`)
+export function buildFromFormatString(
+  formatStr: string,
+  seq: number,
+  d: Date,
+  padding = 0,
+): string {
+  const y4  = String(d.getFullYear());
+  const y2  = y4.slice(-2);
+  const mm  = String(d.getMonth() + 1).padStart(2, "0");
+  const mmm = MONTH_ABBR[d.getMonth()];
+  const startYear = d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1;
+  const fy  = `${String(startYear).slice(-2)}-${String(startYear + 1).slice(-2)}`;
+  const seqStr = padding > 0 ? String(seq).padStart(padding, "0") : String(seq);
+
+  return formatStr
+    .replace(/YYYY/g, y4)
+    .replace(/YY/g,   y2)
+    .replace(/MMM/g,  mmm)
+    .replace(/MM/g,   mm)
+    .replace(/FY/g,   fy)
+    .replace(/SEQ/g,  seqStr);
+}
+
+// Build using the legacy structured approach.
 function buildNumber(row: SeriesRow, seq: number, d: Date): string {
   const parts: string[] = [];
   if (row.prefix) parts.push(row.prefix);
@@ -78,18 +110,41 @@ function buildNumber(row: SeriesRow, seq: number, d: Date): string {
   return parts.join(row.separator || "/");
 }
 
-const DEFAULTS: Record<SeriesType, Omit<SeriesRow, "seriesType" | "nextNumber" | "periodKey">> = {
-  invoice: { prefix: "INV", includeYear: true, includeMonth: true, yearFormat: "calendar", separator: "/", padding: 0, startNumber: 1, resetRule: "monthly" },
-  order: { prefix: "ORD", includeYear: true, includeMonth: true, yearFormat: "calendar", separator: "-", padding: 5, startNumber: 1, resetRule: "monthly" },
-  quotation: { prefix: "QTN", includeYear: true, includeMonth: true, yearFormat: "calendar", separator: "/", padding: 4, startNumber: 1, resetRule: "monthly" },
+// Format-string defaults for every known series type.
+// Existing types (invoice/order/quotation) carry a format_string as well so the
+// settings UI can display and edit them uniformly.
+interface TypeDefault {
+  formatString: string;
+  resetRule: string;
+  // Legacy structured fields (kept for backward-compat / initial row creation)
+  prefix: string;
+  includeYear: boolean;
+  includeMonth: boolean;
+  yearFormat: string;
+  separator: string;
+  padding: number;
+  startNumber: number;
+}
+
+export const SERIES_TYPE_DEFAULTS: Record<SeriesType, TypeDefault> = {
+  invoice:          { formatString: "INV/YYYY/MM/SEQ", resetRule: "monthly",  prefix: "INV", includeYear: true,  includeMonth: true,  yearFormat: "calendar", separator: "/", padding: 0, startNumber: 1 },
+  order:            { formatString: "ORD/YYYY/MM/SEQ", resetRule: "monthly",  prefix: "ORD", includeYear: true,  includeMonth: true,  yearFormat: "calendar", separator: "-", padding: 5, startNumber: 1 },
+  quotation:        { formatString: "QTN/YYYY/MM/SEQ", resetRule: "monthly",  prefix: "QTN", includeYear: true,  includeMonth: true,  yearFormat: "calendar", separator: "/", padding: 4, startNumber: 1 },
+  gst_invoice:      { formatString: "GST/MM/SEQ",      resetRule: "monthly",  prefix: "GST", includeYear: false, includeMonth: true,  yearFormat: "calendar", separator: "/", padding: 0, startNumber: 1 },
+  bill_of_supply:   { formatString: "BILL-SEQ",         resetRule: "never",    prefix: "BILL",includeYear: false, includeMonth: false, yearFormat: "calendar", separator: "-", padding: 3, startNumber: 1 },
+  proforma_invoice: { formatString: "PRO-SEQ",          resetRule: "never",    prefix: "PRO", includeYear: false, includeMonth: false, yearFormat: "calendar", separator: "-", padding: 0, startNumber: 1 },
+  sale_return:      { formatString: "CR/MM/SEQ",        resetRule: "monthly",  prefix: "CR",  includeYear: false, includeMonth: true,  yearFormat: "calendar", separator: "/", padding: 0, startNumber: 1 },
+  delivery_challan: { formatString: "DEL-SEQ",          resetRule: "never",    prefix: "DEL", includeYear: false, includeMonth: false, yearFormat: "calendar", separator: "-", padding: 3, startNumber: 1 },
+  payment_receipt:  { formatString: "REC/MM/SEQ",       resetRule: "monthly",  prefix: "REC", includeYear: false, includeMonth: true,  yearFormat: "calendar", separator: "/", padding: 0, startNumber: 1 },
+  sale_order:       { formatString: "SO-SEQ",           resetRule: "never",    prefix: "SO",  includeYear: false, includeMonth: false, yearFormat: "calendar", separator: "-", padding: 3, startNumber: 1 },
+  purchase_order:   { formatString: "PO/MM/SEQ",        resetRule: "monthly",  prefix: "PO",  includeYear: false, includeMonth: true,  yearFormat: "calendar", separator: "/", padding: 0, startNumber: 1 },
+  purchase_invoice: { formatString: "PINV/MM/SEQ",      resetRule: "monthly",  prefix: "PINV",includeYear: false, includeMonth: true,  yearFormat: "calendar", separator: "/", padding: 0, startNumber: 1 },
+  purchase_return:  { formatString: "PR/MM/SEQ",        resetRule: "monthly",  prefix: "PR",  includeYear: false, includeMonth: true,  yearFormat: "calendar", separator: "/", padding: 0, startNumber: 1 },
 };
 
-// Lazily create a sensible default config row the first time a series is used.
-// For invoices we seed nextNumber from the legacy invoice_sequence table so the
-// running counter is preserved (avoids duplicate invoice_no on cutover).
 async function ensureDefaultSeries(client: any, seriesType: SeriesType, companyId: number): Promise<void> {
   const now = new Date();
-  const d = DEFAULTS[seriesType];
+  const d = SERIES_TYPE_DEFAULTS[seriesType];
   let nextNumber = d.startNumber;
   let periodKey = computePeriodKey(d.resetRule, now);
 
@@ -105,20 +160,35 @@ async function ensureDefaultSeries(client: any, seriesType: SeriesType, companyI
 
   await client.query(
     `INSERT INTO number_series
-       (company_id, series_type, prefix, include_year, include_month, year_format, separator, padding, start_number, next_number, reset_rule, period_key)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+       (company_id, series_type, prefix, include_year, include_month, year_format, separator,
+        padding, start_number, next_number, reset_rule, period_key, format_string)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
      ON CONFLICT (company_id, series_type) DO NOTHING`,
-    [companyId, seriesType, d.prefix, d.includeYear, d.includeMonth, d.yearFormat, d.separator, d.padding, d.startNumber, nextNumber, d.resetRule, periodKey],
+    [
+      companyId, seriesType,
+      d.prefix, d.includeYear, d.includeMonth, d.yearFormat, d.separator,
+      d.padding, d.startNumber, nextNumber, d.resetRule, periodKey, d.formatString,
+    ],
   );
 }
 
-export async function generateSeriesNumber(client: any, seriesType: SeriesType, companyId: number): Promise<string> {
+export async function generateSeriesNumber(
+  client: any,
+  seriesType: SeriesType,
+  companyId: number,
+): Promise<string> {
   const now = new Date();
 
-  let res = await client.query(`SELECT * FROM number_series WHERE series_type = $1 AND company_id = $2 FOR UPDATE`, [seriesType, companyId]);
+  let res = await client.query(
+    `SELECT * FROM number_series WHERE series_type = $1 AND company_id = $2 FOR UPDATE`,
+    [seriesType, companyId],
+  );
   if (res.rows.length === 0) {
     await ensureDefaultSeries(client, seriesType, companyId);
-    res = await client.query(`SELECT * FROM number_series WHERE series_type = $1 AND company_id = $2 FOR UPDATE`, [seriesType, companyId]);
+    res = await client.query(
+      `SELECT * FROM number_series WHERE series_type = $1 AND company_id = $2 FOR UPDATE`,
+      [seriesType, companyId],
+    );
   }
 
   const row = mapRow(res.rows[0]);
@@ -130,17 +200,21 @@ export async function generateSeriesNumber(client: any, seriesType: SeriesType, 
     [seq + 1, periodKey, seriesType, companyId],
   );
 
+  if (row.formatString) {
+    return buildFromFormatString(row.formatString, seq, now, row.padding);
+  }
   return buildNumber(row, seq, now);
 }
 
-// Preview what the next number for a series would look like, without consuming it.
 export function previewNumber(row: SeriesRow, d: Date = new Date()): string {
   const periodKey = computePeriodKey(row.resetRule, d);
   const seq = row.periodKey !== periodKey ? row.startNumber : row.nextNumber;
+  if (row.formatString) {
+    return buildFromFormatString(row.formatString, seq, d, row.padding);
+  }
   return buildNumber(row, seq, d);
 }
 
-// Same as previewNumber but accepts a raw DB row (snake_case) — convenient for routes.
 export function previewSeriesFromRow(r: any, d: Date = new Date()): string {
   return previewNumber(mapRow(r), d);
 }

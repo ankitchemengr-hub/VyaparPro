@@ -7,16 +7,20 @@ import {
   UpdateNumberSeriesBody,
   UpdatePrintSettingsBody,
 } from "@workspace/api-zod";
-import { previewSeriesFromRow, type SeriesType } from "../lib/number-series";
+import { buildFromFormatString, computePeriodKey, type SeriesType, SERIES_TYPE_DEFAULTS } from "../lib/number-series";
 import { getCompanyId } from "../lib/tenant";
 
 const router: IRouter = Router();
 
-const SERIES_TYPES: SeriesType[] = ["invoice", "order", "quotation"];
+const ALL_SERIES_TYPES: SeriesType[] = [
+  "invoice", "gst_invoice", "bill_of_supply", "proforma_invoice",
+  "quotation", "sale_return", "delivery_challan", "payment_receipt",
+  "sale_order", "purchase_order", "purchase_invoice", "purchase_return",
+  "order",
+];
+
 const DEFAULT_TEMPLATE_KEY = "default_invoice_template";
 
-// Complete default print configuration. A company with no saved row (or a row
-// missing some keys) still resolves to a full, typed PrintSettings object.
 const DEFAULT_PRINT_SETTINGS = {
   defaultTemplate: "a5-compact",
   copies: 1,
@@ -74,30 +78,28 @@ async function requireAdmin(req: Request, res: Response, next: NextFunction): Pr
 }
 
 function mapSeries(r: any) {
+  const d = SERIES_TYPE_DEFAULTS[r.series_type as SeriesType] ?? SERIES_TYPE_DEFAULTS.invoice;
+  const fmtStr: string = r.format_string ?? d.formatString;
+  const nextNum = Number(r.next_number ?? 1);
+  const padding = Number(r.padding ?? d.padding);
   return {
     seriesType: r.series_type,
-    prefix: r.prefix ?? "",
-    includeYear: r.include_year ?? true,
-    includeMonth: r.include_month ?? true,
-    yearFormat: r.year_format ?? "calendar",
-    separator: r.separator ?? "/",
-    padding: Number(r.padding ?? 0),
-    startNumber: Number(r.start_number ?? 1),
-    nextNumber: Number(r.next_number ?? 1),
-    resetRule: r.reset_rule ?? "monthly",
+    prefix: r.prefix ?? d.prefix,
+    includeYear: r.include_year ?? d.includeYear,
+    includeMonth: r.include_month ?? d.includeMonth,
+    yearFormat: r.year_format ?? d.yearFormat,
+    separator: r.separator ?? d.separator,
+    padding,
+    startNumber: Number(r.start_number ?? d.startNumber),
+    nextNumber: nextNum,
+    resetRule: r.reset_rule ?? d.resetRule,
     periodKey: r.period_key ?? null,
-    preview: previewSeriesFromRow(r),
+    formatString: fmtStr,
+    preview: buildFromFormatString(fmtStr, nextNum, new Date(), padding),
   };
 }
 
-const SERIES_DEFAULTS: Record<SeriesType, any> = {
-  invoice: { prefix: "INV", include_year: true, include_month: true, year_format: "calendar", separator: "/", padding: 0, start_number: 1, next_number: 1, reset_rule: "monthly", period_key: null },
-  order: { prefix: "ORD", include_year: true, include_month: true, year_format: "calendar", separator: "-", padding: 5, start_number: 1, next_number: 1, reset_rule: "monthly", period_key: null },
-  quotation: { prefix: "QTN", include_year: true, include_month: true, year_format: "calendar", separator: "/", padding: 4, start_number: 1, next_number: 1, reset_rule: "monthly", period_key: null },
-};
-
-// GET /settings — app settings (default invoice template). Available to any logged-in user
-// so the frontend can pick the correct print layout.
+// GET /settings — app settings (default invoice template).
 router.get("/settings", async (req, res): Promise<void> => {
   const session = (req as any).session;
   if (!session?.userId) {
@@ -140,8 +142,7 @@ router.put("/settings", requireAdmin, async (req, res): Promise<void> => {
   res.json({ defaultInvoiceTemplate: r.rows[0]?.value ?? null });
 });
 
-// GET /print-settings — per-company invoice print config (merged with defaults).
-// Available to any logged-in user so the frontend can render the chosen template.
+// GET /print-settings
 router.get("/print-settings", async (req, res): Promise<void> => {
   const session = (req as any).session;
   if (!session?.userId) {
@@ -152,7 +153,7 @@ router.get("/print-settings", async (req, res): Promise<void> => {
   res.json(await resolvePrintSettings(companyId));
 });
 
-// PUT /print-settings — update per-company print config (admin only).
+// PUT /print-settings
 router.put("/print-settings", requireAdmin, async (req, res): Promise<void> => {
   const parsed = UpdatePrintSettingsBody.safeParse(req.body);
   if (!parsed.success) {
@@ -162,8 +163,6 @@ router.put("/print-settings", requireAdmin, async (req, res): Promise<void> => {
   const session = (req as any).session;
   const companyId = getCompanyId(req);
 
-  // Merge the incoming partial over whatever is already stored, then persist the
-  // full config object so future default changes never clobber saved values.
   const current = await pool.query(`SELECT config FROM print_settings WHERE company_id = $1`, [companyId]);
   const merged = {
     ...DEFAULT_PRINT_SETTINGS,
@@ -196,8 +195,26 @@ router.get("/number-series", requireAdmin, async (req, res): Promise<void> => {
   const companyId = getCompanyId(req);
   const r = await pool.query(`SELECT * FROM number_series WHERE company_id = $1`, [companyId]);
   const byType = new Map<string, any>(r.rows.map((row) => [row.series_type, row]));
-  // Surface a row for every known series type, even if not yet persisted.
-  const out = SERIES_TYPES.map((t) => mapSeries(byType.get(t) ?? { series_type: t, ...SERIES_DEFAULTS[t] }));
+
+  const out = ALL_SERIES_TYPES.map((t) => {
+    const d = SERIES_TYPE_DEFAULTS[t];
+    const existing = byType.get(t);
+    if (existing) return mapSeries(existing);
+    return mapSeries({
+      series_type: t,
+      prefix: d.prefix,
+      include_year: d.includeYear,
+      include_month: d.includeMonth,
+      year_format: d.yearFormat,
+      separator: d.separator,
+      padding: d.padding,
+      start_number: d.startNumber,
+      next_number: d.startNumber,
+      reset_rule: d.resetRule,
+      period_key: null,
+      format_string: d.formatString,
+    });
+  });
   res.json(out);
 });
 
@@ -214,16 +231,21 @@ router.put("/number-series/:seriesType", requireAdmin, async (req, res): Promise
     return;
   }
   const seriesType = params.data.seriesType as SeriesType;
-  const d = SERIES_DEFAULTS[seriesType];
+  const d = SERIES_TYPE_DEFAULTS[seriesType];
   const b = body.data;
   const session = (req as any).session;
   const companyId = getCompanyId(req);
 
-  // Upsert the full row, falling back to defaults for any unspecified field.
+  // Compute the current period key so the saved nextNumber takes effect immediately
+  // (rather than being overridden by a reset when the series is first used).
+  const resetRule = b.resetRule ?? d.resetRule;
+  const periodKey = computePeriodKey(resetRule, new Date());
+
   await pool.query(
     `INSERT INTO number_series
-       (company_id, series_type, prefix, include_year, include_month, year_format, separator, padding, start_number, next_number, reset_rule)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+       (company_id, series_type, prefix, include_year, include_month, year_format, separator, padding,
+        start_number, next_number, reset_rule, format_string, period_key)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
      ON CONFLICT (company_id, series_type) DO UPDATE SET
        prefix = EXCLUDED.prefix,
        include_year = EXCLUDED.include_year,
@@ -234,19 +256,23 @@ router.put("/number-series/:seriesType", requireAdmin, async (req, res): Promise
        start_number = EXCLUDED.start_number,
        next_number = EXCLUDED.next_number,
        reset_rule = EXCLUDED.reset_rule,
+       format_string = EXCLUDED.format_string,
+       period_key = EXCLUDED.period_key,
        updated_at = NOW()`,
     [
       companyId,
       seriesType,
       b.prefix ?? d.prefix,
-      b.includeYear ?? d.include_year,
-      b.includeMonth ?? d.include_month,
-      b.yearFormat ?? d.year_format,
+      b.includeYear ?? d.includeYear,
+      b.includeMonth ?? d.includeMonth,
+      b.yearFormat ?? d.yearFormat,
       b.separator ?? d.separator,
       b.padding ?? d.padding,
-      b.startNumber ?? d.start_number,
-      b.nextNumber ?? d.next_number,
-      b.resetRule ?? d.reset_rule,
+      b.startNumber ?? d.startNumber,
+      b.nextNumber ?? d.startNumber,
+      resetRule,
+      b.formatString ?? d.formatString,
+      periodKey,
     ],
   );
 
@@ -262,8 +288,37 @@ router.put("/number-series/:seriesType", requireAdmin, async (req, res): Promise
     ],
   );
 
-  const r = await pool.query(`SELECT * FROM number_series WHERE company_id = $1 AND series_type = $2`, [companyId, seriesType]);
+  const r = await pool.query(
+    `SELECT * FROM number_series WHERE company_id = $1 AND series_type = $2`,
+    [companyId, seriesType],
+  );
   res.json(mapSeries(r.rows[0]));
+});
+
+// GET /role-permissions
+router.get("/role-permissions", async (req, res): Promise<void> => {
+  const session = (req as any).session;
+  if (!session?.userId) { res.status(401).json({ error: "Not authenticated" }); return; }
+  const companyId = getCompanyId(req);
+  const r = await pool.query(`SELECT role, feature, allowed FROM role_permissions WHERE company_id = $1`, [companyId]);
+  res.json(r.rows.map((row: any) => ({ role: row.role, feature: row.feature, allowed: row.allowed })));
+});
+
+// PUT /role-permissions
+router.put("/role-permissions", requireAdmin, async (req, res): Promise<void> => {
+  const { permissions } = req.body;
+  if (!Array.isArray(permissions)) { res.status(400).json({ error: "permissions must be an array" }); return; }
+  const companyId = getCompanyId(req);
+  for (const p of permissions) {
+    await pool.query(
+      `INSERT INTO role_permissions (company_id, role, feature, allowed)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (company_id, role, feature) DO UPDATE SET allowed = EXCLUDED.allowed`,
+      [companyId, p.role, p.feature, p.allowed],
+    );
+  }
+  const r = await pool.query(`SELECT role, feature, allowed FROM role_permissions WHERE company_id = $1`, [companyId]);
+  res.json(r.rows.map((row: any) => ({ role: row.role, feature: row.feature, allowed: row.allowed })));
 });
 
 export default router;

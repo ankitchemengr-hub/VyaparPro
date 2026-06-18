@@ -1,0 +1,149 @@
+Add a new "Document Sequences" module under Settings and make Payment Receipt Number mandatory and auto-generated.
+
+Requirements:
+
+1. Settings → Document Sequences
+Create a new settings page similar to Tally/Busy.
+
+Document types:
+- GST Invoice
+- Invoice
+- Bill of Supply
+- Proforma Invoice
+- Quotation
+- Sale Return
+- Delivery Challan
+- Payment Receipt
+- Sale Order
+- Purchase Order
+- Purchase Invoice
+- Purchase Return
+
+For each document type provide:
+- Number Sequence (numeric counter)
+- Number Format dropdown
+- Reset Monthly checkbox
+- Live Preview
+
+Supported keywords:
+- SEQ = Running Number
+- YY = Year (26)
+- YYYY = Year (2026)
+- MM = Month (06)
+- MMM = Month Short Name (JUN)
+- FY = Financial Year (26-27)
+
+Examples:
+- INV/MM/SEQ → INV/06/8047
+- GST/MM/SEQ → GST/06/718
+- REC/MM/SEQ → REC/06/5784
+- PO/MM/SEQ → PO/06/125
+
+2. Database Changes
+Create a document_sequences table with:
+- id
+- company_id
+- document_type
+- current_sequence
+- format
+- reset_monthly
+- last_reset_month
+
+Support multi-company ERP.
+Each company should have independent numbering.
+
+3. Auto Number Generation
+Whenever a document is created:
+- Read format from settings.
+- Generate next number automatically.
+- Increment sequence after save.
+- Never allow duplicate numbers.
+- Lock sequence update inside transaction.
+
+4. Payment Receipt Module
+Create a dedicated Payment Receipt numbering system.
+
+Receipt number should be auto-generated from:
+Settings → Document Sequences → Payment Receipt
+
+Example:
+REC/06/5784
+
+Store:
+- Receipt Number
+- Date
+- Customer
+- Invoice Reference
+- Amount Received
+- Payment Mode
+- Account
+- Notes
+
+5. Payment Recording Screen (Important)
+Current "Record Payment" popup must be modified.
+
+Make the following fields compulsory:
+✓ Amount Received
+✓ Payment Mode
+✓ Deposit To Account
+✓ Payment Receipt Number (Auto Generated)
+
+User should NOT be able to save payment without:
+- Payment Mode selected
+- Deposit Account selected
+- Receipt Number generated
+
+Show validation messages.
+
+6. Payment Receipt Creation
+When payment is recorded:
+- Automatically create Payment Receipt entry.
+- Generate receipt number from sequence settings.
+- Link receipt with invoice.
+- Update invoice paid amount and balance.
+- Support partial payment and multiple receipts.
+
+Example:
+Invoice: INV/2026/06/6
+Receipt: REC/06/5784
+
+7. Payment Receipt Print
+Add:
+- Print Receipt
+- PDF Download
+- Share Receipt
+
+Receipt should show:
+- Company Details
+- Receipt No.
+- Date
+- Customer
+- Invoice Reference
+- Amount Received
+- Payment Mode
+- Received By
+- Signature Area
+
+8. Audit Trail
+Maintain audit logs:
+- Receipt Created
+- Receipt Edited
+- Receipt Deleted
+- Sequence Changed
+
+9. Permissions
+Only Admin can:
+- Change document sequences
+- Reset counters
+- Edit numbering formats
+
+10. UI Design
+Use same layout as attached screenshot:
+- Grid cards for each document type
+- Number Sequence
+- Number Format
+- Reset Monthly
+- Live Preview
+- Save Settings button
+
+Ensure all existing invoices continue working and no old document numbers are changed.

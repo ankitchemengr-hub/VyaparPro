@@ -14,6 +14,7 @@ import {
 } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
 import { getCompanyId } from "../lib/tenant";
+import { generateSeriesNumber } from "../lib/number-series";
 
 const router: IRouter = Router();
 
@@ -50,12 +51,9 @@ router.post("/payments", async (req, res): Promise<void> => {
   const companyId = getCompanyId(req);
   const session = (req as any).session;
   const isAdmin = session?.role === "admin";
-  const status = isAdmin ? "approved" : "pending";
 
-  // Resolve customer — explicit id, or find-or-create the shared "Walk-in Customer" entity for cash sales.
-  // A session-level advisory lock serializes concurrent walk-in inserts so we never end up with duplicates
-  // (the entities table has no UNIQUE constraint on name/type).
-  const WALKIN_LOCK_KEY = 7421953; // arbitrary constant — any int32 unique to this purpose works
+  // Resolve customer
+  const WALKIN_LOCK_KEY = 7421953;
   let customer;
   let customerId: number;
   if (parsed.data.customerId) {
@@ -93,13 +91,13 @@ router.post("/payments", async (req, res): Promise<void> => {
     }
   }
 
-  const receiptId = `RCP-${Date.now()}`;
-
   if (isAdmin) {
-    // Direct commit with SERIALIZABLE transaction
+    // Direct commit with SERIALIZABLE transaction — receipt ID generated inside for safety
     const client = await pool.connect();
     try {
       await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
+
+      const receiptId = await generateSeriesNumber(client, "payment_receipt", companyId);
 
       const [payment] = await db.insert(paymentsTable).values({
         companyId,
@@ -119,7 +117,6 @@ router.post("/payments", async (req, res): Promise<void> => {
         collectedById: parsed.data.accountId ? session.userId : null,
       }).returning();
 
-      // If deposited directly to an account, verify it exists & is active, then bump its balance
       if (parsed.data.accountId) {
         const upd = await client.query(
           `UPDATE accounts SET current_balance = current_balance + $1
@@ -132,7 +129,6 @@ router.post("/payments", async (req, res): Promise<void> => {
         }
       }
 
-      // Deduct from outstanding
       await client.query(
         `UPDATE entities SET outstanding_balance = outstanding_balance - $1 WHERE id = $2 AND company_id = $3`,
         [parsed.data.amount, customerId, companyId]
@@ -160,7 +156,20 @@ router.post("/payments", async (req, res): Promise<void> => {
       client.release();
     }
   } else {
-    // Salesman entry - goes to escrow (pending)
+    // Salesman — pending escrow. Generate receipt ID in its own short transaction.
+    let receiptId: string;
+    const seqClient = await pool.connect();
+    try {
+      await seqClient.query("BEGIN");
+      receiptId = await generateSeriesNumber(seqClient, "payment_receipt", companyId);
+      await seqClient.query("COMMIT");
+    } catch {
+      await seqClient.query("ROLLBACK").catch(() => {});
+      receiptId = `REC-${Date.now()}`;
+    } finally {
+      seqClient.release();
+    }
+
     const [payment] = await db.insert(paymentsTable).values({
       companyId,
       receiptId,
@@ -199,20 +208,25 @@ router.post("/payments/:id/approve", async (req, res): Promise<void> => {
   }
 
   if (payment.status !== "pending") {
-    res.status(400).json({ error: "Payment is not pending" });
+    res.status(400).json({ error: `Payment is already ${payment.status}` });
     return;
   }
+
+  const body = req.body as { accountId?: number };
 
   const client = await pool.connect();
   try {
     await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
 
-    const [updated] = await db.update(paymentsTable)
-      .set({ status: "approved", approvedById: session?.userId, approvedAt: new Date() })
-      .where(and(eq(paymentsTable.companyId, companyId), eq(paymentsTable.id, params.data.id)))
-      .returning();
+    if (body.accountId) {
+      const upd = await client.query(
+        `UPDATE accounts SET current_balance = current_balance + $1
+         WHERE id = $2 AND is_active = true AND company_id = $3 RETURNING id`,
+        [payment.amount, body.accountId, companyId]
+      );
+      if (upd.rowCount === 0) throw new Error(`Account ${body.accountId} not found or inactive`);
+    }
 
-    // Deduct from outstanding
     await client.query(
       `UPDATE entities SET outstanding_balance = outstanding_balance - $1 WHERE id = $2 AND company_id = $3`,
       [payment.amount, payment.customerId, companyId]
@@ -227,8 +241,21 @@ router.post("/payments/:id/approve", async (req, res): Promise<void> => {
     await client.query(
       `INSERT INTO ledger_entries (company_id, entity_id, date, description, debit, credit, balance, type, reference_id, reference_no)
        VALUES ($1, $2, NOW(), $3, 0, $4, $5, 'payment', $6, $7)`,
-      [companyId, payment.customerId, `Payment received - Approved (${payment.mode})`, payment.amount, newBal, payment.id, payment.receiptId]
+      [companyId, payment.customerId, `Payment received (${payment.mode})`, payment.amount, newBal, payment.id, payment.receiptId]
     );
+
+    const [updated] = await db
+      .update(paymentsTable)
+      .set({
+        status: "approved",
+        approvedById: session?.userId ?? null,
+        approvedAt: new Date(),
+        accountId: body.accountId ?? null,
+        collectedAt: body.accountId ? new Date() : null,
+        collectedById: body.accountId ? session?.userId : null,
+      })
+      .where(and(eq(paymentsTable.companyId, companyId), eq(paymentsTable.id, params.data.id)))
+      .returning();
 
     await client.query("COMMIT");
     res.json(formatPayment(updated));
@@ -250,7 +277,8 @@ router.post("/payments/:id/reject", async (req, res): Promise<void> => {
   }
 
   const companyId = getCompanyId(req);
-  const [updated] = await db.update(paymentsTable)
+  const [updated] = await db
+    .update(paymentsTable)
     .set({ status: "rejected" })
     .where(and(eq(paymentsTable.companyId, companyId), eq(paymentsTable.id, params.data.id)))
     .returning();

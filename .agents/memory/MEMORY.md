@@ -1,3 +1,2 @@
-- [Express route ordering](express-route-ordering.md) — literal paths before param routes in purchases.ts
-- [Multi-company auth](multi-company-auth.md) — per-company session isolation, role-based access
-- [Artifact recovery](artifact-recovery.md) — how to restore deleted artifacts and restart services
+- [Document Sequences](doc-sequences.md) — format-string engine for all 13 document types; format_string col added to number_series; backward-compat with old structured rows.
+- [Payment Receipt IDs](payment-receipt-ids.md) — receipt IDs now generated via generateSeriesNumber("payment_receipt") inside the SERIALIZABLE transaction; salesman flow uses its own short transaction.
