@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/use-auth";
 import {
@@ -38,11 +38,25 @@ import {
 import {
   Trash2, Printer, Save, CheckCircle, Loader2, User, Phone, MapPin,
   ArrowLeft, Banknote, CreditCard, Building2, Smartphone, Clock, SkipForward,
+  Search, Plus,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 
 type QtyMode = "unit" | "box";
+
+const GST_INVOICE_TYPES = new Set(["gst", "proforma_invoice"]);
+function isGstInvoiceType(t: string) { return GST_INVOICE_TYPES.has(t); }
+
+const INVOICE_TYPE_OPTIONS: { value: string; label: string }[] = [
+  { value: "gst",               label: "GST Invoice" },
+  { value: "non_gst",           label: "Non-GST Invoice" },
+  { value: "quotation",         label: "Quotation" },
+  { value: "proforma_invoice",  label: "Proforma Invoice" },
+  { value: "bill_of_supply",    label: "Bill of Supply" },
+  { value: "delivery_challan",  label: "Delivery Challan" },
+  { value: "sale_order",        label: "Sale Order" },
+];
 
 type BillingItem = {
   productId: number;
@@ -112,12 +126,17 @@ export default function Billing() {
     try { return params.customer ? JSON.parse(decodeURIComponent(params.customer)) : null; } catch { return null; }
   });
 
-  const [invoiceType, setInvoiceType] = useState<"gst" | "non_gst">("gst");
+  const [invoiceType, setInvoiceType] = useState<string>("gst");
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
   const [placeOfSupply, setPlaceOfSupply] = useState(customer?.state || "Maharashtra");
   const [items, setItems] = useState<BillingItem[]>([]);
   const [freight, setFreight] = useState(0);
   const [saved, setSaved] = useState(false);
+
+  // Product inline search
+  const [productSearch, setProductSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
   const [savedInvoice, setSavedInvoice] = useState<any>(null);
 
   const { data: products } = useListProducts({ forSale: true });
@@ -179,7 +198,7 @@ export default function Billing() {
           const p = products.find((x) => x.id === productId);
           if (!p) return null;
           const rate = customer?.pricingTier === "wholesale" ? p.wholesalePrice : p.retailPrice;
-          const taxPct = invoiceType === "gst" ? (p.taxRate ?? 18) : 0;
+          const taxPct = isGstInvoiceType(invoiceType) ? (p.taxRate ?? 18) : 0;
           const amount = qty * rate * (1 + taxPct / 100);
           return {
             productId: p.id,
@@ -190,7 +209,7 @@ export default function Billing() {
             unitsPerBox: resolvePack(p),
             rate: Number(rate ?? 0),
             mrp: Number(p.mrp ?? 0),
-            taxPct: invoiceType === "gst" ? (p.taxRate ?? 18) : 0,
+            taxPct: isGstInvoiceType(invoiceType) ? (p.taxRate ?? 18) : 0,
             discountPct: 0,
             discountAmt: 0,
             amount: Math.round(amount * 100) / 100,
@@ -209,7 +228,7 @@ export default function Billing() {
       const base = billedUnits(item) * item.rate;
       const discAmt = item.discountAmt > 0 ? item.discountAmt : (base * item.discountPct / 100);
       const taxable = base - discAmt;
-      const taxAmt = invoiceType === "gst" ? (taxable * item.taxPct / 100) : 0;
+      const taxAmt = isGstInvoiceType(invoiceType) ? (taxable * item.taxPct / 100) : 0;
       item.amount = Math.round((taxable + taxAmt) * 100) / 100;
       updated[idx] = item;
       return updated;
@@ -217,6 +236,56 @@ export default function Billing() {
   };
 
   const removeItem = (idx: number) => setItems((prev) => prev.filter((_, i) => i !== idx));
+
+  // Filtered products for inline search (max 12 shown)
+  const filteredProducts = productSearch.trim()
+    ? (products ?? []).filter((p) =>
+        p.name.toLowerCase().includes(productSearch.toLowerCase().trim())
+      ).slice(0, 12)
+    : (products ?? []).slice(0, 12);
+
+  const addProduct = (p: any) => {
+    const existing = items.findIndex((i) => i.productId === p.id);
+    if (existing >= 0) {
+      updateItem(existing, "qty", items[existing].qty + 1);
+    } else {
+      const rate = customer?.pricingTier === "wholesale" ? p.wholesalePrice : p.retailPrice;
+      const taxPct = isGstInvoiceType(invoiceType) ? (Number(p.taxRate) || 18) : 0;
+      const amount = 1 * Number(rate ?? 0) * (1 + taxPct / 100);
+      setItems((prev) => [
+        ...prev,
+        {
+          productId: p.id,
+          name: p.name,
+          unit: p.unit ?? "QTY",
+          qty: 1,
+          qtyMode: "unit" as QtyMode,
+          unitsPerBox: resolvePack(p),
+          rate: Number(rate ?? 0),
+          mrp: Number(p.mrp ?? 0),
+          taxPct,
+          discountPct: 0,
+          discountAmt: 0,
+          amount: Math.round(amount * 100) / 100,
+          litersPerBox: Number((p as any).litersPerBox ?? 0) || 0,
+        },
+      ]);
+    }
+    setProductSearch("");
+    setSearchOpen(false);
+  };
+
+  // Close product search dropdown on outside click
+  useEffect(() => {
+    if (!searchOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setSearchOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [searchOpen]);
 
   // Totals
   const subtotal = items.reduce((s, i) => {
@@ -228,7 +297,7 @@ export default function Billing() {
     const base = billedUnits(i) * i.rate;
     return s + (i.discountAmt > 0 ? i.discountAmt : (base * i.discountPct / 100));
   }, 0);
-  const totalTax = invoiceType === "gst"
+  const totalTax = isGstInvoiceType(invoiceType)
     ? items.reduce((s, i) => {
         const base = billedUnits(i) * i.rate;
         const disc = i.discountAmt > 0 ? i.discountAmt : (base * i.discountPct / 100);
@@ -300,7 +369,7 @@ export default function Billing() {
         unit: i.unit ?? "QTY",
         rate: i.rate ?? 0,
         mrp: i.mrp ?? 0,
-        taxPct: invoiceType === "gst" ? i.taxPct : 0,
+        taxPct: isGstInvoiceType(invoiceType) ? i.taxPct : 0,
         discountPct: i.discountPct,
         discountAmt: i.discountAmt,
         cessPct: 0,
@@ -702,13 +771,14 @@ export default function Billing() {
           )}
         </div>
         <div className="flex gap-2">
-          <Select value={invoiceType} onValueChange={(v: "gst" | "non_gst") => setInvoiceType(v)}>
-            <SelectTrigger className="w-[150px]" data-testid="select-invoice-type">
+          <Select value={invoiceType} onValueChange={setInvoiceType}>
+            <SelectTrigger className="w-[180px]" data-testid="select-invoice-type">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="gst">GST Invoice</SelectItem>
-              <SelectItem value="non_gst">Non-GST Invoice</SelectItem>
+              {INVOICE_TYPE_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
           <Button
@@ -819,12 +889,62 @@ export default function Billing() {
 
           {/* Items Table */}
           <Card>
-            <CardHeader className="pb-3 flex-row items-center justify-between">
+            <CardHeader className="pb-2 flex-row items-center justify-between">
               <CardTitle className="text-base">Line Items</CardTitle>
               <span className="text-xs text-muted-foreground">{items.length} item{items.length !== 1 ? "s" : ""}</span>
             </CardHeader>
+
+            {/* Inline product search */}
+            <div className="px-5 pb-3 relative" ref={searchRef}>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                <Input
+                  value={productSearch}
+                  onChange={(e) => { setProductSearch(e.target.value); setSearchOpen(true); }}
+                  onFocus={() => setSearchOpen(true)}
+                  placeholder="Search product to add..."
+                  className="pl-9 h-9"
+                  data-testid="input-product-search"
+                />
+              </div>
+              {searchOpen && (
+                <div className="absolute z-50 left-5 right-5 top-full mt-1 max-h-64 overflow-y-auto rounded-md border bg-popover shadow-lg">
+                  {filteredProducts.length === 0 ? (
+                    <div className="p-3 text-sm text-muted-foreground">No products found.</div>
+                  ) : (
+                    filteredProducts.map((p) => {
+                      const alreadyAdded = items.some((i) => i.productId === p.id);
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => addProduct(p)}
+                          className="w-full text-left px-3 py-2 hover:bg-accent flex items-center justify-between gap-3 text-sm border-b last:border-0"
+                          data-testid={`product-option-${p.id}`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="font-medium truncate">{p.name}</div>
+                            <div className="text-xs text-muted-foreground">
+                              ₹{Number(customer?.pricingTier === "wholesale" ? p.wholesalePrice : p.retailPrice).toLocaleString()} · {p.unit ?? "QTY"}
+                              {isGstInvoiceType(invoiceType) && p.taxRate ? ` · GST ${p.taxRate}%` : ""}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {alreadyAdded && (
+                              <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">Added</span>
+                            )}
+                            <Plus className="w-4 h-4 text-muted-foreground" />
+                          </div>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+            </div>
+
             <CardContent className="p-0">
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
                 <Table>
                   <TableHeader>
                     <TableRow className="text-xs">
@@ -832,7 +952,7 @@ export default function Billing() {
                       <TableHead className="w-32 text-right">Qty</TableHead>
                       <TableHead className="w-16 text-right">LTR</TableHead>
                       <TableHead className="w-24 text-right">Rate (₹)</TableHead>
-                      {invoiceType === "gst" && <TableHead className="w-16 text-right">Tax%</TableHead>}
+                      {isGstInvoiceType(invoiceType) && <TableHead className="w-16 text-right">Tax%</TableHead>}
                       <TableHead className="w-20 text-right">Disc%</TableHead>
                       <TableHead className="w-24 text-right font-semibold">Amount</TableHead>
                       <TableHead className="w-8" />
@@ -842,7 +962,7 @@ export default function Billing() {
                     {items.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={8} className="text-center py-8 text-muted-foreground text-sm">
-                          No items — go back to catalog to add products
+                          No items — search above to add products
                         </TableCell>
                       </TableRow>
                     ) : (
@@ -910,7 +1030,7 @@ export default function Billing() {
                               title={user?.role !== "admin" ? "Only admin can edit rate" : undefined}
                             />
                           </TableCell>
-                          {invoiceType === "gst" && (
+                          {isGstInvoiceType(invoiceType) && (
                             <TableCell className="text-right">
                               <Input
                                 type="number"
@@ -987,7 +1107,7 @@ export default function Billing() {
                   <span>- ₹{totalDiscount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                 </div>
               )}
-              {invoiceType === "gst" && (
+              {isGstInvoiceType(invoiceType) && (
                 <>
                   <Separator />
                   {!isInterstate ? (
@@ -1027,7 +1147,7 @@ export default function Billing() {
                 <span className="text-primary">₹{finalTotal.toLocaleString()}</span>
               </div>
 
-              {invoiceType === "gst" && totalTax > 0 && (
+              {isGstInvoiceType(invoiceType) && totalTax > 0 && (
                 <div className="bg-muted/50 rounded p-3 space-y-1 text-xs">
                   <div className="font-medium mb-1 text-muted-foreground uppercase tracking-wide">GST Breakup</div>
                   {items.map((item, i) => {
