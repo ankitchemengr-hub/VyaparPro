@@ -403,7 +403,7 @@ export default function CustomerOrdersAdmin() {
                       Print Order
                     </Button>
                   )}
-                  {isAdminOrAccountant && (detail.status === "done" || detail.status === "processing") && (
+                  {isAdminOrAccountant && !["pending", "cancelled"].includes(detail.status) && (
                     <Button
                       variant="default"
                       onClick={goToBilling}
