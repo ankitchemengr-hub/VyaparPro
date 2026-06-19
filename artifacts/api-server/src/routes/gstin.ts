@@ -70,6 +70,7 @@ router.get("/gstin-lookup", async (req, res): Promise<void> => {
     }
 
     const info = data.taxpayerInfo;
+    req.log.info({ lgnm: info.lgnm, tradeNam: info.tradeNam, allKeys: Object.keys(info) }, "GSTIN raw taxpayerInfo fields");
     const pradr = info.pradr?.addr ?? {};
     const addressParts = [
       pradr.bno, pradr.bnm, pradr.st, pradr.loc, pradr.dst, pradr.stcd, pradr.pncd,
