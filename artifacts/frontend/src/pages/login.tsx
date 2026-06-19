@@ -209,12 +209,12 @@ export default function Login() {
             aria-hidden="true"
           >
             {companyLogo ? (
-              <div className="w-16 h-16 rounded-xl bg-card flex items-center justify-center overflow-hidden mb-6 shadow-lg shadow-primary/20 border border-sidebar-border">
+              <div className="w-28 h-28 rounded-2xl bg-card flex items-center justify-center overflow-hidden mb-6 shadow-lg shadow-primary/20 border border-sidebar-border">
                 <img src={companyLogo} alt={`${companyName} logo`} className="w-full h-full object-contain" />
               </div>
             ) : (
-              <div className="w-16 h-16 rounded-xl bg-primary flex items-center justify-center text-primary-foreground mb-6 shadow-lg shadow-primary/20">
-                <Factory className="w-8 h-8" />
+              <div className="w-28 h-28 rounded-2xl bg-primary flex items-center justify-center text-primary-foreground mb-6 shadow-lg shadow-primary/20">
+                <Factory className="w-14 h-14" />
               </div>
             )}
           </div>
