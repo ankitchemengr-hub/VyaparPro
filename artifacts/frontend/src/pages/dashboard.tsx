@@ -214,33 +214,6 @@ export default function Dashboard() {
             ))}
           </div>
 
-          {/* Pending items list */}
-          {cards.filter((c: any) => c.status === "pending").length > 0 && (
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-amber-500" /> Pending Production Items
-              </p>
-              <div className="divide-y rounded-lg border overflow-hidden">
-                {cards
-                  .filter((c: any) => c.status === "pending")
-                  .slice(0, 10)
-                  .map((c: any) => (
-                    <div key={c.id} className="flex items-center justify-between px-3 py-2 bg-card hover:bg-muted/40">
-                      <span className="text-sm font-medium">{c.productName ?? `Product #${c.productId}`}</span>
-                      <Badge variant="outline" className="text-xs font-mono ml-4 shrink-0">
-                        {Number(c.targetQty).toLocaleString()} {c.unit ?? "qty"}
-                      </Badge>
-                    </div>
-                  ))}
-                {cards.filter((c: any) => c.status === "pending").length > 10 && (
-                  <div className="px-3 py-2 text-xs text-muted-foreground bg-muted/20">
-                    + {cards.filter((c: any) => c.status === "pending").length - 10} more items
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
           {/* In-progress items list */}
           {cards.filter((c: any) => c.status === "processing").length > 0 && (
             <div>
