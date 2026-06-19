@@ -82,7 +82,7 @@ export default function Manufacturing() {
       </div>
 
       <Tabs value={tab} onValueChange={setTab} className="w-full">
-        <TabsList className="grid w-full max-w-2xl grid-cols-3">
+        <TabsList className="grid w-full max-w-3xl grid-cols-4">
           <TabsTrigger value="workload" data-testid="tab-workload">
             Workload
           </TabsTrigger>
@@ -91,6 +91,9 @@ export default function Manufacturing() {
           </TabsTrigger>
           <TabsTrigger value="dispatch" data-testid="tab-dispatch">
             Ready For Dispatch
+          </TabsTrigger>
+          <TabsTrigger value="report" data-testid="tab-report">
+            Report
           </TabsTrigger>
         </TabsList>
 
@@ -107,6 +110,10 @@ export default function Manufacturing() {
 
         <TabsContent value="dispatch" className="mt-6">
           <DispatchTab />
+        </TabsContent>
+
+        <TabsContent value="report" className="mt-6">
+          <ReportTab />
         </TabsContent>
       </Tabs>
     </div>
@@ -974,11 +981,6 @@ function AssembleTab({
   const canAssemble =
     !!selectedBom && batchCount > 0 && !anyShortage && !submitting;
 
-  const recentAssemblies = useMemo(() => {
-    return (workloads ?? [])
-      .filter((c: any) => c.status === "done")
-      .slice(0, 6);
-  }, [workloads]);
 
   const handleAssemble = async () => {
     if (!selectedBom || batchCount <= 0) return;
@@ -1145,41 +1147,6 @@ function AssembleTab({
           </div>
         )}
       </div>
-
-      {/* Recent Assemblies */}
-      <Card className="h-fit">
-        <CardHeader>
-          <CardTitle className="text-base">Recent Assemblies</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {recentAssemblies.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">
-              No assemblies yet.
-            </p>
-          ) : (
-            <ul className="space-y-3">
-              {recentAssemblies.map((c: any) => (
-                <li
-                  key={c.id}
-                  className="text-sm border-b border-border/50 pb-2 last:border-0 last:pb-0"
-                >
-                  <div className="font-medium line-clamp-1">
-                    {c.productName}
-                  </div>
-                  <div className="text-xs text-muted-foreground flex justify-between mt-0.5">
-                    <span>Qty {c.targetQty}</span>
-                    <span>
-                      {c.completedAt
-                        ? new Date(c.completedAt).toLocaleString()
-                        : ""}
-                    </span>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
 
       {/* Assembly Dialog — opens when a recipe card is tapped */}
       <Dialog
@@ -1637,6 +1604,134 @@ function DispatchTab() {
                 </Card>
               );
             })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --------------------------- REPORT TAB ---------------------------
+
+function ReportTab() {
+  const { data: workloads, isLoading } = useListWorkloadCards();
+  const today = new Date().toISOString().slice(0, 10);
+  const firstOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+    .toISOString()
+    .slice(0, 10);
+  const [fromDate, setFromDate] = useState(firstOfMonth);
+  const [toDate, setToDate] = useState(today);
+  const [search, setSearch] = useState("");
+
+  const filtered = useMemo(() => {
+    const from = fromDate ? new Date(fromDate + "T00:00:00") : null;
+    const to = toDate ? new Date(toDate + "T23:59:59") : null;
+    const q = search.trim().toLowerCase();
+    return (workloads ?? [])
+      .filter((c: any) => c.status === "done")
+      .filter((c: any) => {
+        const date = c.completedAt ? new Date(c.completedAt) : null;
+        if (from && date && date < from) return false;
+        if (to && date && date > to) return false;
+        return true;
+      })
+      .filter((c: any) => {
+        if (!q) return true;
+        return String(c.productName ?? "").toLowerCase().includes(q);
+      })
+      .sort((a: any, b: any) =>
+        new Date(b.completedAt ?? 0).getTime() - new Date(a.completedAt ?? 0).getTime()
+      );
+  }, [workloads, fromDate, toDate, search]);
+
+  const totalQty = filtered.reduce((sum: number, c: any) => sum + Number(c.targetQty ?? 0), 0);
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-lg font-semibold">Assembly Report</h2>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          All completed assembly runs within the selected date range.
+        </p>
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap gap-3 items-end">
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">From</label>
+          <Input
+            type="date"
+            value={fromDate}
+            onChange={(e) => setFromDate(e.target.value)}
+            className="w-[150px]"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">To</label>
+          <Input
+            type="date"
+            value={toDate}
+            onChange={(e) => setToDate(e.target.value)}
+            className="w-[150px]"
+          />
+        </div>
+        <div className="space-y-1 flex-1 min-w-[180px]">
+          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Search Product</label>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Filter by product name…"
+              className="pl-9"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Summary */}
+      {!isLoading && filtered.length > 0 && (
+        <div className="flex gap-4">
+          <div className="rounded-lg border bg-muted/30 px-4 py-2 text-sm">
+            <span className="text-muted-foreground">Runs: </span>
+            <span className="font-semibold">{filtered.length}</span>
+          </div>
+          <div className="rounded-lg border bg-muted/30 px-4 py-2 text-sm">
+            <span className="text-muted-foreground">Total Qty: </span>
+            <span className="font-semibold">{totalQty.toLocaleString()}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Table */}
+      {isLoading ? (
+        <div className="text-center py-12 text-muted-foreground">
+          <Loader2 className="w-6 h-6 animate-spin mx-auto" />
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-16 border border-dashed rounded-lg">
+          <Factory className="mx-auto h-10 w-10 text-muted-foreground opacity-20 mb-3" />
+          <p className="text-sm text-muted-foreground">No assembly records found for the selected period.</p>
+        </div>
+      ) : (
+        <div className="rounded-lg border overflow-hidden">
+          <div className="grid grid-cols-12 gap-2 px-4 py-2 text-xs uppercase text-muted-foreground font-medium bg-muted/50">
+            <div className="col-span-1">#</div>
+            <div className="col-span-5">Product</div>
+            <div className="col-span-2 text-right">Qty</div>
+            <div className="col-span-4 text-right">Completed At</div>
+          </div>
+          <div className="divide-y">
+            {filtered.map((c: any, idx: number) => (
+              <div key={c.id} className="grid grid-cols-12 gap-2 px-4 py-3 items-center text-sm">
+                <div className="col-span-1 text-muted-foreground tabular-nums">{idx + 1}</div>
+                <div className="col-span-5 font-medium line-clamp-1">{c.productName}</div>
+                <div className="col-span-2 text-right tabular-nums font-medium">{Number(c.targetQty).toLocaleString()}</div>
+                <div className="col-span-4 text-right text-xs text-muted-foreground">
+                  {c.completedAt ? new Date(c.completedAt).toLocaleString() : "—"}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
