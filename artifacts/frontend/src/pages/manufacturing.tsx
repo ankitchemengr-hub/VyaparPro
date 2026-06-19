@@ -1615,6 +1615,7 @@ function DispatchTab() {
 
 function ReportTab() {
   const { data: workloads, isLoading } = useListWorkloadCards();
+  const { data: products } = useListProducts({});
   const today = new Date().toISOString().slice(0, 10);
   const firstOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
     .toISOString()
@@ -1622,6 +1623,12 @@ function ReportTab() {
   const [fromDate, setFromDate] = useState(firstOfMonth);
   const [toDate, setToDate] = useState(today);
   const [search, setSearch] = useState("");
+
+  const productById = useMemo(() => {
+    const m = new Map<number, any>();
+    (products ?? []).forEach((p: any) => m.set(p.id, p));
+    return m;
+  }, [products]);
 
   const filtered = useMemo(() => {
     const from = fromDate ? new Date(fromDate + "T00:00:00") : null;
@@ -1645,6 +1652,11 @@ function ReportTab() {
   }, [workloads, fromDate, toDate, search]);
 
   const totalQty = filtered.reduce((sum: number, c: any) => sum + Number(c.targetQty ?? 0), 0);
+  const totalLtrs = filtered.reduce((sum: number, c: any) => {
+    const prod = productById.get(c.productId);
+    const lpb = Number(prod?.litersPerBox ?? 0);
+    return sum + Number(c.targetQty ?? 0) * lpb;
+  }, 0);
 
   return (
     <div className="space-y-5">
@@ -1691,7 +1703,7 @@ function ReportTab() {
 
       {/* Summary */}
       {!isLoading && filtered.length > 0 && (
-        <div className="flex gap-4">
+        <div className="flex gap-4 flex-wrap">
           <div className="rounded-lg border bg-muted/30 px-4 py-2 text-sm">
             <span className="text-muted-foreground">Runs: </span>
             <span className="font-semibold">{filtered.length}</span>
@@ -1700,6 +1712,12 @@ function ReportTab() {
             <span className="text-muted-foreground">Total Qty: </span>
             <span className="font-semibold">{totalQty.toLocaleString()}</span>
           </div>
+          {totalLtrs > 0 && (
+            <div className="rounded-lg border bg-muted/30 px-4 py-2 text-sm">
+              <span className="text-muted-foreground">Total Ltrs: </span>
+              <span className="font-semibold">{totalLtrs.toLocaleString()}</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -1717,21 +1735,30 @@ function ReportTab() {
         <div className="rounded-lg border overflow-hidden">
           <div className="grid grid-cols-12 gap-2 px-4 py-2 text-xs uppercase text-muted-foreground font-medium bg-muted/50">
             <div className="col-span-1">#</div>
-            <div className="col-span-5">Product</div>
+            <div className="col-span-4">Product</div>
             <div className="col-span-2 text-right">Qty</div>
-            <div className="col-span-4 text-right">Completed At</div>
+            <div className="col-span-2 text-right">Ltrs</div>
+            <div className="col-span-3 text-right">Completed At</div>
           </div>
           <div className="divide-y">
-            {filtered.map((c: any, idx: number) => (
-              <div key={c.id} className="grid grid-cols-12 gap-2 px-4 py-3 items-center text-sm">
-                <div className="col-span-1 text-muted-foreground tabular-nums">{idx + 1}</div>
-                <div className="col-span-5 font-medium line-clamp-1">{c.productName}</div>
-                <div className="col-span-2 text-right tabular-nums font-medium">{Number(c.targetQty).toLocaleString()}</div>
-                <div className="col-span-4 text-right text-xs text-muted-foreground">
-                  {c.completedAt ? new Date(c.completedAt).toLocaleString() : "—"}
+            {filtered.map((c: any, idx: number) => {
+              const prod = productById.get(c.productId);
+              const lpb = Number(prod?.litersPerBox ?? 0);
+              const ltrs = Number(c.targetQty ?? 0) * lpb;
+              return (
+                <div key={c.id} className="grid grid-cols-12 gap-2 px-4 py-3 items-center text-sm">
+                  <div className="col-span-1 text-muted-foreground tabular-nums">{idx + 1}</div>
+                  <div className="col-span-4 font-medium line-clamp-1">{c.productName}</div>
+                  <div className="col-span-2 text-right tabular-nums font-medium">{Number(c.targetQty).toLocaleString()}</div>
+                  <div className="col-span-2 text-right tabular-nums font-medium">
+                    {lpb > 0 ? ltrs.toLocaleString() : "—"}
+                  </div>
+                  <div className="col-span-3 text-right text-xs text-muted-foreground">
+                    {c.completedAt ? new Date(c.completedAt).toLocaleString() : "—"}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
