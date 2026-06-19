@@ -685,6 +685,33 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
   }
 });
 
+// PATCH /invoices/:id/mark-paid  — admin only; manually marks invoice paid (no ledger entry)
+router.patch("/invoices/:id/mark-paid", async (req, res): Promise<void> => {
+  const session = (req as any).session;
+  const companyId = getCompanyId(req);
+  if (session?.role !== "admin") {
+    res.status(403).json({ error: "Only admins can mark invoices as paid" });
+    return;
+  }
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({ error: "Invalid invoice id" });
+    return;
+  }
+  const { rows } = await pool.query(
+    `UPDATE invoices
+     SET amount_paid = grand_total, balance_due = 0, updated_at = NOW()
+     WHERE id = $1 AND company_id = $2 AND status != 'cancelled'
+     RETURNING *`,
+    [id, companyId]
+  );
+  if (rows.length === 0) {
+    res.status(404).json({ error: "Invoice not found or cancelled" });
+    return;
+  }
+  res.json({ id: rows[0].id, invoiceNo: rows[0].invoice_no, balanceDue: 0 });
+});
+
 // DELETE /invoices/:id  — admin only
 router.delete("/invoices/:id", async (req, res): Promise<void> => {
   const session = (req as any).session;

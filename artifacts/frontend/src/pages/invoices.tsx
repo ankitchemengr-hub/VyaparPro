@@ -7,6 +7,7 @@ import {
   useDeleteInvoice,
   getListInvoicesQueryKey,
 } from "@workspace/api-client-react";
+import { useMutation } from "@tanstack/react-query";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -19,7 +20,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { format, startOfMonth, startOfDay, subDays } from "date-fns";
-import { Pencil, Trash2, Loader2, UserCircle2, Eye, CalendarIcon, X } from "lucide-react";
+import { Pencil, Trash2, Loader2, UserCircle2, Eye, CalendarIcon, X, IndianRupee } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
@@ -76,6 +77,21 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
   });
 
   const deleteInvoice = useDeleteInvoice();
+
+  const [markingPaid, setMarkingPaid] = useState<{ id: number; invoiceNo: string } | null>(null);
+  const markPaidMut = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`/api/invoices/${id}/mark-paid`, { method: "PATCH", credentials: "include" });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error ?? "Failed"); }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
+      toast({ title: "Invoice marked as paid", description: `${markingPaid?.invoiceNo} is now paid.` });
+      setMarkingPaid(null);
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
 
   const noPayTypes = new Set(["quotation", "proforma_invoice", "sale_order", "delivery_challan"]);
   const getPayStatus = (inv: any): string => {
@@ -301,6 +317,21 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
                         </Button>
                         {isAdmin && (
                           <>
+                            {(() => {
+                              const ps = getPayStatus(invoice);
+                              return (ps === "not_paid" || ps === "partial") ? (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-green-600 hover:text-green-700"
+                                  onClick={() => setMarkingPaid({ id: invoice.id, invoiceNo: invoice.invoiceNo })}
+                                  title="Mark as paid"
+                                  aria-label="Mark as paid"
+                                >
+                                  <IndianRupee className="h-4 w-4" />
+                                </Button>
+                              ) : null;
+                            })()}
                             <Button
                               variant="ghost"
                               size="icon"
@@ -342,6 +373,31 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
           </Table>
         </CardContent>
       </Card>
+
+      {/* Mark Paid confirm */}
+      <AlertDialog open={!!markingPaid} onOpenChange={(o) => !o && setMarkingPaid(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Mark {markingPaid?.invoiceNo} as Paid?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will set the invoice balance to <strong>₹0</strong> and mark it <strong>Paid</strong>.
+              Use this when payment was already recorded in the khata or cash book.
+              No new payment receipt will be created.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={markPaidMut.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); if (markingPaid) markPaidMut.mutate(markingPaid.id); }}
+              disabled={markPaidMut.isPending}
+              className="bg-green-600 text-white hover:bg-green-700"
+            >
+              {markPaidMut.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Yes, mark as paid
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Delete confirm */}
       <AlertDialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
