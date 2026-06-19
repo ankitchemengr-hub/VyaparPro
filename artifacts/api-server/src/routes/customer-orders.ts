@@ -91,8 +91,11 @@ router.post("/customer-orders", async (req, res): Promise<void> => {
   let entityId: number | null = body.entityId != null ? Number(body.entityId) : null;
 
   if (session.role === "customer") {
+    // Link is stored on users.entity_id → look up through the users table
     const entRows = await pool.query(
-      `SELECT id, name, mobile FROM entities WHERE user_id = $1 AND type = 'customer' AND company_id = $2 LIMIT 1`,
+      `SELECT e.id, e.name, e.mobile FROM entities e
+       JOIN users u ON u.entity_id = e.id
+       WHERE u.id = $1 AND e.type = 'customer' AND e.company_id = $2 LIMIT 1`,
       [session.userId, companyId]
     );
     if (entRows.rows[0]) {
@@ -272,9 +275,22 @@ router.get("/customer-orders", async (req, res): Promise<void> => {
   const params: any[] = [companyId];
   const where: string[] = [`company_id = $1`];
 
-  if (session.role === "customer" || session.role === "salesman") {
+  if (session.role === "customer") {
     params.push(session.userId);
     where.push(`user_id = $${params.length}`);
+  } else if (session.role === "salesman") {
+    // Show orders from customers assigned to this salesman (via entity.assigned_salesman_id)
+    const salesmanEntityId = session.entityId ?? null;
+    if (salesmanEntityId) {
+      params.push(salesmanEntityId);
+      where.push(
+        `entity_id IN (SELECT id FROM entities WHERE assigned_salesman_id = $${params.length} AND company_id = $1)`
+      );
+    } else {
+      // Fallback: salesman's own created orders
+      params.push(session.userId);
+      where.push(`user_id = $${params.length}`);
+    }
   } else if (session.role !== "admin" && session.role !== "manufacturing" && session.role !== "store") {
     // Manufacturing and store workers need to see all orders (dispatch queue etc.).
     res.status(403).json({ error: "Forbidden" });
@@ -310,8 +326,24 @@ router.get("/customer-orders/:id", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Not found" });
     return;
   }
-  if (session.role === "customer" || session.role === "salesman") {
+  if (session.role === "customer") {
     if (order.user_id !== session.userId) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+  } else if (session.role === "salesman") {
+    // Allow if order belongs to a customer assigned to this salesman
+    const salesmanEntityId = session.entityId ?? null;
+    if (salesmanEntityId && order.entity_id) {
+      const check = await pool.query(
+        `SELECT 1 FROM entities WHERE id = $1 AND assigned_salesman_id = $2 AND company_id = $3`,
+        [order.entity_id, salesmanEntityId, companyId]
+      );
+      if (!check.rows[0]) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+    } else {
       res.status(403).json({ error: "Forbidden" });
       return;
     }
