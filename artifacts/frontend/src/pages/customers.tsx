@@ -76,7 +76,7 @@ export default function Customers() {
         }
         return;
       }
-      const name = data.legalName || data.tradeName || "";
+      const name = data.tradeName || data.legalName || "";
       if (targetForm === "add") {
         if (name) form.setValue("name", name);
         if (data.address) form.setValue("address", data.address);
