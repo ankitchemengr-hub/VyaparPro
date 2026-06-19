@@ -222,6 +222,7 @@ type ProductForm = {
   hsnCode: string;
   taxRate: string;
   commissionPerLiter: string;
+  volumeUnit: string;
   litersPerBox: string;
   unitsPerBox: string;
   openingStock: string;
@@ -234,7 +235,7 @@ type ProductForm = {
 const emptyForm: ProductForm = {
   name: "", printName: "", group: "", brand: "", itemCode: "",
   unit: "", purchasePrice: "", mrp: "", wholesalePrice: "", retailPrice: "",
-  hsnCode: "", taxRate: "18", commissionPerLiter: "0", litersPerBox: "", unitsPerBox: "", openingStock: "0",
+  hsnCode: "", taxRate: "18", commissionPerLiter: "0", volumeUnit: "liter", litersPerBox: "", unitsPerBox: "", openingStock: "0",
   minStockThreshold: "5", notForSale: false, addForManufacturing: false, imageUrl: "",
 };
 
@@ -270,6 +271,7 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
         hsnCode: product.hsnCode ?? "",
         taxRate: product.taxRate != null ? String(product.taxRate) : "18",
         commissionPerLiter: product.commissionPerLiter != null ? String(product.commissionPerLiter) : "0",
+        volumeUnit: product.volumeUnit ?? "liter",
         litersPerBox: product.litersPerBox != null ? String(product.litersPerBox) : "",
         unitsPerBox: product.unitsPerBox != null ? String(product.unitsPerBox) : "",
         openingStock: product.openingStock != null ? String(product.openingStock) : "0",
@@ -356,6 +358,7 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
       hsnCode: form.hsnCode.trim() || undefined,
       taxRate: form.taxRate ? Number(form.taxRate) : undefined,
       commissionPerLiter: form.commissionPerLiter ? Number(form.commissionPerLiter) : 0,
+      volumeUnit: form.volumeUnit || "liter",
       litersPerBox: form.litersPerBox ? Number(form.litersPerBox) : undefined,
       unitsPerBox: form.unitsPerBox ? Number(form.unitsPerBox) : undefined,
       minStockThreshold: form.minStockThreshold ? Number(form.minStockThreshold) : undefined,
@@ -474,13 +477,24 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Liters per {form.unit?.trim() ? form.unit.trim() : "Unit"}</Label>
+                <div className="flex items-center justify-between">
+                  <Label>{form.volumeUnit === "kg" ? "Kgs" : "Liters"} per {form.unit?.trim() ? form.unit.trim() : "Unit"}</Label>
+                  <Select value={form.volumeUnit} onValueChange={(v) => set("volumeUnit", v)}>
+                    <SelectTrigger className="h-6 text-xs w-20 px-2">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="liter">Liter</SelectItem>
+                      <SelectItem value="kg">Kg</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <Input
                   type="number"
                   min={0}
                   value={form.litersPerBox}
                   onChange={(e) => set("litersPerBox", e.target.value)}
-                  placeholder="Volume multiplier"
+                  placeholder={form.volumeUnit === "kg" ? "Kg multiplier" : "Volume multiplier"}
                 />
               </div>
               <div className="space-y-1.5">
@@ -598,7 +612,7 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label>Commission per Liter (₹)</Label>
+                <Label>Commission per {form.volumeUnit === "kg" ? "Kg" : "Liter"} (₹)</Label>
                 <Input
                   type="number" min={0} step="0.01"
                   value={form.commissionPerLiter}

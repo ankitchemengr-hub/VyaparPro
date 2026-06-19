@@ -170,6 +170,9 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
       created_at      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
     )`,
 
+    // ── Products: volume unit type (liter or kg) ───────────────────────────
+    `ALTER TABLE products ADD COLUMN IF NOT EXISTS volume_unit VARCHAR(10) NOT NULL DEFAULT 'liter'`,
+
     // ── Commission payments: bulk payment records ──────────────────────────
     `CREATE TABLE IF NOT EXISTS commission_payments (
       id                  SERIAL PRIMARY KEY,

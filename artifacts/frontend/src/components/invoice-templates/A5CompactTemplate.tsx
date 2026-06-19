@@ -119,7 +119,7 @@ export function A5CompactTemplate({ invoice, maps, settings, computed }: Templat
             {isGst && <th className="border-r border-black px-2 py-1 text-left w-20">HSN</th>}
             <th className="border-r border-black px-2 py-1 text-right w-14">QTY</th>
             <th className="border-r border-black px-2 py-1 text-left w-12">Unit</th>
-            <th className="border-r border-black px-2 py-1 text-right w-16">LTR</th>
+            <th className="border-r border-black px-2 py-1 text-right w-16">LTR/KGS</th>
             <th className="border-r border-black px-2 py-1 text-right w-16">BOX</th>
             <th className="border-r border-black px-2 py-1 text-right w-20">RATE</th>
             {hasAnyDisc && <th className="border-r border-black px-2 py-1 text-right w-16">DISC.</th>}

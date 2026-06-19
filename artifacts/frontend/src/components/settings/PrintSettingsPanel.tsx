@@ -180,7 +180,7 @@ export function PrintSettingsPanel() {
               <ToggleRow label="Show signature" checked={form.showSignature} onChange={(v) => set("showSignature", v)} testId="switch-show-signature" />
               <ToggleRow label="Show amount in words" checked={form.showAmountInWords} onChange={(v) => set("showAmountInWords", v)} testId="switch-show-words" />
               <ToggleRow label="Show HSN column (GST)" checked={form.showHsn} onChange={(v) => set("showHsn", v)} testId="switch-show-hsn" />
-              <ToggleRow label="Show LTR column" checked={form.showLtrColumn} onChange={(v) => set("showLtrColumn", v)} testId="switch-show-ltr" />
+              <ToggleRow label="Show LTR/KGS column" checked={form.showLtrColumn} onChange={(v) => set("showLtrColumn", v)} testId="switch-show-ltr" />
               <ToggleRow label="Show BOX column" checked={form.showBoxColumn} onChange={(v) => set("showBoxColumn", v)} testId="switch-show-box" />
               <ToggleRow label="Show terms & conditions" checked={form.showTerms} onChange={(v) => set("showTerms", v)} testId="switch-show-terms" />
               <ToggleRow label="Filler rows" description="Pad short bills with empty rows." checked={form.fillerRows} onChange={(v) => set("fillerRows", v)} testId="switch-filler-rows" />

@@ -27,6 +27,7 @@ export interface ProductInput {
   hsnCode?: string;
   taxRate?: number;
   commissionPerLiter?: number;
+  volumeUnit?: string;
   litersPerBox?: number;
   unitsPerBox?: number;
   notForSale?: boolean;

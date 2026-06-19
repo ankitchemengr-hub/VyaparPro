@@ -31,7 +31,7 @@ export function ItemsTable({ computed, settings, maps, theme, grandTotal }: Item
           {showHsn && <th className={`${cell} w-20`}>HSN</th>}
           <th className={`${cell} w-14 text-right`}>QTY</th>
           <th className={`${cell} w-12`}>UNIT</th>
-          {showLtr && <th className={`${cell} w-16 text-right`}>LTR</th>}
+          {showLtr && <th className={`${cell} w-16 text-right`}>LTR/KGS</th>}
           {showBox && <th className={`${cell} w-16 text-right`}>BOX</th>}
           <th className={`${cell} w-20 text-right`}>RATE</th>
           {hasAnyDisc && <th className={`${cell} w-16 text-right`}>DISC.</th>}

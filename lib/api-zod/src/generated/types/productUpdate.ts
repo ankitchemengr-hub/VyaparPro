@@ -23,6 +23,7 @@ export interface ProductUpdate {
   retailMargin?: number;
   hsnCode?: string;
   taxRate?: number;
+  volumeUnit?: string;
   litersPerBox?: number;
   unitsPerBox?: number;
   notForSale?: boolean;

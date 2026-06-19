@@ -25,6 +25,7 @@ export const productsTable = pgTable("products", {
   hsnCode: text("hsn_code"),
   taxRate: numeric("tax_rate", { precision: 5, scale: 2 }).default("18"),
   commissionPerLiter: numeric("commission_per_liter", { precision: 12, scale: 2 }).notNull().default("0"),
+  volumeUnit: text("volume_unit").notNull().default("liter"),
   litersPerBox: numeric("liters_per_box", { precision: 10, scale: 3 }),
   unitsPerBox: numeric("units_per_box", { precision: 10, scale: 3 }),
   notForSale: boolean("not_for_sale").notNull().default(false),
