@@ -265,6 +265,15 @@ router.get("/entities/:id/ledger", async (req, res): Promise<void> => {
     return;
   }
 
+  // Customers may only view their own ledger.
+  const session = (req as any).session;
+  if (session?.role === "customer") {
+    if (!session.entityId || session.entityId !== params.data.id) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+  }
+
   const companyId = getCompanyId(req);
   const [entity] = await db
     .select()

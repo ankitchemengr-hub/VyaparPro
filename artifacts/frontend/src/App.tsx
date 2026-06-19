@@ -34,6 +34,7 @@ import Menu from "@/pages/menu";
 import SalesmanOrders from "@/pages/salesman-orders";
 import Commission from "@/pages/commission";
 import SalesmanDashboard from "@/pages/salesman-dashboard";
+import MyStatement from "@/pages/my-statement";
 import BackupRestore from "@/pages/backup-restore";
 import PriceList from "@/pages/price-list";
 import Quotations from "@/pages/quotations";
@@ -72,6 +73,7 @@ function ProtectedRoutes() {
         <Route path="/price-list" component={PriceList} />
         <Route path="/users" component={Users} />
         <Route path="/my-orders" component={MyOrders} />
+        <Route path="/my-statement" component={MyStatement} />
         <Route path="/customer-orders" component={CustomerOrdersAdmin} />
         <Route path="/subscriptions" component={Subscriptions} />
         <Route component={NotFound} />
