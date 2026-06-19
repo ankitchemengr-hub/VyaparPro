@@ -48,9 +48,8 @@ type QtyMode = "unit" | "box";
 const GST_INVOICE_TYPES = new Set(["gst", "proforma_invoice"]);
 function isGstInvoiceType(t: string) { return GST_INVOICE_TYPES.has(t); }
 
-const INVOICE_TYPE_OPTIONS: { value: string; label: string }[] = [
-  { value: "gst",               label: "GST Invoice" },
-  { value: "non_gst",           label: "Non-GST Invoice" },
+const DOC_TYPE_OPTIONS = [
+  { value: "invoice",           label: "Invoice" },
   { value: "quotation",         label: "Quotation" },
   { value: "proforma_invoice",  label: "Proforma Invoice" },
   { value: "bill_of_supply",    label: "Bill of Supply" },
@@ -127,7 +126,9 @@ export default function Billing() {
     try { return params.customer ? JSON.parse(decodeURIComponent(params.customer)) : null; } catch { return null; }
   });
 
-  const [invoiceType, setInvoiceType] = useState<string>("gst");
+  const [docType, setDocType] = useState<string>("invoice");
+  const [invoiceSubtype, setInvoiceSubtype] = useState<"gst" | "non_gst">("gst");
+  const invoiceType = docType === "invoice" ? invoiceSubtype : docType;
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
   const [placeOfSupply, setPlaceOfSupply] = useState(customer?.state || "Maharashtra");
   const [items, setItems] = useState<BillingItem[]>([]);
@@ -150,7 +151,13 @@ export default function Billing() {
   const [prefilled, setPrefilled] = useState(false);
   useEffect(() => {
     if (!isEditMode || !existingInvoice || prefilled) return;
-    setInvoiceType(existingInvoice.invoiceType as any);
+    const et = existingInvoice.invoiceType as string;
+    if (et === "gst" || et === "non_gst") {
+      setDocType("invoice");
+      setInvoiceSubtype(et);
+    } else {
+      setDocType(et);
+    }
     setInvoiceDate(String(existingInvoice.invoiceDate).slice(0, 10));
     setPlaceOfSupply(existingInvoice.placeOfSupply || "Maharashtra");
     setFreight(Number(existingInvoice.freight ?? 0));
@@ -788,23 +795,36 @@ export default function Billing() {
           )}
         </div>
         <div className="flex gap-2">
-          <Select value={invoiceType} onValueChange={setInvoiceType}>
-            <SelectTrigger className="w-[180px]" data-testid="select-invoice-type">
+          <Select value={docType} onValueChange={setDocType}>
+            <SelectTrigger className="w-[170px]" data-testid="select-doc-type">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {INVOICE_TYPE_OPTIONS.map((opt) => (
+              {DOC_TYPE_OPTIONS.map((opt) => (
                 <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
               ))}
             </SelectContent>
           </Select>
+          {docType === "invoice" && (
+            <Select value={invoiceSubtype} onValueChange={(v) => setInvoiceSubtype(v as "gst" | "non_gst")}>
+              <SelectTrigger className="w-[110px]" data-testid="select-invoice-subtype">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="gst">GST</SelectItem>
+                <SelectItem value="non_gst">Non-GST</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
           <Button
             onClick={handleSave}
             disabled={createInvoice.isPending || updateInvoice.isPending || items.length === 0}
             data-testid="button-save-invoice"
           >
             {(createInvoice.isPending || updateInvoice.isPending) ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-            {isEditMode ? "Update Invoice" : invoiceType === "quotation" ? "Save Quotation" : "Save Invoice"}
+            {isEditMode ? "Update" : (
+              { quotation: "Save Quotation", proforma_invoice: "Save Proforma", bill_of_supply: "Save Bill", delivery_challan: "Save Challan", sale_order: "Save Order" }[invoiceType] ?? "Save Invoice"
+            )}
           </Button>
           <Button variant="outline" onClick={() => window.print()} data-testid="button-print-invoice">
             <Printer className="w-4 h-4 mr-2" /> Print
