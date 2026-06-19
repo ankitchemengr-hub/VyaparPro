@@ -3,6 +3,7 @@ import { useForm } from "react-hook-form";
 import {
   useListEntities,
   useCreateEntity,
+  useUpdateEntity,
   getListEntitiesQueryKey,
   EntityType,
 } from "@workspace/api-client-react";
@@ -20,7 +21,7 @@ import {
   Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
 } from "@/components/ui/form";
 import { Link } from "wouter";
-import { Search, UserPlus, Loader2 } from "lucide-react";
+import { Search, UserPlus, Pencil, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -33,11 +34,29 @@ const TYPE_LABELS: Record<EntityType, string> = {
   salesman: "Salesman",
 };
 
+type EditFormValues = {
+  name: string;
+  mobile: string;
+  gstin: string;
+  address: string;
+  city: string;
+  state: string;
+  district: string;
+  area: string;
+  pinCode: string;
+  gpsLocation: string;
+  pricingTier: "retail" | "wholesale";
+};
+
 export default function Customers() {
   const [search, setSearch] = useState("");
   const [type, setType] = useState<FilterType>("customer");
   const [showAdd, setShowAdd] = useState(false);
   const [assignedSalesmanId, setAssignedSalesmanId] = useState<string>("");
+
+  const [editingEntity, setEditingEntity] = useState<any | null>(null);
+  const [editSalesmanId, setEditSalesmanId] = useState<string>("");
+
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -49,6 +68,7 @@ export default function Customers() {
   const { data: salesmanEntities } = useListEntities({ type: "salesman" as EntityType });
 
   const createEntity = useCreateEntity();
+  const updateEntity = useUpdateEntity();
 
   const form = useForm({
     defaultValues: {
@@ -64,6 +84,22 @@ export default function Customers() {
       pinCode: "",
       gpsLocation: "",
       pricingTier: "retail" as "retail" | "wholesale",
+    },
+  });
+
+  const editForm = useForm<EditFormValues>({
+    defaultValues: {
+      name: "",
+      mobile: "",
+      gstin: "",
+      address: "",
+      city: "",
+      state: "",
+      district: "",
+      area: "",
+      pinCode: "",
+      gpsLocation: "",
+      pricingTier: "retail",
     },
   });
 
@@ -84,6 +120,24 @@ export default function Customers() {
     });
     setAssignedSalesmanId("");
     setShowAdd(true);
+  };
+
+  const openEdit = (entity: any) => {
+    setEditingEntity(entity);
+    editForm.reset({
+      name: entity.name || "",
+      mobile: entity.mobile || "",
+      gstin: entity.gstin || "",
+      address: entity.address || "",
+      city: entity.city || "",
+      state: entity.state || "",
+      district: entity.district || "",
+      area: entity.area || "",
+      pinCode: entity.pinCode || "",
+      gpsLocation: entity.gpsLocation || "",
+      pricingTier: entity.pricingTier === "wholesale" ? "wholesale" : "retail",
+    });
+    setEditSalesmanId(entity.assignedSalesmanId ? String(entity.assignedSalesmanId) : "");
   };
 
   const onSubmit = form.handleSubmit((data) => {
@@ -127,9 +181,54 @@ export default function Customers() {
     );
   });
 
+  const onEditSubmit = editForm.handleSubmit((data) => {
+    if (!editingEntity) return;
+    const isCustomer = editingEntity.type === "customer";
+    const payload: any = {
+      name: data.name.trim() || undefined,
+      mobile: data.mobile.trim(),
+      gstin: data.gstin?.trim() || undefined,
+      address: data.address?.trim() || undefined,
+      city: data.city?.trim() || undefined,
+      state: data.state?.trim() || undefined,
+      district: data.district?.trim() || undefined,
+      area: data.area?.trim() || undefined,
+      pinCode: data.pinCode?.trim() || undefined,
+      gpsLocation: data.gpsLocation?.trim() || undefined,
+    };
+    if (isCustomer) {
+      payload.pricingTier = data.pricingTier;
+      payload.assignedSalesmanId = editSalesmanId ? Number(editSalesmanId) : null;
+    }
+
+    updateEntity.mutate(
+      { id: editingEntity.id, data: payload },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getListEntitiesQueryKey() });
+          toast({ title: "Saved", description: `${editingEntity.name} updated successfully.` });
+          setEditingEntity(null);
+        },
+        onError: async (err: any) => {
+          let msg = err?.message ?? "Failed to update";
+          try {
+            const j = await err?.response?.json?.();
+            if (j?.error) msg = String(j.error).slice(0, 300);
+          } catch {}
+          toast({ title: "Update failed", description: msg, variant: "destructive" });
+        },
+      }
+    );
+  });
+
   const formType = form.watch("type");
   const isCustomerForm = formType === "customer";
   const needsName = isCustomerForm && form.watch("pricingTier") === "retail" ? false : true;
+
+  const salesmanName = (id: number | null | undefined) => {
+    if (!id) return null;
+    return salesmanEntities?.find((s) => s.id === id)?.name ?? `#${id}`;
+  };
 
   return (
     <div className="space-y-6">
@@ -173,6 +272,7 @@ export default function Customers() {
                 <TableHead>Type</TableHead>
                 <TableHead>Mobile</TableHead>
                 <TableHead>Pricing Tier</TableHead>
+                <TableHead>Salesman</TableHead>
                 <TableHead className="text-right">Balance</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -180,11 +280,11 @@ export default function Customers() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8">Loading...</TableCell>
+                  <TableCell colSpan={7} className="text-center py-8">Loading...</TableCell>
                 </TableRow>
               ) : entities?.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No entities found.</TableCell>
+                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No entities found.</TableCell>
                 </TableRow>
               ) : (
                 entities?.map((entity) => (
@@ -199,13 +299,21 @@ export default function Customers() {
                     <TableCell>
                       {entity.pricingTier && <Badge variant="outline" className="capitalize">{entity.pricingTier}</Badge>}
                     </TableCell>
+                    <TableCell>
+                      {(entity as any).assignedSalesmanId
+                        ? <span className="text-sm text-muted-foreground">{salesmanName((entity as any).assignedSalesmanId)}</span>
+                        : <span className="text-xs text-muted-foreground italic">—</span>}
+                    </TableCell>
                     <TableCell className="text-right font-bold">
                       <span className={entity.outstandingBalance && entity.outstandingBalance > 0 ? "text-destructive" : "text-green-600"}>
                         ₹{Math.abs(entity.outstandingBalance || 0).toLocaleString()}
                         {entity.outstandingBalance && entity.outstandingBalance > 0 ? " Dr" : " Cr"}
                       </span>
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right space-x-1">
+                      <Button variant="ghost" size="sm" onClick={() => openEdit(entity)}>
+                        <Pencil className="w-3.5 h-3.5 mr-1" /> Edit
+                      </Button>
                       <Link href={`/customers/${entity.id}`}>
                         <Button variant="ghost" size="sm">View Ledger</Button>
                       </Link>
@@ -218,6 +326,7 @@ export default function Customers() {
         </CardContent>
       </Card>
 
+      {/* ── ADD DIALOG ─────────────────────────────────── */}
       <Dialog open={showAdd} onOpenChange={setShowAdd}>
         <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>
@@ -468,6 +577,219 @@ export default function Customers() {
                 <Button type="submit" disabled={createEntity.isPending} data-testid="button-submit-add-entity">
                   {createEntity.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <UserPlus className="w-4 h-4 mr-2" />}
                   Add {TYPE_LABELS[formType]}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── EDIT DIALOG ─────────────────────────────────── */}
+      <Dialog open={!!editingEntity} onOpenChange={(open) => { if (!open) setEditingEntity(null); }}>
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="w-5 h-5 text-primary" />
+              Edit {editingEntity ? TYPE_LABELS[editingEntity.type as EntityType] ?? editingEntity.type : "Entity"}
+            </DialogTitle>
+            <DialogDescription>
+              Update details for <strong>{editingEntity?.name}</strong>.
+              {editingEntity?.type === "customer" && " You can reassign the salesman here — changing this updates future commission attribution."}
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...editForm}>
+            <form onSubmit={onEditSubmit} className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <FormField
+                  control={editForm.control}
+                  name="name"
+                  rules={{ required: "Name is required" }}
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Name *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Full name" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={editForm.control}
+                  name="mobile"
+                  rules={{
+                    required: "Mobile is required",
+                    pattern: { value: /^\d{10}$/, message: "Must be 10 digits" },
+                  }}
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Mobile *</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="9876543210"
+                          inputMode="numeric"
+                          maxLength={10}
+                          {...field}
+                          onChange={(e) => field.onChange(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              {editingEntity?.type === "customer" && (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <FormField
+                      control={editForm.control}
+                      name="pricingTier"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Pricing Tier</FormLabel>
+                          <Select value={field.value} onValueChange={field.onChange}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="retail">Retail</SelectItem>
+                              <SelectItem value="wholesale">Wholesale</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={editForm.control}
+                      name="gstin"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>GSTIN</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Optional" {...field} />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium">Assigned Salesman</label>
+                    <Select
+                      value={editSalesmanId || "__none__"}
+                      onValueChange={(v) => setEditSalesmanId(v === "__none__" ? "" : v)}
+                    >
+                      <SelectTrigger className="mt-1.5">
+                        <SelectValue placeholder="None" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">None (remove assignment)</SelectItem>
+                        {salesmanEntities?.map((s) => (
+                          <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {editSalesmanId && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Future invoices for this customer will generate commission for the selected salesman.
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
+
+              <FormField
+                control={editForm.control}
+                name="address"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Address</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Street address" {...field} />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              <div className="grid grid-cols-2 gap-3">
+                <FormField
+                  control={editForm.control}
+                  name="city"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>City</FormLabel>
+                      <FormControl><Input placeholder="City" {...field} /></FormControl>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={editForm.control}
+                  name="state"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>State</FormLabel>
+                      <FormControl><Input placeholder="State" {...field} /></FormControl>
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <FormField
+                  control={editForm.control}
+                  name="district"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>District</FormLabel>
+                      <FormControl><Input placeholder="District" {...field} /></FormControl>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={editForm.control}
+                  name="area"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Area</FormLabel>
+                      <FormControl><Input placeholder="Area" {...field} /></FormControl>
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <FormField
+                  control={editForm.control}
+                  name="pinCode"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>PIN Code</FormLabel>
+                      <FormControl><Input placeholder="PIN Code" {...field} /></FormControl>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={editForm.control}
+                  name="gpsLocation"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>GPS Location</FormLabel>
+                      <FormControl><Input placeholder="GPS Location" {...field} /></FormControl>
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <DialogFooter className="pt-2">
+                <Button type="button" variant="outline" onClick={() => setEditingEntity(null)} disabled={updateEntity.isPending}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={updateEntity.isPending}>
+                  {updateEntity.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Pencil className="w-4 h-4 mr-2" />}
+                  Save Changes
                 </Button>
               </DialogFooter>
             </form>
