@@ -196,6 +196,58 @@ router.post("/customer-orders", async (req, res): Promise<void> => {
         );
       }
     }
+    // ── Commission generation ──────────────────────────────────────────────
+    // When a non-draft order is placed by a tracked customer who has an
+    // assigned salesman with an active commission period, snapshot the
+    // commission into commission_transactions (same logic as invoices.ts).
+    if (!isDraft && entityId) {
+      const custRes = await client.query(
+        `SELECT assigned_salesman_id, commission_expiry_date FROM entities WHERE id = $1 AND company_id = $2`,
+        [entityId, companyId]
+      );
+      const cust = custRes.rows[0];
+      if (
+        cust?.assigned_salesman_id &&
+        (!cust.commission_expiry_date || new Date(cust.commission_expiry_date) > new Date())
+      ) {
+        const salesmanId = cust.assigned_salesman_id;
+        const smRes = await client.query(
+          `SELECT name FROM entities WHERE id = $1 AND company_id = $2`,
+          [salesmanId, companyId]
+        );
+        const salesmanName: string = smRes.rows[0]?.name ?? "";
+
+        let totalCommission = 0;
+        let totalLiters = 0;
+        for (const it of resolvedItems) {
+          const p = byId.get(it.productId);
+          const commPerLiter = Number((p as any)?.commissionPerLiter ?? 0);
+          totalLiters += it.qty;
+          totalCommission += it.qty * commPerLiter;
+        }
+
+        if (totalCommission > 0 || totalLiters > 0) {
+          await client.query(
+            `INSERT INTO commission_transactions
+               (company_id, invoice_id, invoice_no, salesman_id, salesman_name,
+                customer_id, customer_name, total_liters, commission_amount, status)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending')`,
+            [
+              companyId,
+              order.id,
+              orderNo,
+              salesmanId,
+              salesmanName,
+              entityId,
+              customerName,
+              String(totalLiters),
+              String(totalCommission),
+            ]
+          );
+        }
+      }
+    }
+
     await client.query("COMMIT");
     res.status(201).json(formatOrder(order));
   } catch (err: any) {
