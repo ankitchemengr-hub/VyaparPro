@@ -254,7 +254,7 @@ export default function InvoiceDetail() {
             <LayoutTemplate className="h-4 w-4 mr-2" />
             {activeMeta?.name ?? "Choose Template"}
           </Button>
-          {invoice.status !== "cancelled" && Number(invoice.balanceDue) > 0 && (
+          {invoice.status !== "cancelled" && invPayStatus !== "paid" && Number(invoice.balanceDue) > 0 && (
             <Button onClick={openPayDialog} data-testid="button-record-payment">
               <IndianRupee className="h-4 w-4 mr-2" />Record Payment
             </Button>
