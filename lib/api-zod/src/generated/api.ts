@@ -2815,7 +2815,8 @@ export const CreateSubscriptionBody = zod.object({
   "subscriptionStartDate": zod.string(),
   "paymentStatus": zod.enum(['paid', 'pending', 'overdue']).optional(),
   "adminUsername": zod.string().nullish().describe('Optional login username for the new company\'s admin account. When provided together with adminPassword, an active admin user scoped to the new company is created so the company can log in immediately.'),
-  "adminPassword": zod.string().nullish().describe('Login password for the new company\'s admin account.')
+  "adminPassword": zod.string().nullish().describe('Login password for the new company\'s admin account.'),
+  "logo": zod.string().nullish().describe('Base64 data URL of the company logo image.')
 })
 
 

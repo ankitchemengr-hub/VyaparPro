@@ -284,9 +284,9 @@ router.post("/subscriptions/create", async (req, res): Promise<void> => {
     }
 
     const companyRes = await client.query(
-      `INSERT INTO companies (name, owner_name, mobile, email)
-       VALUES ($1, $2, $3, $4) RETURNING id`,
-      [body.companyName, body.ownerName ?? null, body.mobile ?? null, body.email ?? null]
+      `INSERT INTO companies (name, owner_name, mobile, email, logo)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [body.companyName, body.ownerName ?? null, body.mobile ?? null, body.email ?? null, (body as any).logo ?? null]
     );
     const companyId = companyRes.rows[0].id;
 

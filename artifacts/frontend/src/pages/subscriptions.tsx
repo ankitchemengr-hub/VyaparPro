@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import {
   useGetSubscriptionDashboard,
   useGetSubscriptionCharts,
@@ -177,6 +177,7 @@ const emptyForm = {
   planName: "monthly", subscriptionAmount: "", subscriptionStartDate: new Date().toISOString().slice(0, 10),
   paymentStatus: "pending",
   adminUsername: "", adminPassword: "",
+  logo: "",
 };
 
 export default function Subscriptions() {
@@ -209,6 +210,7 @@ export default function Subscriptions() {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   const [planOpen, setPlanOpen] = useState(false);
   const [planTarget, setPlanTarget] = useState<{ id: number; planName: string; amount: string } | null>(null);
@@ -253,7 +255,8 @@ export default function Subscriptions() {
         paymentStatus: form.paymentStatus as "paid" | "pending" | "overdue",
         adminUsername: form.adminUsername.trim() || null,
         adminPassword: form.adminPassword.trim() || null,
-      },
+        logo: form.logo || null,
+      } as any,
     }, { onSuccess: () => { setCreateOpen(false); setForm(emptyForm); } });
   };
 
@@ -335,6 +338,60 @@ export default function Subscriptions() {
               <DialogDescription>Register a tenant company and start its subscription plan.</DialogDescription>
             </DialogHeader>
             <div className="grid grid-cols-2 gap-3">
+              {/* Logo Upload */}
+              <div className="col-span-2 space-y-1.5">
+                <Label>Company Logo <span className="text-muted-foreground text-xs">(optional)</span></Label>
+                <div className="flex items-center gap-3">
+                  {form.logo ? (
+                    <img src={form.logo} alt="Logo preview" className="h-14 w-14 rounded-md object-contain border bg-white p-1 flex-shrink-0" />
+                  ) : (
+                    <div className="h-14 w-14 rounded-md border border-dashed flex items-center justify-center bg-muted flex-shrink-0 text-[10px] text-muted-foreground text-center leading-tight px-1">
+                      No Logo
+                    </div>
+                  )}
+                  <div className="flex flex-col gap-1.5 min-w-0">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => logoInputRef.current?.click()}
+                    >
+                      {form.logo ? "Change Logo" : "Upload Logo"}
+                    </Button>
+                    {form.logo && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive h-7 text-xs"
+                        onClick={() => setForm({ ...form, logo: "" })}
+                      >
+                        Remove
+                      </Button>
+                    )}
+                    <p className="text-[11px] text-muted-foreground">PNG, JPG, SVG · max 500 KB</p>
+                  </div>
+                </div>
+                <input
+                  ref={logoInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    if (file.size > 500 * 1024) {
+                      toast({ title: "File too large", description: "Logo must be under 500 KB.", variant: "destructive" });
+                      return;
+                    }
+                    const reader = new FileReader();
+                    reader.onload = () => setForm((f) => ({ ...f, logo: reader.result as string }));
+                    reader.readAsDataURL(file);
+                    e.target.value = "";
+                  }}
+                />
+              </div>
+
               <div className="col-span-2 space-y-1.5">
                 <Label>Company Name</Label>
                 <Input value={form.companyName} onChange={(e) => setForm({ ...form, companyName: e.target.value })} />
