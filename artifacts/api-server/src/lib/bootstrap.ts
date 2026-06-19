@@ -173,6 +173,58 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
     // ── Products: volume unit type (liter or kg) ───────────────────────────
     `ALTER TABLE products ADD COLUMN IF NOT EXISTS volume_unit VARCHAR(10) NOT NULL DEFAULT 'liter'`,
 
+    // ── Transport / E-Way Bill: Transporter Master ─────────────────────────
+    `CREATE TABLE IF NOT EXISTS transporters (
+      id                SERIAL PRIMARY KEY,
+      company_id        INTEGER NOT NULL,
+      name              TEXT NOT NULL,
+      gstin             TEXT,
+      transporter_id    TEXT,
+      contact_name      TEXT,
+      contact_mobile    TEXT,
+      notes             TEXT,
+      is_active         BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at        TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+      updated_at        TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    )`,
+
+    // ── Transport / E-Way Bill: Vehicle Master ─────────────────────────────
+    `CREATE TABLE IF NOT EXISTS vehicles (
+      id                SERIAL PRIMARY KEY,
+      company_id        INTEGER NOT NULL,
+      vehicle_number    TEXT NOT NULL,
+      vehicle_type      TEXT NOT NULL DEFAULT 'regular',
+      notes             TEXT,
+      is_active         BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at        TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    )`,
+
+    // ── Transport / E-Way Bill: Dispatch Module ────────────────────────────
+    `CREATE TABLE IF NOT EXISTS dispatches (
+      id                        SERIAL PRIMARY KEY,
+      company_id                INTEGER NOT NULL,
+      invoice_id                INTEGER REFERENCES invoices(id) ON DELETE CASCADE,
+      invoice_no                TEXT,
+      transporter_id            INTEGER,
+      transporter_name          TEXT,
+      transporter_gstin         TEXT,
+      vehicle_id                INTEGER,
+      vehicle_number            TEXT,
+      lr_number                 TEXT,
+      transport_mode            TEXT NOT NULL DEFAULT 'road',
+      distance_km               INTEGER,
+      eway_bill_status          TEXT NOT NULL DEFAULT 'pending',
+      eway_bill_number          TEXT,
+      eway_bill_date            TIMESTAMP WITH TIME ZONE,
+      eway_bill_validity_date   TIMESTAMP WITH TIME ZONE,
+      notes                     TEXT,
+      created_by_user_id        INTEGER,
+      created_at                TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+      updated_at                TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    )`,
+    `CREATE INDEX IF NOT EXISTS dispatches_company_idx ON dispatches(company_id)`,
+    `CREATE INDEX IF NOT EXISTS dispatches_invoice_idx ON dispatches(invoice_id)`,
+
     // ── Commission payments: bulk payment records ──────────────────────────
     `CREATE TABLE IF NOT EXISTS commission_payments (
       id                  SERIAL PRIMARY KEY,

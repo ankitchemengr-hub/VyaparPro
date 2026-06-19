@@ -20,6 +20,7 @@ import commissionsRouter from "./commissions";
 import subscriptionsRouter from "./subscriptions";
 import settingsRouter from "./settings";
 import gstinRouter from "./gstin";
+import transportRouter from "./transport";
 import systemAdminRouter from "./system-admin";
 import { requireAuth } from "../lib/tenant";
 
@@ -56,6 +57,7 @@ router.use(commissionsRouter);
 // authenticated role (e.g. salesmen printing invoices).
 router.use(settingsRouter);
 router.use(gstinRouter);
+router.use(transportRouter);
 // Mounted before subscriptions: the subscriptions router installs a path-less
 // super_admin guard, so anything after it is 403'd for company admins. These
 // backup routes are company-admin-only and must stay reachable.

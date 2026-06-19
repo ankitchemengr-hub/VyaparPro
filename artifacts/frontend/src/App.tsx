@@ -38,6 +38,9 @@ import MyStatement from "@/pages/my-statement";
 import BackupRestore from "@/pages/backup-restore";
 import PriceList from "@/pages/price-list";
 import Quotations from "@/pages/quotations";
+import Transporters from "@/pages/transporters";
+import Vehicles from "@/pages/vehicles";
+import Dispatches from "@/pages/dispatches";
 
 const queryClient = new QueryClient();
 
@@ -76,6 +79,9 @@ function ProtectedRoutes() {
         <Route path="/my-statement" component={MyStatement} />
         <Route path="/customer-orders" component={CustomerOrdersAdmin} />
         <Route path="/subscriptions" component={Subscriptions} />
+        <Route path="/transporters" component={Transporters} />
+        <Route path="/vehicles" component={Vehicles} />
+        <Route path="/dispatches" component={Dispatches} />
         <Route component={NotFound} />
       </Switch>
     </AppLayout>
