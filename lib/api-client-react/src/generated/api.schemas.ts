@@ -1209,6 +1209,8 @@ export interface PaymentInput {
   mode: PaymentInputMode;
   notes?: string;
   accountId?: number;
+  /** When provided, applies payment directly to this invoice and updates its amount_paid / balance_due. */
+  invoiceId?: number;
 }
 
 export type AccountType = typeof AccountType[keyof typeof AccountType];

@@ -1,4 +1,4 @@
-modules = ["nodejs-20"]
+modules = ["nodejs-20", "postgresql-16"]
 
 [workflows]
 
@@ -12,3 +12,6 @@ externalPort = 80
 [[ports]]
 localPort = 18130
 externalPort = 3000
+
+[nix]
+channel = "stable-25_05"
