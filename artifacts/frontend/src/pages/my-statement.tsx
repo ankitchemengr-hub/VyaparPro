@@ -12,7 +12,7 @@ import { useAuth } from "@/contexts/use-auth";
 
 export default function MyStatement() {
   const { user } = useAuth();
-  const entityId = (user as any)?.entityId as number | undefined;
+  const entityId = (user as any)?.customerId as number | undefined;
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const { data: ledger, isLoading } = useGetEntityLedger(entityId!, {
