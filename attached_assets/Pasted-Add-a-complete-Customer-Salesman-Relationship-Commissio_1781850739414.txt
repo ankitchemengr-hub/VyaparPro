@@ -1,0 +1,142 @@
+Add a complete Customer–Salesman Relationship & Commission Tracking System to the ERP.
+
+BUSINESS RULES:
+
+1. CUSTOMER OWNERSHIP
+- When a salesman adds a new customer, that customer must be permanently linked to that salesman.
+- Add fields:
+  - Customer Source = Salesman / Admin
+  - Assigned Salesman
+  - Assignment Date
+  - Commission Expiry Date (Assignment Date + 1 Year)
+
+2. 1 YEAR COMMISSION PROTECTION
+- If a salesman acquires a customer, all orders from that customer for the next 365 days must generate commission for the assigned salesman.
+- Commission must be applicable even if:
+  - Customer places order directly.
+  - Admin creates invoice for customer.
+  - Customer orders through customer portal.
+  - Salesman is not involved in future orders.
+- Commission expires automatically after 1 year.
+- Admin should be able to renew commission period if required.
+
+3. CUSTOMER REGISTRATION
+- While creating customer, mandatory field:
+  - Assigned Salesman
+- Customer profile should display:
+  - Customer Name
+  - Assigned Salesman
+  - Assignment Date
+  - Commission Valid Till
+  - Total Orders
+  - Total Sales Value
+  - Total Commission Earned
+
+4. SALESMAN CUSTOMER LIST
+- Salesman can view only his customers.
+- Salesman dashboard should show:
+  - Total Customers
+  - Active Customers
+  - Orders This Month
+  - Sales Value
+  - Pending Commission
+  - Paid Commission
+
+5. ORDER VISIBILITY
+- Any order placed by customer must be visible to:
+  - Assigned Salesman
+  - Admin
+- Order flow:
+  Customer Order → Admin Approval → Production → Dispatch → Invoice → Payment
+
+6. COMPLETE ORDER TRACKING
+- Salesman should be able to see:
+  - Order Number
+  - Order Date
+  - Product Details
+  - Quantity
+  - Production Status
+  - Dispatch Status
+  - Invoice Status
+  - Payment Status
+
+7. COMMISSION CALCULATION
+- Add configurable commission percentage.
+- Example:
+  Invoice Amount = ₹100,000
+  Commission = 2%
+  Salesman Commission = ₹2,000
+
+8. COMMISSION REPORTS
+- Admin Commission Report
+- Salesman Commission Report
+
+Report columns:
+  - Invoice No
+  - Customer
+  - Salesman
+  - Invoice Amount
+  - Commission %
+  - Commission Amount
+  - Invoice Date
+  - Payment Status
+  - Commission Status (Pending/Paid)
+
+9. COMMISSION PAYMENT MODULE
+- Admin can mark commission as paid.
+- Store:
+  - Payment Date
+  - Payment Reference
+  - Notes
+
+10. CUSTOMER PORTAL
+- Customer can:
+  - Place Orders
+  - View Order History
+  - Download Invoices
+  - Track Production Status
+
+11. NOTIFICATIONS
+- Notify salesman when:
+  - New order received
+  - Production completed
+  - Invoice generated
+  - Payment received
+  - Commission generated
+
+12. SECURITY
+- Salesman cannot change customer ownership.
+- Only Admin can reassign customer to another salesman.
+- All ownership changes must be stored in audit logs.
+
+13. DASHBOARD WIDGETS
+
+Admin Dashboard:
+- Total Customers
+- Customers Under Salesman
+- Orders Today
+- Production Pending
+- Dispatch Pending
+- Commission Pending
+- Commission Paid
+
+Salesman Dashboard:
+- My Customers
+- My Orders
+- My Sales
+- My Commission
+- Pending Payments
+- Expiring Customer Commission (Next 30 Days)
+
+14. DATABASE REQUIREMENTS
+Create tables:
+- salesmen
+- customer_salesman_mapping
+- commission_rules
+- commission_transactions
+- commission_payments
+- customer_assignment_history
+
+Ensure all existing orders, production, dispatch, invoicing and payment modules automatically inherit the assigned salesman information from the customer record.
+
+The system must work in a SaaS multi-company environment, where each company's customers, salesmen, commissions and reports remain completely isolated.
