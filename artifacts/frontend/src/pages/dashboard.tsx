@@ -18,7 +18,6 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Factory,
-  CheckCircle2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -47,7 +46,7 @@ export default function Dashboard() {
     query: { queryKey: getGetCapitalSnapshotQueryKey(), enabled: isAdmin },
   });
   const { data: workloadCards } = useListWorkloadCards();
-  const assembledItems = (workloadCards ?? []).filter((c: any) => c.orderType === "production");
+  const assembledItems = (workloadCards ?? []).filter((c: any) => c.status === "pending");
 
   return (
     <div className="space-y-6">
@@ -179,28 +178,26 @@ export default function Dashboard() {
             <Factory className="h-5 w-5 text-primary" />
             <CardTitle>Manufacturing Workload</CardTitle>
           </div>
-          <CardDescription>Recently assembled items from production.</CardDescription>
+          <CardDescription>Items pending production.</CardDescription>
         </CardHeader>
         <CardContent>
           {assembledItems.length === 0 ? (
-            <div className="py-8 text-center text-muted-foreground text-sm">No assembled items yet.</div>
+            <div className="py-8 text-center text-muted-foreground text-sm">No pending items. All production is up to date.</div>
           ) : (
             <div className="divide-y rounded-lg border overflow-hidden">
               {assembledItems.slice(0, 10).map((c: any) => (
                 <div key={c.id} className="flex items-center justify-between px-3 py-2.5 bg-card hover:bg-muted/40">
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
+                    <PackageOpen className="w-4 h-4 text-amber-500 shrink-0" />
                     <span className="text-sm font-medium">{c.productName ?? `Product #${c.productId}`}</span>
                   </div>
                   <div className="flex items-center gap-3 ml-4 shrink-0">
                     <Badge variant="secondary" className="text-xs font-mono">
                       {Number(c.targetQty).toLocaleString()} qty
                     </Badge>
-                    {c.completedAt && (
-                      <span className="text-xs text-muted-foreground">
-                        {new Date(c.completedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
-                      </span>
-                    )}
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(c.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+                    </span>
                   </div>
                 </div>
               ))}
