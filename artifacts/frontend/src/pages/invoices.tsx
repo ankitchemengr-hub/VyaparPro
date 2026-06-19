@@ -41,7 +41,7 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
   const [, setLocation] = useLocation();
   const [search, setSearch] = useState("");
   const [type, setType] = useState<string>(initialType);
-  const [status, setStatus] = useState<string>("all");
+  const [payStatus, setPayStatus] = useState<string>("all");
   const [dateFrom, setDateFrom] = useState<Date | undefined>();
   const [dateTo, setDateTo] = useState<Date | undefined>();
   const [deleting, setDeleting] = useState<{ id: number; invoiceNo: string; invoiceType: string } | null>(null);
@@ -58,11 +58,11 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
   };
 
   const clearFilters = () => {
-    setSearch(""); setType("all"); setStatus("all");
+    setSearch(""); setType("all"); setPayStatus("all");
     setDateFrom(undefined); setDateTo(undefined);
   };
 
-  const hasFilters = !!search || type !== "all" || status !== "all" || !!dateFrom || !!dateTo;
+  const hasFilters = !!search || type !== "all" || payStatus !== "all" || !!dateFrom || !!dateTo;
 
   // Salesman scoping is enforced server-side from their session entity — no need
   // (and incorrect) to send user.id here, which is the user-account id, not the
@@ -70,12 +70,28 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
   const { data: invoices, isLoading } = useListInvoices({
     search: search || undefined,
     type: type !== "all" ? (type as any) : undefined,
-    status: status !== "all" ? (status as any) : undefined,
+    status: payStatus === "cancelled" ? "cancelled" : undefined,
     dateFrom: dateFrom ? format(dateFrom, "yyyy-MM-dd") : undefined,
     dateTo: dateTo ? format(dateTo, "yyyy-MM-dd") : undefined,
   });
 
   const deleteInvoice = useDeleteInvoice();
+
+  const noPayTypes = new Set(["quotation", "proforma_invoice", "sale_order", "delivery_challan"]);
+  const getPayStatus = (inv: any): string => {
+    if (inv.status === "cancelled") return "cancelled";
+    if (noPayTypes.has(inv.invoiceType)) return "na";
+    const paid = Number(inv.amountPaid ?? 0);
+    const due = Number(inv.balanceDue ?? 0);
+    const total = Number(inv.grandTotal ?? 0);
+    if (total > 0 && due <= 0) return "paid";
+    if (paid > 0) return "partial";
+    return "not_paid";
+  };
+  const displayedInvoices = (invoices ?? []).filter((inv) => {
+    if (payStatus === "all" || payStatus === "cancelled") return true;
+    return getPayStatus(inv) === payStatus;
+  });
 
   const handleConfirmDelete = () => {
     if (!deleting) return;
@@ -130,14 +146,15 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
                 <SelectItem value="sale_order">Sale Order</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger className="w-[150px]" data-testid="select-invoice-status">
+            <Select value={payStatus} onValueChange={setPayStatus}>
+              <SelectTrigger className="w-[160px]" data-testid="select-invoice-status">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="saved">Saved</SelectItem>
-                <SelectItem value="draft">Draft</SelectItem>
+                <SelectItem value="not_paid">Not Paid</SelectItem>
+                <SelectItem value="partial">Partially Paid</SelectItem>
+                <SelectItem value="paid">Paid</SelectItem>
                 <SelectItem value="cancelled">Cancelled</SelectItem>
               </SelectContent>
             </Select>
@@ -199,7 +216,7 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
             <Button variant="outline" size="sm" className="h-7" onClick={() => applyPreset("30d")} data-testid="preset-30d">Last 30 days</Button>
             <Button variant="outline" size="sm" className="h-7" onClick={() => applyPreset("mtd")} data-testid="preset-mtd">This month</Button>
             <span className="ml-auto text-muted-foreground" data-testid="text-result-count">
-              {isLoading ? "Loading…" : `${invoices?.length ?? 0} invoice${(invoices?.length ?? 0) === 1 ? "" : "s"}`}
+              {isLoading ? "Loading…" : `${displayedInvoices.length} invoice${displayedInvoices.length === 1 ? "" : "s"}`}
             </span>
           </div>
         </CardContent>
@@ -225,12 +242,12 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
                 <TableRow>
                   <TableCell colSpan={isAdmin ? 8 : 7} className="text-center py-8">Loading...</TableCell>
                 </TableRow>
-              ) : invoices?.length === 0 ? (
+              ) : displayedInvoices.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={isAdmin ? 8 : 7} className="text-center py-8">No invoices found.</TableCell>
                 </TableRow>
               ) : (
-                invoices?.map((invoice) => {
+                displayedInvoices.map((invoice) => {
                   const bySalesman = isAdmin && !!invoice.salesmanName;
                   return (
                   <TableRow
@@ -260,9 +277,14 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
                     )}
                     <TableCell className="text-right font-bold">₹{invoice.grandTotal.toLocaleString()}</TableCell>
                     <TableCell>
-                      <Badge variant={invoice.status === "saved" ? "default" : invoice.status === "draft" ? "secondary" : "destructive"}>
-                        {invoice.status}
-                      </Badge>
+                      {(() => {
+                        const ps = getPayStatus(invoice);
+                        if (ps === "paid") return <Badge className="bg-green-600 text-white hover:bg-green-700">Paid</Badge>;
+                        if (ps === "partial") return <Badge className="bg-amber-500 text-white hover:bg-amber-600">Partial</Badge>;
+                        if (ps === "not_paid") return <Badge variant="destructive">Not Paid</Badge>;
+                        if (ps === "cancelled") return <Badge variant="destructive">Cancelled</Badge>;
+                        return <Badge variant="secondary">{invoice.status}</Badge>;
+                      })()}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">

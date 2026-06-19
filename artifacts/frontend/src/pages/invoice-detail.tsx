@@ -92,6 +92,18 @@ export default function InvoiceDetail() {
   const [selectorOpen, setSelectorOpen] = useState(false);
 
   const [payDialogOpen, setPayDialogOpen] = useState(false);
+  const noPayTypes = new Set(["quotation", "proforma_invoice", "sale_order", "delivery_challan"]);
+  const invPayStatus = invoice ? (() => {
+    if (invoice.status === "cancelled") return "cancelled";
+    if (noPayTypes.has(invoice.invoiceType)) return "na";
+    const paid = Number(invoice.amountPaid ?? 0);
+    const due = Number(invoice.balanceDue ?? 0);
+    const total = Number(invoice.grandTotal ?? 0);
+    if (total > 0 && due <= 0) return "paid";
+    if (paid > 0) return "partial";
+    return "not_paid";
+  })() : "na";
+
   const [payAmount, setPayAmount] = useState(0);
   const [payMode, setPayMode] = useState<PayMode>("cash");
   const [payRef, setPayRef] = useState("");
@@ -229,22 +241,16 @@ export default function InvoiceDetail() {
         </Button>
         <div className="flex items-center gap-2">
           <Badge variant={isGst ? "default" : "secondary"}>{isGst ? "GST" : "Non-GST"}</Badge>
-          <Badge
-            variant={
-              invoice.status === "saved"
-                ? "default"
-                : invoice.status === "cancelled"
-                  ? "destructive"
-                  : "secondary"
-            }
-          >
-            {invoice.status}
-          </Badge>
+          {invPayStatus === "paid" && <Badge className="bg-green-600 text-white hover:bg-green-700">Paid</Badge>}
+          {invPayStatus === "partial" && <Badge className="bg-amber-500 text-white hover:bg-amber-600">Partially Paid</Badge>}
+          {invPayStatus === "not_paid" && <Badge variant="destructive">Not Paid</Badge>}
+          {invPayStatus === "cancelled" && <Badge variant="destructive">Cancelled</Badge>}
+          {invPayStatus === "na" && <Badge variant="secondary">{invoice.status}</Badge>}
           <Button variant="outline" onClick={() => setSelectorOpen(true)} data-testid="button-choose-template">
             <LayoutTemplate className="h-4 w-4 mr-2" />
             {activeMeta?.name ?? "Choose Template"}
           </Button>
-          {invoice.status !== "cancelled" && (
+          {invoice.status !== "cancelled" && Number(invoice.balanceDue) > 0 && (
             <Button onClick={openPayDialog} data-testid="button-record-payment">
               <IndianRupee className="h-4 w-4 mr-2" />Record Payment
             </Button>
@@ -318,13 +324,17 @@ export default function InvoiceDetail() {
                   id="pay-amount"
                   type="number"
                   min={0}
+                  max={Number(invoice.balanceDue)}
                   step="any"
                   value={payAmount}
-                  onChange={(e) => setPayAmount(Number(e.target.value))}
+                  onChange={(e) => setPayAmount(Math.min(Number(e.target.value), Number(invoice.balanceDue)))}
                   data-testid="input-pay-amount"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Invoice total: ₹{Number(invoice.grandTotal).toLocaleString()}
+                  Balance due: ₹{Number(invoice.balanceDue).toLocaleString()} of ₹{Number(invoice.grandTotal).toLocaleString()}
+                </p>
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  For advance / extra payments, use the Customer Portal.
                 </p>
               </div>
 
