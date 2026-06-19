@@ -6,8 +6,6 @@ import {
   useGetLowStockAlerts,
   useGetCapitalSnapshot,
   getGetCapitalSnapshotQueryKey,
-  useListWorkloadCards,
-  useListCustomerOrders,
 } from "@workspace/api-client-react";
 import {
   IndianRupee,
@@ -18,11 +16,6 @@ import {
   Wallet,
   ArrowUpRight,
   ArrowDownRight,
-  Factory,
-  Clock,
-  Loader2,
-  Truck,
-  CheckCircle2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -50,22 +43,6 @@ export default function Dashboard() {
   const { data: capital, isLoading: isLoadingCapital } = useGetCapitalSnapshot({
     query: { queryKey: getGetCapitalSnapshotQueryKey(), enabled: isAdmin },
   });
-  const { data: workloadCards } = useListWorkloadCards();
-  const { data: readyOrders } = useListCustomerOrders({ status: "ready_for_dispatch" });
-
-  const cards = workloadCards ?? [];
-  const workloadPending = cards.filter((c: any) => c.status === "pending").length;
-  const workloadInProgress = cards.filter((c: any) => c.status === "processing").length;
-  const workloadCompleted = cards.filter((c: any) => c.status === "done").length;
-  const workloadReady = (readyOrders ?? []).length;
-
-  const workloadStats = [
-    { label: "Pending", value: workloadPending, icon: Clock, color: "text-amber-600" },
-    { label: "In Progress", value: workloadInProgress, icon: Loader2, color: "text-blue-600" },
-    { label: "Ready for Dispatch", value: workloadReady, icon: Truck, color: "text-purple-600" },
-    { label: "Completed", value: workloadCompleted, icon: CheckCircle2, color: "text-green-600" },
-  ];
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -189,59 +166,6 @@ export default function Dashboard() {
         </div>
       ) : null}
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Factory className="h-5 w-5 text-primary" />
-            <CardTitle>Manufacturing Workload</CardTitle>
-          </div>
-          <CardDescription>Production pipeline status across all batches.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-            {workloadStats.map((stat) => (
-              <div
-                key={stat.label}
-                className="rounded-lg border bg-card p-4 flex flex-col gap-2"
-                data-testid={`workload-stat-${stat.label.toLowerCase().replace(/\s+/g, "-")}`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-muted-foreground">{stat.label}</span>
-                  <stat.icon className={`h-4 w-4 ${stat.color}`} />
-                </div>
-                <div className="text-2xl font-bold">{stat.value}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* In-progress items list */}
-          {cards.filter((c: any) => c.status === "processing").length > 0 && (
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1.5">
-                <Loader2 className="w-3.5 h-3.5 text-blue-500" /> In Progress
-              </p>
-              <div className="divide-y rounded-lg border overflow-hidden">
-                {cards
-                  .filter((c: any) => c.status === "processing")
-                  .slice(0, 5)
-                  .map((c: any) => (
-                    <div key={c.id} className="flex items-center justify-between px-3 py-2 bg-card hover:bg-muted/40">
-                      <div>
-                        <span className="text-sm font-medium">{c.productName ?? `Product #${c.productId}`}</span>
-                        {c.workerName && (
-                          <span className="text-xs text-muted-foreground ml-2">— {c.workerName}</span>
-                        )}
-                      </div>
-                      <Badge variant="secondary" className="text-xs font-mono ml-4 shrink-0">
-                        {Number(c.targetQty).toLocaleString()} {c.unit ?? "qty"}
-                      </Badge>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
 
       <Card>
         <CardHeader>
