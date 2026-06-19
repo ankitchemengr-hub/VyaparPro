@@ -40,6 +40,8 @@ export const topNavItems: NavItem[] = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard, roles: ["admin", "accountant"] },
   { name: "Menu", href: "/menu", icon: LayoutGrid, roles: ["admin", "salesman", "store", "manufacturing", "accountant", "customer"] },
   { name: "Catalog", href: "/catalog", icon: ShoppingCart, roles: ["admin", "salesman", "store", "manufacturing", "customer"] },
+  { name: "My Statement", href: "/my-statement", icon: FileText, roles: ["customer"] },
+  { name: "My Orders", href: "/my-orders", icon: ClipboardList, roles: ["customer"] },
 ];
 
 // All operational modules, shown as a grid on the Menu page.

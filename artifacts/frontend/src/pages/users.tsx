@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useForm } from "react-hook-form";
 import {
   useListUsers,
@@ -22,7 +22,7 @@ import {
 import {
   Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
 } from "@/components/ui/form";
-import { UserPlus, KeyRound, Loader2, ShieldAlert } from "lucide-react";
+import { UserPlus, KeyRound, Loader2, ShieldAlert, Pencil } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/use-auth";
@@ -52,6 +52,7 @@ export default function Users() {
   const queryClient = useQueryClient();
   const [showAdd, setShowAdd] = useState(false);
   const [resetTarget, setResetTarget] = useState<UserAccount | null>(null);
+  const [editTarget, setEditTarget] = useState<UserAccount | null>(null);
 
   const { data: users, isLoading } = useListUsers();
   const createUser = useCreateUser();
@@ -111,6 +112,7 @@ export default function Users() {
                     key={u.id}
                     user={u}
                     isSelf={me?.id === u.id}
+                    onEdit={() => setEditTarget(u)}
                     onResetPassword={() => setResetTarget(u)}
                     onToggleActive={(next) =>
                       updateUser.mutate(
@@ -155,6 +157,16 @@ export default function Users() {
         createUser={createUser}
       />
 
+      <EditUserDialog
+        target={editTarget}
+        onClose={() => setEditTarget(null)}
+        onDone={() => {
+          queryClient.invalidateQueries({ queryKey: getListUsersQueryKey() });
+          setEditTarget(null);
+          toast({ title: "User updated" });
+        }}
+      />
+
       <ResetPasswordDialog
         target={resetTarget}
         onClose={() => setResetTarget(null)}
@@ -170,11 +182,13 @@ export default function Users() {
 function UserRow({
   user,
   isSelf,
+  onEdit,
   onResetPassword,
   onToggleActive,
 }: {
   user: UserAccount;
   isSelf: boolean;
+  onEdit: () => void;
   onResetPassword: () => void;
   onToggleActive: (next: boolean) => void;
 }) {
@@ -202,12 +216,148 @@ function UserRow({
         </div>
       </TableCell>
       <TableCell className="text-right">
-        <Button size="sm" variant="outline" onClick={onResetPassword} data-testid={`button-reset-${user.id}`}>
-          <KeyRound className="h-3.5 w-3.5 mr-1.5" />
-          Reset Password
-        </Button>
+        <div className="flex items-center justify-end gap-2">
+          <Button size="sm" variant="outline" onClick={onEdit} data-testid={`button-edit-${user.id}`}>
+            <Pencil className="h-3.5 w-3.5 mr-1.5" />
+            Edit
+          </Button>
+          <Button size="sm" variant="outline" onClick={onResetPassword} data-testid={`button-reset-${user.id}`}>
+            <KeyRound className="h-3.5 w-3.5 mr-1.5" />
+            Reset Password
+          </Button>
+        </div>
       </TableCell>
     </TableRow>
+  );
+}
+
+function EditUserDialog({
+  target,
+  onClose,
+  onDone,
+}: {
+  target: UserAccount | null;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const { toast } = useToast();
+  const updateUser = useUpdateUser();
+  const [role, setRole] = useState<Role>("salesman");
+  const [name, setName] = useState("");
+  const [entityId, setEntityId] = useState("");
+
+  const linkableType = ROLE_TO_ENTITY_TYPE[role];
+  const { data: linkableEntities } = useListEntities(
+    linkableType ? { type: linkableType } : undefined,
+    {
+      query: {
+        enabled: Boolean(linkableType),
+        queryKey: getListEntitiesQueryKey(linkableType ? { type: linkableType } : undefined),
+      },
+    },
+  );
+
+  // Populate form when target changes
+  React.useEffect(() => {
+    if (target) {
+      setRole(target.role as Role);
+      setName(target.name ?? "");
+      setEntityId(target.entityId ? String(target.entityId) : "");
+    }
+  }, [target]);
+
+  const submit = () => {
+    if (!target) return;
+    updateUser.mutate(
+      {
+        id: target.id,
+        data: {
+          role,
+          name: name.trim() || undefined,
+          entityId: entityId ? Number(entityId) : null,
+        },
+      },
+      {
+        onSuccess: onDone,
+        onError: (e: any) =>
+          toast({
+            title: "Update failed",
+            description: e?.response?.data?.error ?? String(e),
+            variant: "destructive",
+          }),
+      },
+    );
+  };
+
+  return (
+    <Dialog open={Boolean(target)} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Edit User — <span className="font-mono">{target?.username}</span></DialogTitle>
+          <DialogDescription>
+            Update role, display name, or the linked entity record.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-1">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Role</label>
+            <Select value={role} onValueChange={(v) => { setRole(v as Role); setEntityId(""); }}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {ROLES.map(r => (
+                  <SelectItem key={r} value={r}>{ROLE_LABELS[r]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Display Name</label>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Falls back to entity name if linked"
+            />
+          </div>
+
+          {linkableType && (
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">
+                Linked {linkableType} entity
+              </label>
+              <Select
+                value={entityId || "__none__"}
+                onValueChange={(v) => setEntityId(v === "__none__" ? "" : v)}
+              >
+                <SelectTrigger><SelectValue placeholder="Not linked" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— Not linked —</SelectItem>
+                  {linkableEntities?.map(e => (
+                    <SelectItem key={e.id} value={String(e.id)}>
+                      {e.name}{e.mobile ? ` (${e.mobile})` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {role === "customer" && !entityId && (
+                <p className="text-xs text-destructive">
+                  Customer users need a linked entity to view their statement and ledger.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={updateUser.isPending}>Cancel</Button>
+          <Button onClick={submit} disabled={updateUser.isPending}>
+            {updateUser.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            Save Changes
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
