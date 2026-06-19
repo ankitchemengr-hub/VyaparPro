@@ -215,11 +215,12 @@ export default function Subscriptions() {
   const [planOpen, setPlanOpen] = useState(false);
   const [planTarget, setPlanTarget] = useState<{ id: number; planName: string; amount: string } | null>(null);
 
+  const logoEditInputRef = useRef<HTMLInputElement>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<{
     id: number; companyName: string; ownerName: string; mobile: string; email: string;
     planName: string; subscriptionAmount: string; subscriptionStartDate: string;
-    subscriptionEndDate: string; paymentStatus: string;
+    subscriptionEndDate: string; paymentStatus: string; logo: string;
   } | null>(null);
 
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; companyName: string } | null>(null);
@@ -285,6 +286,7 @@ export default function Subscriptions() {
       subscriptionStartDate: r.subscriptionStartDate.slice(0, 10),
       subscriptionEndDate: r.subscriptionEndDate.slice(0, 10),
       paymentStatus: r.paymentStatus,
+      logo: (r as any).logo ?? "",
     });
     setEditOpen(true);
   };
@@ -312,7 +314,8 @@ export default function Subscriptions() {
         subscriptionStartDate: new Date(editTarget.subscriptionStartDate).toISOString(),
         subscriptionEndDate: new Date(editTarget.subscriptionEndDate).toISOString(),
         paymentStatus: editTarget.paymentStatus as "paid" | "pending" | "overdue",
-      },
+        logo: editTarget.logo || null,
+      } as any,
     }, { onSuccess: () => { setEditOpen(false); setEditTarget(null); } });
   };
 
@@ -706,6 +709,60 @@ export default function Subscriptions() {
           </DialogHeader>
           {editTarget && (
             <div className="grid grid-cols-2 gap-3">
+              {/* Logo Upload */}
+              <div className="col-span-2 space-y-1.5">
+                <Label>Company Logo <span className="text-muted-foreground text-xs">(optional)</span></Label>
+                <div className="flex items-center gap-3">
+                  {editTarget.logo ? (
+                    <img src={editTarget.logo} alt="Logo preview" className="h-14 w-14 rounded-md object-contain border bg-white p-1 flex-shrink-0" />
+                  ) : (
+                    <div className="h-14 w-14 rounded-md border border-dashed flex items-center justify-center bg-muted flex-shrink-0 text-[10px] text-muted-foreground text-center leading-tight px-1">
+                      No Logo
+                    </div>
+                  )}
+                  <div className="flex flex-col gap-1.5 min-w-0">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => logoEditInputRef.current?.click()}
+                    >
+                      {editTarget.logo ? "Change Logo" : "Upload Logo"}
+                    </Button>
+                    {editTarget.logo && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive h-7 text-xs"
+                        onClick={() => setEditTarget({ ...editTarget, logo: "" })}
+                      >
+                        Remove
+                      </Button>
+                    )}
+                    <p className="text-[11px] text-muted-foreground">PNG, JPG, SVG · max 500 KB</p>
+                  </div>
+                </div>
+                <input
+                  ref={logoEditInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    if (file.size > 500 * 1024) {
+                      toast({ title: "File too large", description: "Logo must be under 500 KB.", variant: "destructive" });
+                      return;
+                    }
+                    const reader = new FileReader();
+                    reader.onload = () => setEditTarget((t) => t ? { ...t, logo: reader.result as string } : t);
+                    reader.readAsDataURL(file);
+                    e.target.value = "";
+                  }}
+                />
+              </div>
+
               <div className="col-span-2 space-y-1.5">
                 <Label>Company Name</Label>
                 <Input value={editTarget.companyName} onChange={(e) => setEditTarget({ ...editTarget, companyName: e.target.value })} />

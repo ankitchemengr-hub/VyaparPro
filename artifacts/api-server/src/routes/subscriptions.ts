@@ -68,6 +68,7 @@ function mapRow(r: any) {
     ownerName: r.owner_name ?? null,
     mobile: r.mobile ?? null,
     email: r.email ?? null,
+    logo: r.logo ?? null,
     planName: r.plan_name,
     subscriptionStartDate: new Date(r.subscription_start_date).toISOString(),
     subscriptionEndDate: end.toISOString(),
@@ -81,7 +82,7 @@ function mapRow(r: any) {
 }
 
 const SELECT_JOIN = `
-  SELECT s.*, c.name AS company_name, c.owner_name, c.mobile, c.email
+  SELECT s.*, c.name AS company_name, c.owner_name, c.mobile, c.email, c.logo
   FROM subscriptions s
   JOIN companies c ON c.id = s.company_id
 `;
@@ -529,9 +530,9 @@ router.put("/subscriptions/:id", async (req, res): Promise<void> => {
 
     await client.query(
       `UPDATE companies
-       SET name = $1, owner_name = $2, mobile = $3, email = $4, updated_at = NOW()
-       WHERE id = $5`,
-      [body.companyName.trim(), body.ownerName ?? null, body.mobile ?? null, body.email ?? null, companyId]
+       SET name = $1, owner_name = $2, mobile = $3, email = $4, logo = $5, updated_at = NOW()
+       WHERE id = $6`,
+      [body.companyName.trim(), body.ownerName ?? null, body.mobile ?? null, body.email ?? null, (body as any).logo ?? null, companyId]
     );
 
     await client.query(

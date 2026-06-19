@@ -2945,7 +2945,8 @@ export const UpdateSubscriptionBody = zod.object({
   "subscriptionAmount": zod.number(),
   "subscriptionStartDate": zod.string(),
   "subscriptionEndDate": zod.string(),
-  "paymentStatus": zod.enum(['paid', 'pending', 'overdue'])
+  "paymentStatus": zod.enum(['paid', 'pending', 'overdue']),
+  "logo": zod.string().nullish().describe('Base64 data URL of the company logo image.')
 })
 
 export const UpdateSubscriptionResponse = zod.object({
