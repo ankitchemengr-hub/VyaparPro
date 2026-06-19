@@ -6,6 +6,7 @@ import {
   useGetLowStockAlerts,
   useGetCapitalSnapshot,
   getGetCapitalSnapshotQueryKey,
+  useListWorkloadCards,
 } from "@workspace/api-client-react";
 import {
   IndianRupee,
@@ -16,6 +17,8 @@ import {
   Wallet,
   ArrowUpRight,
   ArrowDownRight,
+  Factory,
+  CheckCircle2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -43,6 +46,9 @@ export default function Dashboard() {
   const { data: capital, isLoading: isLoadingCapital } = useGetCapitalSnapshot({
     query: { queryKey: getGetCapitalSnapshotQueryKey(), enabled: isAdmin },
   });
+  const { data: workloadCards } = useListWorkloadCards();
+  const assembledItems = (workloadCards ?? []).filter((c: any) => c.orderType === "production");
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -166,6 +172,47 @@ export default function Dashboard() {
         </div>
       ) : null}
 
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Factory className="h-5 w-5 text-primary" />
+            <CardTitle>Manufacturing Workload</CardTitle>
+          </div>
+          <CardDescription>Recently assembled items from production.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {assembledItems.length === 0 ? (
+            <div className="py-8 text-center text-muted-foreground text-sm">No assembled items yet.</div>
+          ) : (
+            <div className="divide-y rounded-lg border overflow-hidden">
+              {assembledItems.slice(0, 10).map((c: any) => (
+                <div key={c.id} className="flex items-center justify-between px-3 py-2.5 bg-card hover:bg-muted/40">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
+                    <span className="text-sm font-medium">{c.productName ?? `Product #${c.productId}`}</span>
+                  </div>
+                  <div className="flex items-center gap-3 ml-4 shrink-0">
+                    <Badge variant="secondary" className="text-xs font-mono">
+                      {Number(c.targetQty).toLocaleString()} qty
+                    </Badge>
+                    {c.completedAt && (
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(c.completedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {assembledItems.length > 10 && (
+                <div className="px-3 py-2 text-xs text-muted-foreground bg-muted/20">
+                  + {assembledItems.length - 10} more
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
