@@ -41,7 +41,6 @@ import Quotations from "@/pages/quotations";
 import Transporters from "@/pages/transporters";
 import Vehicles from "@/pages/vehicles";
 import Dispatches from "@/pages/dispatches";
-import WhatsAppLogs from "@/pages/whatsapp-logs";
 
 const queryClient = new QueryClient();
 
@@ -83,7 +82,6 @@ function ProtectedRoutes() {
         <Route path="/transporters" component={Transporters} />
         <Route path="/vehicles" component={Vehicles} />
         <Route path="/dispatches" component={Dispatches} />
-        <Route path="/whatsapp-logs" component={WhatsAppLogs} />
         <Route component={NotFound} />
       </Switch>
     </AppLayout>

@@ -23,7 +23,6 @@ import {
   Tag,
   PackageCheck,
   Car,
-  MessageCircle,
   type LucideIcon,
 } from "lucide-react";
 
@@ -78,5 +77,4 @@ export const moduleNavItems: NavItem[] = [
   { name: "Dispatch", href: "/dispatches", icon: PackageCheck, roles: ["admin", "accountant"], description: "Dispatch records and E-Way Bill status" },
   { name: "Transporters", href: "/transporters", icon: Truck, roles: ["admin"], description: "Transporter master list" },
   { name: "Vehicles", href: "/vehicles", icon: Car, roles: ["admin"], description: "Vehicle master list" },
-  { name: "WhatsApp Logs", href: "/whatsapp-logs", icon: MessageCircle, roles: ["admin", "accountant"], description: "WhatsApp message history and delivery status" },
 ];
