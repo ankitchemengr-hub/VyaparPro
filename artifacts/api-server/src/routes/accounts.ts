@@ -422,4 +422,112 @@ router.post("/account-transactions", async (req, res): Promise<void> => {
   }
 });
 
+// POST /accounts/transfer — move money from one account to another atomically
+router.post("/accounts/transfer", async (req, res): Promise<void> => {
+  if (!requireFinancialWrite(req, res)) return;
+  const { fromAccountId, toAccountId, amount, notes } = req.body ?? {};
+  if (!Number.isInteger(fromAccountId) || fromAccountId <= 0 ||
+      !Number.isInteger(toAccountId)   || toAccountId <= 0 ||
+      typeof amount !== "number" || amount < 0.01) {
+    res.status(400).json({ error: "Invalid transfer parameters" });
+    return;
+  }
+  if (fromAccountId === toAccountId) {
+    res.status(400).json({ error: "Source and destination accounts must be different" });
+    return;
+  }
+  const session = (req as any).session;
+  const companyId = getCompanyId(req);
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
+
+    // Lock both accounts in consistent order to avoid deadlock
+    const [minId, maxId] = fromAccountId < toAccountId
+      ? [fromAccountId, toAccountId]
+      : [toAccountId, fromAccountId];
+
+    const acctRes = await client.query(
+      `SELECT id, name, type, current_balance FROM accounts
+       WHERE company_id = $1 AND id IN ($2, $3) AND is_active = true
+       ORDER BY id FOR UPDATE`,
+      [companyId, minId, maxId],
+    );
+    if (acctRes.rows.length !== 2) {
+      await client.query("ROLLBACK");
+      res.status(404).json({ error: "One or both accounts not found or inactive" });
+      return;
+    }
+    const fromAcct = acctRes.rows.find((r: any) => r.id === fromAccountId);
+    const toAcct   = acctRes.rows.find((r: any) => r.id === toAccountId);
+    if (!fromAcct || !toAcct) {
+      await client.query("ROLLBACK");
+      res.status(404).json({ error: "Account lookup error" });
+      return;
+    }
+    if (Number(fromAcct.current_balance) < amount - 0.001) {
+      await client.query("ROLLBACK");
+      res.status(400).json({ error: `Insufficient balance in "${fromAcct.name}" (₹${Number(fromAcct.current_balance).toFixed(2)})` });
+      return;
+    }
+
+    const memo = notes?.trim() || `Transfer to ${toAcct.name}`;
+    const memoTo = `Transfer from ${fromAcct.name}`;
+    const byId   = session?.userId ?? null;
+    const byName = session?.name ?? session?.username ?? null;
+    const byRole = session?.role ?? null;
+
+    // Debit from source
+    const outRes = await client.query(
+      `INSERT INTO account_transactions
+        (company_id, account_id, direction, amount, mode, party_name, notes, created_by_id, created_by_name, created_by_role)
+       VALUES ($1,$2,'out',$3,'bank_transfer',$4,$5,$6,$7,$8) RETURNING id, created_at`,
+      [companyId, fromAccountId, amount, toAcct.name, memo, byId, byName, byRole],
+    );
+    const outTxn = outRes.rows[0];
+    const outReceiptNo = `TRF-OUT-${outTxn.id}`;
+    await client.query(`UPDATE account_transactions SET receipt_no=$1 WHERE id=$2`, [outReceiptNo, outTxn.id]);
+
+    // Credit to destination
+    const inRes = await client.query(
+      `INSERT INTO account_transactions
+        (company_id, account_id, direction, amount, mode, party_name, notes, created_by_id, created_by_name, created_by_role)
+       VALUES ($1,$2,'in',$3,'bank_transfer',$4,$5,$6,$7,$8) RETURNING id, created_at`,
+      [companyId, toAccountId, amount, fromAcct.name, memoTo, byId, byName, byRole],
+    );
+    const inTxn = inRes.rows[0];
+    const inReceiptNo = `TRF-IN-${inTxn.id}`;
+    await client.query(`UPDATE account_transactions SET receipt_no=$1 WHERE id=$2`, [inReceiptNo, inTxn.id]);
+
+    // Update balances
+    const updFrom = await client.query(
+      `UPDATE accounts SET current_balance = current_balance - $1 WHERE company_id=$2 AND id=$3 RETURNING current_balance`,
+      [amount, companyId, fromAccountId],
+    );
+    const updTo = await client.query(
+      `UPDATE accounts SET current_balance = current_balance + $1 WHERE company_id=$2 AND id=$3 RETURNING current_balance`,
+      [amount, companyId, toAccountId],
+    );
+
+    await client.query("COMMIT");
+    res.status(201).json({
+      amount,
+      fromAccountId,
+      fromAccountName: fromAcct.name,
+      fromBalanceAfter: Number(updFrom.rows[0].current_balance),
+      toAccountId,
+      toAccountName: toAcct.name,
+      toBalanceAfter: Number(updTo.rows[0].current_balance),
+      outReceiptNo,
+      inReceiptNo,
+    });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    logger.error({ err }, "Failed to transfer between accounts");
+    res.status(500).json({ error: "Transfer failed" });
+  } finally {
+    client.release();
+  }
+});
+
 export default router;
