@@ -63,6 +63,9 @@ export function rupeesInWords(n: number): string {
 
 // Derive all the totals/flags a template needs from the raw invoice + product maps.
 export function computeTotals(invoice: any, maps: ProductMaps): Computed {
+  if (!invoice) {
+    return { items: [], isGst: false, isInterstate: false, placeOfSupply: "Maharashtra", totalQty: 0, totalLtr: 0, totalBox: 0, hasAnyDisc: false, roundOff: 0 };
+  }
   const { lpbByProduct, upbByProduct } = maps ?? { lpbByProduct: new Map(), upbByProduct: new Map() };
   const items = invoice.items ?? [];
   const isGst = invoice.invoiceType === "gst";

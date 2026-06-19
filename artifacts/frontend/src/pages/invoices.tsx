@@ -24,13 +24,23 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 
-export default function Invoices() {
+const TYPE_LABELS: Record<string, string> = {
+  gst: "GST",
+  non_gst: "Non-GST",
+  quotation: "Quotation",
+  proforma_invoice: "Proforma",
+  bill_of_supply: "Bill of Supply",
+  delivery_challan: "Delivery Challan",
+  sale_order: "Sale Order",
+};
+
+export default function Invoices({ initialType = "all", pageTitle }: { initialType?: string; pageTitle?: string }) {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
   const [search, setSearch] = useState("");
-  const [type, setType] = useState<string>("all");
+  const [type, setType] = useState<string>(initialType);
   const [status, setStatus] = useState<string>("all");
   const [dateFrom, setDateFrom] = useState<Date | undefined>();
   const [dateTo, setDateTo] = useState<Date | undefined>();
@@ -92,7 +102,7 @@ export default function Invoices() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold tracking-tight">Invoices</h1>
+        <h1 className="text-3xl font-bold tracking-tight">{pageTitle ?? "Invoices"}</h1>
       </div>
 
       <Card>
@@ -113,6 +123,11 @@ export default function Invoices() {
                 <SelectItem value="all">All Types</SelectItem>
                 <SelectItem value="gst">GST</SelectItem>
                 <SelectItem value="non_gst">Non-GST</SelectItem>
+                <SelectItem value="quotation">Quotation</SelectItem>
+                <SelectItem value="proforma_invoice">Proforma Invoice</SelectItem>
+                <SelectItem value="bill_of_supply">Bill of Supply</SelectItem>
+                <SelectItem value="delivery_challan">Delivery Challan</SelectItem>
+                <SelectItem value="sale_order">Sale Order</SelectItem>
               </SelectContent>
             </Select>
             <Select value={status} onValueChange={setStatus}>
@@ -228,7 +243,7 @@ export default function Invoices() {
                     </TableCell>
                     <TableCell>{format(new Date(invoice.invoiceDate), "MMM dd, yyyy")}</TableCell>
                     <TableCell>
-                      <Badge variant="outline">{invoice.invoiceType === "gst" ? "GST" : "Non-GST"}</Badge>
+                      <Badge variant="outline">{TYPE_LABELS[invoice.invoiceType] ?? invoice.invoiceType}</Badge>
                     </TableCell>
                     <TableCell>{invoice.customerName || "Cash Sale"}</TableCell>
                     {isAdmin && (

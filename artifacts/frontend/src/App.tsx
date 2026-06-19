@@ -35,6 +35,7 @@ import SalesmanOrders from "@/pages/salesman-orders";
 import Commission from "@/pages/commission";
 import BackupRestore from "@/pages/backup-restore";
 import PriceList from "@/pages/price-list";
+import Quotations from "@/pages/quotations";
 
 const queryClient = new QueryClient();
 
@@ -50,6 +51,7 @@ function ProtectedRoutes() {
         <Route path="/billing" component={Billing} />
         <Route path="/invoices" component={Invoices} />
         <Route path="/invoices/:id" component={InvoiceDetail} />
+        <Route path="/quotations" component={Quotations} />
         <Route path="/inventory" component={Inventory} />
         <Route path="/customers" component={Customers} />
         <Route path="/customers/:id" component={CustomerProfile} />
