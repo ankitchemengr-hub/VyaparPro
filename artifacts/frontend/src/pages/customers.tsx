@@ -344,12 +344,15 @@ export default function Customers() {
                   </div>
                   <div>
                     <label className="text-sm font-medium">Assigned Salesman</label>
-                    <Select value={assignedSalesmanId} onValueChange={setAssignedSalesmanId}>
+                    <Select
+                      value={assignedSalesmanId || "__none__"}
+                      onValueChange={(v) => setAssignedSalesmanId(v === "__none__" ? "" : v)}
+                    >
                       <SelectTrigger className="mt-1.5" data-testid="select-assigned-salesman">
                         <SelectValue placeholder="None (no salesman)" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value="__none__">None</SelectItem>
                         {salesmanEntities?.map((s) => (
                           <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
                         ))}
