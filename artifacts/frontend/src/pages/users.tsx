@@ -22,7 +22,7 @@ import {
 import {
   Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
 } from "@/components/ui/form";
-import { UserPlus, KeyRound, Loader2, ShieldAlert, Pencil } from "lucide-react";
+import { UserPlus, KeyRound, Loader2, ShieldAlert, Pencil, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/use-auth";
@@ -53,6 +53,7 @@ export default function Users() {
   const [showAdd, setShowAdd] = useState(false);
   const [resetTarget, setResetTarget] = useState<UserAccount | null>(null);
   const [editTarget, setEditTarget] = useState<UserAccount | null>(null);
+  const [search, setSearch] = useState("");
 
   const { data: users, isLoading } = useListUsers();
   const createUser = useCreateUser();
@@ -90,6 +91,16 @@ export default function Users() {
         </Button>
       </div>
 
+      <div className="relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+        <Input
+          placeholder="Search by username, name or role…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+
       <Card>
         <CardContent className="p-0">
           {isLoading ? (
@@ -107,7 +118,15 @@ export default function Users() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {users?.map(u => (
+                {(users ?? []).filter(u => {
+                  const q = search.toLowerCase().trim();
+                  if (!q) return true;
+                  return (
+                    u.username?.toLowerCase().includes(q) ||
+                    u.name?.toLowerCase().includes(q) ||
+                    u.role?.toLowerCase().includes(q)
+                  );
+                }).map(u => (
                   <UserRow
                     key={u.id}
                     user={u}
@@ -133,10 +152,14 @@ export default function Users() {
                     }
                   />
                 ))}
-                {users && users.length === 0 && (
+                {users !== undefined && (users ?? []).filter(u => {
+                  const q = search.toLowerCase().trim();
+                  if (!q) return true;
+                  return u.username?.toLowerCase().includes(q) || u.name?.toLowerCase().includes(q) || u.role?.toLowerCase().includes(q);
+                }).length === 0 && (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      No users yet.
+                      {search.trim() ? `No users match "${search}"` : "No users yet."}
                     </TableCell>
                   </TableRow>
                 )}
