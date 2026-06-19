@@ -291,6 +291,46 @@ router.post("/invoices", async (req, res): Promise<void> => {
       );
     }
 
+    // ── Commission transaction ─────────────────────────────────────────────
+    // When an invoice has a salesman attributed, snapshot the commission
+    // (liters × commission_per_liter per item) into commission_transactions.
+    const effectiveSalesmanId = session?.role === "salesman"
+      ? (session.entityId ?? null)
+      : (data.salesmanId ?? null);
+
+    if (effectiveSalesmanId && !isQuotation) {
+      const commissionRows = await client.query(
+        `SELECT SUM(COALESCE(ii.total_liters, ii.qty, 0) * COALESCE(p.commission_per_liter, 0)) AS commission,
+                SUM(COALESCE(ii.total_liters, ii.qty, 0)) AS liters
+         FROM invoice_items ii
+         JOIN products p ON p.id = ii.product_id
+         WHERE ii.invoice_id = $1 AND ii.company_id = $2`,
+        [invRow.id, companyId]
+      );
+      const totalCommission = Number(commissionRows.rows[0]?.commission ?? 0);
+      const totalLiters = Number(commissionRows.rows[0]?.liters ?? 0);
+
+      if (totalCommission > 0 || totalLiters > 0) {
+        await client.query(
+          `INSERT INTO commission_transactions
+             (company_id, invoice_id, invoice_no, salesman_id, salesman_name,
+              customer_id, customer_name, total_liters, commission_amount, status)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending')`,
+          [
+            companyId,
+            invRow.id,
+            invoiceNo,
+            effectiveSalesmanId,
+            salesmanName ?? "",
+            data.customerId ?? null,
+            data.customerName ?? null,
+            String(totalLiters),
+            String(totalCommission),
+          ]
+        );
+      }
+    }
+
     await client.query("COMMIT");
 
     // Fetch with items

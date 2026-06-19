@@ -140,6 +140,61 @@ async function seedBusinessDataIfEmpty(client: pg.Client): Promise<void> {
   }
 }
 
+/**
+ * Idempotent schema patches. Adds columns and tables introduced after the
+ * initial production-schema.sql was cut, so existing installs pick them up on
+ * the next restart without a manual migration step.
+ */
+async function applySchemaPatches(client: pg.Client): Promise<void> {
+  const patches: string[] = [
+    // ── Entities: salesman assignment ──────────────────────────────────────
+    `ALTER TABLE entities ADD COLUMN IF NOT EXISTS assigned_salesman_id INTEGER`,
+    `ALTER TABLE entities ADD COLUMN IF NOT EXISTS commission_expiry_date TIMESTAMP WITH TIME ZONE`,
+    `ALTER TABLE entities ADD COLUMN IF NOT EXISTS customer_source TEXT NOT NULL DEFAULT 'admin'`,
+
+    // ── Commission transactions: per-invoice commission snapshots ──────────
+    `CREATE TABLE IF NOT EXISTS commission_transactions (
+      id              SERIAL PRIMARY KEY,
+      company_id      INTEGER NOT NULL,
+      invoice_id      INTEGER NOT NULL,
+      invoice_no      TEXT NOT NULL,
+      salesman_id     INTEGER NOT NULL,
+      salesman_name   TEXT NOT NULL,
+      customer_id     INTEGER,
+      customer_name   TEXT,
+      total_liters    NUMERIC(14, 3) NOT NULL DEFAULT 0,
+      commission_amount NUMERIC(12, 2) NOT NULL DEFAULT 0,
+      status          TEXT NOT NULL DEFAULT 'pending',
+      paid_at         TIMESTAMP WITH TIME ZONE,
+      payment_reference TEXT,
+      created_at      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    )`,
+
+    // ── Commission payments: bulk payment records ──────────────────────────
+    `CREATE TABLE IF NOT EXISTS commission_payments (
+      id                  SERIAL PRIMARY KEY,
+      company_id          INTEGER NOT NULL,
+      salesman_id         INTEGER NOT NULL,
+      salesman_name       TEXT NOT NULL,
+      amount              NUMERIC(12, 2) NOT NULL,
+      payment_date        TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+      reference           TEXT,
+      note                TEXT,
+      created_by_user_id  INTEGER,
+      created_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    )`,
+  ];
+
+  for (const sql of patches) {
+    try {
+      await client.query(sql);
+    } catch (err) {
+      logger.warn({ err, sql: sql.slice(0, 120) }, "Schema patch failed (non-fatal)");
+    }
+  }
+  logger.info("Schema patches applied");
+}
+
 async function ensureDefaultAdmin(client: pg.Client): Promise<void> {
   // Insert the platform super_admin if it does not exist yet.
   // ON CONFLICT: if the row already exists but has the old role "admin" (pre-fix
@@ -208,6 +263,7 @@ export async function ensureDatabaseReady(): Promise<void> {
     }
 
     await seedBusinessDataIfEmpty(client);
+    await applySchemaPatches(client);
     await ensureDefaultAdmin(client);
   } catch (err) {
     logger.error({ err }, "Database bootstrap failed");

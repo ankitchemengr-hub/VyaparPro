@@ -21,6 +21,9 @@ export const entitiesTable = pgTable("entities", {
   creditLimit: numeric("credit_limit", { precision: 12, scale: 2 }),
   userId: integer("user_id"),
   isActive: boolean("is_active").notNull().default(true),
+  assignedSalesmanId: integer("assigned_salesman_id"),
+  commissionExpiryDate: timestamp("commission_expiry_date", { withTimezone: true }),
+  customerSource: text("customer_source").default("admin"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (t) => [

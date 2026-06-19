@@ -33,6 +33,7 @@ import Subscriptions from "@/pages/subscriptions";
 import Menu from "@/pages/menu";
 import SalesmanOrders from "@/pages/salesman-orders";
 import Commission from "@/pages/commission";
+import SalesmanDashboard from "@/pages/salesman-dashboard";
 import BackupRestore from "@/pages/backup-restore";
 import PriceList from "@/pages/price-list";
 import Quotations from "@/pages/quotations";
@@ -47,6 +48,7 @@ function ProtectedRoutes() {
         <Route path="/menu" component={Menu} />
         <Route path="/catalog" component={Catalog} />
         <Route path="/salesman-orders" component={SalesmanOrders} />
+        <Route path="/salesman-dashboard" component={SalesmanDashboard} />
         <Route path="/commission" component={Commission} />
         <Route path="/billing" component={Billing} />
         <Route path="/invoices" component={Invoices} />

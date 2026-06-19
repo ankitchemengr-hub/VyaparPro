@@ -119,15 +119,28 @@ router.post("/entities", async (req, res): Promise<void> => {
     return;
   }
 
+  // Handle optional salesman assignment for customers (not in Zod schema — read directly from body).
+  const assignedSalesmanIdRaw = (req.body as any).assignedSalesmanId;
+  const assignedSalesmanId = assignedSalesmanIdRaw != null && assignedSalesmanIdRaw !== ""
+    ? Number(assignedSalesmanIdRaw)
+    : null;
+
+  const insertValues: any = {
+    ...parsed.data,
+    companyId,
+    name,
+    pricingTier,
+    creditLimit: parsed.data.creditLimit != null ? String(parsed.data.creditLimit) : null,
+  };
+
+  if (assignedSalesmanId && parsed.data.type === "customer") {
+    insertValues.assignedSalesmanId = assignedSalesmanId;
+    insertValues.commissionExpiryDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+  }
+
   const [entity] = await db
     .insert(entitiesTable)
-    .values({
-      ...parsed.data,
-      companyId,
-      name,
-      pricingTier,
-      creditLimit: parsed.data.creditLimit != null ? String(parsed.data.creditLimit) : null,
-    })
+    .values(insertValues)
     .returning();
 
   res.status(201).json(formatEntity(entity));
@@ -200,11 +213,38 @@ router.patch("/entities/:id", async (req, res): Promise<void> => {
     }
   }
 
+  // Pull salesman-assignment fields directly from body (not in UpdateEntityBody Zod schema).
+  const assignedSalesmanId: number | null | undefined = (req.body as any).assignedSalesmanId !== undefined
+    ? ((req.body as any).assignedSalesmanId === null || (req.body as any).assignedSalesmanId === ""
+      ? null
+      : Number((req.body as any).assignedSalesmanId))
+    : undefined;
+  const clearSalesman = assignedSalesmanId === null;
+
+  // If assigning a salesman, look up their name.
+  let assignedSalesmanName: string | null = null;
+  if (assignedSalesmanId != null) {
+    const [salesman] = await db
+      .select({ name: entitiesTable.name })
+      .from(entitiesTable)
+      .where(and(eq(entitiesTable.companyId, companyId), eq(entitiesTable.id, assignedSalesmanId)));
+    assignedSalesmanName = salesman?.name ?? null;
+  }
+
+  // Run the main Drizzle update.
   const [entity] = await db
     .update(entitiesTable)
     .set({
       ...parsed.data,
       creditLimit: parsed.data.creditLimit != null ? String(parsed.data.creditLimit) : undefined,
+      ...(assignedSalesmanId !== undefined
+        ? {
+            assignedSalesmanId: clearSalesman ? null : assignedSalesmanId,
+            commissionExpiryDate: clearSalesman
+              ? null
+              : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+          }
+        : {}),
     })
     .where(and(eq(entitiesTable.companyId, companyId), eq(entitiesTable.id, params.data.id)))
     .returning();
@@ -214,7 +254,7 @@ router.patch("/entities/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  res.json(formatEntity(entity));
+  res.json({ ...formatEntity(entity), assignedSalesmanName });
 });
 
 // GET /entities/:id/ledger
@@ -390,6 +430,10 @@ function formatEntity(e: any) {
     outstandingBalance: Number(e.outstandingBalance ?? 0),
     creditLimit: e.creditLimit != null ? Number(e.creditLimit) : null,
     userId: e.userId ?? null,
+    assignedSalesmanId: e.assignedSalesmanId ?? null,
+    assignedSalesmanName: e.assignedSalesmanName ?? null,
+    commissionExpiryDate: e.commissionExpiryDate ? new Date(e.commissionExpiryDate).toISOString() : null,
+    customerSource: e.customerSource ?? "admin",
     createdAt: e.createdAt?.toISOString(),
   };
 }

@@ -16,6 +16,7 @@ import workersRouter from "./workers";
 import expensesRouter from "./expenses";
 import customerOrdersRouter from "./customer-orders";
 import reportsRouter from "./reports";
+import commissionsRouter from "./commissions";
 import subscriptionsRouter from "./subscriptions";
 import settingsRouter from "./settings";
 import gstinRouter from "./gstin";
@@ -48,6 +49,7 @@ router.use(workersRouter);
 router.use(expensesRouter);
 router.use(customerOrdersRouter);
 router.use(reportsRouter);
+router.use(commissionsRouter);
 // settings + gstin are mounted BEFORE subscriptions: the subscriptions router
 // installs a path-less super_admin guard, so anything mounted after it would be
 // 403'd for company-scoped users. Print/app settings must be readable by every

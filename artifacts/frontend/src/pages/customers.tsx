@@ -37,6 +37,7 @@ export default function Customers() {
   const [search, setSearch] = useState("");
   const [type, setType] = useState<FilterType>("customer");
   const [showAdd, setShowAdd] = useState(false);
+  const [assignedSalesmanId, setAssignedSalesmanId] = useState<string>("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -44,6 +45,8 @@ export default function Customers() {
     type: type !== "all" ? (type as EntityType) : undefined,
     search: search || undefined,
   });
+
+  const { data: salesmanEntities } = useListEntities({ type: "salesman" as EntityType });
 
   const createEntity = useCreateEntity();
 
@@ -79,6 +82,7 @@ export default function Customers() {
       gpsLocation: "",
       pricingTier: "retail",
     });
+    setAssignedSalesmanId("");
     setShowAdd(true);
   };
 
@@ -98,6 +102,7 @@ export default function Customers() {
       gpsLocation: data.gpsLocation?.trim() || undefined,
     };
     if (isCustomer) payload.pricingTier = data.pricingTier;
+    if (isCustomer && assignedSalesmanId) payload.assignedSalesmanId = Number(assignedSalesmanId);
 
     createEntity.mutate(
       { data: payload },
@@ -302,40 +307,61 @@ export default function Customers() {
               </div>
 
               {isCustomerForm && (
-                <div className="grid grid-cols-2 gap-3">
-                  <FormField
-                    control={form.control}
-                    name="pricingTier"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Pricing Tier</FormLabel>
-                        <Select value={field.value} onValueChange={field.onChange}>
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <FormField
+                      control={form.control}
+                      name="pricingTier"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Pricing Tier</FormLabel>
+                          <Select value={field.value} onValueChange={field.onChange}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-add-entity-tier">
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="retail">Retail</SelectItem>
+                              <SelectItem value="wholesale">Wholesale</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="gstin"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>GSTIN</FormLabel>
                           <FormControl>
-                            <SelectTrigger data-testid="select-add-entity-tier">
-                              <SelectValue />
-                            </SelectTrigger>
+                            <Input data-testid="input-add-entity-gstin" placeholder="Optional" {...field} />
                           </FormControl>
-                          <SelectContent>
-                            <SelectItem value="retail">Retail</SelectItem>
-                            <SelectItem value="wholesale">Wholesale</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </FormItem>
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Assigned Salesman</label>
+                    <Select value={assignedSalesmanId} onValueChange={setAssignedSalesmanId}>
+                      <SelectTrigger className="mt-1.5" data-testid="select-assigned-salesman">
+                        <SelectValue placeholder="None (no salesman)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">None</SelectItem>
+                        {salesmanEntities?.map((s) => (
+                          <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {assignedSalesmanId && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Commission from this customer's invoices will be attributed to the selected salesman for 1 year.
+                      </p>
                     )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="gstin"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>GSTIN</FormLabel>
-                        <FormControl>
-                          <Input data-testid="input-add-entity-gstin" placeholder="Optional" {...field} />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-                </div>
+                  </div>
+                </>
               )}
 
               <FormField
