@@ -21,7 +21,7 @@ import {
   Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
 } from "@/components/ui/form";
 import { Link } from "wouter";
-import { Search, UserPlus, Pencil, Loader2 } from "lucide-react";
+import { Search, UserPlus, Pencil, Loader2, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -57,6 +57,44 @@ export default function Customers() {
 
   const [editingEntity, setEditingEntity] = useState<any | null>(null);
   const [editSalesmanId, setEditSalesmanId] = useState<string>("");
+  const [gstFetching, setGstFetching] = useState(false);
+  const [gstFetchingEdit, setGstFetchingEdit] = useState(false);
+
+  const fetchGstinDetails = async (gstin: string, targetForm: "add" | "edit") => {
+    const val = gstin.trim().toUpperCase();
+    if (!val) { toast({ title: "Enter a GSTIN first", variant: "destructive" }); return; }
+    const setFetching = targetForm === "add" ? setGstFetching : setGstFetchingEdit;
+    setFetching(true);
+    try {
+      const res = await fetch(`/api/gstin-lookup?gstin=${encodeURIComponent(val)}`, { credentials: "include" });
+      const data = await res.json();
+      if (!data.found) {
+        toast({ title: "Not found", description: data.error ?? "GSTIN not found in registry.", variant: "destructive" });
+        if (data.state) {
+          if (targetForm === "add") form.setValue("state", data.state);
+          else editForm.setValue("state", data.state);
+        }
+        return;
+      }
+      const name = data.tradeName || data.legalName || "";
+      if (targetForm === "add") {
+        if (name) form.setValue("name", name);
+        if (data.address) form.setValue("address", data.address);
+        if (data.state) form.setValue("state", data.state);
+        if (data.pinCode) form.setValue("pinCode", data.pinCode);
+      } else {
+        if (name) editForm.setValue("name", name);
+        if (data.address) editForm.setValue("address", data.address);
+        if (data.state) editForm.setValue("state", data.state);
+        if (data.pinCode) editForm.setValue("pinCode", data.pinCode);
+      }
+      toast({ title: "Details fetched", description: `${name || data.gstin} — ${data.state ?? ""}` });
+    } catch {
+      toast({ title: "Fetch failed", description: "Could not reach GST registry.", variant: "destructive" });
+    } finally {
+      setFetching(false);
+    }
+  };
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -463,7 +501,20 @@ export default function Customers() {
                         <FormItem>
                           <FormLabel>GSTIN</FormLabel>
                           <FormControl>
-                            <Input data-testid="input-add-entity-gstin" placeholder="Optional" {...field} />
+                            <div className="flex gap-2">
+                              <Input data-testid="input-add-entity-gstin" placeholder="Optional" {...field} className="uppercase" />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="shrink-0 whitespace-nowrap"
+                                disabled={gstFetching}
+                                onClick={() => fetchGstinDetails(field.value, "add")}
+                              >
+                                {gstFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-1" />}
+                                {gstFetching ? "" : "Fetch"}
+                              </Button>
+                            </div>
                           </FormControl>
                         </FormItem>
                       )}
@@ -687,7 +738,20 @@ export default function Customers() {
                         <FormItem>
                           <FormLabel>GSTIN</FormLabel>
                           <FormControl>
-                            <Input placeholder="Optional" {...field} />
+                            <div className="flex gap-2">
+                              <Input placeholder="Optional" {...field} className="uppercase" />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="shrink-0 whitespace-nowrap"
+                                disabled={gstFetchingEdit}
+                                onClick={() => fetchGstinDetails(field.value, "edit")}
+                              >
+                                {gstFetchingEdit ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-1" />}
+                                {gstFetchingEdit ? "" : "Fetch"}
+                              </Button>
+                            </div>
                           </FormControl>
                         </FormItem>
                       )}
