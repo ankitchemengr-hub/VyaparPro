@@ -16,7 +16,7 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { PackageCheck, Plus, Pencil, Loader2, FileText } from "lucide-react";
+import { PackageCheck, Plus, Pencil, Loader2, FileText, MessageCircle } from "lucide-react";
 import { Link } from "wouter";
 
 interface Dispatch {
@@ -85,6 +85,40 @@ export default function DispatchesPage() {
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Dispatch | null>(null);
+
+  // WhatsApp send state
+  const [waSendDispatch, setWaSendDispatch] = useState<Dispatch | null>(null);
+  const [waToNumber, setWaToNumber] = useState("");
+  const [waType, setWaType] = useState<"dispatch_status" | "vehicle_details">("dispatch_status");
+  const [waSending, setWaSending] = useState(false);
+  const { toast } = useToast();
+
+  const openWaSend = (d: Dispatch) => {
+    setWaSendDispatch(d);
+    setWaToNumber("");
+    setWaType("dispatch_status");
+  };
+
+  const handleSendWa = async () => {
+    if (!waToNumber || !waSendDispatch) return;
+    setWaSending(true);
+    try {
+      const res = await fetch("/api/whatsapp/send/dispatch-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ dispatchId: waSendDispatch.id, toNumber: waToNumber, messageType: waType }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error ?? "Send failed");
+      toast({ title: "WhatsApp sent ✓", description: `Message sent to ${waToNumber}` });
+      setWaSendDispatch(null);
+    } catch (err: any) {
+      toast({ title: "Failed to send", description: err?.message ?? "Unknown error", variant: "destructive" });
+    } finally {
+      setWaSending(false);
+    }
+  };
 
   const handleNew = () => { setEditing(null); setOpen(true); };
   const handleEdit = (d: Dispatch) => { setEditing(d); setOpen(true); };
@@ -156,9 +190,14 @@ export default function DispatchesPage() {
                       <TableCell className="font-mono text-sm">{d.ewayBillNumber ?? "—"}</TableCell>
                       <TableCell className="text-sm">{fmt(d.ewayBillValidityDate)}</TableCell>
                       <TableCell>
-                        <Button variant="ghost" size="icon" onClick={() => handleEdit(d)}>
-                          <Pencil className="w-4 h-4" />
-                        </Button>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="icon" title="Send on WhatsApp" onClick={() => openWaSend(d)}>
+                            <MessageCircle className="w-4 h-4 text-green-600" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => handleEdit(d)}>
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
@@ -177,6 +216,56 @@ export default function DispatchesPage() {
         vehicles={vehicles?.filter((v) => v.isActive) ?? []}
         onSaved={() => refetch()}
       />
+
+      {/* WhatsApp Send Dialog */}
+      <Dialog open={!!waSendDispatch} onOpenChange={(v) => { if (!v) setWaSendDispatch(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageCircle className="w-5 h-5 text-green-500" /> Send Dispatch Update
+            </DialogTitle>
+            <DialogDescription>
+              {waSendDispatch?.invoiceNo
+                ? `Dispatch for invoice ${waSendDispatch.invoiceNo}`
+                : `Dispatch #${waSendDispatch?.id}`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Message Type</Label>
+              <Select value={waType} onValueChange={(v) => setWaType(v as any)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="dispatch_status">Dispatch Status</SelectItem>
+                  <SelectItem value="vehicle_details">Vehicle Details</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Customer WhatsApp Number</Label>
+              <Input
+                placeholder="10-digit mobile number"
+                inputMode="numeric"
+                maxLength={10}
+                value={waToNumber}
+                onChange={(e) => setWaToNumber(e.target.value.replace(/\D/g, "").slice(0, 10))}
+              />
+              <p className="text-xs text-muted-foreground">Dispatch details will be sent to this number</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setWaSendDispatch(null)} disabled={waSending}>Cancel</Button>
+            <Button
+              onClick={handleSendWa}
+              disabled={waSending || waToNumber.length !== 10}
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              {waSending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <MessageCircle className="w-4 h-4 mr-2" />}
+              Send Message
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

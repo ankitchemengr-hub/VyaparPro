@@ -21,6 +21,7 @@ import subscriptionsRouter from "./subscriptions";
 import settingsRouter from "./settings";
 import gstinRouter from "./gstin";
 import transportRouter from "./transport";
+import whatsappRouter from "./whatsapp";
 import systemAdminRouter from "./system-admin";
 import { requireAuth } from "../lib/tenant";
 
@@ -58,6 +59,7 @@ router.use(commissionsRouter);
 router.use(settingsRouter);
 router.use(gstinRouter);
 router.use(transportRouter);
+router.use(whatsappRouter);
 // Mounted before subscriptions: the subscriptions router installs a path-less
 // super_admin guard, so anything after it is 403'd for company admins. These
 // backup routes are company-admin-only and must stay reachable.

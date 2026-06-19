@@ -173,6 +173,28 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
     // ── Products: volume unit type (liter or kg) ───────────────────────────
     `ALTER TABLE products ADD COLUMN IF NOT EXISTS volume_unit VARCHAR(10) NOT NULL DEFAULT 'liter'`,
 
+    // ── WhatsApp: per-entity WhatsApp number ──────────────────────────────
+    `ALTER TABLE entities ADD COLUMN IF NOT EXISTS whatsapp_number TEXT`,
+
+    // ── WhatsApp: message log ──────────────────────────────────────────────
+    `CREATE TABLE IF NOT EXISTS whatsapp_logs (
+      id                SERIAL PRIMARY KEY,
+      company_id        INTEGER NOT NULL,
+      customer_id       INTEGER,
+      customer_name     TEXT,
+      mobile_number     TEXT NOT NULL,
+      message_type      TEXT NOT NULL,
+      message_body      TEXT NOT NULL,
+      reference_id      INTEGER,
+      reference_type    TEXT,
+      delivery_status   TEXT NOT NULL DEFAULT 'pending',
+      wa_message_id     TEXT,
+      error_text        TEXT,
+      sent_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    )`,
+    `CREATE INDEX IF NOT EXISTS whatsapp_logs_company_idx ON whatsapp_logs(company_id)`,
+    `CREATE INDEX IF NOT EXISTS whatsapp_logs_customer_idx ON whatsapp_logs(customer_id)`,
+
     // ── Transport / E-Way Bill: Transporter Master ─────────────────────────
     `CREATE TABLE IF NOT EXISTS transporters (
       id                SERIAL PRIMARY KEY,

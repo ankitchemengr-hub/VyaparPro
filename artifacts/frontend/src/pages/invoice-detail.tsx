@@ -22,7 +22,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { ArrowLeft, Printer, Loader2, LayoutTemplate, IndianRupee, Banknote, Smartphone, CreditCard, Building2, CheckCircle2, Hash } from "lucide-react";
+import { ArrowLeft, Printer, Loader2, LayoutTemplate, IndianRupee, Banknote, Smartphone, CreditCard, Building2, CheckCircle2, Hash, MessageCircle } from "lucide-react";
 import { useAuth } from "@/contexts/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { InvoiceTemplateRenderer } from "@/components/invoice-templates/InvoiceTemplateRenderer";
@@ -91,6 +91,44 @@ export default function InvoiceDetail() {
 
   const [templateOverride, setTemplateOverride] = useState<string | null>(null);
   const [selectorOpen, setSelectorOpen] = useState(false);
+
+  // WhatsApp send state
+  const [waOpen, setWaOpen] = useState(false);
+  const [waNumber, setWaNumber] = useState("");
+  const [waType, setWaType] = useState<"invoice_pdf" | "order_confirmation">("invoice_pdf");
+  const [waSending, setWaSending] = useState(false);
+
+  const openWaDialog = () => {
+    // Pre-fill with customer WhatsApp number if available
+    if (invoice?.customerId) {
+      fetch(`/api/whatsapp/entity/${invoice.customerId}/number`, { credentials: "include" })
+        .then((r) => r.ok ? r.json() : null)
+        .then((d) => { if (d?.whatsappNumber) setWaNumber(d.whatsappNumber); })
+        .catch(() => {});
+    }
+    setWaOpen(true);
+  };
+
+  const handleSendWa = async () => {
+    if (!waNumber || !invoice) return;
+    setWaSending(true);
+    try {
+      const res = await fetch("/api/whatsapp/send/invoice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ invoiceId: id, toNumber: waNumber, messageType: waType }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error ?? "Send failed");
+      toast({ title: "WhatsApp sent ✓", description: `Message sent to ${waNumber}` });
+      setWaOpen(false);
+    } catch (err: any) {
+      toast({ title: "Failed to send", description: err?.message ?? "Unknown error", variant: "destructive" });
+    } finally {
+      setWaSending(false);
+    }
+  };
 
   const [payDialogOpen, setPayDialogOpen] = useState(false);
   const noPayTypes = new Set(["quotation", "proforma_invoice", "sale_order", "delivery_challan"]);
@@ -259,6 +297,14 @@ export default function InvoiceDetail() {
               <IndianRupee className="h-4 w-4 mr-2" />Record Payment
             </Button>
           )}
+          <Button
+            variant="outline"
+            onClick={openWaDialog}
+            className="border-green-400 text-green-700 hover:bg-green-50"
+            data-testid="button-whatsapp-send"
+          >
+            <MessageCircle className="h-4 w-4 mr-2" />WhatsApp
+          </Button>
           <Button variant="outline" onClick={() => window.print()} data-testid="button-print">
             <Printer className="h-4 w-4 mr-2" />Print
           </Button>
@@ -435,6 +481,51 @@ export default function InvoiceDetail() {
                 </Button>
               </>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* WhatsApp Send Dialog */}
+      <Dialog open={waOpen} onOpenChange={(v) => { if (!v) setWaOpen(false); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageCircle className="w-5 h-5 text-green-500" /> Send on WhatsApp
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Message Type</Label>
+              <Select value={waType} onValueChange={(v) => setWaType(v as any)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="invoice_pdf">Invoice Notification</SelectItem>
+                  <SelectItem value="order_confirmation">Order Confirmation</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>WhatsApp Number</Label>
+              <Input
+                placeholder="10-digit mobile number"
+                inputMode="numeric"
+                maxLength={10}
+                value={waNumber}
+                onChange={(e) => setWaNumber(e.target.value.replace(/\D/g, "").slice(0, 10))}
+              />
+              <p className="text-xs text-muted-foreground">Message will be sent to this number via WhatsApp</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setWaOpen(false)} disabled={waSending}>Cancel</Button>
+            <Button
+              onClick={handleSendWa}
+              disabled={waSending || waNumber.length !== 10}
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              {waSending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <MessageCircle className="w-4 h-4 mr-2" />}
+              Send Message
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -21,7 +21,7 @@ import {
   Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
 } from "@/components/ui/form";
 import { Link } from "wouter";
-import { Search, UserPlus, Pencil, Loader2, RefreshCw } from "lucide-react";
+import { Search, UserPlus, Pencil, Loader2, RefreshCw, MessageCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -57,6 +57,7 @@ export default function Customers() {
 
   const [editingEntity, setEditingEntity] = useState<any | null>(null);
   const [editSalesmanId, setEditSalesmanId] = useState<string>("");
+  const [editWaNumber, setEditWaNumber] = useState<string>("");
   const [gstFetching, setGstFetching] = useState(false);
   const [gstFetchingEdit, setGstFetchingEdit] = useState(false);
 
@@ -177,6 +178,12 @@ export default function Customers() {
       pricingTier: entity.pricingTier === "wholesale" ? "wholesale" : "retail",
     });
     setEditSalesmanId(entity.assignedSalesmanId ? String(entity.assignedSalesmanId) : "");
+    setEditWaNumber("");
+    // Fetch WhatsApp number separately (bootstrap-patched column, not in drizzle schema)
+    fetch(`/api/whatsapp/entity/${entity.id}/number`, { credentials: "include" })
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (d?.whatsappNumber) setEditWaNumber(d.whatsappNumber); })
+      .catch(() => {});
   };
 
   const onSubmit = form.handleSubmit((data) => {
@@ -245,6 +252,15 @@ export default function Customers() {
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getListEntitiesQueryKey() });
+          // Save WhatsApp number separately
+          if (editingEntity.id) {
+            fetch(`/api/whatsapp/entity/${editingEntity.id}/number`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify({ whatsappNumber: editWaNumber }),
+            }).catch(() => {});
+          }
           toast({ title: "Saved", description: `${editingEntity.name} updated successfully.` });
           setEditingEntity(null);
         },
@@ -863,6 +879,22 @@ export default function Customers() {
                     </FormItem>
                   )}
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium flex items-center gap-1.5">
+                    <MessageCircle className="w-3.5 h-3.5 text-green-500" /> WhatsApp No.
+                  </label>
+                  <Input
+                    placeholder="10-digit number"
+                    inputMode="numeric"
+                    maxLength={10}
+                    value={editWaNumber}
+                    onChange={(e) => setEditWaNumber(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                  />
+                  <p className="text-[11px] text-muted-foreground">Used for sending invoices &amp; reminders</p>
+                </div>
               </div>
 
               <DialogFooter className="pt-2">
