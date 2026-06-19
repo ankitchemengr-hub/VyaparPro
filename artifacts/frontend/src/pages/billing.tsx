@@ -8,6 +8,7 @@ import {
   useGetInvoice,
   useLogPayment,
   useListAccounts,
+  useListEntities,
   getListInvoicesQueryKey,
   getListPaymentsQueryKey,
   getListAccountsQueryKey,
@@ -134,6 +135,18 @@ export default function Billing() {
   const [items, setItems] = useState<BillingItem[]>([]);
   const [freight, setFreight] = useState(0);
   const [saved, setSaved] = useState(false);
+  const [salesmanId, setSalesmanId] = useState<number | null>(null);
+
+  const { data: salesmanEntities } = useListEntities({ type: "salesman" } as any);
+
+  // Auto-populate salesman from customer's assignedSalesmanId
+  useEffect(() => {
+    if (customer?.assignedSalesmanId) {
+      setSalesmanId(Number(customer.assignedSalesmanId));
+    } else {
+      setSalesmanId(null);
+    }
+  }, [customer?.id]);
 
   // Product inline search
   const [productSearch, setProductSearch] = useState("");
@@ -367,6 +380,7 @@ export default function Billing() {
       customerName: customer?.name ?? undefined,
       customerGstin: customer?.gstin ?? undefined,
       billingAddress: customer?.address ?? undefined,
+      salesmanId: salesmanId ?? undefined,
       freight,
       roundOff,
       items: items.map((i) => ({
@@ -920,6 +934,25 @@ export default function Billing() {
                     data-testid="input-freight"
                   />
                 </div>
+                {user?.role === "admin" && (
+                  <div className="space-y-1">
+                    <Label className="text-xs">Salesman (Commission)</Label>
+                    <Select
+                      value={salesmanId ? String(salesmanId) : "__none__"}
+                      onValueChange={(v) => setSalesmanId(v === "__none__" ? null : Number(v))}
+                    >
+                      <SelectTrigger className="h-9" data-testid="select-salesman">
+                        <SelectValue placeholder="No salesman" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">No salesman</SelectItem>
+                        {(salesmanEntities ?? []).map((s: any) => (
+                          <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

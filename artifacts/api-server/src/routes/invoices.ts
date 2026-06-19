@@ -176,13 +176,34 @@ router.post("/invoices", async (req, res): Promise<void> => {
     const grandTotal = subtotal + totalTax + freight + roundOff;
     const balanceDue = isQuotation ? 0 : grandTotal;
 
-    // Get salesman name
+    // Resolve effective salesman (for invoice attribution + commission).
+    // Priority: 1) salesman session entity, 2) explicit salesmanId from admin,
+    // 3) customer's assignedSalesmanId (auto-resolved when commission hasn't expired).
+    let resolvedSalesmanId: number | null = null;
     let salesmanName: string | null = null;
-    if (data.salesmanId) {
+
+    if (session?.role === "salesman") {
+      resolvedSalesmanId = session.entityId ?? null;
+      salesmanName = session.name;
+    } else if (data.salesmanId) {
+      resolvedSalesmanId = data.salesmanId;
       const [salesman] = await db.select().from(entitiesTable).where(and(eq(entitiesTable.companyId, companyId), eq(entitiesTable.id, data.salesmanId)));
       salesmanName = salesman?.name ?? null;
-    } else if (session?.role === "salesman") {
-      salesmanName = session.name;
+    } else if (data.customerId) {
+      // Auto-resolve from customer's assigned salesman if commission period is still active
+      const custRes = await client.query(
+        `SELECT assigned_salesman_id, commission_expiry_date FROM entities WHERE id = $1 AND company_id = $2`,
+        [data.customerId, companyId]
+      );
+      const cust = custRes.rows[0];
+      if (cust?.assigned_salesman_id && (!cust.commission_expiry_date || new Date(cust.commission_expiry_date) > new Date())) {
+        resolvedSalesmanId = cust.assigned_salesman_id;
+        const smRes = await client.query(
+          `SELECT name FROM entities WHERE id = $1 AND company_id = $2`,
+          [resolvedSalesmanId, companyId]
+        );
+        salesmanName = smRes.rows[0]?.name ?? null;
+      }
     }
 
     // Insert invoice
@@ -204,11 +225,7 @@ router.post("/invoices", async (req, res): Promise<void> => {
         data.billingAddress ?? null,
         data.shippingAddress ?? null,
         data.placeOfSupply,
-        // Salesmen cannot spoof attribution — always stamp their own entity. Other
-        // roles (admin/accountant) may pass an explicit salesmanId.
-        session?.role === "salesman"
-          ? (session.entityId ?? null)
-          : (data.salesmanId ?? null),
+        resolvedSalesmanId,
         salesmanName,
         data.poNumber ?? null,
         data.eWayBillNo ?? null,
@@ -294,11 +311,7 @@ router.post("/invoices", async (req, res): Promise<void> => {
     // ── Commission transaction ─────────────────────────────────────────────
     // When an invoice has a salesman attributed, snapshot the commission
     // (liters × commission_per_liter per item) into commission_transactions.
-    const effectiveSalesmanId = session?.role === "salesman"
-      ? (session.entityId ?? null)
-      : (data.salesmanId ?? null);
-
-    if (effectiveSalesmanId && !isQuotation) {
+    if (resolvedSalesmanId && !isQuotation) {
       const commissionRows = await client.query(
         `SELECT SUM(COALESCE(ii.total_liters, ii.qty, 0) * COALESCE(p.commission_per_liter, 0)) AS commission,
                 SUM(COALESCE(ii.total_liters, ii.qty, 0)) AS liters
@@ -320,7 +333,7 @@ router.post("/invoices", async (req, res): Promise<void> => {
             companyId,
             invRow.id,
             invoiceNo,
-            effectiveSalesmanId,
+            resolvedSalesmanId,
             salesmanName ?? "",
             data.customerId ?? null,
             data.customerName ?? null,
