@@ -51,6 +51,7 @@ type EditFormValues = {
 export default function Customers() {
   const [search, setSearch] = useState("");
   const [type, setType] = useState<FilterType>("customer");
+  const [sort, setSort] = useState("name_asc");
   const [showAdd, setShowAdd] = useState(false);
   const [assignedSalesmanId, setAssignedSalesmanId] = useState<string>("");
 
@@ -261,6 +262,17 @@ export default function Customers() {
             <SelectItem value="salesman">Salesmen</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={sort} onValueChange={setSort}>
+          <SelectTrigger className="w-[190px]">
+            <SelectValue placeholder="Sort by" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="name_asc">Name A → Z</SelectItem>
+            <SelectItem value="name_desc">Name Z → A</SelectItem>
+            <SelectItem value="balance_high">Balance High → Low</SelectItem>
+            <SelectItem value="balance_low">Balance Low → High</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <Card>
@@ -287,7 +299,13 @@ export default function Customers() {
                   <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No entities found.</TableCell>
                 </TableRow>
               ) : (
-                entities?.map((entity) => (
+                [...(entities ?? [])].sort((a, b) => {
+                  if (sort === "name_asc") return (a.name ?? "").localeCompare(b.name ?? "");
+                  if (sort === "name_desc") return (b.name ?? "").localeCompare(a.name ?? "");
+                  if (sort === "balance_high") return (b.outstandingBalance ?? 0) - (a.outstandingBalance ?? 0);
+                  if (sort === "balance_low") return (a.outstandingBalance ?? 0) - (b.outstandingBalance ?? 0);
+                  return 0;
+                }).map((entity) => (
                   <TableRow key={entity.id} data-testid={`row-entity-${entity.id}`}>
                     <TableCell className="font-medium">
                       <Link href={`/customers/${entity.id}`} className="text-primary hover:underline">
