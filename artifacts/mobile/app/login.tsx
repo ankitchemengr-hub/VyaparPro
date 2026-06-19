@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { Redirect } from "expo-router";
 import * as Haptics from "expo-haptics";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -18,6 +18,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/contexts/AuthContext";
 import { useColors } from "@/hooks/useColors";
 
+interface CompanyOption {
+  id: number;
+  name: string;
+}
+
 export default function LoginScreen() {
   const { user, login } = useAuth();
   const colors = useColors();
@@ -29,6 +34,24 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const [companies, setCompanies] = useState<CompanyOption[]>([]);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null);
+  const [companiesLoaded, setCompaniesLoaded] = useState(false);
+
+  useEffect(() => {
+    const base = `https://${process.env.EXPO_PUBLIC_DOMAIN}`;
+    fetch(`${base}/api/system/companies-public`)
+      .then((r) => r.json())
+      .then((list: CompanyOption[]) => {
+        setCompanies(list ?? []);
+        if (list?.length === 1) {
+          setSelectedCompanyId(list[0].id);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setCompaniesLoaded(true));
+  }, []);
+
   if (user) {
     return <Redirect href="/(tabs)/" />;
   }
@@ -38,10 +61,14 @@ export default function LoginScreen() {
       setError("Enter username and password");
       return;
     }
+    if (companies.length > 1 && selectedCompanyId == null) {
+      setError("Please select a company");
+      return;
+    }
     setError("");
     setLoading(true);
     try {
-      await login(username.trim(), password);
+      await login(username.trim(), password, selectedCompanyId);
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Login failed";
@@ -74,6 +101,49 @@ export default function LoginScreen() {
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Sign In</Text>
+
+          {/* Company selector — shown only when multiple companies */}
+          {companiesLoaded && companies.length > 1 && (
+            <View style={styles.field}>
+              <Text style={styles.label}>Company</Text>
+              <View style={styles.companyList}>
+                {companies.map((c) => (
+                  <Pressable
+                    key={c.id}
+                    style={[
+                      styles.companyChip,
+                      selectedCompanyId === c.id && styles.companyChipActive,
+                    ]}
+                    onPress={() => setSelectedCompanyId(c.id)}
+                  >
+                    <Feather
+                      name="briefcase"
+                      size={13}
+                      color={
+                        selectedCompanyId === c.id ? "#ffffff" : colors.mutedForeground
+                      }
+                    />
+                    <Text
+                      style={[
+                        styles.companyChipText,
+                        selectedCompanyId === c.id && styles.companyChipTextActive,
+                      ]}
+                    >
+                      {c.name}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* Single company — show as read-only badge */}
+          {companiesLoaded && companies.length === 1 && (
+            <View style={styles.singleCompanyRow}>
+              <Feather name="briefcase" size={13} color={colors.primary} />
+              <Text style={styles.singleCompanyName}>{companies[0]?.name}</Text>
+            </View>
+          )}
 
           <View style={styles.field}>
             <Text style={styles.label}>Username</Text>
@@ -139,11 +209,11 @@ export default function LoginScreen() {
           <Pressable
             style={({ pressed }) => [
               styles.loginBtn,
-              loading && styles.loginBtnDisabled,
+              (loading || !companiesLoaded) && styles.loginBtnDisabled,
               pressed && styles.loginBtnPressed,
             ]}
             onPress={handleLogin}
-            disabled={loading}
+            disabled={loading || !companiesLoaded}
           >
             {loading ? (
               <ActivityIndicator size="small" color="#ffffff" />
@@ -157,15 +227,15 @@ export default function LoginScreen() {
   );
 }
 
-function makeStyles(colors: ReturnType<typeof useColors>, insets: ReturnType<typeof useSafeAreaInsets>) {
+function makeStyles(
+  colors: ReturnType<typeof useColors>,
+  insets: ReturnType<typeof useSafeAreaInsets>
+) {
   const topInset = Platform.OS === "web" ? 67 : insets.top;
   const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
 
   return StyleSheet.create({
-    root: {
-      flex: 1,
-      backgroundColor: colors.primary,
-    },
+    root: { flex: 1, backgroundColor: colors.primary },
     scroll: {
       flexGrow: 1,
       paddingTop: topInset,
@@ -191,11 +261,7 @@ function makeStyles(colors: ReturnType<typeof useColors>, insets: ReturnType<typ
       color: "#ffffff",
       letterSpacing: 0.5,
     },
-    tagline: {
-      fontSize: 13,
-      color: "rgba(255,255,255,0.75)",
-      marginTop: 4,
-    },
+    tagline: { fontSize: 13, color: "rgba(255,255,255,0.75)", marginTop: 4 },
     card: {
       marginHorizontal: 20,
       backgroundColor: colors.card,
@@ -206,19 +272,54 @@ function makeStyles(colors: ReturnType<typeof useColors>, insets: ReturnType<typ
       fontSize: 20,
       fontWeight: "700" as const,
       color: colors.foreground,
-      marginBottom: 24,
+      marginBottom: 20,
     },
-    field: {
+    singleCompanyRow: {
+      flexDirection: "row" as const,
+      alignItems: "center",
+      gap: 6,
+      backgroundColor: colors.accent,
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
       marginBottom: 16,
     },
-    label: {
+    singleCompanyName: {
       fontSize: 13,
+      fontWeight: "600" as const,
+      color: colors.primary,
+    },
+    field: { marginBottom: 16 },
+    label: {
+      fontSize: 12,
       fontWeight: "600" as const,
       color: colors.mutedForeground,
       marginBottom: 6,
       textTransform: "uppercase" as const,
       letterSpacing: 0.5,
     },
+    companyList: { flexDirection: "row" as const, flexWrap: "wrap" as const, gap: 8 },
+    companyChip: {
+      flexDirection: "row" as const,
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.muted,
+    },
+    companyChipActive: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+    },
+    companyChipText: {
+      fontSize: 13,
+      fontWeight: "500" as const,
+      color: colors.mutedForeground,
+    },
+    companyChipTextActive: { color: "#ffffff" },
     inputWrapper: {
       flexDirection: "row" as const,
       alignItems: "center",
@@ -228,21 +329,10 @@ function makeStyles(colors: ReturnType<typeof useColors>, insets: ReturnType<typ
       backgroundColor: colors.muted,
       paddingHorizontal: 12,
     },
-    inputIcon: {
-      marginRight: 8,
-    },
-    input: {
-      flex: 1,
-      height: 46,
-      fontSize: 15,
-      color: colors.foreground,
-    },
-    inputFlex: {
-      flex: 1,
-    },
-    eyeBtn: {
-      padding: 4,
-    },
+    inputIcon: { marginRight: 8 },
+    input: { flex: 1, height: 46, fontSize: 15, color: colors.foreground },
+    inputFlex: { flex: 1 },
+    eyeBtn: { padding: 4 },
     errorBox: {
       flexDirection: "row" as const,
       alignItems: "center",
@@ -252,11 +342,7 @@ function makeStyles(colors: ReturnType<typeof useColors>, insets: ReturnType<typ
       padding: 10,
       marginBottom: 12,
     },
-    errorText: {
-      fontSize: 13,
-      color: colors.destructive,
-      flex: 1,
-    },
+    errorText: { fontSize: 13, color: colors.destructive, flex: 1 },
     loginBtn: {
       height: 50,
       backgroundColor: colors.primary,
@@ -265,16 +351,8 @@ function makeStyles(colors: ReturnType<typeof useColors>, insets: ReturnType<typ
       justifyContent: "center",
       marginTop: 8,
     },
-    loginBtnDisabled: {
-      opacity: 0.7,
-    },
-    loginBtnPressed: {
-      opacity: 0.85,
-    },
-    loginBtnText: {
-      fontSize: 16,
-      fontWeight: "700" as const,
-      color: "#ffffff",
-    },
+    loginBtnDisabled: { opacity: 0.7 },
+    loginBtnPressed: { opacity: 0.85 },
+    loginBtnText: { fontSize: 16, fontWeight: "700" as const, color: "#ffffff" },
   });
 }

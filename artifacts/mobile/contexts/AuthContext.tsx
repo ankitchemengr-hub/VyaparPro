@@ -16,7 +16,7 @@ interface AuthContextType {
   user: User | null;
   companyName: string;
   loading: boolean;
-  login: (username: string, password: string) => Promise<void>;
+  login: (username: string, password: string, companyId?: number | null) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -41,10 +41,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })();
   }, []);
 
-  const login = async (username: string, password: string) => {
+  const login = async (username: string, password: string, companyId?: number | null) => {
+    const body: Record<string, unknown> = { username, password };
+    if (companyId != null) body.companyId = companyId;
     const res = await apiFetch("/auth/login", {
       method: "POST",
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) {
       const err = (await res.json().catch(() => ({}))) as Record<string, string>;
