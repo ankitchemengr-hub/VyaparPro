@@ -1230,7 +1230,8 @@ export const LogPaymentBody = zod.object({
   "amount": zod.number(),
   "mode": zod.enum(['cash', 'cheque', 'upi', 'bank_transfer', 'other']),
   "notes": zod.string().optional(),
-  "accountId": zod.number().optional()
+  "accountId": zod.number().optional(),
+  "invoiceId": zod.number().optional().describe('When provided, applies payment directly to this invoice and updates its amount_paid / balance_due.')
 })
 
 

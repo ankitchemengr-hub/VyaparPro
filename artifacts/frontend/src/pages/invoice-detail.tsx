@@ -3,6 +3,7 @@ import { useRoute, useLocation } from "wouter";
 import {
   useGetInvoice,
   getGetInvoiceQueryKey,
+  getListInvoicesQueryKey,
   useListProducts,
   useGetPrintSettings,
   useLogPayment,
@@ -164,6 +165,7 @@ export default function InvoiceDetail() {
       {
         data: {
           ...(invoice?.customerId ? { customerId: invoice.customerId } : {}),
+          ...(id ? { invoiceId: id } : {}),
           amount: payAmount,
           mode: payMode,
           ...(payAccountId ? { accountId: payAccountId } : {}),
@@ -176,6 +178,8 @@ export default function InvoiceDetail() {
       },
       {
         onSuccess: (payment) => {
+          queryClient.invalidateQueries({ queryKey: getGetInvoiceQueryKey(id!) });
+          queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
           queryClient.invalidateQueries({ queryKey: getListPaymentsQueryKey() });
           queryClient.invalidateQueries({ queryKey: getListAccountsQueryKey() });
           setPaySuccess(true);

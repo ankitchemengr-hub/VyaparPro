@@ -129,6 +129,29 @@ router.post("/payments", async (req, res): Promise<void> => {
         }
       }
 
+      // If payment is tied to a specific invoice, update its amount_paid / balance_due atomically
+      if (parsed.data.invoiceId) {
+        const invCheck = await client.query(
+          `SELECT id, balance_due FROM invoices WHERE id = $1 AND company_id = $2 AND status != 'cancelled'`,
+          [parsed.data.invoiceId, companyId]
+        );
+        if (invCheck.rowCount === 0) {
+          throw new Error("Invoice not found or cancelled");
+        }
+        const currentBalance = Number(invCheck.rows[0].balance_due);
+        if (currentBalance <= 0) {
+          throw new Error("Invoice is already fully paid");
+        }
+        const applyAmount = Math.min(parsed.data.amount, currentBalance);
+        await client.query(
+          `UPDATE invoices
+           SET amount_paid = amount_paid + $1,
+               balance_due = GREATEST(0, balance_due - $1)
+           WHERE id = $2 AND company_id = $3`,
+          [applyAmount, parsed.data.invoiceId, companyId]
+        );
+      }
+
       await client.query(
         `UPDATE entities SET outstanding_balance = outstanding_balance - $1 WHERE id = $2 AND company_id = $3`,
         [parsed.data.amount, customerId, companyId]
