@@ -11,6 +11,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -186,16 +187,17 @@ export default function LoginScreen() {
                 returnKeyType="done"
                 onSubmitEditing={handleLogin}
               />
-              <Pressable
+              <TouchableOpacity
                 onPress={() => setShowPassword((v) => !v)}
                 style={styles.eyeBtn}
+                activeOpacity={0.6}
               >
                 <Feather
                   name={showPassword ? "eye-off" : "eye"}
                   size={16}
                   color={colors.mutedForeground}
                 />
-              </Pressable>
+              </TouchableOpacity>
             </View>
           </View>
 
