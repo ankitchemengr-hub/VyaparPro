@@ -1,5 +1,4 @@
 import { Feather } from "@expo/vector-icons";
-import { Redirect } from "expo-router";
 import * as Haptics from "expo-haptics";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -53,10 +52,6 @@ export default function LoginScreen() {
       .catch(() => {})
       .finally(() => setCompaniesLoaded(true));
   }, []);
-
-  if (user) {
-    return <Redirect href="/(tabs)/" />;
-  }
 
   const handleLogin = async () => {
     if (!username.trim()) {
