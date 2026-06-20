@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "ERP Mobile",
-    "slug": "mobile",
+    "name": "SHRADHA ERP",
+    "slug": "shradhaerp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "mobile",
+    "scheme": "shradhaerp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
@@ -14,9 +14,12 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "bundleIdentifier": "com.shradhaerp.app"
     },
-    "android": {},
+    "android": {
+      "package": "com.shradhaerp.app"
+    },
     "web": {
       "favicon": "./assets/images/icon.png"
     },

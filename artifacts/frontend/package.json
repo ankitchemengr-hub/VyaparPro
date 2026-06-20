@@ -80,6 +80,7 @@
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "jszip": "^3.10.1",
+    "workbox-window": "^7.4.1",
     "xlsx": "^0.18.5"
   }
 }
