@@ -98,16 +98,24 @@ export function useGetCommissionTransactions(
   });
 }
 
+// Fixed: added explicit generic type to customFetch
 export function useMarkTransactionPaid(
-  options?: UseMutationOptions<{ id: number; status: string; paidAt: string | null; paymentReference: string | null }, unknown, { id: number; reference?: string }>
+  options?: UseMutationOptions<
+    { id: number; status: string; paidAt: string | null; paymentReference: string | null },
+    unknown,
+    { id: number; reference?: string }
+  >
 ) {
   return useMutation({
     mutationFn: ({ id, reference }: { id: number; reference?: string }) =>
-      customFetch(`/api/commissions/transactions/${id}/mark-paid`, {
-        method: "PATCH",
-        body: JSON.stringify({ reference }),
-        headers: { "Content-Type": "application/json" },
-      }),
+      customFetch<{ id: number; status: string; paidAt: string | null; paymentReference: string | null }>(
+        `/api/commissions/transactions/${id}/mark-paid`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ reference }),
+          headers: { "Content-Type": "application/json" },
+        }
+      ),
     ...options,
   });
 }
@@ -115,7 +123,11 @@ export function useMarkTransactionPaid(
 // ── Bulk pay ─────────────────────────────────────────────────────────────────
 
 export function useBulkPayCommission(
-  options?: UseMutationOptions<{ paidCount: number; totalAmount: number }, unknown, { salesmanId: number; reference?: string; note?: string }>
+  options?: UseMutationOptions<
+    { paidCount: number; totalAmount: number },
+    unknown,
+    { salesmanId: number; reference?: string; note?: string }
+  >
 ) {
   return useMutation({
     mutationFn: (data: { salesmanId: number; reference?: string; note?: string }) =>

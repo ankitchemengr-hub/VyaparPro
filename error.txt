@@ -1,0 +1,9 @@
+$ pnpm run typecheck && pnpm -r --if-present run build
+$ pnpm run typecheck:libs && pnpm -r --filter "./artifacts/**" --filter "./scripts" --if-present run typecheck
+$ tsc --build
+lib/api-client-react/src/commission-hooks.ts(105,5): error TS2322: Type '({ id, reference }: { id: number; reference?: string; }) => Promise<unknown>' is not assignable to type 'MutationFunction<{ id: number; status: string; paidAt: string | null; paymentReference: string | null; }, { id: number; reference?: string | undefined; }>'.
+  Type 'Promise<unknown>' is not assignable to type 'Promise<{ id: number; status: string; paidAt: string | null; paymentReference: string | null; }>'.
+    Type 'unknown' is not assignable to type '{ id: number; status: string; paidAt: string | null; paymentReference: string | null; }'.
+[ELIFECYCLE] Command failed with exit code 1.
+[ELIFECYCLE] Command failed with exit code 1.
+[ELIFECYCLE] Command failed with exit code 1.

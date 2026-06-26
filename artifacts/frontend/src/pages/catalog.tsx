@@ -199,7 +199,7 @@ export default function Catalog() {
       const rate = showRetailOnly
         ? Number(product.retailPrice)
         : Number(product.wholesalePrice);
-      const gstRate = Number(product.gstRate ?? 0);
+      const gstRate = Number(product.taxRate ?? 0);
       const baseAmount = rate * qty;
       const gstAmount = (baseAmount * gstRate) / 100;
       const lineTotal = baseAmount + gstAmount;

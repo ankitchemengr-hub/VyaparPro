@@ -55,7 +55,7 @@ function ProtectedRoutes() {
         <Route path="/salesman-dashboard" component={SalesmanDashboard} />
         <Route path="/commission" component={Commission} />
         <Route path="/billing" component={Billing} />
-        <Route path="/invoices" component={Invoices} />
+        <Route path="/invoices">{() => <Invoices />}</Route>
         <Route path="/invoices/:id" component={InvoiceDetail} />
         <Route path="/quotations" component={Quotations} />
         <Route path="/inventory" component={Inventory} />

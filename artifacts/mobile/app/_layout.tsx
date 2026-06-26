@@ -32,7 +32,7 @@ function RootLayoutNav() {
     if (!user && inTabs) {
       router.replace("/login");
     } else if (user && !inTabs) {
-      router.replace("/(tabs)/");
+      router.replace("/(tabs)");
     }
   }, [user, loading]);
 

@@ -321,6 +321,8 @@ export default function InvoiceDetail() {
       <InvoiceTemplateSelector
         open={selectorOpen}
         onOpenChange={setSelectorOpen}
+        invoice={invoice}
+        maps={maps}
         settings={settings}
         value={activeTemplate}
         onSelect={setTemplateOverride}

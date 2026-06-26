@@ -13,6 +13,7 @@ import {
   getListPaymentsQueryKey,
   getListAccountsQueryKey,
   getGetInvoiceQueryKey,
+  type PaymentInputMode,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -419,13 +420,13 @@ export default function Billing() {
     }
 
     createInvoice.mutate(
-      { data: payload },
+      { data: payload as any },
       {
         onSuccess: (invoice) => {
           queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
           setSaved(true);
           setSavedInvoice(invoice);
-          if (invoice.invoiceType !== "quotation") {
+          if ((invoice.invoiceType as string) !== "quotation") {
             setPaymentAmount(finalTotal);
             toast({ title: `Invoice ${invoice.invoiceNo} saved`, description: "Now record payment received." });
           } else {
@@ -448,7 +449,7 @@ export default function Billing() {
         data: {
           ...(customer?.id ? { customerId: customer.id } : {}),
           amount: paymentAmount,
-          mode: paymentMode,
+          mode: paymentMode as PaymentInputMode,
           ...(accountId ? { accountId } : {}),
           notes: [
             isWalkIn ? `Walk-in cash sale${savedInvoice?.invoiceNo ? ` (Invoice ${savedInvoice.invoiceNo})` : ""}` : "",

@@ -16,35 +16,19 @@ if (!rawPort) {
 const port = Number(rawPort);
 
 if (Number.isNaN(port) || port <= 0) {
-  throw new Error(`Invalid PORT value: "${rawPort}"`);
+  throw new Error(`Invalid PORT value: ${rawPort}`);
 }
 
 async function start(): Promise<void> {
   await ensureDatabaseReady();
-
-  // Announce the deployment mode at boot so operators can confirm a dedicated
-  // install is locked to the intended company.
-  if (!isMultiCompanyMode()) {
-    const company = await getCurrentCompany(getDefaultCompanyId());
-    const companyName = company?.name ?? `id ${getDefaultCompanyId() ?? "(unset/invalid)"}`;
-    logger.info(`Dedicated Company Mode Enabled for: ${companyName}`);
-  } else {
-    logger.info("Multi-Company Mode Enabled (shared SaaS)");
-  }
-
-  startSubscriptionScheduler();
-
-  app.listen(port, (err) => {
-    if (err) {
-      logger.error({ err }, "Error listening on port");
-      process.exit(1);
-    }
-
-    logger.info({ port }, "Server listening");
+  // Actually start the HTTP server
+  app.listen(port, () => {
+    logger.info(`🚀 Server running on http://localhost:${port}`);
   });
 }
 
+// Execute the start function
 start().catch((err) => {
-  logger.error({ err }, "Fatal error during server startup");
+  logger.error("Failed to start server:", err);
   process.exit(1);
 });

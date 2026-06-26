@@ -1222,7 +1222,7 @@ function EditPurchaseDialog({
   onOpenChange: (v: boolean) => void;
 }) {
   const { data: purchase, isLoading } = useGetPurchase(purchaseId, {
-    query: { enabled: open },
+    query: { enabled: open, queryKey: getGetPurchaseQueryKey(purchaseId) },
   });
   const { data: vendors } = useListEntities({ type: "vendor" });
   const { data: products } = useListProducts({});

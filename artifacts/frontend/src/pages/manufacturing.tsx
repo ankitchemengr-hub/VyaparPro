@@ -1178,7 +1178,7 @@ function AssembleTab({
                       <div className="w-16 h-16 rounded-lg border bg-muted flex items-center justify-center shrink-0 overflow-hidden">
                         <img
                           src={prod.imageUrl}
-                          alt={selectedBom.finishedProductName}
+                          alt={selectedBom.finishedProductName ?? ""}
                           className="object-contain w-full h-full"
                         />
                       </div>
