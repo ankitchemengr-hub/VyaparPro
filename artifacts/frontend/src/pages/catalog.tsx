@@ -58,6 +58,8 @@ export default function Catalog() {
   const [, setLocation] = useLocation();
   const [search, setSearch] = useState("");
   const [group, setGroup] = useState<string>("");
+  const [searchExpanded, setSearchExpanded] = useState(false);
+
   const [brand, setBrand] = useState<string>("");
   // Multi-product cart: productId -> quantity
   const [cart, setCart] = useState<Record<number, number>>({});
@@ -332,15 +334,37 @@ export default function Catalog() {
 
       {/* Filters */}
       <div className="flex items-center gap-3 bg-card p-4 rounded-lg border shadow-sm flex-wrap mb-4">
-        <div className="relative flex-1 min-w-[180px]">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search products..."
-            className="pl-8"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            data-testid="input-search-products"
-          />
+       <div
+          className={`relative ${
+            searchExpanded ? "w-full sm:w-[220px]" : ""
+          }`}
+        >
+          {searchExpanded ? (
+            <>
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                autoFocus
+                placeholder="Search products..."
+                className="pl-8"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onBlur={() => {
+                  if (!search) setSearchExpanded(false);
+                }}
+                data-testid="input-search-products"
+              />
+            </>
+          ) : (
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label="Search products"
+              onClick={() => setSearchExpanded(true)}
+              data-testid="button-expand-search"
+            >
+              <Search className="h-4 w-4" />
+            </Button>
+          )}
         </div>
         {showAdvancedFilters && (
           <>

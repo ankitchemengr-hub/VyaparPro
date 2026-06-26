@@ -157,8 +157,12 @@ router.post("/invoices", async (req, res): Promise<void> => {
         ...item,
         qty: String(qty),
         qtyBoxes: item.qtyBoxes != null ? String(item.qtyBoxes) : null,
-        totalLiters: item.qtyBoxes != null && item.litersPerBox != null
-          ? String(Number(item.qtyBoxes) * Number(item.litersPerBox))
+       // total_liters = qty × liters-per-unit (the litersPerBox field, despite
+        // its name, holds liters per single unit — see inventory form field
+        // "Liters per QTY"). This feeds the commission calculation, so it must
+        // not depend on qtyBoxes/box-mode being set.
+        totalLiters: item.litersPerBox != null
+          ? String(qty * Number(item.litersPerBox))
           : null,
         rate: String(rate),
         mrp: String(item.mrp),
@@ -313,8 +317,8 @@ router.post("/invoices", async (req, res): Promise<void> => {
     // (liters × commission_per_liter per item) into commission_transactions.
     if (resolvedSalesmanId && !isQuotation) {
       const commissionRows = await client.query(
-        `SELECT SUM(COALESCE(ii.total_liters, ii.qty, 0) * COALESCE(p.commission_per_liter, 0)) AS commission,
-                SUM(COALESCE(ii.total_liters, ii.qty, 0)) AS liters
+       `SELECT SUM(COALESCE(ii.total_liters, 0) * COALESCE(p.commission_per_liter, 0)) AS commission,
+                SUM(COALESCE(ii.total_liters, 0)) AS liters
          FROM invoice_items ii
          JOIN products p ON p.id = ii.product_id
          WHERE ii.invoice_id = $1 AND ii.company_id = $2`,
@@ -542,7 +546,9 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
       }
       const qtyBoxes = item.qtyBoxes != null ? Number(item.qtyBoxes) : null;
       const litersPerBox = item.litersPerBox != null ? Number(item.litersPerBox) : null;
-      const totalLiters = qtyBoxes != null && litersPerBox != null ? qtyBoxes * litersPerBox : null;
+     // total_liters = qty × liters-per-unit (see comment in the
+      // create-invoice route above). Feeds the commission calculation.
+      const totalLiters = litersPerBox != null ? qty * litersPerBox : null;
       return {
         ...item,
         qty: String(qty), rate: String(rate), mrp: String(item.mrp),

@@ -432,8 +432,8 @@ router.get("/reports/commission", async (req, res): Promise<void> => {
             ii.product_id,
             MAX(ii.product_name) AS product_name,
             COALESCE(p.commission_per_liter, 0) AS commission_per_liter,
-            SUM(COALESCE(ii.total_liters, ii.qty, 0)) AS liters
-     FROM invoice_items ii
+            SUM(COALESCE(ii.total_liters, 0)) AS liters   
+            FROM invoice_items ii
      JOIN invoices i ON i.id = ii.invoice_id
      JOIN products p ON p.id = ii.product_id
      WHERE ${where.join(" AND ")}
