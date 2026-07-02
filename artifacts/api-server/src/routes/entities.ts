@@ -170,6 +170,11 @@ router.get("/entities/:id", async (req, res): Promise<void> => {
 
 // PATCH /entities/:id
 router.patch("/entities/:id", async (req, res): Promise<void> => {
+  const session = (req as any).session;
+  if (session?.role === "salesman") {
+    res.status(403).json({ error: "Salesmen cannot edit customer details" });
+    return;
+  }
   const params = UpdateEntityParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
