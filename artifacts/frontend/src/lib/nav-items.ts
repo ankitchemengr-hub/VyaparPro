@@ -44,12 +44,12 @@ export const topNavItems: NavItem[] = [
   { name: "Menu", href: "/menu", icon: LayoutGrid, roles: ["admin", "salesman", "store", "manufacturing", "accountant", "customer"] },
   { name: "Catalog", href: "/catalog", icon: ShoppingCart, roles: ["admin", "salesman", "store", "manufacturing", "customer"] },
   { name: "My Statement", href: "/my-statement", icon: FileText, roles: ["customer"] },
-  { name: "My Orders", href: "/my-orders", icon: ClipboardList, roles: ["customer"] },
+  { name: "My Orders", href: "/my-orders", icon: ClipboardList, roles: ["customer", "salesman"] },
 ];
 
 // All operational modules, shown as a grid on the Menu page.
 export const moduleNavItems: NavItem[] = [
-  { name: "My Orders", href: "/my-orders", icon: ClipboardList, roles: ["customer"], description: "Track your placed orders" },
+  { name: "My Orders", href: "/my-orders", icon: ClipboardList, roles: ["customer", "salesman"], description: "Track your placed orders" },
   { name: "My Statement", href: "/my-statement", icon: FileText, roles: ["customer"], description: "View your balance and transaction history" },
   { name: "Customer Orders", href: "/customer-orders", icon: Inbox, roles: ["admin", "store", "manufacturing"], description: "Manage incoming orders" },
   { name: "Salesman Orders", href: "/salesman-orders", icon: ClipboardList, roles: ["admin"], description: "Create and submit orders" },

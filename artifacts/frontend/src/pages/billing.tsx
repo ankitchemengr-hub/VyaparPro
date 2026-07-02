@@ -120,11 +120,11 @@ export default function Billing() {
   const queryClient = useQueryClient();
 
   // Salesmen create sales via Catalog → Order, not direct billing/invoicing.
-  useEffect(() => {
-    if (user?.role === "salesman") {
-      setLocation("/catalog");
-    }
-  }, [user?.role, setLocation]);
+  const { hasRole } = useAuth();
+  if (!hasRole("admin")) {
+    setLocation("/");
+    return null;
+  }
 
   const params = parseSearch(window.location.search);
   const editId = params.edit ? Number(params.edit) : null;
