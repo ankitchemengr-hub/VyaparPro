@@ -1,5 +1,23 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, and, sql, or, isNull, ne } from "drizzle-orm";
+import { db, pool } from "@workspace/db";
+import {
+  productsTable,
+  stockMovementsTable,
+} from "@workspace/db";
+import {
+  ListProductsQueryParams,
+  CreateProductBody,
+  GetProductParams,
+  UpdateProductParams,
+  UpdateProductBody,
+  DeleteProductParams,
+  GetProductStockMovementsParams,
+  CreateStockMovementParams,
+  CreateStockMovementBody,
+  BulkStockReconciliationBody,
+} from "@workspace/api-zod";import { Router, type IRouter } from "express";
+import { eq, ilike, and, sql, or, isNull, ne } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   productsTable,
@@ -393,14 +411,152 @@ router.get("/products/:id/stock-movements", async (req, res): Promise<void> => {
 
   res.json(movements.map(formatMovement));
 });
-
 // POST /products/:id/stock-movements
+// Admin-only: this endpoint directly mutates stock quantities (used for
+// damage write-offs and physical stock reconciliation adjustments), so it
+// must not be reachable by salesman or other non-admin roles.
 router.post("/products/:id/stock-movements", async (req, res): Promise<void> => {
+  const session = (req as any).session;
+  if (session?.role !== "admin") {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
   const params = CreateStockMovementParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
     return;
   }
+
+  const parsed = CreateStockMovementBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const companyId = getCompanyId(req);
+  const userId = session?.userId ?? 1;
+
+  // Ensure the target product belongs to this company before mutating stock.
+  const [owned] = await db
+    .select({ id: productsTable.id })
+    .from(productsTable)
+    .where(and(eq(productsTable.companyId, companyId), eq(productsTable.id, params.data.id)));
+  if (!owned) {
+    res.status(404).json({ error: "Product not found" });
+    return;
+  }
+
+  const [movement] = await db.insert(stockMovementsTable).values({
+    companyId,
+    productId: params.data.id,
+    type: parsed.data.type,
+    quantity: String(parsed.data.quantity),
+    reason: parsed.data.reason,
+    referenceId: parsed.data.referenceId ?? null,
+    referenceType: parsed.data.referenceType ?? null,
+    userId,
+  }).returning();
+
+  // Update stock.
+  // - inward / manufacturing_produce: quantity is always entered positive, adds to stock.
+  // - outward / manufacturing_consume / damage: quantity is always entered positive, subtracts from stock.
+  // - adjustment: quantity is a SIGNED difference (e.g. from physical stock
+  //   reconciliation) — positive means more was counted than the system
+  //   shows, negative means less. Applied as-is, in either direction.
+  const delta =
+    parsed.data.type === "adjustment"
+      ? parsed.data.quantity
+      : ["inward", "manufacturing_produce"].includes(parsed.data.type)
+        ? parsed.data.quantity
+        : -parsed.data.quantity;
+
+  await db
+    .update(productsTable)
+    .set({ currentStock: sql`${productsTable.currentStock} + ${delta}` })
+    .where(and(eq(productsTable.companyId, companyId), eq(productsTable.id, params.data.id)));
+
+  res.status(201).json(formatMovement(movement));
+});
+
+// POST /products/stock-reconciliation
+// Admin-only bulk endpoint for physical stock reconciliation: takes a list
+// of { productId, countedStock, reason } entries, computes the signed
+// difference against each product's current system stock, and records one
+// "adjustment" stock movement + stock update per item, all in a single
+// transaction (all succeed or all roll back together).
+router.post("/products/stock-reconciliation", async (req, res): Promise<void> => {
+  const session = (req as any).session;
+  if (session?.role !== "admin") {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
+  const parsed = BulkStockReconciliationBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const companyId = getCompanyId(req);
+  const userId = session?.userId ?? 1;
+  const items = parsed.data.items.filter((i) => i.countedStock != null);
+
+  if (items.length === 0) {
+    res.json({ adjustments: [] });
+    return;
+  }
+
+  const results: any[] = [];
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    for (const item of items) {
+      const productRows = await client.query(
+        `SELECT id, current_stock FROM products WHERE id = $1 AND company_id = $2`,
+        [item.productId, companyId]
+      );
+      const product = productRows.rows[0];
+      if (!product) continue; // skip products that don't belong to this company
+
+      const systemStock = Number(product.current_stock);
+      const delta = item.countedStock - systemStock;
+
+      // Skip items where the count matches — no adjustment needed, no log entry.
+      if (delta === 0) continue;
+
+      const movementRows = await client.query(
+        `INSERT INTO stock_movements (company_id, product_id, type, quantity, reason, reference_type, user_id)
+         VALUES ($1, $2, 'adjustment', $3, $4, 'stock_reconciliation', $5)
+         RETURNING *`,
+        [companyId, item.productId, String(delta), item.reason || "Physical stock reconciliation", userId]
+      );
+
+      await client.query(
+        `UPDATE products SET current_stock = current_stock + $1 WHERE id = $2 AND company_id = $3`,
+        [delta, item.productId, companyId]
+      );
+
+      results.push(formatRawMovement(movementRows.rows[0]));
+    }
+
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  res.status(201).json({ adjustments: results });
+});
+// POST /products/:id/stock-movements
+router.post("/products/:id/stock-movements", async (req, res): Promise<void> => {
+  const params = CreateStockMovementParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;  }
 
   const parsed = CreateStockMovementBody.safeParse(req.body);
   if (!parsed.success) {
@@ -494,5 +650,19 @@ function formatMovement(m: any) {
     createdAt: m.createdAt?.toISOString(),
   };
 }
-
+// Same shape as formatMovement, but for rows returned by raw pool.query()
+// (snake_case columns, plain Date objects) rather than Drizzle's camelCase.
+function formatRawMovement(m: any) {
+  return {
+    id: m.id,
+    productId: m.product_id,
+    type: m.type,
+    quantity: Number(m.quantity),
+    reason: m.reason,
+    referenceId: m.reference_id ?? null,
+    referenceType: m.reference_type ?? null,
+    userId: m.user_id,
+    createdAt: m.created_at instanceof Date ? m.created_at.toISOString() : m.created_at,
+  };
+}
 export default router;

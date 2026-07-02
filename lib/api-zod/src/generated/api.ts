@@ -705,6 +705,17 @@ export const CreateStockMovementBody = zod.object({
   "referenceType": zod.string().optional()
 })
 
+// Hand-added (not from the OpenAPI spec) for the physical stock
+// reconciliation feature — POST /products/stock-reconciliation.
+// If this file is regenerated from the spec, re-add this block.
+export const BulkStockReconciliationBody = zod.object({
+  "items": zod.array(zod.object({
+    "productId": zod.number(),
+    "countedStock": zod.number(),
+    "reason": zod.string().optional(),
+  }))
+})
+
 
 /**
  * @summary List product groups

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/use-auth";
 import {
   useListProducts,
@@ -67,6 +68,14 @@ export default function SalesmanOrders() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [, setLocation] = useLocation();
+
+  // Salesmen now create orders via Catalog → Order, not this page.
+  useEffect(() => {
+    if (user?.role === "salesman") {
+      setLocation("/catalog");
+    }
+  }, [user?.role, setLocation]);
 
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<Record<number, CartItem>>({});

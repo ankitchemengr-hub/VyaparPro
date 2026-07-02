@@ -119,6 +119,13 @@ export default function Billing() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  // Salesmen create sales via Catalog → Order, not direct billing/invoicing.
+  useEffect(() => {
+    if (user?.role === "salesman") {
+      setLocation("/catalog");
+    }
+  }, [user?.role, setLocation]);
+
   const params = parseSearch(window.location.search);
   const editId = params.edit ? Number(params.edit) : null;
   const isEditMode = editId !== null && !Number.isNaN(editId);
