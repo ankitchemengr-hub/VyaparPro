@@ -208,7 +208,11 @@ export default function Inventory() {
   );
 }
 
+// Replace with:
 type ProductForm = {
+  gstPrice: string;
+  wholesalePrice: string;
+  retailPrice: string;
   name: string;
   printName: string;
   group: string;
@@ -234,7 +238,7 @@ type ProductForm = {
 
 const emptyForm: ProductForm = {
   name: "", printName: "", group: "", brand: "", itemCode: "",
-  unit: "", purchasePrice: "", mrp: "", wholesalePrice: "", retailPrice: "",
+  unit: "", purchasePrice: "", mrp: "", wholesalePrice: "", retailPrice: "", gstPrice: "",
   hsnCode: "", taxRate: "18", commissionPerLiter: "0", volumeUnit: "liter", litersPerBox: "", unitsPerBox: "", openingStock: "0",
   minStockThreshold: "5", notForSale: false, addForManufacturing: false, imageUrl: "",
 };
@@ -266,6 +270,8 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
         unit: product.unit ?? "",
         purchasePrice: product.purchasePrice != null ? String(product.purchasePrice) : "",
         mrp: product.mrp != null ? String(product.mrp) : "",
+        // Replace with:
+        gstPrice: "",
         wholesalePrice: product.wholesalePrice != null ? String(product.wholesalePrice) : "",
         retailPrice: product.retailPrice != null ? String(product.retailPrice) : "",
         hsnCode: product.hsnCode ?? "",
@@ -561,15 +567,63 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
                 />
               </div>
             </div>
+            // Replace with:
             <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
               <p className="text-sm font-medium">Selling Prices</p>
+              {/* GST Price calculator */}
+              <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-3 space-y-2">
+                <p className="text-xs font-medium text-blue-700 dark:text-blue-400">
+                  GST Price → Auto-calculate Wholesale Price
+                </p>
+                <div className="flex items-end gap-2">
+                  <div className="flex-1 space-y-1">
+                    <Label className="text-xs">GST Price / Market Rate (₹)</Label>
+                    <Input
+                      type="number" min={0}
+                      value={form.gstPrice}
+                      onChange={(e) => {
+                        const gstPrice = Number(e.target.value);
+                        const taxRate = Number(form.taxRate) || 0;
+                        const wholesale = taxRate > 0
+                          ? gstPrice / (1 + taxRate / 100)
+                          : gstPrice;
+                        set("gstPrice", e.target.value);
+                        set("wholesalePrice", wholesale > 0 ? wholesale.toFixed(2) : "");
+                      }}
+                      placeholder="e.g. 105"
+                    />
+                  </div>
+                  <div className="text-xs text-muted-foreground pb-2">
+                    ÷ (1 + {form.taxRate || 0}%) =
+                  </div>
+                  <div className="flex-1 space-y-1">
+                    <Label className="text-xs">Base Wholesale Price (₹)</Label>
+                    <Input
+                      type="number"
+                      value={form.wholesalePrice}
+                      readOnly
+                      className="bg-muted"
+                      placeholder="Auto-calculated"
+                    />
+                  </div>
+                </div>
+                {form.gstPrice && form.wholesalePrice && (
+                  <p className="text-xs text-blue-600 dark:text-blue-400">
+                    GST ({form.taxRate}%) = ₹{(Number(form.gstPrice) - Number(form.wholesalePrice)).toFixed(2)} | 
+                    Total bill = ₹{Number(form.gstPrice).toFixed(2)}
+                  </p>
+                )}
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label>Wholesale Price (₹) *</Label>
                   <Input
                     type="number" min={0}
                     value={form.wholesalePrice}
-                    onChange={(e) => set("wholesalePrice", e.target.value)}
+                    onChange={(e) => {
+                      set("wholesalePrice", e.target.value);
+                      set("gstPrice", ""); // clear gst price if manually edited
+                    }}
                     placeholder="0.00"
                     data-testid="input-wholesale-price"
                   />
