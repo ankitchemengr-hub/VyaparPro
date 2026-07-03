@@ -510,7 +510,21 @@ const proceedToOrderWithCustomer = (customer: any) => {
                       <div className="font-medium leading-tight line-clamp-2 max-w-[140px]">{row.product.name}</div>
                       <div className="text-[10px] text-muted-foreground font-mono">{row.product.itemCode}</div>
                     </td>
-                    <td className="text-right py-2 px-1 tabular-nums">{row.qty}</td>
+                    <td className="text-right py-2 px-1">
+                     <input
+                      type="number"
+                      min={1}
+                      max={row.product.currentStock}
+                      value={row.qty}
+                      onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      if (!isNaN(val) && val > 0) {
+                      setQty(row.product.id, val, row.product.currentStock);
+                      }
+                    }}
+                     className="w-16 text-right border rounded px-1 py-0.5 text-sm tabular-nums"
+                   />
+                 </td>
                     <td className="text-right py-2 px-1 tabular-nums">₹{row.rate.toFixed(2)}</td>
                     <td className="text-right py-2 px-1 tabular-nums text-muted-foreground">
                       {row.gstRate > 0 ? `₹${row.gstAmount.toFixed(2)}` : "—"}
