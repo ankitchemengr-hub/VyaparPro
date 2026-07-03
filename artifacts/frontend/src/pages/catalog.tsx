@@ -193,11 +193,38 @@ export default function Catalog() {
     handleLookupResult();
   }
 
-  const proceedToOrderWithCustomer = (customer: any) => {
-    const cartParam = encodeURIComponent(JSON.stringify(cartItems));
-    const customerParam = encodeURIComponent(JSON.stringify(customer));
-    setLocation(`/billing?cart=${cartParam}&customer=${customerParam}`);
-  };
+ // Replace with:
+const proceedToOrderWithCustomer = (customer: any) => {
+  if (isSalesman) {
+    // Salesman places order directly with customer info
+    placeOrder.mutate(
+      { data: { items: cartItems, customerName: customer?.name, customerMobile: customer?.mobile } },
+      {
+        onSuccess: (order: any) => {
+          toast({
+            title: "Order placed",
+            description: `Order ${order.orderNo ?? ""} submitted for ${customer?.name ?? "customer"}.`,
+          });
+          setCart({});
+          setShowCustomerDialog(false);
+          queryClient.invalidateQueries({ queryKey: getListCustomerOrdersQueryKey() });
+          setLocation("/my-orders");
+        },
+        onError: (err: any) => {
+          toast({
+            title: "Failed to place order",
+            description: err?.message ?? "Please try again",
+            variant: "destructive",
+          });
+        },
+      }
+    );
+    return;
+  }
+  const cartParam = encodeURIComponent(JSON.stringify(cartItems));
+  const customerParam = encodeURIComponent(JSON.stringify(customer));
+  setLocation(`/billing?cart=${cartParam}&customer=${customerParam}`);
+};
 
   // Opens cart review dialog; non-staff customers skip straight to place order
   const handleProceedClick = () => {
@@ -515,11 +542,10 @@ export default function Catalog() {
             </Button>
             <Button
               className="flex-1"
-              onClick={() => {
-                if (isSalesman) {
-                   setShowCartReview(false);
-                  handlePlaceOrder();
-                } else if (isStaff) {
+              // Replace with:
+              if (isSalesman) {
+              openCustomerDialog();
+             } else if (isStaff) {
                 openCustomerDialog();
               } else {
                  setShowCartReview(false);
