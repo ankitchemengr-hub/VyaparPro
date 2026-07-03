@@ -58,7 +58,6 @@ export const moduleNavItems: NavItem[] = [
   { name: "Invoices", href: "/invoices", icon: FileText, roles: ["admin", "salesman", "accountant"], description: "Browse and print invoices" },
   { name: "Quotations", href: "/quotations", icon: ClipboardList, roles: ["admin", "salesman", "accountant"], description: "Browse and manage quotations" },
   { name: "Inventory", href: "/inventory", icon: Package, roles: ["admin", "store"], description: "Products and stock" },
-  { name: "Inventory", href: "/inventory", icon: Package, roles: ["admin", "store"], description: "Products and stock" },
   { name: "Stock Adjustment", href: "/stock-adjustment", icon: ClipboardCheck, roles: ["admin"], description: "Physical stock reconciliation and adjustments" },
   { name: "Customers", href: "/customers", icon: Users, roles: ["admin", "salesman", "accountant"], description: "Customer directory and ledgers" },
   { name: "Payments", href: "/payments", icon: CreditCard, roles: ["admin", "salesman", "accountant"], description: "Collections and approvals" },
