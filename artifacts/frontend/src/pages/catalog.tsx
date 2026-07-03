@@ -68,7 +68,7 @@ export default function Catalog() {
   const isManufacturing = user?.role === "manufacturing";
   const isSalesman = user?.role === "salesman";
   const showRetailOnly = isB2B || isManufacturing;
-  const hidePrices = isSalesman;
+  const hidePrices = false;
   const showAdvancedFilters = !isSalesman;
   const { toast } = useToast();
   const placeOrder = useCreateCustomerOrder();
@@ -193,7 +193,7 @@ export default function Catalog() {
     handleLookupResult();
   }
 
- // Replace with:
+
 const proceedToOrderWithCustomer = (customer: any) => {
   if (isSalesman) {
     // Salesman places order directly with customer info
