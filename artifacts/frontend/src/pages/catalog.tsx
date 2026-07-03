@@ -516,13 +516,16 @@ export default function Catalog() {
             <Button
               className="flex-1"
               onClick={() => {
-                if (isStaff) {
-                  openCustomerDialog();
-                } else {
-                  setShowCartReview(false);
+                if (isSalesman) {
+                   setShowCartReview(false);
                   handlePlaceOrder();
-                }
-              }}
+                } else if (isStaff) {
+                openCustomerDialog();
+              } else {
+                 setShowCartReview(false);
+                 handlePlaceOrder();
+              }
+             }}
               disabled={placeOrder.isPending}
               data-testid="button-cart-review-continue"
             >
