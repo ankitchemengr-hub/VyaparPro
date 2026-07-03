@@ -211,8 +211,7 @@ export default function Inventory() {
 // Replace with:
 type ProductForm = {
   gstPrice: string;
-  wholesalePrice: string;
-  retailPrice: string;
+  nonGstPrice: string;
   name: string;
   printName: string;
   group: string;
@@ -238,7 +237,8 @@ type ProductForm = {
 
 const emptyForm: ProductForm = {
   name: "", printName: "", group: "", brand: "", itemCode: "",
-  unit: "", purchasePrice: "", mrp: "", wholesalePrice: "", retailPrice: "", gstPrice: "",
+  unit: "", purchasePrice: "", mrp: "", wholesalePrice: "", retailPrice: "",
+  gstPrice: "", nonGstPrice: "",
   hsnCode: "", taxRate: "18", commissionPerLiter: "0", volumeUnit: "liter", litersPerBox: "", unitsPerBox: "", openingStock: "0",
   minStockThreshold: "5", notForSale: false, addForManufacturing: false, imageUrl: "",
 };
@@ -271,7 +271,8 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
         purchasePrice: product.purchasePrice != null ? String(product.purchasePrice) : "",
         mrp: product.mrp != null ? String(product.mrp) : "",
         // Replace with:
-        gstPrice: "",
+       gstPrice: "",
+        nonGstPrice: "",
         wholesalePrice: product.wholesalePrice != null ? String(product.wholesalePrice) : "",
         retailPrice: product.retailPrice != null ? String(product.retailPrice) : "",
         hsnCode: product.hsnCode ?? "",
@@ -361,6 +362,7 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
       mrp: Number(form.mrp),
       wholesalePrice: Number(form.wholesalePrice),
       retailPrice: Number(form.retailPrice),
+      nonGstPrice: form.nonGstPrice ? Number(form.nonGstPrice) : undefined,
       hsnCode: form.hsnCode.trim() || undefined,
       taxRate: form.taxRate ? Number(form.taxRate) : undefined,
       commissionPerLiter: form.commissionPerLiter ? Number(form.commissionPerLiter) : 0,
@@ -568,8 +570,8 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
               </div>
             </div>
             // Replace with:
-            <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
-              <p className="text-sm font-medium">Selling Prices</p>
+            <div className="rounded-lg border bg-muted/30 p-4 space-y-3">      
+                    <p className="text-sm font-medium">Selling Prices</p>
               {/* GST Price calculator */}
               <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-3 space-y-2">
                 <p className="text-xs font-medium text-blue-700 dark:text-blue-400">
@@ -636,6 +638,16 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
                     onChange={(e) => set("retailPrice", e.target.value)}
                     placeholder="0.00"
                     data-testid="input-retail-price"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Non-GST Price (₹) <span className="text-xs text-muted-foreground">(for non-GST invoices)</span></Label>
+                  <Input
+                    type="number" min={0}
+                    value={form.nonGstPrice}
+                    onChange={(e) => set("nonGstPrice", e.target.value)}
+                    placeholder="Direct selling price without GST"
+                    data-testid="input-non-gst-price"
                   />
                 </div>
               </div>
