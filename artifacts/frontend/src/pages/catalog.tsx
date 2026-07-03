@@ -228,9 +228,19 @@ const proceedToOrderWithCustomer = (customer: any) => {
 
   // Opens cart review dialog; non-staff customers skip straight to place order
   const handleProceedClick = () => {
-    if (!hasSelection) return;
+  if (!hasSelection) return;
+  if (isSalesman) {
+    // Salesman skips cart review — goes straight to customer lookup
+    setMobileInput("");
+    setSearchMobile("");
+    setStep("mobile");
+    setFoundCustomer(null);
+    newCustomerForm.reset({ name: "", mobile: "", gstin: "", address: "", city: "", state: "Maharashtra", pricingTier: "retail" });
+    setShowCustomerDialog(true);
+  } else {
     setShowCartReview(true);
-  };
+  }
+};
 
   // Called when user confirms cart review and is staff — opens customer lookup
   const openCustomerDialog = () => {
