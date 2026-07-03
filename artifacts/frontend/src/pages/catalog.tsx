@@ -564,20 +564,19 @@ const proceedToOrderWithCustomer = (customer: any) => {
               <X className="w-4 h-4 mr-2" />
               Cancel
             </Button>
-            <Button
-              className="flex-1"
-              // Replace with:
-              if (isSalesman) {
-              openCustomerDialog();
-             } else if (isStaff) {
-                openCustomerDialog();
-              } else {
-                 setShowCartReview(false);
-                 handlePlaceOrder();
-              }
-             }}
+             <Button
+               className="flex-1"
+               onClick={() => {
+                 if (isSalesman) {
+                   openCustomerDialog();
+                 } else if (isStaff) {
+                   openCustomerDialog();
+                 } else {
+                   setShowCartReview(false);
+                   handlePlaceOrder();
+                }
+               }}
               disabled={placeOrder.isPending}
-              data-testid="button-cart-review-continue"
             >
               {placeOrder.isPending ? (
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
