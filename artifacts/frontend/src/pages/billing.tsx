@@ -226,7 +226,9 @@ export default function Billing() {
         .map(({ productId, qty }) => {
           const p = products.find((x) => x.id === productId);
           if (!p) return null;
-          const rate = customer?.pricingTier === "wholesale" ? p.wholesalePrice : p.retailPrice;
+          const rate = isGstInvoiceType(invoiceType)
+          ?       p.wholesalePrice
+          : (Number((p as any).nonGstPrice) > 0 ? Number((p as any).nonGstPrice) : p.wholesalePrice);
           const taxPct = isGstInvoiceType(invoiceType) ? (p.taxRate ?? 18) : 0;
           const amount = qty * rate * (1 + taxPct / 100);
           return {
@@ -278,7 +280,9 @@ export default function Billing() {
     if (existing >= 0) {
       updateItem(existing, "qty", items[existing].qty + 1);
     } else {
-      const rate = customer?.pricingTier === "wholesale" ? p.wholesalePrice : p.retailPrice;
+     const rate = isGstInvoiceType(invoiceType)
+  ? p.wholesalePrice
+  : (Number((p as any).nonGstPrice) > 0 ? Number((p as any).nonGstPrice) : p.wholesalePrice);
       const taxPct = isGstInvoiceType(invoiceType) ? (Number(p.taxRate) || 18) : 0;
       const amount = 1 * Number(rate ?? 0) * (1 + taxPct / 100);
       setItems((prev) => [
@@ -1003,7 +1007,7 @@ export default function Billing() {
                           <div className="min-w-0 flex-1">
                             <div className="font-medium truncate">{p.name}</div>
                             <div className="text-xs text-muted-foreground">
-                              ₹{Number(customer?.pricingTier === "wholesale" ? p.wholesalePrice : p.retailPrice).toLocaleString()} · {p.unit ?? "QTY"}
+                              ₹{Number(isGstInvoiceType(invoiceType) ? p.wholesalePrice : ((p as any).nonGstPrice > 0 ? (p as any).nonGstPrice : p.wholesalePrice)).toLocaleString()}
                               {isGstInvoiceType(invoiceType) && p.taxRate ? ` · GST ${p.taxRate}%` : ""}
                             </div>
                           </div>
