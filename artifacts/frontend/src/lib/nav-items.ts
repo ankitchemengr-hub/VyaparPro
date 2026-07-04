@@ -52,6 +52,7 @@ export const moduleNavItems: NavItem[] = [
   { name: "My Orders", href: "/my-orders", icon: ClipboardList, roles: ["customer", "salesman"], description: "Track your placed orders" },
   { name: "My Statement", href: "/my-statement", icon: FileText, roles: ["customer"], description: "View your balance and transaction history" },
   { name: "Customer Orders", href: "/customer-orders", icon: Inbox, roles: ["admin", "store", "manufacturing"], description: "Manage incoming orders" },
+  {// Simply delete this entire line
   { name: "Salesman Orders", href: "/salesman-orders", icon: ClipboardList, roles: ["admin"], description: "Create and submit orders" },
   { name: "My Dashboard", href: "/salesman-dashboard", icon: LayoutDashboard, roles: ["salesman"], description: "My commission and sales overview" },
   { name: "Billing", href: "/billing", icon: FileText, roles: ["admin"], description: "Create GST / non-GST invoices" },
