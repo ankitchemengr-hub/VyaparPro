@@ -137,6 +137,20 @@ export default function Billing() {
 
   const [docType, setDocType] = useState<string>("invoice");
   const [invoiceSubtype, setInvoiceSubtype] = useState<"gst" | "non_gst">("gst");
+  // When invoice type changes, update all item rates
+useEffect(() => {
+  if (!products || items.length === 0) return;
+  setItems((prev) => prev.map((item) => {
+    const p = products.find((x) => x.id === item.productId);
+    if (!p) return item;
+    const newRate = isGstInvoiceType(invoiceType)
+      ? Number(p.wholesalePrice)
+      : (Number((p as any).nonGstPrice) > 0 ? Number((p as any).nonGstPrice) : Number(p.wholesalePrice));
+    const taxPct = isGstInvoiceType(invoiceType) ? (Number(p.taxRate) || 18) : 0;
+    const amount = Math.round(item.qty * newRate * (1 + taxPct / 100) * 100) / 100;
+    return { ...item, rate: newRate, taxPct, amount };
+  }));
+}, [invoiceType]);
   const invoiceType = docType === "invoice" ? invoiceSubtype : docType;
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
   const [placeOfSupply, setPlaceOfSupply] = useState(customer?.state || "Maharashtra");
