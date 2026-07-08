@@ -39,7 +39,7 @@ import {
   AlertTriangle,
   ClipboardCheck,
   Loader2,
-  FileBarChart,
+  Printer,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
@@ -66,11 +66,8 @@ interface AdjustmentRecord {
   createdAt: string;
 }
 
-const ALL_PRODUCTS = "__all__";
-
-async function fetchAdjustments(params: { productId?: string; from?: string; to?: string }): Promise<AdjustmentRecord[]> {
+async function fetchAdjustments(params: { from?: string; to?: string }): Promise<AdjustmentRecord[]> {
   const qs = new URLSearchParams();
-  if (params.productId && params.productId !== ALL_PRODUCTS) qs.set("productId", params.productId);
   if (params.from) qs.set("from", params.from);
   if (params.to) qs.set("to", params.to);
   const r = await fetch(`/api/products/stock-adjustments?${qs.toString()}`, { credentials: "include" });
@@ -114,16 +111,17 @@ export default function StockAdjustment() {
   const [preview, setPreview] = useState<AdjustmentPreview | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const [mainTab, setMainTab] = useState<"adjust" | "report">("adjust");
   const [reportView, setReportView] = useState<"date" | "product">("date");
   const [reportFrom, setReportFrom] = useState("");
   const [reportTo, setReportTo] = useState("");
-  const [reportProductId, setReportProductId] = useState(ALL_PRODUCTS);
+  const [reportSearch, setReportSearch] = useState("");
 
   const { data: products, isLoading } = useListProducts({});
 
   const { data: adjustments = [], isLoading: isReportLoading } = useQuery({
-    queryKey: ["stock-adjustments", reportProductId, reportFrom, reportTo],
-    queryFn: () => fetchAdjustments({ productId: reportProductId, from: reportFrom, to: reportTo }),
+    queryKey: ["stock-adjustments", reportFrom, reportTo],
+    queryFn: () => fetchAdjustments({ from: reportFrom, to: reportTo }),
   });
 
   if (user?.role !== "admin") {
@@ -147,8 +145,14 @@ export default function StockAdjustment() {
     );
   });
 
+  const reportFiltered = adjustments.filter((a) => {
+    if (!reportSearch.trim()) return true;
+    const q = reportSearch.toLowerCase();
+    return a.productName.toLowerCase().includes(q) || (a.itemCode ?? "").toLowerCase().includes(q);
+  });
+
   const productWiseRows = Object.values(
-    adjustments.reduce((acc: Record<number, { productId: number; productName: string; itemCode: string | null; unit: string | null; count: number; netChange: number; lastAdjustedAt: string }>, a) => {
+    reportFiltered.reduce((acc: Record<number, { productId: number; productName: string; itemCode: string | null; unit: string | null; count: number; netChange: number; lastAdjustedAt: string }>, a) => {
       const row = acc[a.productId] ?? {
         productId: a.productId,
         productName: a.productName,
@@ -231,8 +235,8 @@ export default function StockAdjustment() {
   }
 
   return (
-    <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-6">
-      <div className="flex items-center gap-3">
+    <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-6 print:p-0 print:max-w-none print:m-0">
+      <div className="flex items-center gap-3 print:hidden">
         <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
           <ClipboardCheck className="w-5 h-5 text-primary" />
         </div>
@@ -244,190 +248,200 @@ export default function StockAdjustment() {
         </div>
       </div>
 
-      {/* Product Picker */}
-      <div className="space-y-3">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Search by name, item code, brand…"
-            className="pl-9"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setSelectedProduct(null);
-              setPhysicalCount("");
-              setReason("");
-            }}
-          />
-        </div>
-        <div className="border rounded-lg overflow-hidden">
-          {isLoading ? (
-            <div className="flex justify-center py-10">
-              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="text-center py-10 text-sm text-muted-foreground">No products found</div>
-          ) : (
-            <div className="divide-y max-h-[420px] overflow-y-auto">
-              {filtered.map((p: any) => {
-                const isSelected = selectedProduct?.id === p.id;
-                const stock = Number(p.currentStock ?? 0);
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedProduct(p);
-                      setPhysicalCount("");
-                      setReason("");
-                    }}
-                    className={
-                      "w-full text-left px-4 py-3 flex items-center gap-3 transition-colors border-l-2 " +
-                      (isSelected ? "bg-primary/5 border-primary" : "hover:bg-muted/40 border-transparent")
-                    }
-                  >
-                    <div className="w-9 h-9 rounded-md bg-muted flex items-center justify-center shrink-0 overflow-hidden">
-                      {p.imageUrl ? (
-                        <img src={p.imageUrl} alt={p.name} className="object-contain w-full h-full" />
-                      ) : (
-                        <Package className="w-4 h-4 text-muted-foreground/50" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm truncate">{p.name}</div>
-                      <div className="text-xs text-muted-foreground font-mono">{p.itemCode}</div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <div className="text-sm font-semibold tabular-nums">{stock}</div>
-                      <div className="text-[10px] text-muted-foreground">in system</div>
-                    </div>
-                    {isSelected && <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
+      <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as "adjust" | "report")}>
+        <TabsList className="print:hidden">
+          <TabsTrigger value="adjust">Adjust Stock</TabsTrigger>
+          <TabsTrigger value="report">Report</TabsTrigger>
+        </TabsList>
 
-      {/* Adjustment Report — date-wise and product-wise history of stock adjustments */}
-      <div className="border rounded-lg p-4 space-y-4">
-        <div className="flex items-center gap-2">
-          <FileBarChart className="w-4 h-4 text-primary" />
-          <h2 className="font-semibold">Adjustment Report</h2>
-        </div>
+        <TabsContent value="adjust" className="mt-4 space-y-3">
+          {/* Product Picker */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by name, item code, brand…"
+              className="pl-9"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setSelectedProduct(null);
+                setPhysicalCount("");
+                setReason("");
+              }}
+            />
+          </div>
+          <div className="border rounded-lg overflow-hidden">
+            {isLoading ? (
+              <div className="flex justify-center py-10">
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="text-center py-10 text-sm text-muted-foreground">No products found</div>
+            ) : (
+              <div className="divide-y max-h-[420px] overflow-y-auto">
+                {filtered.map((p: any) => {
+                  const isSelected = selectedProduct?.id === p.id;
+                  const stock = Number(p.currentStock ?? 0);
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedProduct(p);
+                        setPhysicalCount("");
+                        setReason("");
+                      }}
+                      className={
+                        "w-full text-left px-4 py-3 flex items-center gap-3 transition-colors border-l-2 " +
+                        (isSelected ? "bg-primary/5 border-primary" : "hover:bg-muted/40 border-transparent")
+                      }
+                    >
+                      <div className="w-9 h-9 rounded-md bg-muted flex items-center justify-center shrink-0 overflow-hidden">
+                        {p.imageUrl ? (
+                          <img src={p.imageUrl} alt={p.name} className="object-contain w-full h-full" />
+                        ) : (
+                          <Package className="w-4 h-4 text-muted-foreground/50" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm truncate">{p.name}</div>
+                        <div className="text-xs text-muted-foreground font-mono">{p.itemCode}</div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="text-sm font-semibold tabular-nums">{stock}</div>
+                        <div className="text-[10px] text-muted-foreground">in system</div>
+                      </div>
+                      {isSelected && <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </TabsContent>
 
-        <div className="flex flex-wrap gap-3 items-end">
-          <div className="space-y-1.5">
-            <Label className="text-xs">From</Label>
-            <Input type="date" value={reportFrom} onChange={(e) => setReportFrom(e.target.value)} className="w-[150px]" />
+        <TabsContent value="report" className="mt-4 space-y-4">
+          {/* Adjustment Report — date-wise and product-wise history of stock adjustments */}
+          <div className="hidden print:block">
+            <h2 className="text-lg font-bold">Stock Adjustment Report — {reportView === "date" ? "Date-wise" : "Product-wise"}</h2>
+            {(reportFrom || reportTo) && (
+              <p className="text-sm text-muted-foreground">
+                {reportFrom || "…"} to {reportTo || "…"}
+              </p>
+            )}
           </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">To</Label>
-            <Input type="date" value={reportTo} onChange={(e) => setReportTo(e.target.value)} className="w-[150px]" />
-          </div>
-          {reportView === "date" && (
+
+          <div className="flex flex-wrap gap-3 items-end print:hidden">
             <div className="space-y-1.5">
+              <Label className="text-xs">From</Label>
+              <Input type="date" value={reportFrom} onChange={(e) => setReportFrom(e.target.value)} className="w-[150px]" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">To</Label>
+              <Input type="date" value={reportTo} onChange={(e) => setReportTo(e.target.value)} className="w-[150px]" />
+            </div>
+            <div className="space-y-1.5 flex-1 min-w-48 max-w-xs">
               <Label className="text-xs">Product</Label>
-              <Select value={reportProductId} onValueChange={setReportProductId}>
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="All products" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL_PRODUCTS}>All products</SelectItem>
-                  {(products ?? []).map((p: any) => (
-                    <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by product name or item code…"
+                  className="pl-8"
+                  value={reportSearch}
+                  onChange={(e) => setReportSearch(e.target.value)}
+                />
+              </div>
             </div>
-          )}
-          {(reportFrom || reportTo || reportProductId !== ALL_PRODUCTS) && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => { setReportFrom(""); setReportTo(""); setReportProductId(ALL_PRODUCTS); }}
-            >
-              Clear filters
+            {(reportFrom || reportTo || reportSearch) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => { setReportFrom(""); setReportTo(""); setReportSearch(""); }}
+              >
+                Clear filters
+              </Button>
+            )}
+            <Button variant="outline" size="sm" className="ml-auto" onClick={() => window.print()}>
+              <Printer className="w-4 h-4 mr-1.5" /> Print
             </Button>
-          )}
-        </div>
+          </div>
 
-        <Tabs value={reportView} onValueChange={(v) => setReportView(v as "date" | "product")}>
-          <TabsList>
-            <TabsTrigger value="date">Date-wise</TabsTrigger>
-            <TabsTrigger value="product">Product-wise</TabsTrigger>
-          </TabsList>
+          <Tabs value={reportView} onValueChange={(v) => setReportView(v as "date" | "product")}>
+            <TabsList className="print:hidden">
+              <TabsTrigger value="date">Date-wise</TabsTrigger>
+              <TabsTrigger value="product">Product-wise</TabsTrigger>
+            </TabsList>
 
-          <TabsContent value="date" className="mt-3">
-            <div className="border rounded-lg overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Product</TableHead>
-                    <TableHead>Reason</TableHead>
-                    <TableHead className="text-right">Qty Change</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isReportLoading ? (
-                    <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">Loading…</TableCell></TableRow>
-                  ) : adjustments.length === 0 ? (
-                    <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No adjustments found</TableCell></TableRow>
-                  ) : (
-                    adjustments.map((a) => (
-                      <TableRow key={a.id}>
-                        <TableCell className="whitespace-nowrap text-sm">{format(new Date(a.createdAt), "dd MMM yyyy")}</TableCell>
-                        <TableCell>
-                          <div className="font-medium text-sm leading-tight">{a.productName}</div>
-                          <div className="text-xs text-muted-foreground font-mono">{a.itemCode}</div>
-                        </TableCell>
-                        <TableCell className="text-sm">{a.reason}</TableCell>
-                        <TableCell className="text-right"><DiffBadge diff={a.quantity} /></TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </TabsContent>
+            <TabsContent value="date" className="mt-3">
+              <div className="border rounded-lg overflow-x-auto print:border-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Product</TableHead>
+                      <TableHead>Reason</TableHead>
+                      <TableHead className="text-right">Qty Change</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {isReportLoading ? (
+                      <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">Loading…</TableCell></TableRow>
+                    ) : reportFiltered.length === 0 ? (
+                      <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No adjustments found</TableCell></TableRow>
+                    ) : (
+                      reportFiltered.map((a) => (
+                        <TableRow key={a.id}>
+                          <TableCell className="whitespace-nowrap text-sm">{format(new Date(a.createdAt), "dd MMM yyyy")}</TableCell>
+                          <TableCell>
+                            <div className="font-medium text-sm leading-tight">{a.productName}</div>
+                            <div className="text-xs text-muted-foreground font-mono">{a.itemCode}</div>
+                          </TableCell>
+                          <TableCell className="text-sm">{a.reason}</TableCell>
+                          <TableCell className="text-right"><DiffBadge diff={a.quantity} /></TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </TabsContent>
 
-          <TabsContent value="product" className="mt-3">
-            <div className="border rounded-lg overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Product</TableHead>
-                    <TableHead className="text-right">Adjustments</TableHead>
-                    <TableHead className="text-right">Net Change</TableHead>
-                    <TableHead>Last Adjusted</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isReportLoading ? (
-                    <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">Loading…</TableCell></TableRow>
-                  ) : productWiseRows.length === 0 ? (
-                    <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No adjustments found</TableCell></TableRow>
-                  ) : (
-                    productWiseRows.map((row) => (
-                      <TableRow key={row.productId}>
-                        <TableCell>
-                          <div className="font-medium text-sm leading-tight">{row.productName}</div>
-                          <div className="text-xs text-muted-foreground font-mono">{row.itemCode}</div>
-                        </TableCell>
-                        <TableCell className="text-right text-sm tabular-nums">{row.count}</TableCell>
-                        <TableCell className="text-right"><DiffBadge diff={row.netChange} /></TableCell>
-                        <TableCell className="whitespace-nowrap text-sm">{format(new Date(row.lastAdjustedAt), "dd MMM yyyy")}</TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </TabsContent>
-        </Tabs>
-      </div>
+            <TabsContent value="product" className="mt-3">
+              <div className="border rounded-lg overflow-x-auto print:border-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Product</TableHead>
+                      <TableHead className="text-right">Adjustments</TableHead>
+                      <TableHead className="text-right">Net Change</TableHead>
+                      <TableHead>Last Adjusted</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {isReportLoading ? (
+                      <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">Loading…</TableCell></TableRow>
+                    ) : productWiseRows.length === 0 ? (
+                      <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No adjustments found</TableCell></TableRow>
+                    ) : (
+                      productWiseRows.map((row) => (
+                        <TableRow key={row.productId}>
+                          <TableCell>
+                            <div className="font-medium text-sm leading-tight">{row.productName}</div>
+                            <div className="text-xs text-muted-foreground font-mono">{row.itemCode}</div>
+                          </TableCell>
+                          <TableCell className="text-right text-sm tabular-nums">{row.count}</TableCell>
+                          <TableCell className="text-right"><DiffBadge diff={row.netChange} /></TableCell>
+                          <TableCell className="whitespace-nowrap text-sm">{format(new Date(row.lastAdjustedAt), "dd MMM yyyy")}</TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </TabsContent>
+          </Tabs>
+        </TabsContent>
+      </Tabs>
 
       {/* Adjustment Form — opens as a modal so it works on mobile without scrolling below the fold */}
       <Dialog

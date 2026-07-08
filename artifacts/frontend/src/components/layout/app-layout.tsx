@@ -50,7 +50,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar with sidebar toggle */}
-        <header className="sticky top-0 z-20 h-12 flex items-center gap-2 px-3 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <header className="sticky top-0 z-20 h-12 flex items-center gap-2 px-3 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 print:hidden">
           <button
             type="button"
             onClick={() => setSidebarOpen((v) => !v)}

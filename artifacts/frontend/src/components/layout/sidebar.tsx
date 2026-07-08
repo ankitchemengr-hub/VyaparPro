@@ -34,7 +34,7 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps = {}) {
   return (
     <div
       className={cn(
-        "flex flex-col w-64 bg-sidebar border-r border-sidebar-border text-sidebar-foreground h-screen shrink-0 transition-transform duration-200 ease-out",
+        "flex flex-col w-64 bg-sidebar border-r border-sidebar-border text-sidebar-foreground h-screen shrink-0 transition-transform duration-200 ease-out print:hidden",
         // Mobile: off-canvas drawer
         "fixed inset-y-0 left-0 z-40 lg:sticky lg:top-0 lg:z-auto",
         isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
