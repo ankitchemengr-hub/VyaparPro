@@ -161,20 +161,6 @@ export default function Commission() {
         {/* ── SUMMARY TAB (admin only) ──────────────────────────────────────── */}
         {isAdmin && (
           <TabsContent value="summary" className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Card>
-                <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Total Pending</CardTitle></CardHeader>
-                <CardContent><div className="text-2xl font-bold text-amber-600">{fmt(salesmenSummary?.reduce((s, r) => s + r.pending, 0))}</div></CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Total Paid</CardTitle></CardHeader>
-                <CardContent><div className="text-2xl font-bold text-emerald-600">{fmt(salesmenSummary?.reduce((s, r) => s + r.paid, 0))}</div></CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Grand Total</CardTitle></CardHeader>
-                <CardContent><div className="text-2xl font-bold text-primary">{fmt(salesmenSummary?.reduce((s, r) => s + r.total, 0))}</div></CardContent>
-              </Card>
-            </div>
             <Card>
               <CardHeader>
                 <CardTitle>Salesman-wise Commission</CardTitle>
