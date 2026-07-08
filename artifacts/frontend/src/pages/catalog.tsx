@@ -140,7 +140,7 @@ export default function Catalog() {
             variant: "destructive",
           });
         },
-      },
+      },<div className="text-[10px] text-muted-foreground font-mono">{product.itemCode}</div>
     );
   };
 
@@ -422,7 +422,16 @@ const proceedToOrderWithCustomer = (customer: any) => {
                     )}
                   </div>
                   <CardContent className="flex-1 p-3 flex flex-col gap-2">
-                    <div className="text-[10px] text-muted-foreground font-mono">{product.itemCode}</div>
+                    <div className="flex items-center justify-between">
+                      <div className="text-[10px] text-muted-foreground font-mono">{product.itemCode}</div>
+                      <div className={`text-[10px] font-bold px-1.5 py-0.5 rounded text-white ${
+                        product.currentStock <= 0 ? "bg-red-600" :
+                        product.currentStock <= 10 ? "bg-amber-500" :
+                        "bg-green-600"
+                    }`}>
+                      {product.currentStock} {product.unit}
+                     </div>
+                    </div>
                     <h3 className="font-semibold text-sm leading-tight line-clamp-2">{product.name}</h3>
                     {!hidePrices && (
                       showRetailOnly ? (
