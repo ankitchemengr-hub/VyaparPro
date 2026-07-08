@@ -553,7 +553,9 @@ export const CreateProductBody = zod.object({
   "notForSale": zod.boolean().optional(),
   "addForManufacturing": zod.boolean().optional(),
   "minStockThreshold": zod.number().optional(),
-  "imageUrl": zod.string().optional()
+  "imageUrl": zod.string().optional(),
+  "nonGstPrice": zod.number().optional()
+})
 })
 
 
@@ -626,7 +628,9 @@ export const UpdateProductBody = zod.object({
   "addForManufacturing": zod.boolean().optional(),
   "minStockThreshold": zod.number().optional(),
   "imageUrl": zod.string().optional(),
-  "commissionPerLiter": zod.number().optional()
+  "commissionPerLiter": zod.number().optional(),
+  "nonGstPrice": zod.number().optional()
+})
 })
 
 export const UpdateProductResponse = zod.object({
@@ -640,6 +644,7 @@ export const UpdateProductResponse = zod.object({
   "purchasePrice": zod.number(),
   "retailPrice": zod.number(),
   "wholesalePrice": zod.number(),
+  "nonGstPrice": zod.number().nullish(),
   "mrp": zod.number(),
   "minSalePrice": zod.number().nullish(),
   "currentStock": zod.number(),
