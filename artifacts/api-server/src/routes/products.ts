@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, ilike, and, sql, or, isNull, ne } from "drizzle-orm";
+import { eq, ilike, and, sql, or, isNull, ne, gte, lte } from "drizzle-orm";
 import { db, pool } from "@workspace/db";
 import {
   productsTable,
@@ -165,6 +165,62 @@ router.get("/products/brands", async (req, res): Promise<void> => {
     .where(and(eq(productsTable.companyId, companyId), isNull(productsTable.deletedAt)))
     .orderBy(productsTable.brand);
   res.json(result.map((r) => r.brand));
+});
+
+// GET /products/stock-adjustments — report of all "adjustment" type stock
+// movements across the company's products, filterable by product and date
+// range. Registered before GET /products/:id so Express does not swallow
+// the literal path segment "stock-adjustments" as an :id param.
+router.get("/products/stock-adjustments", async (req, res): Promise<void> => {
+  const session = (req as any).session;
+  if (session?.role !== "admin") {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
+  const companyId = getCompanyId(req);
+  const { productId, from, to } = req.query as { productId?: string; from?: string; to?: string };
+
+  const conditions: any[] = [
+    eq(stockMovementsTable.companyId, companyId),
+    eq(stockMovementsTable.type, "adjustment"),
+  ];
+
+  const pid = productId ? Number(productId) : NaN;
+  if (!isNaN(pid)) conditions.push(eq(stockMovementsTable.productId, pid));
+  if (from) conditions.push(gte(stockMovementsTable.createdAt, new Date(`${from}T00:00:00`)));
+  if (to) conditions.push(lte(stockMovementsTable.createdAt, new Date(`${to}T23:59:59.999`)));
+
+  const rows = await db
+    .select({
+      id: stockMovementsTable.id,
+      productId: stockMovementsTable.productId,
+      productName: productsTable.name,
+      itemCode: productsTable.itemCode,
+      unit: productsTable.unit,
+      quantity: stockMovementsTable.quantity,
+      reason: stockMovementsTable.reason,
+      referenceType: stockMovementsTable.referenceType,
+      createdAt: stockMovementsTable.createdAt,
+    })
+    .from(stockMovementsTable)
+    .innerJoin(productsTable, eq(productsTable.id, stockMovementsTable.productId))
+    .where(and(...conditions))
+    .orderBy(sql`${stockMovementsTable.createdAt} DESC`);
+
+  res.json(
+    rows.map((r) => ({
+      id: r.id,
+      productId: r.productId,
+      productName: r.productName,
+      itemCode: r.itemCode,
+      unit: r.unit,
+      quantity: Number(r.quantity),
+      reason: r.reason,
+      referenceType: r.referenceType ?? null,
+      createdAt: r.createdAt?.toISOString(),
+    })),
+  );
 });
 
 // GET /products/:id

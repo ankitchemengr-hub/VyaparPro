@@ -19,6 +19,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import {
   Search,
@@ -30,8 +39,10 @@ import {
   AlertTriangle,
   ClipboardCheck,
   Loader2,
+  FileBarChart,
 } from "lucide-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { format } from "date-fns";
 
 interface AdjustmentPreview {
   productId: number;
@@ -41,6 +52,30 @@ interface AdjustmentPreview {
   physicalCount: number;
   difference: number;
   reason: string;
+}
+
+interface AdjustmentRecord {
+  id: number;
+  productId: number;
+  productName: string;
+  itemCode: string | null;
+  unit: string | null;
+  quantity: number;
+  reason: string;
+  referenceType: string | null;
+  createdAt: string;
+}
+
+const ALL_PRODUCTS = "__all__";
+
+async function fetchAdjustments(params: { productId?: string; from?: string; to?: string }): Promise<AdjustmentRecord[]> {
+  const qs = new URLSearchParams();
+  if (params.productId && params.productId !== ALL_PRODUCTS) qs.set("productId", params.productId);
+  if (params.from) qs.set("from", params.from);
+  if (params.to) qs.set("to", params.to);
+  const r = await fetch(`/api/products/stock-adjustments?${qs.toString()}`, { credentials: "include" });
+  if (!r.ok) throw new Error("Failed to load adjustment report");
+  return r.json();
 }
 
 function DiffBadge({ diff }: { diff: number }) {
@@ -79,7 +114,17 @@ export default function StockAdjustment() {
   const [preview, setPreview] = useState<AdjustmentPreview | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const [reportView, setReportView] = useState<"date" | "product">("date");
+  const [reportFrom, setReportFrom] = useState("");
+  const [reportTo, setReportTo] = useState("");
+  const [reportProductId, setReportProductId] = useState(ALL_PRODUCTS);
+
   const { data: products, isLoading } = useListProducts({});
+
+  const { data: adjustments = [], isLoading: isReportLoading } = useQuery({
+    queryKey: ["stock-adjustments", reportProductId, reportFrom, reportTo],
+    queryFn: () => fetchAdjustments({ productId: reportProductId, from: reportFrom, to: reportTo }),
+  });
 
   if (user?.role !== "admin") {
     return (
@@ -101,6 +146,25 @@ export default function StockAdjustment() {
       p.group?.toLowerCase().includes(q)
     );
   });
+
+  const productWiseRows = Object.values(
+    adjustments.reduce((acc: Record<number, { productId: number; productName: string; itemCode: string | null; unit: string | null; count: number; netChange: number; lastAdjustedAt: string }>, a) => {
+      const row = acc[a.productId] ?? {
+        productId: a.productId,
+        productName: a.productName,
+        itemCode: a.itemCode,
+        unit: a.unit,
+        count: 0,
+        netChange: 0,
+        lastAdjustedAt: a.createdAt,
+      };
+      row.count += 1;
+      row.netChange += a.quantity;
+      if (a.createdAt > row.lastAdjustedAt) row.lastAdjustedAt = a.createdAt;
+      acc[a.productId] = row;
+      return acc;
+    }, {}),
+  ).sort((a, b) => b.lastAdjustedAt.localeCompare(a.lastAdjustedAt));
 
   const systemStock = Number(selectedProduct?.currentStock ?? 0);
   const countVal = physicalCount === "" ? null : Number(physicalCount);
@@ -244,6 +308,125 @@ export default function StockAdjustment() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Adjustment Report — date-wise and product-wise history of stock adjustments */}
+      <div className="border rounded-lg p-4 space-y-4">
+        <div className="flex items-center gap-2">
+          <FileBarChart className="w-4 h-4 text-primary" />
+          <h2 className="font-semibold">Adjustment Report</h2>
+        </div>
+
+        <div className="flex flex-wrap gap-3 items-end">
+          <div className="space-y-1.5">
+            <Label className="text-xs">From</Label>
+            <Input type="date" value={reportFrom} onChange={(e) => setReportFrom(e.target.value)} className="w-[150px]" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">To</Label>
+            <Input type="date" value={reportTo} onChange={(e) => setReportTo(e.target.value)} className="w-[150px]" />
+          </div>
+          {reportView === "date" && (
+            <div className="space-y-1.5">
+              <Label className="text-xs">Product</Label>
+              <Select value={reportProductId} onValueChange={setReportProductId}>
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="All products" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_PRODUCTS}>All products</SelectItem>
+                  {(products ?? []).map((p: any) => (
+                    <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          {(reportFrom || reportTo || reportProductId !== ALL_PRODUCTS) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => { setReportFrom(""); setReportTo(""); setReportProductId(ALL_PRODUCTS); }}
+            >
+              Clear filters
+            </Button>
+          )}
+        </div>
+
+        <Tabs value={reportView} onValueChange={(v) => setReportView(v as "date" | "product")}>
+          <TabsList>
+            <TabsTrigger value="date">Date-wise</TabsTrigger>
+            <TabsTrigger value="product">Product-wise</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="date" className="mt-3">
+            <div className="border rounded-lg overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Product</TableHead>
+                    <TableHead>Reason</TableHead>
+                    <TableHead className="text-right">Qty Change</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {isReportLoading ? (
+                    <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">Loading…</TableCell></TableRow>
+                  ) : adjustments.length === 0 ? (
+                    <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No adjustments found</TableCell></TableRow>
+                  ) : (
+                    adjustments.map((a) => (
+                      <TableRow key={a.id}>
+                        <TableCell className="whitespace-nowrap text-sm">{format(new Date(a.createdAt), "dd MMM yyyy")}</TableCell>
+                        <TableCell>
+                          <div className="font-medium text-sm leading-tight">{a.productName}</div>
+                          <div className="text-xs text-muted-foreground font-mono">{a.itemCode}</div>
+                        </TableCell>
+                        <TableCell className="text-sm">{a.reason}</TableCell>
+                        <TableCell className="text-right"><DiffBadge diff={a.quantity} /></TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="product" className="mt-3">
+            <div className="border rounded-lg overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Product</TableHead>
+                    <TableHead className="text-right">Adjustments</TableHead>
+                    <TableHead className="text-right">Net Change</TableHead>
+                    <TableHead>Last Adjusted</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {isReportLoading ? (
+                    <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">Loading…</TableCell></TableRow>
+                  ) : productWiseRows.length === 0 ? (
+                    <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No adjustments found</TableCell></TableRow>
+                  ) : (
+                    productWiseRows.map((row) => (
+                      <TableRow key={row.productId}>
+                        <TableCell>
+                          <div className="font-medium text-sm leading-tight">{row.productName}</div>
+                          <div className="text-xs text-muted-foreground font-mono">{row.itemCode}</div>
+                        </TableCell>
+                        <TableCell className="text-right text-sm tabular-nums">{row.count}</TableCell>
+                        <TableCell className="text-right"><DiffBadge diff={row.netChange} /></TableCell>
+                        <TableCell className="whitespace-nowrap text-sm">{format(new Date(row.lastAdjustedAt), "dd MMM yyyy")}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
 
       {/* Adjustment Form — opens as a modal so it works on mobile without scrolling below the fold */}
