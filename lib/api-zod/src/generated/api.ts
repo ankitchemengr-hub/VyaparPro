@@ -514,7 +514,7 @@ export const ListProductsResponseItem = zod.object({
   "hsnCode": zod.string().nullish(),
   "taxRate": zod.number().nullish(),
   "commissionPerLiter": zod.number().nullish(),
-  "nonGstPrice: z.number().nullish(),
+  "nonGstPrice": zod.number().nullish(),
   "litersPerBox": zod.number().nullish(),
   "unitsPerBox": zod.number().nullish(),
   "notForSale": zod.boolean(),
@@ -549,15 +549,13 @@ export const CreateProductBody = zod.object({
   "hsnCode": zod.string().optional(),
   "taxRate": zod.number().optional(),
   "commissionPerLiter": zod.number().optional(),
-  "nonGstPrice: z.number().optional(),
+  "nonGstPrice": zod.number().optional(),
   "litersPerBox": zod.number().optional(),
   "unitsPerBox": zod.number().optional(),
   "notForSale": zod.boolean().optional(),
   "addForManufacturing": zod.boolean().optional(),
   "minStockThreshold": zod.number().optional(),
-  "imageUrl": zod.string().optional(),
-  "nonGstPrice": zod.number().optional()
-})
+  "imageUrl": zod.string().optional()
 })
 
 
@@ -607,7 +605,7 @@ export const UpdateProductParams = zod.object({
   "id": zod.coerce.number()
 })
 
-export const UpdateProductBody = z.object({
+export const UpdateProductBody = zod.object({
   "name": zod.string().optional(),
   "printName": zod.string().optional(),
   "group": zod.string().optional(),
@@ -634,7 +632,6 @@ export const UpdateProductBody = z.object({
   "minStockThreshold": zod.number().optional(),
   "imageUrl": zod.string().optional(),
 }).passthrough();
-})
 
 export const UpdateProductResponse = zod.object({
   "id": zod.number(),

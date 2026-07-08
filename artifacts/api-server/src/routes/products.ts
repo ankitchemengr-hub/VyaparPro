@@ -17,7 +17,7 @@ import {
   CreateStockMovementBody,
   BulkStockReconciliationBody,
 } from "@workspace/api-zod";
-import { getCompanyId } from "../lib/tenant";
+import { getCompanyId, handleTenantError } from "../lib/tenant";
 
 const router: IRouter = Router();
 
