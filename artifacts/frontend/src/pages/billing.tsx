@@ -148,18 +148,19 @@ export default function Billing() {
   }, [customer?.id]);
 
   useEffect(() => {
-    if (!products || items.length === 0) return;
-    setItems((prev) => prev.map((item) => {
-      const p = products.find((x: any) => x.id === item.productId);
-      if (!p) return item;
-      const newRate = isGstInvoiceType(invoiceType)
-        ? Number(p.wholesalePrice)
-        : (Number((p as any).nonGstPrice) > 0 ? Number((p as any).nonGstPrice) : Number(p.wholesalePrice));
-      const taxPct = isGstInvoiceType(invoiceType) ? (Number(p.taxRate) || 18) : 0;
-      const amount = Math.round(item.qty * newRate * (1 + taxPct / 100) * 100) / 100;
-      return { ...item, rate: newRate, taxPct, amount };
-    }));
-  }, [invoiceType]);
+  if (!products || items.length === 0) return;
+  setItems((prev) => prev.map((item) => {
+    const p = products.find((x: any) => x.id === item.productId);
+    if (!p) return item;
+    const newRate = isGstInvoiceType(invoiceType)
+      ? Number(p.wholesalePrice)
+      : (Number((p as any).nonGstPrice) > 0 ? Number((p as any).nonGstPrice) : Number(p.wholesalePrice));
+    const taxPct = isGstInvoiceType(invoiceType) ? (Number(p.taxRate) || 18) : 0;
+    const amount = Math.round(billedUnits(item) * newRate * (1 + taxPct / 100) * 100) / 100;
+    return { ...item, rate: newRate, taxPct, amount };
+  }));
+// eslint-disable-next-line react-hooks/exhaustive-deps
+}, [invoiceType, products]);
 
   useEffect(() => {
     if (!isEditMode || !existingInvoice || prefilled) return;
