@@ -325,10 +325,16 @@ router.patch("/products/:id", async (req, res): Promise<void> => {
     }
   }
 
-  const updateData: Record<string, any> = {};
-  for (const [k, v] of Object.entries(data)) {
-    if (v !== undefined) updateData[k] = v;
-  }
+ const updateData: Record<string, any> = {};
+for (const [k, v] of Object.entries(data)) {
+  if (v !== undefined) updateData[k] = v;
+}
+// Explicitly handle nonGstPrice
+if ((data as any).nonGstPrice !== undefined) {
+  updateData.nonGstPrice = (data as any).nonGstPrice != null 
+    ? String((data as any).nonGstPrice) 
+    : null;
+}
 
   try {
     const [product] = await db
