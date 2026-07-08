@@ -208,7 +208,7 @@ export default function Inventory() {
   );
 }
 
-// Replace with:
+
 type ProductForm = {
   gstPrice: string;
   nonGstPrice: string;

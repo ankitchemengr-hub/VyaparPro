@@ -31,6 +31,7 @@ export const productsTable = pgTable("products", {
   notForSale: boolean("not_for_sale").notNull().default(false),
   addForManufacturing: boolean("add_for_manufacturing").notNull().default(false),
   minStockThreshold: numeric("min_stock_threshold", { precision: 12, scale: 3 }),
+  nonGstPrice: numeric("non_gst_price", { precision: 12, scale: 2 }),
   imageUrl: text("image_url"),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

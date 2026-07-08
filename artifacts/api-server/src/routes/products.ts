@@ -133,6 +133,7 @@ router.post("/products", async (req, res): Promise<void> => {
         volumeUnit: (data as any).volumeUnit ?? undefined,
         litersPerBox: data.litersPerBox != null ? String(data.litersPerBox) : undefined,
         unitsPerBox: data.unitsPerBox != null ? String(data.unitsPerBox) : undefined,
+        nonGstPrice: (data as any).nonGstPrice != null ? String((data as any).nonGstPrice) : undefined,
         minStockThreshold: data.minStockThreshold != null ? String(data.minStockThreshold) : undefined,
       })
       .returning();
@@ -614,6 +615,7 @@ function formatProduct(p: any) {
     purchasePrice: Number(p.purchasePrice),
     retailPrice: Number(p.retailPrice),
     wholesalePrice: Number(p.wholesalePrice),
+    nonGstPrice: p.nonGstPrice != null ? Number(p.nonGstPrice) : null,
     mrp: Number(p.mrp),
     minSalePrice: p.minSalePrice != null ? Number(p.minSalePrice) : null,
     currentStock: Number(p.currentStock),
@@ -634,6 +636,7 @@ function formatProduct(p: any) {
     imageUrl: p.imageUrl ?? null,
     createdAt: p.createdAt?.toISOString(),
     updatedAt: p.updatedAt?.toISOString(),
+    
   };
 }
 
