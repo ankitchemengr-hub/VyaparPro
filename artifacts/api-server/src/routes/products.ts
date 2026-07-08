@@ -207,6 +207,7 @@ router.patch("/products/bulk-price", async (req, res): Promise<void> => {
         purchasePrice?: number;
         wholesalePrice?: number;
         retailPrice?: number;
+        nonGstPrice?: number | null;
         hsnCode?: string;
         taxRate?: number;
       }>;
@@ -239,6 +240,7 @@ router.patch("/products/bulk-price", async (req, res): Promise<void> => {
       if (u.purchasePrice !== undefined) patch.purchasePrice = String(u.purchasePrice);
       if (u.wholesalePrice !== undefined) patch.wholesalePrice = String(u.wholesalePrice);
       if (u.retailPrice !== undefined) patch.retailPrice = String(u.retailPrice);
+      if (u.nonGstPrice !== undefined) patch.nonGstPrice = u.nonGstPrice != null ? String(u.nonGstPrice) : null;
       if (u.hsnCode !== undefined) patch.hsnCode = u.hsnCode;
       if (u.taxRate !== undefined) patch.taxRate = String(u.taxRate);
 

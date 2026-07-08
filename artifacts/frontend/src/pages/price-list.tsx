@@ -38,6 +38,7 @@ type Product = {
   purchasePrice: number;
   wholesalePrice: number;
   retailPrice: number;
+  nonGstPrice: number | null;
   updatedAt?: string;
   createdAt?: string;
 };
@@ -46,6 +47,7 @@ type EditedRow = {
   purchasePrice: string;
   wholesalePrice: string;
   retailPrice: string;
+  nonGstPrice: string;
 };
 
 const ALL = "__all__";
@@ -73,6 +75,7 @@ async function bulkUpdatePrices(updates: Array<{
   purchasePrice?: number;
   wholesalePrice?: number;
   retailPrice?: number;
+  nonGstPrice?: number | null;
 }>) {
   const r = await fetch("/api/products/bulk-price", {
     method: "PATCH",
@@ -195,10 +198,11 @@ export default function PriceList() {
         purchasePrice: e?.purchasePrice !== undefined ? numOrNull(e.purchasePrice) : undefined,
         wholesalePrice: e?.wholesalePrice !== undefined ? numOrNull(e.wholesalePrice) : undefined,
         retailPrice: e?.retailPrice !== undefined ? numOrNull(e.retailPrice) : undefined,
+        nonGstPrice: e?.nonGstPrice !== undefined ? (e.nonGstPrice.trim() === "" ? null : numOrNull(e.nonGstPrice)) : undefined,
       };
     }).filter((u) => {
       return u.purchasePrice !== undefined || u.wholesalePrice !== undefined ||
-        u.retailPrice !== undefined;
+        u.retailPrice !== undefined || u.nonGstPrice !== undefined;
     });
 
     if (updates.length === 0) {
@@ -339,6 +343,11 @@ export default function PriceList() {
             <Input type="number" step="0.01" min="0" placeholder="—" className="h-7 w-24 text-sm"
               onChange={(e) => handleBulkEdit("retailPrice", e.target.value)} />
           </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-muted-foreground">Non-GST ₹</span>
+            <Input type="number" step="0.01" min="0" placeholder="—" className="h-7 w-24 text-sm"
+              onChange={(e) => handleBulkEdit("nonGstPrice", e.target.value)} />
+          </div>
           <Button variant="ghost" size="sm" className="ml-auto" onClick={() => setSelected(new Set())}>
             <X className="h-3.5 w-3.5 mr-1" /> Clear selection
           </Button>
@@ -361,15 +370,16 @@ export default function PriceList() {
               <th className="text-right px-3 py-2.5 font-semibold w-32">Purchase ₹</th>
               <th className="text-right px-3 py-2.5 font-semibold w-32">Wholesale ₹</th>
               <th className="text-right px-3 py-2.5 font-semibold w-32">Retail ₹</th>
+              <th className="text-right px-3 py-2.5 font-semibold w-32">Non-GST ₹</th>
               <th className="text-left px-3 py-2.5 font-semibold w-36 text-muted-foreground text-xs">Last Updated</th>
             </tr>
           </thead>
           <tbody>
             {isLoading && (
-              <tr><td colSpan={6} className="text-center py-12 text-muted-foreground">Loading…</td></tr>
+              <tr><td colSpan={7} className="text-center py-12 text-muted-foreground">Loading…</td></tr>
             )}
             {!isLoading && filtered.length === 0 && (
-              <tr><td colSpan={6} className="text-center py-12 text-muted-foreground">No products found</td></tr>
+              <tr><td colSpan={7} className="text-center py-12 text-muted-foreground">No products found</td></tr>
             )}
             {filtered.map((p, idx) => {
               const isSelected = selected.has(p.id);
@@ -405,6 +415,7 @@ export default function PriceList() {
                   <td className="px-3 py-2 text-right">{numericCell(p.id, "purchasePrice", p.purchasePrice)}</td>
                   <td className="px-3 py-2 text-right">{numericCell(p.id, "wholesalePrice", p.wholesalePrice)}</td>
                   <td className="px-3 py-2 text-right">{numericCell(p.id, "retailPrice", p.retailPrice)}</td>
+                  <td className="px-3 py-2 text-right">{numericCell(p.id, "nonGstPrice", p.nonGstPrice)}</td>
                   <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">
                     {p.updatedAt || p.createdAt
                       ? format(new Date(p.updatedAt ?? p.createdAt!), "dd MMM yyyy")
