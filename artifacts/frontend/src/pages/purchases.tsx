@@ -100,6 +100,152 @@ function ProductCombobox({
   );
 }
 
+function lineAmount(l: Line, isGst: boolean): number {
+  const qty = Number(l.qty) || 0;
+  const rate = Number(l.rate) || 0;
+  const disc = Number(l.discountPct) || 0;
+  const taxPct = isGst ? Number(l.taxPct) || 0 : 0;
+  const base = qty * rate;
+  const taxable = base - (base * disc / 100);
+  return taxable + (taxable * taxPct / 100);
+}
+
+// Renders purchase line items as a table on tablet/desktop and as stacked
+// cards on mobile, so entry never requires horizontal scrolling on a phone.
+function LineItemsEditor({
+  lines,
+  isGst,
+  products,
+  onPickProduct,
+  onUpdateLine,
+  onRemoveLine,
+  testIdPrefix,
+}: {
+  lines: Line[];
+  isGst: boolean;
+  products: any[];
+  onPickProduct: (i: number, v: string) => void;
+  onUpdateLine: (i: number, patch: Partial<Line>) => void;
+  onRemoveLine: (i: number) => void;
+  testIdPrefix?: string;
+}) {
+  return (
+    <>
+      {/* Tablet/desktop: table */}
+      <div className="hidden sm:block overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="pl-4 min-w-[200px]">Product</TableHead>
+              <TableHead className="w-24 text-right">Qty</TableHead>
+              <TableHead className="w-20">Unit</TableHead>
+              <TableHead className="w-28 text-right">Rate (₹)</TableHead>
+              <TableHead className="w-20 text-right">Disc%</TableHead>
+              {isGst && <TableHead className="w-20 text-right">GST%</TableHead>}
+              <TableHead className="w-28 text-right">Amount</TableHead>
+              <TableHead className="w-12 pr-4"></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {lines.map((l, i) => (
+              <TableRow key={i} data-testid={testIdPrefix ? `${testIdPrefix}-${i}` : undefined}>
+                <TableCell className="pl-4">
+                  <ProductCombobox
+                    products={products}
+                    value={l.productId}
+                    onChange={(v) => onPickProduct(i, v)}
+                    testId={testIdPrefix ? `select-product-${i}` : undefined}
+                  />
+                </TableCell>
+                <TableCell className="text-right">
+                  <Input type="number" min="0" step="1"
+                    value={l.qty} onChange={(e) => onUpdateLine(i, { qty: e.target.value })}
+                    className="w-20 text-right ml-auto" data-testid={testIdPrefix ? `input-qty-${i}` : undefined} />
+                </TableCell>
+                <TableCell>
+                  <Input value={l.unit} onChange={(e) => onUpdateLine(i, { unit: e.target.value })} className="w-16" />
+                </TableCell>
+                <TableCell className="text-right">
+                  <Input type="number" min="0" step="0.01"
+                    value={l.rate} onChange={(e) => onUpdateLine(i, { rate: e.target.value })}
+                    className="w-24 text-right ml-auto" data-testid={testIdPrefix ? `input-rate-${i}` : undefined} />
+                </TableCell>
+                <TableCell className="text-right">
+                  <Input type="number" min="0" max="100" step="0.1"
+                    value={l.discountPct} onChange={(e) => onUpdateLine(i, { discountPct: e.target.value })}
+                    className="w-16 text-right ml-auto" />
+                </TableCell>
+                {isGst && (
+                  <TableCell className="text-right">
+                    <Input type="number" min="0" max="100" step="0.5"
+                      value={l.taxPct} onChange={(e) => onUpdateLine(i, { taxPct: e.target.value })}
+                      className="w-16 text-right ml-auto" />
+                  </TableCell>
+                )}
+                <TableCell className="text-right tabular-nums font-semibold pr-4">
+                  ₹{lineAmount(l, isGst).toFixed(2)}
+                </TableCell>
+                <TableCell className="pr-4">
+                  <Button size="icon" variant="ghost" onClick={() => onRemoveLine(i)}
+                    data-testid={testIdPrefix ? `button-remove-line-${i}` : undefined}>
+                    <Trash2 className="w-4 h-4 text-destructive" />
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* Mobile: stacked cards, no horizontal scroll */}
+      <div className="sm:hidden divide-y">
+        {lines.map((l, i) => (
+          <div key={i} className="p-4 space-y-3" data-testid={testIdPrefix ? `${testIdPrefix}-mobile-${i}` : undefined}>
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <ProductCombobox products={products} value={l.productId} onChange={(v) => onPickProduct(i, v)} />
+              </div>
+              <Button size="icon" variant="ghost" className="shrink-0" onClick={() => onRemoveLine(i)}>
+                <Trash2 className="w-4 h-4 text-destructive" />
+              </Button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Qty</Label>
+                <Input type="number" min="0" step="1" value={l.qty} onChange={(e) => onUpdateLine(i, { qty: e.target.value })} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Unit</Label>
+                <Input value={l.unit} onChange={(e) => onUpdateLine(i, { unit: e.target.value })} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Rate (₹)</Label>
+                <Input type="number" min="0" step="0.01" value={l.rate} onChange={(e) => onUpdateLine(i, { rate: e.target.value })} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Discount %</Label>
+                <Input type="number" min="0" max="100" step="0.1" value={l.discountPct} onChange={(e) => onUpdateLine(i, { discountPct: e.target.value })} />
+              </div>
+            </div>
+            {isGst && (
+              <div className="space-y-1 w-1/2 pr-1">
+                <Label className="text-xs text-muted-foreground">GST %</Label>
+                <Input type="number" min="0" max="100" step="0.5" value={l.taxPct} onChange={(e) => onUpdateLine(i, { taxPct: e.target.value })} />
+              </div>
+            )}
+            <div className="flex items-center justify-between pt-2 border-t">
+              <span className="text-sm text-muted-foreground">Amount</span>
+              <span className="text-base font-bold tabular-nums">₹{lineAmount(l, isGst).toFixed(2)}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
 export default function Purchases() {
   return (
     <div className="space-y-6">
@@ -352,79 +498,15 @@ function NewPurchaseTab() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="pl-4 min-w-[200px]">Product</TableHead>
-                  <TableHead className="w-24 text-right">Qty</TableHead>
-                  <TableHead className="w-20">Unit</TableHead>
-                  <TableHead className="w-28 text-right">Rate (₹)</TableHead>
-                  <TableHead className="w-20 text-right">Disc%</TableHead>
-                  {isGst && <TableHead className="w-20 text-right">GST%</TableHead>}
-                  <TableHead className="w-28 text-right">Amount</TableHead>
-                  <TableHead className="w-12 pr-4"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {lines.map((l, i) => {
-                  const qty  = Number(l.qty) || 0;
-                  const rate = Number(l.rate) || 0;
-                  const disc = Number(l.discountPct) || 0;
-                  const taxPct = isGst ? Number(l.taxPct) || 0 : 0;
-                  const base   = qty * rate;
-                  const taxable = base - (base * disc / 100);
-                  const amount  = taxable + (taxable * taxPct / 100);
-                  return (
-                    <TableRow key={i} data-testid={`line-${i}`}>
-                      <TableCell className="pl-4">
-                        <ProductCombobox
-                          products={products ?? []}
-                          value={l.productId}
-                          onChange={(v) => onPickProduct(i, v)}
-                          testId={`select-product-${i}`}
-                        />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Input type="number" min="0" step="1"
-                          value={l.qty} onChange={(e) => updateLine(i, { qty: e.target.value })}
-                          className="w-20 text-right ml-auto" data-testid={`input-qty-${i}`} />
-                      </TableCell>
-                      <TableCell>
-                        <Input value={l.unit} onChange={(e) => updateLine(i, { unit: e.target.value })} className="w-16" />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Input type="number" min="0" step="0.01"
-                          value={l.rate} onChange={(e) => updateLine(i, { rate: e.target.value })}
-                          className="w-24 text-right ml-auto" data-testid={`input-rate-${i}`} />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Input type="number" min="0" max="100" step="0.1"
-                          value={l.discountPct} onChange={(e) => updateLine(i, { discountPct: e.target.value })}
-                          className="w-16 text-right ml-auto" />
-                      </TableCell>
-                      {isGst && (
-                        <TableCell className="text-right">
-                          <Input type="number" min="0" max="100" step="0.5"
-                            value={l.taxPct} onChange={(e) => updateLine(i, { taxPct: e.target.value })}
-                            className="w-16 text-right ml-auto" />
-                        </TableCell>
-                      )}
-                      <TableCell className="text-right tabular-nums font-semibold pr-4">
-                        ₹{amount.toFixed(2)}
-                      </TableCell>
-                      <TableCell className="pr-4">
-                        <Button size="icon" variant="ghost" onClick={() => removeLine(i)}
-                          data-testid={`button-remove-line-${i}`}>
-                          <Trash2 className="w-4 h-4 text-destructive" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
+          <LineItemsEditor
+            lines={lines}
+            isGst={isGst}
+            products={products ?? []}
+            onPickProduct={onPickProduct}
+            onUpdateLine={updateLine}
+            onRemoveLine={removeLine}
+            testIdPrefix="line"
+          />
         </CardContent>
       </Card>
 
@@ -972,15 +1054,15 @@ function PurchaseReportDialog({
         </DialogHeader>
 
         <div className="flex flex-wrap gap-3 items-end border-b pb-4">
-          <div className="space-y-1">
+          <div className="space-y-1 flex-1 min-w-[130px] sm:flex-none">
             <Label className="text-xs">From Date</Label>
-            <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="w-36 h-8 text-sm" />
+            <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="w-full sm:w-36 h-8 text-sm" />
           </div>
-          <div className="space-y-1">
+          <div className="space-y-1 flex-1 min-w-[130px] sm:flex-none">
             <Label className="text-xs">To Date</Label>
-            <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="w-36 h-8 text-sm" />
+            <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="w-full sm:w-36 h-8 text-sm" />
           </div>
-          <div className="space-y-1 min-w-[200px]">
+          <div className="space-y-1 flex-1 min-w-[160px] sm:min-w-[200px] sm:flex-none">
             <Label className="text-xs">Item / Product</Label>
             <Select value={productId} onValueChange={setProductId}>
               <SelectTrigger className="h-8 text-sm">
@@ -999,7 +1081,7 @@ function PurchaseReportDialog({
             Generate
           </Button>
           {fetched && rows.length > 0 && (
-            <div className="flex gap-2 ml-auto">
+            <div className="flex flex-wrap gap-2 sm:ml-auto">
               <Button size="sm" variant="outline" onClick={handlePrint}>
                 <FileText className="w-4 h-4 mr-1.5" /> Print
               </Button>
@@ -1117,10 +1199,10 @@ function HistoryTab() {
                   <TableHead>Bill #</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Vendor</TableHead>
-                  <TableHead>Vendor Bill</TableHead>
-                  <TableHead>Type</TableHead>
+                  <TableHead className="hidden md:table-cell">Vendor Bill</TableHead>
+                  <TableHead className="hidden sm:table-cell">Type</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
-                  <TableHead className="text-right">Balance Due</TableHead>
+                  <TableHead className="hidden sm:table-cell text-right">Balance Due</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="w-20"></TableHead>
                 </TableRow>
@@ -1138,8 +1220,8 @@ function HistoryTab() {
                       {new Date(p.billDate).toLocaleDateString("en-IN")}
                     </TableCell>
                     <TableCell>{p.vendorName ?? <span className="text-muted-foreground">—</span>}</TableCell>
-                    <TableCell className="text-muted-foreground">{p.vendorBillNo ?? "—"}</TableCell>
-                    <TableCell>
+                    <TableCell className="hidden md:table-cell text-muted-foreground">{p.vendorBillNo ?? "—"}</TableCell>
+                    <TableCell className="hidden sm:table-cell">
                       <Badge variant={p.billType === "gst" ? "default" : "secondary"}>
                         {p.billType === "gst" ? "GST" : "Non-GST"}
                       </Badge>
@@ -1147,7 +1229,7 @@ function HistoryTab() {
                     <TableCell className="text-right tabular-nums font-medium">
                       ₹{Number(p.grandTotal).toFixed(2)}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell className="hidden sm:table-cell text-right tabular-nums">
                       ₹{Number(p.balanceDue).toFixed(2)}
                     </TableCell>
                     <TableCell>
@@ -1397,58 +1479,21 @@ function EditPurchaseDialog({
             </div>
 
             {/* Line Items */}
-            <div className="rounded-lg border overflow-x-auto">
+            <div className="rounded-lg border">
               <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/30">
                 <span className="text-sm font-semibold">Line Items</span>
                 <Button size="sm" variant="outline" onClick={() => setLines((p) => [...p, emptyLine()])}>
                   <Plus className="w-4 h-4 mr-1" /> Add Line
                 </Button>
               </div>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="pl-4 min-w-[180px]">Product</TableHead>
-                    <TableHead className="w-24 text-right">Qty</TableHead>
-                    <TableHead className="w-20">Unit</TableHead>
-                    <TableHead className="w-28 text-right">Rate (₹)</TableHead>
-                    <TableHead className="w-20 text-right">Disc%</TableHead>
-                    {isGst && <TableHead className="w-20 text-right">GST%</TableHead>}
-                    <TableHead className="w-28 text-right">Amount</TableHead>
-                    <TableHead className="w-12 pr-4"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {lines.map((l, i) => {
-                    const qty   = Number(l.qty) || 0;
-                    const rate  = Number(l.rate) || 0;
-                    const disc  = Number(l.discountPct) || 0;
-                    const taxPct = isGst ? Number(l.taxPct) || 0 : 0;
-                    const base   = qty * rate;
-                    const taxable = base - (base * disc / 100);
-                    const amount  = taxable + (taxable * taxPct / 100);
-                    return (
-                      <TableRow key={i}>
-                        <TableCell className="pl-4">
-                          <ProductCombobox
-                            products={products ?? []}
-                            value={l.productId}
-                            onChange={(v) => onPickProduct(i, v)}
-                          />
-                        </TableCell>
-                        <TableCell><Input type="number" min="0" step="1" value={l.qty} onChange={(e) => updateLine(i, { qty: e.target.value })} className="w-20 text-right ml-auto" /></TableCell>
-                        <TableCell><Input value={l.unit} onChange={(e) => updateLine(i, { unit: e.target.value })} className="w-16" /></TableCell>
-                        <TableCell><Input type="number" min="0" step="0.01" value={l.rate} onChange={(e) => updateLine(i, { rate: e.target.value })} className="w-24 text-right ml-auto" /></TableCell>
-                        <TableCell><Input type="number" min="0" max="100" step="0.1" value={l.discountPct} onChange={(e) => updateLine(i, { discountPct: e.target.value })} className="w-16 text-right ml-auto" /></TableCell>
-                        {isGst && <TableCell><Input type="number" min="0" max="100" step="0.5" value={l.taxPct} onChange={(e) => updateLine(i, { taxPct: e.target.value })} className="w-16 text-right ml-auto" /></TableCell>}
-                        <TableCell className="text-right tabular-nums font-semibold pr-4">₹{amount.toFixed(2)}</TableCell>
-                        <TableCell className="pr-4">
-                          <Button size="icon" variant="ghost" onClick={() => removeLine(i)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+              <LineItemsEditor
+                lines={lines}
+                isGst={isGst}
+                products={products ?? []}
+                onPickProduct={onPickProduct}
+                onUpdateLine={updateLine}
+                onRemoveLine={removeLine}
+              />
             </div>
 
             {/* Freight + Notes */}
