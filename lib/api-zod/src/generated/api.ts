@@ -514,6 +514,7 @@ export const ListProductsResponseItem = zod.object({
   "hsnCode": zod.string().nullish(),
   "taxRate": zod.number().nullish(),
   "commissionPerLiter": zod.number().nullish(),
+  "nonGstPrice: z.number().nullish(),
   "litersPerBox": zod.number().nullish(),
   "unitsPerBox": zod.number().nullish(),
   "notForSale": zod.boolean(),
@@ -548,6 +549,7 @@ export const CreateProductBody = zod.object({
   "hsnCode": zod.string().optional(),
   "taxRate": zod.number().optional(),
   "commissionPerLiter": zod.number().optional(),
+  "nonGstPrice: z.number().optional(),
   "litersPerBox": zod.number().optional(),
   "unitsPerBox": zod.number().optional(),
   "notForSale": zod.boolean().optional(),
@@ -629,6 +631,7 @@ export const UpdateProductBody = zod.object({
   "minStockThreshold": zod.number().optional(),
   "imageUrl": zod.string().optional(),
   "commissionPerLiter": zod.number().optional(),
+  "nonGstPrice: z.number().optional(),
   "nonGstPrice": zod.number().optional()
 })
 })
