@@ -251,9 +251,6 @@ export default function Purchases() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Purchases</h1>
-        <p className="text-muted-foreground mt-2">
-          Record goods received from vendors. Adds to inventory and creates a payable in the vendor ledger.
-        </p>
       </div>
 
       <Tabs defaultValue="new" className="w-full">
