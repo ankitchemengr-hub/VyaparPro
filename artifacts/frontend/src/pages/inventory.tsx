@@ -270,9 +270,9 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
         unit: product.unit ?? "",
         purchasePrice: product.purchasePrice != null ? String(product.purchasePrice) : "",
         mrp: product.mrp != null ? String(product.mrp) : "",
-        // Replace with:
+      
        gstPrice: "",
-        nonGstPrice: "",
+        nonGstPrice: product.nonGstPrice != null ? String(product.nonGstPrice) : "",
         wholesalePrice: product.wholesalePrice != null ? String(product.wholesalePrice) : "",
         retailPrice: product.retailPrice != null ? String(product.retailPrice) : "",
         hsnCode: product.hsnCode ?? "",
