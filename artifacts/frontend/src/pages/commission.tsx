@@ -149,12 +149,14 @@ export default function Commission() {
       </div>
 
       <Tabs defaultValue={isAdmin ? "summary" : "transactions"}>
-        <TabsList>
-          {isAdmin && <TabsTrigger value="summary">Summary</TabsTrigger>}
-          <TabsTrigger value="report">Report</TabsTrigger>
-          <TabsTrigger value="transactions">Transactions</TabsTrigger>
-          {isAdmin && <TabsTrigger value="payments">Payment History</TabsTrigger>}
-        </TabsList>
+        <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+          <TabsList className="w-max">
+            {isAdmin && <TabsTrigger value="summary">Summary</TabsTrigger>}
+            <TabsTrigger value="report">Report</TabsTrigger>
+            <TabsTrigger value="transactions">Transactions</TabsTrigger>
+            {isAdmin && <TabsTrigger value="payments">Payment History</TabsTrigger>}
+          </TabsList>
+        </div>
 
         {/* ── SUMMARY TAB (admin only) ──────────────────────────────────────── */}
         {isAdmin && (
@@ -245,13 +247,13 @@ export default function Commission() {
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-3 items-end mb-4">
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 flex-1 min-w-[130px] sm:flex-none">
                   <label className="text-xs font-medium text-muted-foreground">From</label>
-                  <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-[160px]" />
+                  <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-full sm:w-[160px]" />
                 </div>
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 flex-1 min-w-[130px] sm:flex-none">
                   <label className="text-xs font-medium text-muted-foreground">To</label>
-                  <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-[160px]" />
+                  <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-full sm:w-[160px]" />
                 </div>
                 {(from || to) && (
                   <Button variant="outline" onClick={() => { setFrom(""); setTo(""); }}>Clear</Button>
@@ -286,7 +288,7 @@ export default function Commission() {
                           {isOpen && breakdown.length > 0 && (
                             <TableRow className="bg-muted/30 hover:bg-muted/30">
                               <TableCell colSpan={4} className="p-0">
-                                <div className="p-3">
+                                <div className="p-3 overflow-x-auto">
                                   <Table>
                                     <TableHeader>
                                       <TableRow>
@@ -352,10 +354,10 @@ export default function Commission() {
             <CardContent>
               <div className="flex flex-wrap gap-3 items-end mb-4">
                 {isAdmin && (
-                  <div className="space-y-1.5">
+                  <div className="space-y-1.5 flex-1 min-w-[140px] sm:flex-none">
                     <label className="text-xs font-medium text-muted-foreground">Salesman</label>
                     <Select value={txSalesmanId} onValueChange={setTxSalesmanId}>
-                      <SelectTrigger className="w-[160px]"><SelectValue placeholder="All" /></SelectTrigger>
+                      <SelectTrigger className="w-full sm:w-[160px]"><SelectValue placeholder="All" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All Salesmen</SelectItem>
                         {salesmanEntities?.map((s) => (
@@ -365,10 +367,10 @@ export default function Commission() {
                     </Select>
                   </div>
                 )}
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 flex-1 min-w-[110px] sm:flex-none">
                   <label className="text-xs font-medium text-muted-foreground">Status</label>
                   <Select value={txStatus} onValueChange={setTxStatus}>
-                    <SelectTrigger className="w-[130px]"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="w-full sm:w-[130px]"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All</SelectItem>
                       <SelectItem value="pending">Pending</SelectItem>
@@ -376,13 +378,13 @@ export default function Commission() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 flex-1 min-w-[130px] sm:flex-none">
                   <label className="text-xs font-medium text-muted-foreground">From</label>
-                  <Input type="date" value={txFrom} onChange={(e) => setTxFrom(e.target.value)} className="w-[150px]" />
+                  <Input type="date" value={txFrom} onChange={(e) => setTxFrom(e.target.value)} className="w-full sm:w-[150px]" />
                 </div>
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 flex-1 min-w-[130px] sm:flex-none">
                   <label className="text-xs font-medium text-muted-foreground">To</label>
-                  <Input type="date" value={txTo} onChange={(e) => setTxTo(e.target.value)} className="w-[150px]" />
+                  <Input type="date" value={txTo} onChange={(e) => setTxTo(e.target.value)} className="w-full sm:w-[150px]" />
                 </div>
               </div>
               <div className="border rounded-md overflow-x-auto">
