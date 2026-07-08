@@ -16,23 +16,6 @@ import {
   CreateStockMovementParams,
   CreateStockMovementBody,
   BulkStockReconciliationBody,
-} from "@workspace/api-zod";import { Router, type IRouter } from "express";
-import { eq, ilike, and, sql, or, isNull, ne } from "drizzle-orm";
-import { db } from "@workspace/db";
-import {
-  productsTable,
-  stockMovementsTable,
-} from "@workspace/db";
-import {
-  ListProductsQueryParams,
-  CreateProductBody,
-  GetProductParams,
-  UpdateProductParams,
-  UpdateProductBody,
-  DeleteProductParams,
-  GetProductStockMovementsParams,
-  CreateStockMovementParams,
-  CreateStockMovementBody,
 } from "@workspace/api-zod";
 import { getCompanyId } from "../lib/tenant";
 

@@ -3196,6 +3196,8 @@ components:
           type: ["number", "null"]
         commissionPerLiter:
           type: ["number", "null"]
+        nonGstPrice:
+          type: ["number", "null"]
         litersPerBox:
           type: ["number", "null"]
         unitsPerBox:
@@ -3253,6 +3255,8 @@ components:
         taxRate:
           type: number
         commissionPerLiter:
+          type: number
+        nonGstPrice:
           type: number
         litersPerBox:
           type: number
@@ -3315,6 +3319,8 @@ components:
         imageUrl:
           type: string
         commissionPerLiter:
+          type: number
+        nonGstPrice:
           type: number
 
     StockMovement:
