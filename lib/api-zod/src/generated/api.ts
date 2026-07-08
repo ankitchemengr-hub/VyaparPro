@@ -633,7 +633,7 @@ export const UpdateProductBody = zod.object({
   "commissionPerLiter": zod.number().optional(),
   "nonGstPrice: z.number().optional(),
   "nonGstPrice": zod.number().optional()
-})
+}).passthrough();
 })
 
 export const UpdateProductResponse = zod.object({
