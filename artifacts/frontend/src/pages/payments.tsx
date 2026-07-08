@@ -1,15 +1,15 @@
 import React, { useState, useMemo } from "react";
 import { useAuth } from "@/contexts/use-auth";
 import { useListPayments, useApprovePayment, useRejectPayment, PaymentStatus } from "@workspace/api-client-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
-import { CheckCircle2, XCircle, X } from "lucide-react";
+import { CheckCircle2, XCircle, X, Filter, Clock } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
@@ -46,6 +46,7 @@ export default function Payments() {
   const totalInRange = filteredPayments.reduce((s, p) => s + Number(p.amount || 0), 0);
 
   const clearDates = () => { setFrom(""); setTo(""); };
+  const hasActiveFilters = status !== "all" || !!from || !!to;
 
   const handleApprove = (id: number) => {
     approvePayment.mutate({ id }, {
@@ -74,35 +75,55 @@ export default function Payments() {
       </div>
 
       <Card>
-        <CardContent className="py-3 flex flex-wrap items-end gap-3">
-          <div className="flex-1 min-w-[140px] sm:flex-none">
-            <Label className="text-xs">Status</Label>
-            <Select value={status} onValueChange={(v) => setStatus(v as PaymentStatus | "all")}>
-              <SelectTrigger className="w-full sm:w-[180px]" data-testid="filter-payment-status">
-                <SelectValue placeholder="Status Filter" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Payments</SelectItem>
-                <SelectItem value="pending">Pending Approval</SelectItem>
-                <SelectItem value="approved">Approved</SelectItem>
-                <SelectItem value="rejected">Rejected</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex-1 min-w-[120px] sm:flex-none">
-            <Label className="text-xs">From</Label>
-            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-full sm:w-40" data-testid="filter-payment-from" />
-          </div>
-          <div className="flex-1 min-w-[120px] sm:flex-none">
-            <Label className="text-xs">To</Label>
-            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-full sm:w-40" data-testid="filter-payment-to" />
-          </div>
-          {(from || to) && (
-            <Button variant="ghost" size="sm" onClick={clearDates} data-testid="button-clear-dates">
-              <X className="w-4 h-4 mr-1" /> Clear dates
-            </Button>
-          )}
-          <div className="w-full sm:w-auto sm:ml-auto text-left sm:text-right border-t sm:border-t-0 pt-3 sm:pt-0 mt-1 sm:mt-0">
+        <CardContent className="py-3 flex items-center justify-between gap-3">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="icon" className="relative shrink-0" data-testid="button-open-filters">
+                <Filter className="h-4 w-4" />
+                {hasActiveFilters && (
+                  <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-primary" />
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-72 space-y-3" align="start">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Status</Label>
+                <Select value={status} onValueChange={(v) => setStatus(v as PaymentStatus | "all")}>
+                  <SelectTrigger className="w-full" data-testid="filter-payment-status">
+                    <SelectValue placeholder="Status Filter" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Payments</SelectItem>
+                    <SelectItem value="pending">Pending Approval</SelectItem>
+                    <SelectItem value="approved">Approved</SelectItem>
+                    <SelectItem value="rejected">Rejected</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">From</Label>
+                  <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} data-testid="filter-payment-from" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">To</Label>
+                  <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} data-testid="filter-payment-to" />
+                </div>
+              </div>
+              {hasActiveFilters && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => { setStatus("all"); clearDates(); }}
+                  data-testid="button-clear-dates"
+                >
+                  <X className="w-4 h-4 mr-1" /> Clear filters
+                </Button>
+              )}
+            </PopoverContent>
+          </Popover>
+          <div className="text-right">
             <div className="text-xs text-muted-foreground">
               {filteredPayments.length} payment{filteredPayments.length === 1 ? "" : "s"} · Total in range
             </div>
@@ -146,13 +167,15 @@ export default function Payments() {
                       <TableCell className="hidden sm:table-cell capitalize">{payment.mode.replace('_', ' ')}</TableCell>
                       <TableCell className="text-right font-bold text-green-600 whitespace-nowrap">₹{payment.amount.toLocaleString()}</TableCell>
                       <TableCell>
-                        <Badge variant={
-                          payment.status === "approved" ? "default" :
-                          payment.status === "rejected" ? "destructive" :
-                          "secondary"
-                        } className={payment.status === "approved" ? "bg-green-500" : payment.status === "pending" ? "bg-amber-500 text-white" : ""}>
-                          {payment.status}
-                        </Badge>
+                        <span title={payment.status[0].toUpperCase() + payment.status.slice(1)} className="inline-flex">
+                          {payment.status === "approved" ? (
+                            <CheckCircle2 className="h-5 w-5 text-green-600" />
+                          ) : payment.status === "rejected" ? (
+                            <XCircle className="h-5 w-5 text-destructive" />
+                          ) : (
+                            <Clock className="h-5 w-5 text-amber-500" />
+                          )}
+                        </span>
                       </TableCell>
                       {isAdmin && (
                         <TableCell className="text-right">
