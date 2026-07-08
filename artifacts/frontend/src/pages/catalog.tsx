@@ -113,9 +113,9 @@ export default function Catalog() {
   const increaseQty = (productId: number, maxStock: number) =>
     setCart((c) => ({ ...c, [productId]: Math.min(maxStock, (c[productId] ?? 0) + 1) }));
 
-  const getStockBadge = (stock: number) => {
-    if (stock > 10) return <Badge className="bg-green-600 text-white border-transparent text-[10px]">In Stock</Badge>;
-    if (stock > 0) return <Badge variant="outline" className="text-amber-500 border-amber-500 text-[10px]">Only {stock} Left!</Badge>;
+  const getStockBadge = (stock: number, unit: string) => {
+    if (stock > 10) return <Badge className="bg-green-600 text-white border-transparent text-[10px]">{stock} {unit}</Badge>;
+    if (stock > 0) return <Badge className="bg-amber-500 text-white border-transparent text-[10px]">{stock} {unit}</Badge>;
     return <Badge variant="destructive" className="text-[10px]">Out of Stock</Badge>;
   };
 
@@ -414,8 +414,7 @@ const proceedToOrderWithCustomer = (customer: any) => {
                         <ShoppingCart className="w-full h-full" />
                       </div>
                     )}
-                    <div className="absolute top-2 right-2">{getStockBadge(product.currentStock)}</div>
-                    {inCart && (
+                          <div className="absolute top-2 right-2">{getStockBadge(product.currentStock, product.unit ?? "")}</div>                             {inCart && (
                       <div className="absolute top-2 left-2">
                         <CheckCircle className="w-5 h-5 text-primary fill-background" />
                       </div>
