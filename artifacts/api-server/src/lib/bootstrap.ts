@@ -173,6 +173,9 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
     // ── Products: volume unit type (liter or kg) ───────────────────────────
     `ALTER TABLE products ADD COLUMN IF NOT EXISTS volume_unit VARCHAR(10) NOT NULL DEFAULT 'liter'`,
 
+    // ── Products: direct selling price for non-GST invoices ───────────────
+    `ALTER TABLE products ADD COLUMN IF NOT EXISTS non_gst_price NUMERIC(12, 2)`,
+
     // ── WhatsApp: per-entity WhatsApp number ──────────────────────────────
     `ALTER TABLE entities ADD COLUMN IF NOT EXISTS whatsapp_number TEXT`,
 

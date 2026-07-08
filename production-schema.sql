@@ -938,7 +938,8 @@ CREATE TABLE public.products (
     deleted_at timestamp with time zone,
     units_per_box numeric(10,3),
     commission_per_liter numeric(12,2) DEFAULT '0'::numeric NOT NULL,
-    company_id integer NOT NULL
+    company_id integer NOT NULL,
+    non_gst_price numeric(12,2)
 );
 
 
