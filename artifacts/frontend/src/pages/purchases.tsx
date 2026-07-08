@@ -547,8 +547,8 @@ function NewPurchaseTab() {
                 <span className="tabular-nums">₹{totals.freight.toFixed(2)}</span>
               </div>
             )}
-            <div className="ml-auto flex items-center gap-4">
-              <div>
+            <div className="w-full sm:w-auto sm:ml-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4">
+              <div className="text-center sm:text-left">
                 <span className="text-muted-foreground mr-1.5">Grand Total:</span>
                 <span className="text-xl font-bold tabular-nums" data-testid="text-grand-total">₹{totals.grand.toFixed(2)}</span>
               </div>
@@ -557,6 +557,7 @@ function NewPurchaseTab() {
                 onClick={onSubmit}
                 data-testid="button-save-purchase"
                 size="lg"
+                className="w-full sm:w-auto"
               >
                 {submitting
                   ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving…</>
