@@ -65,20 +65,20 @@ export default function Payments() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Payments & Receipts</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Payments & Receipts</h1>
           <p className="text-muted-foreground mt-2">Manage incoming payments and escrow approvals.</p>
         </div>
-        <Button>Log Payment</Button>
+        <Button className="w-full sm:w-auto">Log Payment</Button>
       </div>
 
       <Card>
         <CardContent className="py-3 flex flex-wrap items-end gap-3">
-          <div>
+          <div className="flex-1 min-w-[140px] sm:flex-none">
             <Label className="text-xs">Status</Label>
             <Select value={status} onValueChange={(v) => setStatus(v as PaymentStatus | "all")}>
-              <SelectTrigger className="w-[180px]" data-testid="filter-payment-status">
+              <SelectTrigger className="w-full sm:w-[180px]" data-testid="filter-payment-status">
                 <SelectValue placeholder="Status Filter" />
               </SelectTrigger>
               <SelectContent>
@@ -89,20 +89,20 @@ export default function Payments() {
               </SelectContent>
             </Select>
           </div>
-          <div>
+          <div className="flex-1 min-w-[120px] sm:flex-none">
             <Label className="text-xs">From</Label>
-            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-40" data-testid="filter-payment-from" />
+            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-full sm:w-40" data-testid="filter-payment-from" />
           </div>
-          <div>
+          <div className="flex-1 min-w-[120px] sm:flex-none">
             <Label className="text-xs">To</Label>
-            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-40" data-testid="filter-payment-to" />
+            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-full sm:w-40" data-testid="filter-payment-to" />
           </div>
           {(from || to) && (
             <Button variant="ghost" size="sm" onClick={clearDates} data-testid="button-clear-dates">
               <X className="w-4 h-4 mr-1" /> Clear dates
             </Button>
           )}
-          <div className="ml-auto text-right">
+          <div className="w-full sm:w-auto sm:ml-auto text-left sm:text-right border-t sm:border-t-0 pt-3 sm:pt-0 mt-1 sm:mt-0">
             <div className="text-xs text-muted-foreground">
               {filteredPayments.length} payment{filteredPayments.length === 1 ? "" : "s"} · Total in range
             </div>
@@ -113,75 +113,77 @@ export default function Payments() {
 
       <Card>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Receipt ID</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>Collected By</TableHead>
-                <TableHead>Mode</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-                <TableHead>Status</TableHead>
-                {isAdmin && <TableHead className="text-right">Actions</TableHead>}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={isAdmin ? 8 : 7} className="text-center py-8">Loading...</TableCell>
+                  <TableHead>Receipt ID</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Customer</TableHead>
+                  <TableHead className="hidden md:table-cell">Collected By</TableHead>
+                  <TableHead className="hidden sm:table-cell">Mode</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead>Status</TableHead>
+                  {isAdmin && <TableHead className="text-right">Actions</TableHead>}
                 </TableRow>
-              ) : filteredPayments.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={isAdmin ? 8 : 7} className="text-center py-8 text-muted-foreground">No payments found in selected range.</TableCell>
-                </TableRow>
-              ) : (
-                filteredPayments.map(payment => (
-                  <TableRow key={payment.id}>
-                    <TableCell className="font-mono text-xs">{payment.receiptId || `REC-${payment.id}`}</TableCell>
-                    <TableCell>{format(new Date(payment.createdAt), "MMM dd, yyyy")}</TableCell>
-                    <TableCell className="font-medium">{payment.customerName}</TableCell>
-                    <TableCell>{payment.salesmanName || "Direct"}</TableCell>
-                    <TableCell className="capitalize">{payment.mode.replace('_', ' ')}</TableCell>
-                    <TableCell className="text-right font-bold text-green-600">₹{payment.amount.toLocaleString()}</TableCell>
-                    <TableCell>
-                      <Badge variant={
-                        payment.status === "approved" ? "default" : 
-                        payment.status === "rejected" ? "destructive" : 
-                        "secondary"
-                      } className={payment.status === "approved" ? "bg-green-500" : payment.status === "pending" ? "bg-amber-500 text-white" : ""}>
-                        {payment.status}
-                      </Badge>
-                    </TableCell>
-                    {isAdmin && (
-                      <TableCell className="text-right">
-                        {payment.status === "pending" && (
-                          <div className="flex justify-end gap-2">
-                            <Button 
-                              size="sm" 
-                              variant="outline" 
-                              className="text-green-600 border-green-600 hover:bg-green-50"
-                              onClick={() => handleApprove(payment.id)}
-                            >
-                              <CheckCircle2 className="h-4 w-4 mr-1" /> Approve
-                            </Button>
-                            <Button 
-                              size="sm" 
-                              variant="outline" 
-                              className="text-destructive border-destructive hover:bg-destructive/10"
-                              onClick={() => handleReject(payment.id)}
-                            >
-                              <XCircle className="h-4 w-4 mr-1" /> Reject
-                            </Button>
-                          </div>
-                        )}
-                      </TableCell>
-                    )}
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={isAdmin ? 8 : 7} className="text-center py-8">Loading...</TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                ) : filteredPayments.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={isAdmin ? 8 : 7} className="text-center py-8 text-muted-foreground">No payments found in selected range.</TableCell>
+                  </TableRow>
+                ) : (
+                  filteredPayments.map(payment => (
+                    <TableRow key={payment.id}>
+                      <TableCell className="font-mono text-xs whitespace-nowrap">{payment.receiptId || `REC-${payment.id}`}</TableCell>
+                      <TableCell className="whitespace-nowrap">{format(new Date(payment.createdAt), "MMM dd, yyyy")}</TableCell>
+                      <TableCell className="font-medium">{payment.customerName}</TableCell>
+                      <TableCell className="hidden md:table-cell">{payment.salesmanName || "Direct"}</TableCell>
+                      <TableCell className="hidden sm:table-cell capitalize">{payment.mode.replace('_', ' ')}</TableCell>
+                      <TableCell className="text-right font-bold text-green-600 whitespace-nowrap">₹{payment.amount.toLocaleString()}</TableCell>
+                      <TableCell>
+                        <Badge variant={
+                          payment.status === "approved" ? "default" :
+                          payment.status === "rejected" ? "destructive" :
+                          "secondary"
+                        } className={payment.status === "approved" ? "bg-green-500" : payment.status === "pending" ? "bg-amber-500 text-white" : ""}>
+                          {payment.status}
+                        </Badge>
+                      </TableCell>
+                      {isAdmin && (
+                        <TableCell className="text-right">
+                          {payment.status === "pending" && (
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-green-600 border-green-600 hover:bg-green-50"
+                                onClick={() => handleApprove(payment.id)}
+                              >
+                                <CheckCircle2 className="h-4 w-4 mr-1" /> Approve
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-destructive border-destructive hover:bg-destructive/10"
+                                onClick={() => handleReject(payment.id)}
+                              >
+                                <XCircle className="h-4 w-4 mr-1" /> Reject
+                              </Button>
+                            </div>
+                          )}
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
     </div>
