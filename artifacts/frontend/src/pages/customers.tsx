@@ -21,11 +21,32 @@ import {
   Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
 } from "@/components/ui/form";
 import { Link } from "wouter";
-import { Search, UserPlus, Pencil, Loader2, RefreshCw, MessageCircle } from "lucide-react";
+import { Search, UserPlus, Pencil, Loader2, RefreshCw, MessageCircle, MapPin } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 
 type FilterType = EntityType | "all";
+
+// Builds a Google Maps link from whatever location info the entity has.
+// gpsLocation may already be a full maps URL, a "lat,long" pair, or a
+// plus code — anything else falls back to a text search on the address.
+function getMapsUrl(e: {
+  gpsLocation?: string | null;
+  address?: string | null;
+  area?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pinCode?: string | null;
+}): string | null {
+  const gps = e.gpsLocation?.trim();
+  if (gps) {
+    if (/^https?:\/\//i.test(gps)) return gps;
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(gps)}`;
+  }
+  const parts = [e.address, e.area, e.city, e.state, e.pinCode].filter(Boolean).join(", ");
+  if (!parts) return null;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(parts)}`;
+}
 
 const TYPE_LABELS: Record<EntityType, string> = {
   customer: "Customer",
@@ -279,6 +300,8 @@ export default function Customers() {
   const formType = form.watch("type");
   const isCustomerForm = formType === "customer";
   const needsName = isCustomerForm && form.watch("pricingTier") === "retail" ? false : true;
+  const addMapsUrl = getMapsUrl(form.watch());
+  const editMapsUrl = getMapsUrl(editForm.watch());
 
   const salesmanName = (id: number | null | undefined) => {
     if (!id) return null;
@@ -287,15 +310,15 @@ export default function Customers() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold tracking-tight">Entity Directory</h1>
-        <Button onClick={openAdd} data-testid="button-open-add-entity">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Entity Directory</h1>
+        <Button onClick={openAdd} className="w-full sm:w-auto" data-testid="button-open-add-entity">
           <UserPlus className="mr-2 h-4 w-4" /> Add Entity
         </Button>
       </div>
 
-      <div className="flex gap-4">
-        <div className="relative w-full max-w-sm">
+      <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+        <div className="relative w-full sm:max-w-sm">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search name or mobile..."
@@ -304,97 +327,120 @@ export default function Customers() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <Select value={type} onValueChange={(v) => setType(v as FilterType)}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Entity Type" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Types</SelectItem>
-            <SelectItem value="customer">Customers</SelectItem>
-            <SelectItem value="vendor">Vendors</SelectItem>
-            <SelectItem value="worker">Workers</SelectItem>
-            <SelectItem value="salesman">Salesmen</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={sort} onValueChange={setSort}>
-          <SelectTrigger className="w-[190px]">
-            <SelectValue placeholder="Sort by" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="name_asc">Name A → Z</SelectItem>
-            <SelectItem value="name_desc">Name Z → A</SelectItem>
-            <SelectItem value="balance_high">Balance High → Low</SelectItem>
-            <SelectItem value="balance_low">Balance Low → High</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex gap-3">
+          <Select value={type} onValueChange={(v) => setType(v as FilterType)}>
+            <SelectTrigger className="flex-1 sm:w-[180px]">
+              <SelectValue placeholder="Entity Type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              <SelectItem value="customer">Customers</SelectItem>
+              <SelectItem value="vendor">Vendors</SelectItem>
+              <SelectItem value="worker">Workers</SelectItem>
+              <SelectItem value="salesman">Salesmen</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={sort} onValueChange={setSort}>
+            <SelectTrigger className="flex-1 sm:w-[190px]">
+              <SelectValue placeholder="Sort by" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="name_asc">Name A → Z</SelectItem>
+              <SelectItem value="name_desc">Name Z → A</SelectItem>
+              <SelectItem value="balance_high">Balance High → Low</SelectItem>
+              <SelectItem value="balance_low">Balance Low → High</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <Card>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Mobile</TableHead>
-                <TableHead>Pricing Tier</TableHead>
-                <TableHead>Salesman</TableHead>
-                <TableHead className="text-right">Balance</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8">Loading...</TableCell>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Mobile</TableHead>
+                  <TableHead className="hidden md:table-cell">Pricing Tier</TableHead>
+                  <TableHead className="hidden md:table-cell">Salesman</TableHead>
+                  <TableHead>Location</TableHead>
+                  <TableHead className="text-right">Balance</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
-              ) : entities?.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No entities found.</TableCell>
-                </TableRow>
-              ) : (
-                [...(entities ?? [])].sort((a, b) => {
-                  if (sort === "name_asc") return (a.name ?? "").localeCompare(b.name ?? "");
-                  if (sort === "name_desc") return (b.name ?? "").localeCompare(a.name ?? "");
-                  if (sort === "balance_high") return (b.outstandingBalance ?? 0) - (a.outstandingBalance ?? 0);
-                  if (sort === "balance_low") return (a.outstandingBalance ?? 0) - (b.outstandingBalance ?? 0);
-                  return 0;
-                }).map((entity) => (
-                  <TableRow key={entity.id} data-testid={`row-entity-${entity.id}`}>
-                    <TableCell className="font-medium">
-                      <Link href={`/customers/${entity.id}`} className="text-primary hover:underline">
-                        {entity.name}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="capitalize">{entity.type}</TableCell>
-                    <TableCell>{entity.mobile}</TableCell>
-                    <TableCell>
-                      {entity.pricingTier && <Badge variant="outline" className="capitalize">{entity.pricingTier}</Badge>}
-                    </TableCell>
-                    <TableCell>
-                      {(entity as any).assignedSalesmanId
-                        ? <span className="text-sm text-muted-foreground">{salesmanName((entity as any).assignedSalesmanId)}</span>
-                        : <span className="text-xs text-muted-foreground italic">—</span>}
-                    </TableCell>
-                    <TableCell className="text-right font-bold">
-                      <span className={entity.outstandingBalance && entity.outstandingBalance > 0 ? "text-destructive" : "text-green-600"}>
-                        ₹{Math.abs(entity.outstandingBalance || 0).toLocaleString()}
-                        {entity.outstandingBalance && entity.outstandingBalance > 0 ? " Dr" : " Cr"}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right space-x-1">
-                      <Button variant="ghost" size="sm" onClick={() => openEdit(entity)}>
-                        <Pencil className="w-3.5 h-3.5 mr-1" /> Edit
-                      </Button>
-                      <Link href={`/customers/${entity.id}`}>
-                        <Button variant="ghost" size="sm">View Ledger</Button>
-                      </Link>
-                    </TableCell>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8">Loading...</TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                ) : entities?.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No entities found.</TableCell>
+                  </TableRow>
+                ) : (
+                  [...(entities ?? [])].sort((a, b) => {
+                    if (sort === "name_asc") return (a.name ?? "").localeCompare(b.name ?? "");
+                    if (sort === "name_desc") return (b.name ?? "").localeCompare(a.name ?? "");
+                    if (sort === "balance_high") return (b.outstandingBalance ?? 0) - (a.outstandingBalance ?? 0);
+                    if (sort === "balance_low") return (a.outstandingBalance ?? 0) - (b.outstandingBalance ?? 0);
+                    return 0;
+                  }).map((entity) => {
+                    const mapsUrl = getMapsUrl(entity as any);
+                    return (
+                      <TableRow key={entity.id} data-testid={`row-entity-${entity.id}`}>
+                        <TableCell className="font-medium">
+                          <Link href={`/customers/${entity.id}`} className="text-primary hover:underline">
+                            {entity.name}
+                          </Link>
+                        </TableCell>
+                        <TableCell className="capitalize">{entity.type}</TableCell>
+                        <TableCell>{entity.mobile}</TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          {entity.pricingTier && <Badge variant="outline" className="capitalize">{entity.pricingTier}</Badge>}
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          {(entity as any).assignedSalesmanId
+                            ? <span className="text-sm text-muted-foreground">{salesmanName((entity as any).assignedSalesmanId)}</span>
+                            : <span className="text-xs text-muted-foreground italic">—</span>}
+                        </TableCell>
+                        <TableCell>
+                          {mapsUrl ? (
+                            <a
+                              href={mapsUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-primary hover:underline text-sm"
+                              data-testid={`link-map-entity-${entity.id}`}
+                            >
+                              <MapPin className="w-3.5 h-3.5" /> Map
+                            </a>
+                          ) : (
+                            <span className="text-xs text-muted-foreground italic">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right font-bold">
+                          <span className={entity.outstandingBalance && entity.outstandingBalance > 0 ? "text-destructive" : "text-green-600"}>
+                            ₹{Math.abs(entity.outstandingBalance || 0).toLocaleString()}
+                            {entity.outstandingBalance && entity.outstandingBalance > 0 ? " Dr" : " Cr"}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right space-x-1 whitespace-nowrap">
+                          <Button variant="ghost" size="sm" onClick={() => openEdit(entity)}>
+                            <Pencil className="w-3.5 h-3.5 mr-1" /> Edit
+                          </Button>
+                          <Link href={`/customers/${entity.id}`}>
+                            <Button variant="ghost" size="sm">View Ledger</Button>
+                          </Link>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
 
@@ -441,7 +487,7 @@ export default function Customers() {
                 )}
               />
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <FormField
                   control={form.control}
                   name="name"
@@ -489,7 +535,7 @@ export default function Customers() {
 
               {isCustomerForm && (
                 <>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <FormField
                       control={form.control}
                       name="pricingTier"
@@ -574,7 +620,7 @@ export default function Customers() {
                 )}
               />
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <FormField
                   control={form.control}
                   name="city"
@@ -601,7 +647,7 @@ export default function Customers() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <FormField
                   control={form.control}
                   name="district"
@@ -628,7 +674,7 @@ export default function Customers() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <FormField
                   control={form.control}
                   name="pinCode"
@@ -646,9 +692,16 @@ export default function Customers() {
                   name="gpsLocation"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>GPS Location</FormLabel>
+                      <FormLabel className="flex items-center justify-between">
+                        GPS Location
+                        {addMapsUrl && (
+                          <a href={addMapsUrl} target="_blank" rel="noopener noreferrer" className="text-xs font-normal text-primary hover:underline inline-flex items-center gap-1">
+                            <MapPin className="w-3 h-3" /> Open Map
+                          </a>
+                        )}
+                      </FormLabel>
                       <FormControl>
-                        <Input data-testid="input-add-entity-gpsLocation" placeholder="GPS Location" {...field} />
+                        <Input data-testid="input-add-entity-gpsLocation" placeholder="Google Maps link or lat,long" {...field} />
                       </FormControl>
                     </FormItem>
                   )}
@@ -684,7 +737,7 @@ export default function Customers() {
           </DialogHeader>
           <Form {...editForm}>
             <form onSubmit={onEditSubmit} className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <FormField
                   control={editForm.control}
                   name="name"
@@ -726,7 +779,7 @@ export default function Customers() {
 
               {editingEntity?.type === "customer" && (
                 <>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <FormField
                       control={editForm.control}
                       name="pricingTier"
@@ -812,7 +865,7 @@ export default function Customers() {
                 )}
               />
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <FormField
                   control={editForm.control}
                   name="city"
@@ -835,7 +888,7 @@ export default function Customers() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <FormField
                   control={editForm.control}
                   name="district"
@@ -858,7 +911,7 @@ export default function Customers() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <FormField
                   control={editForm.control}
                   name="pinCode"
@@ -874,14 +927,21 @@ export default function Customers() {
                   name="gpsLocation"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>GPS Location</FormLabel>
-                      <FormControl><Input placeholder="GPS Location" {...field} /></FormControl>
+                      <FormLabel className="flex items-center justify-between">
+                        GPS Location
+                        {editMapsUrl && (
+                          <a href={editMapsUrl} target="_blank" rel="noopener noreferrer" className="text-xs font-normal text-primary hover:underline inline-flex items-center gap-1">
+                            <MapPin className="w-3 h-3" /> Open Map
+                          </a>
+                        )}
+                      </FormLabel>
+                      <FormControl><Input placeholder="Google Maps link or lat,long" {...field} /></FormControl>
                     </FormItem>
                   )}
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium flex items-center gap-1.5">
                     <MessageCircle className="w-3.5 h-3.5 text-green-500" /> WhatsApp No.
