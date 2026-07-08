@@ -180,82 +180,90 @@ export default function StockAdjustment() {
         </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-[1fr_340px]">
-        {/* Product Picker */}
-        <div className="space-y-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search by name, item code, brand…"
-              className="pl-9"
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setSelectedProduct(null);
-                setPhysicalCount("");
-                setReason("");
-              }}
-            />
-          </div>
-          <div className="border rounded-lg overflow-hidden">
-            {isLoading ? (
-              <div className="flex justify-center py-10">
-                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : filtered.length === 0 ? (
-              <div className="text-center py-10 text-sm text-muted-foreground">No products found</div>
-            ) : (
-              <div className="divide-y max-h-[420px] overflow-y-auto">
-                {filtered.map((p: any) => {
-                  const isSelected = selectedProduct?.id === p.id;
-                  const stock = Number(p.currentStock ?? 0);
-                  return (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedProduct(p);
-                        setPhysicalCount("");
-                        setReason("");
-                      }}
-                      className={
-                        "w-full text-left px-4 py-3 flex items-center gap-3 transition-colors border-l-2 " +
-                        (isSelected ? "bg-primary/5 border-primary" : "hover:bg-muted/40 border-transparent")
-                      }
-                    >
-                      <div className="w-9 h-9 rounded-md bg-muted flex items-center justify-center shrink-0 overflow-hidden">
-                        {p.imageUrl ? (
-                          <img src={p.imageUrl} alt={p.name} className="object-contain w-full h-full" />
-                        ) : (
-                          <Package className="w-4 h-4 text-muted-foreground/50" />
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium text-sm truncate">{p.name}</div>
-                        <div className="text-xs text-muted-foreground font-mono">{p.itemCode}</div>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <div className="text-sm font-semibold tabular-nums">{stock}</div>
-                        <div className="text-[10px] text-muted-foreground">in system</div>
-                      </div>
-                      {isSelected && <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+      {/* Product Picker */}
+      <div className="space-y-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Search by name, item code, brand…"
+            className="pl-9"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setSelectedProduct(null);
+              setPhysicalCount("");
+              setReason("");
+            }}
+          />
         </div>
-
-        {/* Adjustment Form */}
-        <div>
-          {!selectedProduct ? (
-            <div className="border border-dashed rounded-lg flex flex-col items-center justify-center py-16 text-muted-foreground text-sm gap-2 h-full">
-              <ClipboardCheck className="w-8 h-8 opacity-20" />
-              <p>Select a product to adjust</p>
+        <div className="border rounded-lg overflow-hidden">
+          {isLoading ? (
+            <div className="flex justify-center py-10">
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
             </div>
+          ) : filtered.length === 0 ? (
+            <div className="text-center py-10 text-sm text-muted-foreground">No products found</div>
           ) : (
-            <div className="border rounded-lg p-5 space-y-5 sticky top-4">
+            <div className="divide-y max-h-[420px] overflow-y-auto">
+              {filtered.map((p: any) => {
+                const isSelected = selectedProduct?.id === p.id;
+                const stock = Number(p.currentStock ?? 0);
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedProduct(p);
+                      setPhysicalCount("");
+                      setReason("");
+                    }}
+                    className={
+                      "w-full text-left px-4 py-3 flex items-center gap-3 transition-colors border-l-2 " +
+                      (isSelected ? "bg-primary/5 border-primary" : "hover:bg-muted/40 border-transparent")
+                    }
+                  >
+                    <div className="w-9 h-9 rounded-md bg-muted flex items-center justify-center shrink-0 overflow-hidden">
+                      {p.imageUrl ? (
+                        <img src={p.imageUrl} alt={p.name} className="object-contain w-full h-full" />
+                      ) : (
+                        <Package className="w-4 h-4 text-muted-foreground/50" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-sm truncate">{p.name}</div>
+                      <div className="text-xs text-muted-foreground font-mono">{p.itemCode}</div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="text-sm font-semibold tabular-nums">{stock}</div>
+                      <div className="text-[10px] text-muted-foreground">in system</div>
+                    </div>
+                    {isSelected && <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Adjustment Form — opens as a modal so it works on mobile without scrolling below the fold */}
+      <Dialog
+        open={!!selectedProduct && !showConfirm}
+        onOpenChange={(o) => {
+          if (!o) {
+            setSelectedProduct(null);
+            setPhysicalCount("");
+            setReason("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-sm mx-auto max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-base">Adjust Stock</DialogTitle>
+          </DialogHeader>
+
+          {selectedProduct && (
+            <div className="space-y-5">
               <div className="space-y-1">
                 <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Selected Product</div>
                 <div className="font-bold text-base leading-tight">{selectedProduct.name}</div>
@@ -340,8 +348,8 @@ export default function StockAdjustment() {
               )}
             </div>
           )}
-        </div>
-      </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Confirmation Dialog */}
       <Dialog open={showConfirm} onOpenChange={function(o) { if (!isSubmitting) setShowConfirm(o); }}>
