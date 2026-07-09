@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import React from "react";
 import {
   ActivityIndicator,
+  Image,
   Platform,
   Pressable,
   RefreshControl,
@@ -70,7 +71,7 @@ function typeLabel(t: string): string {
 }
 
 export default function DashboardScreen() {
-  const { user, companyName, logout } = useAuth();
+  const { user, companyName, companyLogo, logout } = useAuth();
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -133,12 +134,17 @@ export default function DashboardScreen() {
       }
     >
       <View style={styles.topBar}>
-        <View>
-          <Text style={styles.greeting}>{greeting},</Text>
-          <Text style={styles.userName}>{user?.username ?? "User"}</Text>
-          {companyName ? (
-            <Text style={styles.companyName}>{companyName}</Text>
+        <View style={styles.topBarLeft}>
+          {companyLogo ? (
+            <Image source={{ uri: companyLogo }} style={styles.companyLogo} resizeMode="contain" />
           ) : null}
+          <View>
+            <Text style={styles.greeting}>{greeting},</Text>
+            <Text style={styles.userName}>{user?.username ?? "User"}</Text>
+            {companyName ? (
+              <Text style={styles.companyName}>{companyName}</Text>
+            ) : null}
+          </View>
         </View>
         <Pressable
           style={({ pressed }) => [styles.logoutBtn, pressed && { opacity: 0.7 }]}
@@ -424,6 +430,8 @@ function makeStyles(colors: ReturnType<typeof useColors>, insets: ReturnType<typ
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
     },
+    topBarLeft: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
+    companyLogo: { width: 40, height: 40, borderRadius: 10 },
     greeting: { fontSize: 13, color: colors.mutedForeground },
     userName: { fontSize: 22, fontWeight: "700" as const, color: colors.foreground },
     companyName: { fontSize: 13, color: colors.primary, fontWeight: "600" as const, marginTop: 2 },

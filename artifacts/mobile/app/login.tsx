@@ -3,6 +3,7 @@ import * as Haptics from "expo-haptics";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -20,6 +21,7 @@ import { useColors } from "@/hooks/useColors";
 interface CompanyOption {
   id: number;
   name: string;
+  logo: string | null;
 }
 
 export default function LoginScreen() {
@@ -83,6 +85,12 @@ export default function LoginScreen() {
   const topInset = Platform.OS === "web" ? 60 : insets.top;
   const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
 
+  // Show the selected company's branding once known; when there's only one
+  // tenant on this deployment, show its branding immediately (no picker step).
+  const heroCompany =
+    (selectedCompanyId != null ? companies.find((c) => c.id === selectedCompanyId) : null) ??
+    (companies.length === 1 ? companies[0] : null);
+
   return (
     <KeyboardAvoidingView
       style={[styles.root, { backgroundColor: colors.primary }]}
@@ -99,9 +107,17 @@ export default function LoginScreen() {
         {/* Hero */}
         <View style={styles.hero}>
           <View style={styles.logoRing}>
-            <Feather name="bar-chart-2" size={36} color="#ffffff" />
+            {heroCompany?.logo ? (
+              <Image
+                source={{ uri: heroCompany.logo }}
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
+            ) : (
+              <Feather name="bar-chart-2" size={36} color="#ffffff" />
+            )}
           </View>
-          <Text style={styles.appName}>Vipro ERP</Text>
+          <Text style={styles.appName}>{heroCompany?.name ?? "Vipro ERP"}</Text>
           <Text style={styles.tagline}>Business Management System</Text>
         </View>
 
@@ -139,11 +155,19 @@ export default function LoginScreen() {
                       onPress={() => setSelectedCompanyId(c.id)}
                       activeOpacity={0.7}
                     >
-                      <Feather
-                        name="briefcase"
-                        size={13}
-                        color={active ? "#ffffff" : colors.mutedForeground}
-                      />
+                      {c.logo ? (
+                        <Image
+                          source={{ uri: c.logo }}
+                          style={styles.chipLogo}
+                          resizeMode="contain"
+                        />
+                      ) : (
+                        <Feather
+                          name="briefcase"
+                          size={13}
+                          color={active ? "#ffffff" : colors.mutedForeground}
+                        />
+                      )}
                       <Text
                         style={[
                           styles.chipText,
@@ -163,7 +187,15 @@ export default function LoginScreen() {
           {/* Single company badge */}
           {companiesLoaded && companies.length === 1 && (
             <View style={[styles.singleBadge, { backgroundColor: colors.accent }]}>
-              <Feather name="briefcase" size={13} color={colors.primary} />
+              {companies[0]?.logo ? (
+                <Image
+                  source={{ uri: companies[0].logo as string }}
+                  style={styles.chipLogo}
+                  resizeMode="contain"
+                />
+              ) : (
+                <Feather name="briefcase" size={13} color={colors.primary} />
+              )}
               <Text style={[styles.singleBadgeText, { color: colors.primary }]}>
                 {companies[0]?.name}
               </Text>
@@ -265,7 +297,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 16,
+    overflow: "hidden",
   },
+  logoImage: { width: "100%", height: "100%" },
   appName: { fontSize: 28, fontWeight: "700", color: "#ffffff", letterSpacing: 0.5 },
   tagline: { fontSize: 13, color: "rgba(255,255,255,0.75)", marginTop: 4 },
   card: { marginHorizontal: 20, borderRadius: 16, padding: 24 },
@@ -290,6 +324,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   chipText: { fontSize: 13, fontWeight: "500" },
+  chipLogo: { width: 16, height: 16, borderRadius: 3 },
   singleBadge: {
     flexDirection: "row",
     alignItems: "center",

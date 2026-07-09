@@ -12,6 +12,7 @@ import {
 } from "@workspace/api-zod";
 import { getCompanyId, handleTenantError } from "../lib/tenant";
 import { isAccountAllowedHere, getDefaultCompanyId } from "../lib/system-config";
+import { getCurrentCompany } from "../lib/company";
 
 const router: IRouter = Router();
 
@@ -203,6 +204,8 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     companySwitch: user.role !== "super_admin" && switchTarget != null,
   };
 
+  const loginCompany = await getCurrentCompany(sessionCompanyId);
+
   res.json({
     id: user.id,
     username: user.username,
@@ -210,6 +213,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     name: user.name,
     customerId: user.entityId ?? null,
     companyId: sessionCompanyId,
+    company: loginCompany ? { name: loginCompany.name, logo: loginCompany.logo ?? null } : null,
   });
 
   // Audit success after sending the response.
@@ -269,6 +273,11 @@ router.get("/auth/me", async (req, res): Promise<void> => {
     companySwitch: (session.companySwitch as boolean | undefined) ?? false,
   };
 
+  // Effective company for branding: the user's own company, or (for a
+  // super_admin) whichever company they've switched into.
+  const activeCompanyId = (session.activeCompanyId as number | null | undefined) ?? null;
+  const meCompany = await getCurrentCompany(user.companyId ?? activeCompanyId);
+
   res.json({
     id: user.id,
     username: user.username,
@@ -279,7 +288,8 @@ router.get("/auth/me", async (req, res): Promise<void> => {
     // Surface the super_admin's currently switched-into company so the SPA can
     // show the right company context and unlock ERP navigation. Null for normal
     // users and for a super_admin that hasn't picked a company yet.
-    activeCompanyId: (session.activeCompanyId as number | null | undefined) ?? null,
+    activeCompanyId,
+    company: meCompany ? { name: meCompany.name, logo: meCompany.logo ?? null } : null,
   });
 });
 
