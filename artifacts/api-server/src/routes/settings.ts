@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { eq } from "drizzle-orm";
-import { db, usersTable, pool } from "@workspace/db";
+import { db, usersTable, companiesTable, pool } from "@workspace/db";
 import {
   UpdateAppSettingsBody,
   UpdateNumberSeriesParams,
@@ -188,6 +188,42 @@ router.put("/print-settings", requireAdmin, async (req, res): Promise<void> => {
   );
 
   res.json(merged);
+});
+
+// GET /company-profile — this company's name + logo (shown on the login
+// screen and company switcher). Every tenant manages its own independently.
+router.get("/company-profile", async (req, res): Promise<void> => {
+  const session = (req as any).session;
+  if (!session?.userId) { res.status(401).json({ error: "Not authenticated" }); return; }
+  const companyId = getCompanyId(req);
+  const [company] = await db.select().from(companiesTable).where(eq(companiesTable.id, companyId));
+  if (!company) { res.status(404).json({ error: "Company not found" }); return; }
+  res.json({ id: company.id, name: company.name, logo: company.logo ?? null });
+});
+
+// PUT /company-profile — update this company's logo (admin only). Logo is a
+// base64 data URL, same convention as product images and the super-admin
+// subscriptions console — capped well under Postgres's row-size limits.
+router.put("/company-profile", requireAdmin, async (req, res): Promise<void> => {
+  const { logo } = req.body as { logo?: string | null };
+  if (logo != null && (typeof logo !== "string" || logo.length > 2_000_000)) {
+    res.status(400).json({ error: "Logo must be a data URL under ~1.5MB" });
+    return;
+  }
+  const session = (req as any).session;
+  const companyId = getCompanyId(req);
+  const [updated] = await db
+    .update(companiesTable)
+    .set({ logo: logo ?? null })
+    .where(eq(companiesTable.id, companyId))
+    .returning();
+  if (!updated) { res.status(404).json({ error: "Company not found" }); return; }
+  await pool.query(
+    `INSERT INTO audit_log (company_id, action, description, user_id, user_name, metadata)
+     VALUES ($1, 'company_logo_updated', $2, $3, $4, $5)`,
+    [companyId, logo ? "Company logo updated" : "Company logo removed", session?.userId ?? 1, session?.name ?? "Unknown", JSON.stringify({ hasLogo: !!logo })],
+  );
+  res.json({ id: updated.id, name: updated.name, logo: updated.logo ?? null });
 });
 
 // GET /number-series — list all configured document series (admin only).

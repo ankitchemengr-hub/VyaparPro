@@ -9,8 +9,9 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { ShieldCheck, Save, Printer, Hash, RefreshCw, Loader2 } from "lucide-react";
+import { ShieldCheck, Save, Printer, Hash, RefreshCw, Loader2, Building2 } from "lucide-react";
 import { PrintSettingsPanel } from "@/components/settings/PrintSettingsPanel";
+import { CompanyProfilePanel } from "@/components/settings/CompanyProfilePanel";
 
 const TYPE_LABELS: Record<string, string> = {
   invoice: "Invoice",
@@ -295,17 +296,22 @@ export default function Settings() {
       </div>
 
       <Tabs defaultValue="sequences">
-        <TabsList>
-          <TabsTrigger value="sequences" data-testid="tab-sequences">
-            <Hash className="mr-2 h-4 w-4" /> Document Sequences
-          </TabsTrigger>
-          <TabsTrigger value="permissions" data-testid="tab-permissions">
-            <ShieldCheck className="mr-2 h-4 w-4" /> Permissions
-          </TabsTrigger>
-          <TabsTrigger value="printing" data-testid="tab-printing">
-            <Printer className="mr-2 h-4 w-4" /> Printing
-          </TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+          <TabsList className="w-max">
+            <TabsTrigger value="sequences" data-testid="tab-sequences">
+              <Hash className="mr-2 h-4 w-4" /> Document Sequences
+            </TabsTrigger>
+            <TabsTrigger value="permissions" data-testid="tab-permissions">
+              <ShieldCheck className="mr-2 h-4 w-4" /> Permissions
+            </TabsTrigger>
+            <TabsTrigger value="printing" data-testid="tab-printing">
+              <Printer className="mr-2 h-4 w-4" /> Printing
+            </TabsTrigger>
+            <TabsTrigger value="company" data-testid="tab-company">
+              <Building2 className="mr-2 h-4 w-4" /> Company
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="sequences" className="space-y-4 mt-4">
           <SequencesTab />
@@ -364,6 +370,10 @@ export default function Settings() {
 
         <TabsContent value="printing">
           <PrintSettingsPanel />
+        </TabsContent>
+
+        <TabsContent value="company" className="mt-4">
+          <CompanyProfilePanel />
         </TabsContent>
       </Tabs>
     </div>
