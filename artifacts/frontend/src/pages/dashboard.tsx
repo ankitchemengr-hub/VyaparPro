@@ -6,6 +6,8 @@ import {
   useGetLowStockAlerts,
   useGetCapitalSnapshot,
   getGetCapitalSnapshotQueryKey,
+  useGetLitersSold,
+  getGetLitersSoldQueryKey,
   useListWorkloadCards,
 } from "@workspace/api-client-react";
 import {
@@ -18,8 +20,10 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Factory,
+  Droplets,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 export default function Dashboard() {
   const { user, hasRole } = useAuth();
@@ -44,6 +48,9 @@ export default function Dashboard() {
   const { data: lowStockAlerts } = useGetLowStockAlerts();
   const { data: capital, isLoading: isLoadingCapital } = useGetCapitalSnapshot({
     query: { queryKey: getGetCapitalSnapshotQueryKey(), enabled: isAdmin },
+  });
+  const { data: litersSold, isLoading: isLoadingLiters } = useGetLitersSold({
+    query: { queryKey: getGetLitersSoldQueryKey(), enabled: isAdmin },
   });
   const { data: workloadCards } = useListWorkloadCards();
   const assembledItems = (workloadCards ?? []).filter((c: any) => c.status === "pending");
@@ -97,6 +104,36 @@ export default function Dashboard() {
                   {capital.growthK.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                   <span className="text-xs text-muted-foreground font-normal ml-1">k</span>
                 </div>
+              )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Ltr Sale</CardTitle>
+              <Droplets className="h-4 w-4 text-sky-600" />
+            </CardHeader>
+            <CardContent>
+              {isLoadingLiters || !litersSold ? (
+                <div className="h-8 w-24 bg-muted rounded animate-pulse" />
+              ) : (
+                <Tabs defaultValue="day">
+                  <TabsList className="h-7">
+                    <TabsTrigger value="day" className="text-xs px-2 py-0.5">Day</TabsTrigger>
+                    <TabsTrigger value="month" className="text-xs px-2 py-0.5">Month</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="day">
+                    <div className="text-2xl font-bold" data-testid="text-liters-today-value">
+                      {litersSold.today.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                      <span className="text-xs text-muted-foreground font-normal ml-1">L</span>
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="month">
+                    <div className="text-2xl font-bold" data-testid="text-liters-month-value">
+                      {litersSold.thisMonth.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                      <span className="text-xs text-muted-foreground font-normal ml-1">L</span>
+                    </div>
+                  </TabsContent>
+                </Tabs>
               )}
             </CardContent>
           </Card>

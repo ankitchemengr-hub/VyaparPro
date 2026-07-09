@@ -1833,6 +1833,13 @@ export interface CapitalSnapshot {
   growthK?: number | null;
 }
 
+export interface LitersSold {
+  /** Total liters sold today (saved invoices only) */
+  today: number;
+  /** Total liters sold this calendar month (saved invoices only) */
+  thisMonth: number;
+}
+
 export interface SalesTrendPoint {
   /** ISO date (YYYY-MM-DD) for this trend point */
   date: string;

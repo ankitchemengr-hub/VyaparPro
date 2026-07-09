@@ -1477,6 +1477,33 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Purchase"
+    put:
+      operationId: updatePurchase
+      tags: [purchases]
+      summary: Replace a purchase bill (reverses old stock/ledger, re-applies new)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePurchaseInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Purchase"
+        "400":
+          description: Invalid request
+        "404":
+          description: Purchase not found
 
   /manufacturing/assemble:
     post:
@@ -1635,6 +1662,21 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/SalesTrendPoint"
+
+  /dashboard/liters-sold:
+    get:
+      operationId: getLitersSold
+      tags: [dashboard]
+      summary: Admin-only total liters sold today and this month
+      responses:
+        "200":
+          description: Liters sold totals
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LitersSold"
+        "403":
+          description: Forbidden
 
   # REPORTS
   /reports/ledger:
@@ -4546,6 +4588,17 @@ components:
         growthK:
           type: ["number", "null"]
           description: today capitalK - yesterday capitalK (the value to display)
+
+    LitersSold:
+      type: object
+      required: [today, thisMonth]
+      properties:
+        today:
+          type: number
+          description: Total liters sold today (saved invoices only)
+        thisMonth:
+          type: number
+          description: Total liters sold this calendar month (saved invoices only)
 
     SalesTrendPoint:
       type: object

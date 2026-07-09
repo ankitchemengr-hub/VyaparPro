@@ -266,6 +266,36 @@ router.get("/dashboard/sales-trend", async (req, res): Promise<void> => {
   })));
 });
 
+// GET /dashboard/liters-sold (admin only) — total liters sold today and this
+// calendar month, combining every product regardless of volume_unit (liter or
+// kg) since invoice_items.total_liters already holds the unit-agnostic figure.
+router.get("/dashboard/liters-sold", async (req, res): Promise<void> => {
+  const role = (req as any).session?.role;
+  if (role !== "admin") {
+    res.status(403).json({ error: "Admin only" });
+    return;
+  }
+
+  const companyId = getCompanyId(req);
+  const row = await queryOne(
+    `SELECT
+       COALESCE(SUM(CASE WHEN i.invoice_date::date = CURRENT_DATE
+         THEN ii.total_liters ELSE 0 END), 0) AS today,
+       COALESCE(SUM(CASE WHEN EXTRACT(MONTH FROM i.invoice_date) = EXTRACT(MONTH FROM CURRENT_DATE)
+         AND EXTRACT(YEAR FROM i.invoice_date) = EXTRACT(YEAR FROM CURRENT_DATE)
+         THEN ii.total_liters ELSE 0 END), 0) AS "thisMonth"
+     FROM invoice_items ii
+     JOIN invoices i ON i.id = ii.invoice_id
+     WHERE i.company_id = $1 AND i.status = 'saved'`,
+    [companyId]
+  );
+
+  res.json({
+    today: Number(row.today ?? 0),
+    thisMonth: Number(row.thisMonth ?? 0),
+  });
+});
+
 // GET /reports/ledger
 router.get("/reports/ledger", async (req, res): Promise<void> => {
   const role = (req as any).session?.role;

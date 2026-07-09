@@ -20,14 +20,24 @@ import { useAuth } from "@/contexts/AuthContext";
 import { apiGet } from "@/lib/api";
 import { useColors } from "@/hooks/useColors";
 
+// Must mirror the real /dashboard/capital response shape
+// (artifacts/api-server/src/routes/dashboard.ts) — a prior mismatched local
+// shape here meant every stat card silently rendered nothing.
 interface CapitalSnapshot {
-  totalOutstanding?: string | number;
-  totalReceivable?: string | number;
-  todayCollection?: string | number;
-  thisMonthCollection?: string | number;
-  totalInventoryValue?: string | number;
-  cashBalance?: string | number;
-  bankBalance?: string | number;
+  inventoryValue?: number;
+  receivable?: number;
+  cashInAccounts?: number;
+  payable?: number;
+  expenses?: number;
+  capital?: number;
+  capitalK?: number;
+  growth?: number | null;
+  growthK?: number | null;
+}
+
+interface LitersSold {
+  today: number;
+  thisMonth: number;
 }
 
 interface Invoice {
@@ -53,6 +63,11 @@ function fmt(val: string | number | undefined, compact = true): string {
     return "₹" + (n / 1000).toFixed(1) + "K";
   }
   return "₹" + n.toLocaleString("en-IN", { maximumFractionDigits: 0 });
+}
+
+function fmtLiters(val: number | undefined): string {
+  if (val === undefined || val === null || isNaN(val)) return "0 L";
+  return val.toLocaleString("en-IN", { maximumFractionDigits: 1 }) + " L";
 }
 
 function formatDate(s: string): string {
@@ -88,6 +103,16 @@ export default function DashboardScreen() {
   });
 
   const {
+    data: litersSold,
+    isLoading: litersLoading,
+    refetch: refetchLiters,
+  } = useQuery<LitersSold>({
+    queryKey: ["liters-sold"],
+    queryFn: () => apiGet<LitersSold>("/dashboard/liters-sold"),
+    retry: 1,
+  });
+
+  const {
     data: invoices,
     isLoading: invLoading,
     refetch: refetchInv,
@@ -103,6 +128,7 @@ export default function DashboardScreen() {
 
   const handleRefresh = () => {
     refetchSnap();
+    refetchLiters();
     refetchInv();
   };
 
@@ -154,12 +180,12 @@ export default function DashboardScreen() {
         </Pressable>
       </View>
 
-      {snapLoading ? (
+      {snapLoading && litersLoading ? (
         <View style={styles.loadingRow}>
           <ActivityIndicator size="small" color={colors.primary} />
           <Text style={styles.loadingText}>Loading snapshot...</Text>
         </View>
-      ) : snapshot ? (
+      ) : snapshot || litersSold ? (
         <View>
           <Text style={styles.sectionTitle}>Financial Overview</Text>
           <ScrollView
@@ -167,46 +193,55 @@ export default function DashboardScreen() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.statsRow}
           >
-            {snapshot.totalOutstanding !== undefined && (
+            {snapshot?.receivable !== undefined && (
               <StatCard
                 label="Outstanding"
-                value={fmt(snapshot.totalOutstanding)}
+                value={fmt(snapshot.receivable)}
                 icon="alert-circle"
                 color={colors.destructive}
                 colors={colors}
               />
             )}
-            {snapshot.todayCollection !== undefined && (
+            {snapshot?.growthK != null && (
               <StatCard
-                label="Today's Collection"
-                value={fmt(snapshot.todayCollection)}
+                label="Growth"
+                value={(snapshot.growthK >= 0 ? "+" : "") + fmt(snapshot.growthK * 1000)}
                 icon="trending-up"
-                color={colors.success}
+                color={snapshot.growthK >= 0 ? colors.success : colors.destructive}
                 colors={colors}
               />
             )}
-            {snapshot.thisMonthCollection !== undefined && (
+            {litersSold?.today !== undefined && (
               <StatCard
-                label="This Month"
-                value={fmt(snapshot.thisMonthCollection)}
-                icon="calendar"
-                color={colors.primary}
+                label="Ltr Sale (Day)"
+                value={fmtLiters(litersSold.today)}
+                icon="droplet"
+                color="#0ea5e9"
                 colors={colors}
               />
             )}
-            {snapshot.totalInventoryValue !== undefined && (
+            {litersSold?.thisMonth !== undefined && (
+              <StatCard
+                label="Ltr Sale (Month)"
+                value={fmtLiters(litersSold.thisMonth)}
+                icon="droplet"
+                color="#0284c7"
+                colors={colors}
+              />
+            )}
+            {snapshot?.inventoryValue !== undefined && (
               <StatCard
                 label="Inventory"
-                value={fmt(snapshot.totalInventoryValue)}
+                value={fmt(snapshot.inventoryValue)}
                 icon="package"
                 color="#8b5cf6"
                 colors={colors}
               />
             )}
-            {snapshot.cashBalance !== undefined && (
+            {snapshot?.cashInAccounts !== undefined && (
               <StatCard
                 label="Cash"
-                value={fmt(snapshot.cashBalance)}
+                value={fmt(snapshot.cashInAccounts)}
                 icon="dollar-sign"
                 color={colors.success}
                 colors={colors}

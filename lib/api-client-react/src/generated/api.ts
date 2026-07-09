@@ -83,6 +83,7 @@ import type {
   ItemWiseSalesReport,
   LedgerAdjustmentInput,
   LedgerEntry,
+  LitersSold,
   ListAccountTransactionsParams,
   ListCustomerOrdersParams,
   ListEntitiesParams,
@@ -6265,6 +6266,80 @@ export function useGetSalesTrend<TData = Awaited<ReturnType<typeof getSalesTrend
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetSalesTrendQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+export const getGetLitersSoldUrl = () => {
+
+
+
+
+  return `/api/dashboard/liters-sold`
+}
+
+/**
+ * @summary Admin-only total liters sold today and this month
+ */
+export const getLitersSold = async ( options?: RequestInit): Promise<LitersSold> => {
+
+  return customFetch<LitersSold>(getGetLitersSoldUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetLitersSoldQueryKey = () => {
+    return [
+    `/api/dashboard/liters-sold`
+    ] as const;
+    }
+
+
+export const getGetLitersSoldQueryOptions = <TData = Awaited<ReturnType<typeof getLitersSold>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLitersSold>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetLitersSoldQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLitersSold>>> = ({ signal }) => getLitersSold({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getLitersSold>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetLitersSoldQueryResult = NonNullable<Awaited<ReturnType<typeof getLitersSold>>>
+export type GetLitersSoldQueryError = ErrorType<void>
+
+
+/**
+ * @summary Admin-only total liters sold today and this month
+ */
+
+export function useGetLitersSold<TData = Awaited<ReturnType<typeof getLitersSold>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLitersSold>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetLitersSoldQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
