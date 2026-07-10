@@ -82,7 +82,7 @@ export default function Manufacturing() {
       </div>
 
       <Tabs value={tab} onValueChange={setTab} className="w-full">
-        <TabsList className="grid w-full max-w-3xl grid-cols-4">
+        <TabsList className="flex flex-wrap h-auto justify-start gap-1">
           <TabsTrigger value="workload" data-testid="tab-workload">
             Workload
           </TabsTrigger>
@@ -418,6 +418,8 @@ function WorkloadTab({
       </div>
 
       <div className="rounded-lg border overflow-hidden">
+        {/* Desktop / tablet: dense table layout */}
+        <div className="hidden md:block">
         <div className="grid grid-cols-12 gap-2 px-4 py-2 text-xs uppercase text-muted-foreground font-medium bg-muted/50">
           <div className="col-span-4">Product</div>
           <div className="col-span-1 text-right">Required</div>
@@ -613,6 +615,206 @@ function WorkloadTab({
                     </Button>
                   )}
                 </div>
+              </div>
+            );
+          })}
+        </div>
+        </div>
+
+        {/* Mobile: stacked cards — the status controls (Produce / status select /
+            BOM button) need their own full-width rows since a fixed-width select
+            plus buttons never fit inside a narrow grid column on a phone. */}
+        <div className="md:hidden divide-y">
+          {alerts.map((a: any) => {
+            const bom = bomByFinishedProduct.get(a.id);
+            const product = productById.get(a.id);
+            const imageUrl = product?.imageUrl;
+            const itemCode = product?.itemCode;
+            const unit = a.unit ?? "";
+            const available = Number(a.currentStock);
+            const card = activeCardByProduct.get(a.id);
+            const required = card
+              ? Number(card.targetQty)
+              : Math.max(0, Number(a.minStockThreshold) - available);
+            const shortage = Math.max(0, required - available);
+            const critical = available <= 0;
+            const status: "pending" | "processing" =
+              card?.status === "processing" ? "processing" : "pending";
+            const isBusy = busyProductId === a.id;
+            const hasBom = !!bom;
+
+            return (
+              <div
+                key={a.id}
+                className="p-4 space-y-3"
+                data-testid={`workload-row-mobile-${a.id}`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className="w-12 h-12 rounded-md border bg-muted/30 shrink-0 overflow-hidden flex items-center justify-center">
+                    {imageUrl ? (
+                      <img
+                        src={imageUrl}
+                        alt={a.name}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).style.display =
+                            "none";
+                        }}
+                      />
+                    ) : (
+                      <Package className="w-5 h-5 text-muted-foreground/40" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium line-clamp-1 flex items-center gap-2">
+                      {critical && (
+                        <AlertTriangle className="w-4 h-4 text-destructive shrink-0" />
+                      )}
+                      {a.name}
+                    </div>
+                    {itemCode && (
+                      <div className="text-[11px] text-muted-foreground font-mono">
+                        {itemCode}
+                      </div>
+                    )}
+                    {hasBom ? (
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        Recipe ready · {bom.outputQuantity} per batch ·{" "}
+                        {bom.items.length} materials
+                      </div>
+                    ) : (
+                      <div className="text-xs text-amber-600 dark:text-amber-500 mt-0.5">
+                        No BOM defined — set up a recipe before producing
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  <div>
+                    <div className="text-muted-foreground uppercase tracking-wide text-[10px]">Required</div>
+                    <div className="tabular-nums font-medium">{required.toLocaleString()} {unit}</div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground uppercase tracking-wide text-[10px]">Available</div>
+                    <div className={`tabular-nums font-medium ${critical ? "text-destructive" : ""}`}>
+                      {available.toLocaleString()} {unit}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground uppercase tracking-wide text-[10px]">Shortage</div>
+                    <Badge
+                      variant={shortage > 0 ? "destructive" : "secondary"}
+                      className={shortage > 0 ? "text-white" : ""}
+                      data-testid={`shortage-mobile-${a.id}`}
+                    >
+                      {shortage.toLocaleString()} {unit}
+                    </Badge>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 pt-1 border-t" data-testid={`status-mobile-${a.id}`}>
+                  {hasBom && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      disabled={isBusy}
+                      onClick={() =>
+                        handleOpenProduce(
+                          a.id,
+                          a.name,
+                          unit,
+                          shortage || required || 1,
+                        )
+                      }
+                      data-testid={`button-produce-mobile-${a.id}`}
+                    >
+                      <Factory className="h-4 w-4 mr-1.5" />
+                      Produce
+                    </Button>
+                  )}
+                  {isAdmin && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0"
+                      title={hasBom ? "Edit BOM" : "Add BOM"}
+                      onClick={() =>
+                        setBomDialog({
+                          finishedProductId: a.id,
+                          finishedProductName: a.name,
+                          existingBom: bom ?? null,
+                        })
+                      }
+                      data-testid={`button-${hasBom ? "edit" : "add"}-bom-mobile-${a.id}`}
+                    >
+                      {hasBom ? (
+                        <Pencil className="h-4 w-4" />
+                      ) : (
+                        <Plus className="h-4 w-4" />
+                      )}
+                    </Button>
+                  )}
+                </div>
+
+                {hasBom ? (
+                  <Select
+                    value={status}
+                    disabled={isBusy}
+                    onValueChange={(next) => {
+                      if (next === status) return;
+                      if (next === "done") {
+                        handleOpenDone(a.id, a.name, unit, shortage || 1);
+                      } else if (
+                        next === "pending" ||
+                        next === "processing"
+                      ) {
+                        handleSetStatus(a.id, next, shortage || 1);
+                      }
+                    }}
+                  >
+                    <SelectTrigger
+                      className={`w-full ${
+                        status === "processing"
+                          ? "border-blue-500 text-blue-700 dark:text-blue-300"
+                          : "border-border"
+                      }`}
+                      data-testid={`select-status-mobile-${a.id}`}
+                    >
+                      {isBusy ? (
+                        <span className="flex items-center gap-2 text-xs">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />{" "}
+                          Updating…
+                        </span>
+                      ) : (
+                        <SelectValue />
+                      )}
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pending">
+                        <span className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-muted-foreground" />
+                          Pending
+                        </span>
+                      </SelectItem>
+                      <SelectItem value="processing">
+                        <span className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-blue-500" />
+                          Processing
+                        </span>
+                      </SelectItem>
+                      <SelectItem value="done">
+                        <span className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-green-600" />
+                          Done (enter qty…)
+                        </span>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Badge variant="outline" className="w-full justify-center py-1.5">No Recipe</Badge>
+                )}
               </div>
             );
           })}
@@ -1734,26 +1936,29 @@ function ReportTab() {
       ) : (
         <div className="rounded-lg border overflow-hidden">
           <div className="grid grid-cols-12 gap-2 px-4 py-2 text-xs uppercase text-muted-foreground font-medium bg-muted/50">
-            <div className="col-span-1">#</div>
-            <div className="col-span-4">Product</div>
-            <div className="col-span-2 text-right">Qty</div>
-            <div className="col-span-2 text-right">Ltrs</div>
-            <div className="col-span-3 text-right">Completed At</div>
+            <div className="col-span-5 sm:col-span-4">Product</div>
+            <div className="col-span-3 sm:col-span-2 text-right">Qty</div>
+            <div className="col-span-4 sm:col-span-2 text-right">Ltrs</div>
+            <div className="hidden sm:block sm:col-span-4 text-right">Completed At</div>
           </div>
           <div className="divide-y">
-            {filtered.map((c: any, idx: number) => {
+            {filtered.map((c: any) => {
               const prod = productById.get(c.productId);
               const lpb = Number(prod?.litersPerBox ?? 0);
               const ltrs = Number(c.targetQty ?? 0) * lpb;
               return (
                 <div key={c.id} className="grid grid-cols-12 gap-2 px-4 py-3 items-center text-sm">
-                  <div className="col-span-1 text-muted-foreground tabular-nums">{idx + 1}</div>
-                  <div className="col-span-4 font-medium line-clamp-1">{c.productName}</div>
-                  <div className="col-span-2 text-right tabular-nums font-medium">{Number(c.targetQty).toLocaleString()}</div>
-                  <div className="col-span-2 text-right tabular-nums font-medium">
+                  <div className="col-span-5 sm:col-span-4 font-medium line-clamp-1">
+                    {c.productName}
+                    <div className="text-[11px] text-muted-foreground font-normal sm:hidden">
+                      {c.completedAt ? new Date(c.completedAt).toLocaleDateString() : "—"}
+                    </div>
+                  </div>
+                  <div className="col-span-3 sm:col-span-2 text-right tabular-nums font-medium">{Number(c.targetQty).toLocaleString()}</div>
+                  <div className="col-span-4 sm:col-span-2 text-right tabular-nums font-medium">
                     {lpb > 0 ? ltrs.toLocaleString() : "—"}
                   </div>
-                  <div className="col-span-3 text-right text-xs text-muted-foreground">
+                  <div className="hidden sm:block sm:col-span-4 text-right text-xs text-muted-foreground">
                     {c.completedAt ? new Date(c.completedAt).toLocaleString() : "—"}
                   </div>
                 </div>

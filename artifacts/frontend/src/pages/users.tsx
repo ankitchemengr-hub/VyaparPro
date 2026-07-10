@@ -76,16 +76,9 @@ export default function Users() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">User Accounts</h1>
-          <p className="text-muted-foreground mt-2">
-            Create login credentials for staff — salesmen, store, manufacturing, accountants — and
-            customer B2B portal accounts. Each account can be linked to an existing entity for
-            ledger and invoice attribution.
-          </p>
-        </div>
-        <Button onClick={() => setShowAdd(true)} data-testid="button-add-user">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">User Accounts</h1>
+        <Button className="w-full sm:w-auto" onClick={() => setShowAdd(true)} data-testid="button-add-user">
           <UserPlus className="h-4 w-4 mr-2" />
           Add User
         </Button>
@@ -106,13 +99,14 @@ export default function Users() {
           {isLoading ? (
             <div className="py-12 text-center text-muted-foreground">Loading users...</div>
           ) : (
+            <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Username</TableHead>
                   <TableHead>Name</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Linked Entity</TableHead>
+                  <TableHead className="hidden sm:table-cell">Role</TableHead>
+                  <TableHead className="hidden md:table-cell">Linked Entity</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -165,6 +159,7 @@ export default function Users() {
                 )}
               </TableBody>
             </Table>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -219,10 +214,10 @@ function UserRow({
     <TableRow data-testid={`row-user-${user.id}`}>
       <TableCell className="font-mono text-sm">{user.username}</TableCell>
       <TableCell>{user.name}{isSelf && <span className="text-xs text-muted-foreground ml-2">(you)</span>}</TableCell>
-      <TableCell>
+      <TableCell className="hidden sm:table-cell">
         <Badge variant="outline" className="capitalize">{user.role}</Badge>
       </TableCell>
-      <TableCell className="text-sm text-muted-foreground">
+      <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
         {user.entityId ? `#${user.entityId}` : <span className="italic">—</span>}
       </TableCell>
       <TableCell>
@@ -233,20 +228,34 @@ function UserRow({
             onCheckedChange={onToggleActive}
             data-testid={`switch-active-${user.id}`}
           />
-          <span className="text-xs text-muted-foreground">
+          <span className="hidden sm:inline text-xs text-muted-foreground">
             {user.isActive ? "Active" : "Disabled"}
           </span>
         </div>
       </TableCell>
       <TableCell className="text-right">
-        <div className="flex items-center justify-end gap-2">
-          <Button size="sm" variant="outline" onClick={onEdit} data-testid={`button-edit-${user.id}`}>
-            <Pencil className="h-3.5 w-3.5 mr-1.5" />
-            Edit
+        <div className="flex items-center justify-end gap-1 sm:gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="px-2 sm:px-3"
+            onClick={onEdit}
+            title="Edit"
+            data-testid={`button-edit-${user.id}`}
+          >
+            <Pencil className="h-3.5 w-3.5 sm:mr-1.5" />
+            <span className="hidden sm:inline">Edit</span>
           </Button>
-          <Button size="sm" variant="outline" onClick={onResetPassword} data-testid={`button-reset-${user.id}`}>
-            <KeyRound className="h-3.5 w-3.5 mr-1.5" />
-            Reset Password
+          <Button
+            size="sm"
+            variant="outline"
+            className="px-2 sm:px-3"
+            onClick={onResetPassword}
+            title="Reset Password"
+            data-testid={`button-reset-${user.id}`}
+          >
+            <KeyRound className="h-3.5 w-3.5 sm:mr-1.5" />
+            <span className="hidden sm:inline">Reset Password</span>
           </Button>
         </div>
       </TableCell>
