@@ -22,7 +22,6 @@ import {
   LayoutGrid,
   DatabaseBackup,
   Tag,
-  Car,
   type LucideIcon,
 } from "lucide-react";
 
@@ -76,6 +75,4 @@ export const moduleNavItems: NavItem[] = [
   { name: "User Accounts", href: "/users", icon: KeyRound, roles: ["admin"], description: "Manage logins" },
   { name: "Settings", href: "/settings", icon: Settings, roles: ["admin"], description: "Role permissions and config" },
   { name: "Backup & Restore", href: "/backup-restore", icon: DatabaseBackup, roles: ["admin"], description: "Backup, restore and reset data" },
-  { name: "Transporters", href: "/transporters", icon: Truck, roles: ["admin"], description: "Transporter master list" },
-  { name: "Vehicles", href: "/vehicles", icon: Car, roles: ["admin"], description: "Vehicle master list" },
 ];
