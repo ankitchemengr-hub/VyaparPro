@@ -182,6 +182,13 @@ function WorkloadTab({
     return m;
   }, [products]);
 
+  // Only surface products explicitly flagged "Add for Manufacturing" in
+  // Inventory — other low-stock items are restocked via Purchases, not
+  // produced here.
+  const manufacturingAlerts = useMemo(() => {
+    return (alerts ?? []).filter((a: any) => productById.get(a.id)?.addForManufacturing);
+  }, [alerts, productById]);
+
   // Most recent active (pending/processing) card per product. If a worker
   // accidentally created multiple, we honour the latest one.
   const activeCardByProduct = useMemo(() => {
@@ -385,15 +392,15 @@ function WorkloadTab({
     );
   }
 
-  if (!alerts || alerts.length === 0) {
+  if (manufacturingAlerts.length === 0) {
     return (
       <div className="text-center py-12 border border-dashed rounded-lg">
         <CheckCircle2 className="mx-auto h-12 w-12 text-green-600 opacity-40 mb-4" />
-        <h3 className="text-lg font-medium">All stocks healthy</h3>
+        <h3 className="text-lg font-medium">Nothing to produce</h3>
         <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto">
-          No products are below their minimum stock threshold right now. Items
-          will appear here automatically when stock dips below the threshold set
-          in Inventory.
+          No manufacturing items are below their minimum stock threshold right
+          now. Items appear here when a product with "Add for Manufacturing"
+          enabled in Inventory dips below its stock threshold.
         </p>
       </div>
     );
@@ -408,12 +415,13 @@ function WorkloadTab({
             Production Workload
           </h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Products below minimum stock. Move each item Pending → Processing →
-            Done; on Done, confirm produced qty and stock auto-adjusts.
+            Manufacturing items below minimum stock. Move each item Pending →
+            Processing → Done; on Done, confirm produced qty and stock
+            auto-adjusts.
           </p>
         </div>
         <Badge variant="destructive" data-testid="badge-workload-count">
-          {alerts.length} item{alerts.length === 1 ? "" : "s"}
+          {manufacturingAlerts.length} item{manufacturingAlerts.length === 1 ? "" : "s"}
         </Badge>
       </div>
 
@@ -428,7 +436,7 @@ function WorkloadTab({
           <div className="col-span-4 text-center">Status</div>
         </div>
         <div className="divide-y">
-          {alerts.map((a: any) => {
+          {manufacturingAlerts.map((a: any) => {
             const bom = bomByFinishedProduct.get(a.id);
             const product = productById.get(a.id);
             const imageUrl = product?.imageUrl;
@@ -625,7 +633,7 @@ function WorkloadTab({
             BOM button) need their own full-width rows since a fixed-width select
             plus buttons never fit inside a narrow grid column on a phone. */}
         <div className="md:hidden divide-y">
-          {alerts.map((a: any) => {
+          {manufacturingAlerts.map((a: any) => {
             const bom = bomByFinishedProduct.get(a.id);
             const product = productById.get(a.id);
             const imageUrl = product?.imageUrl;
