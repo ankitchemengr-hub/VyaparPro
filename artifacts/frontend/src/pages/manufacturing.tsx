@@ -11,11 +11,15 @@ import {
   useUpdateBom,
   useListCustomerOrders,
   useUpdateCustomerOrderStatus,
+  useListMaterialTransfers,
+  useCreateMaterialTransfer,
+  useDeleteMaterialTransfer,
   getListWorkloadCardsQueryKey,
   getListProductsQueryKey,
   getGetLowStockAlertsQueryKey,
   getListBomsQueryKey,
   getListCustomerOrdersQueryKey,
+  getListMaterialTransfersQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -57,6 +61,8 @@ import {
   Pencil,
   Truck,
   Inbox,
+  ArrowLeftRight,
+  Printer,
 } from "lucide-react";
 import { BomDialog } from "@/components/bom-dialog";
 
@@ -92,6 +98,9 @@ export default function Manufacturing() {
           <TabsTrigger value="dispatch" data-testid="tab-dispatch">
             Ready For Dispatch
           </TabsTrigger>
+          <TabsTrigger value="transfer" data-testid="tab-transfer">
+            Material Transfer
+          </TabsTrigger>
           <TabsTrigger value="report" data-testid="tab-report">
             Report
           </TabsTrigger>
@@ -110,6 +119,10 @@ export default function Manufacturing() {
 
         <TabsContent value="dispatch" className="mt-6">
           <DispatchTab />
+        </TabsContent>
+
+        <TabsContent value="transfer" className="mt-6">
+          <MaterialTransferTab />
         </TabsContent>
 
         <TabsContent value="report" className="mt-6">
@@ -1817,6 +1830,420 @@ function DispatchTab() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// --------------------------- MATERIAL TRANSFER TAB ---------------------------
+// Printable log of raw material sent between Store and Manufacturing. Does
+// NOT touch product.currentStock — this app tracks one stock number per
+// product, not separate location-wise stock, so this is a paper trail only.
+
+interface TransferDraftItem {
+  productId: string;
+  qty: string;
+  unit: string;
+}
+
+function MaterialTransferTab() {
+  const { data: transfers, isLoading } = useListMaterialTransfers();
+  const { data: products } = useListProducts();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const createTransfer = useCreateMaterialTransfer();
+  const deleteTransfer = useDeleteMaterialTransfer();
+
+  const [showAdd, setShowAdd] = useState(false);
+  const [sentBy, setSentBy] = useState("");
+  const [transferDate, setTransferDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [notes, setNotes] = useState("");
+  const [items, setItems] = useState<TransferDraftItem[]>([{ productId: "", qty: "", unit: "QTY" }]);
+  const [printingId, setPrintingId] = useState<number | null>(null);
+
+  const productById = useMemo(() => {
+    const m = new Map<number, any>();
+    (products ?? []).forEach((p: any) => m.set(p.id, p));
+    return m;
+  }, [products]);
+
+  const resetForm = () => {
+    setSentBy("");
+    setTransferDate(new Date().toISOString().slice(0, 10));
+    setNotes("");
+    setItems([{ productId: "", qty: "", unit: "QTY" }]);
+  };
+
+  const addRow = () => setItems((rows) => [...rows, { productId: "", qty: "", unit: "QTY" }]);
+  const removeRow = (idx: number) => setItems((rows) => rows.filter((_, i) => i !== idx));
+  const updateRow = (idx: number, patch: Partial<TransferDraftItem>) =>
+    setItems((rows) => rows.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+
+  const validItems = items.filter((i) => i.productId && Number(i.qty) > 0);
+  const canSave = validItems.length > 0 && !createTransfer.isPending;
+
+  const handleSave = () => {
+    createTransfer.mutate(
+      {
+        data: {
+          transferDate: transferDate ? new Date(transferDate).toISOString() : undefined,
+          sentBy: sentBy.trim() || undefined,
+          notes: notes.trim() || undefined,
+          items: validItems.map((i) => ({
+            productId: Number(i.productId),
+            qty: Number(i.qty),
+            unit: i.unit || "QTY",
+          })),
+        },
+      },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getListMaterialTransfersQueryKey() });
+          toast({ title: "Material transfer logged" });
+          resetForm();
+          setShowAdd(false);
+        },
+        onError: (e: any) =>
+          toast({
+            title: "Could not save transfer",
+            description: e?.response?.data?.error ?? e?.message ?? "Unknown error",
+            variant: "destructive",
+          }),
+      },
+    );
+  };
+
+  const handleDelete = (id: number) => {
+    if (!confirm("Delete this material transfer? This cannot be undone.")) return;
+    deleteTransfer.mutate(
+      { id },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getListMaterialTransfersQueryKey() });
+          toast({ title: "Material transfer deleted" });
+        },
+        onError: (e: any) =>
+          toast({
+            title: "Could not delete",
+            description: e?.response?.data?.error ?? e?.message ?? "Unknown error",
+            variant: "destructive",
+          }),
+      },
+    );
+  };
+
+  const handlePrint = async (id: number) => {
+    setPrintingId(id);
+    try {
+      const res = await fetch(`/api/material-transfers/${id}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load transfer");
+      const t = await res.json();
+      const printHTML = `
+        <html><head><title>Material Transfer ${t.transferNo}</title>
+        <style>
+          body { font-family: sans-serif; font-size: 13px; padding: 24px; }
+          h2 { margin: 0 0 4px 0; }
+          .meta { color: #444; font-size: 12px; margin-bottom: 4px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+          th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: left; }
+          th { background: #f3f4f6; font-weight: 600; }
+          td.num { text-align: right; }
+          .sign { margin-top: 60px; display: flex; justify-content: space-between; }
+          .sign div { border-top: 1px solid #333; width: 200px; padding-top: 4px; font-size: 11px; text-align: center; }
+        </style></head><body>
+        <h2>Material Transfer Slip</h2>
+        <div class="meta"><strong>${t.transferNo}</strong> &middot; ${new Date(t.transferDate).toLocaleDateString("en-IN")}</div>
+        ${t.sentBy ? `<div class="meta">Sent By: ${t.sentBy}</div>` : ""}
+        ${t.notes ? `<div class="meta">Notes: ${t.notes}</div>` : ""}
+        <table>
+          <thead><tr><th>#</th><th>Item</th><th>Qty</th><th>Unit</th></tr></thead>
+          <tbody>
+            ${t.items.map((it: any, idx: number) => `<tr>
+              <td>${idx + 1}</td><td>${it.productName}</td>
+              <td class="num">${Number(it.qty).toLocaleString()}</td><td>${it.unit}</td>
+            </tr>`).join("")}
+          </tbody>
+        </table>
+        <div class="sign">
+          <div>Sent By</div>
+          <div>Received By</div>
+        </div>
+        </body></html>
+      `;
+      const w = window.open("", "_blank");
+      if (!w) return;
+      w.document.write(printHTML);
+      w.document.close();
+      w.focus();
+      w.print();
+    } catch {
+      toast({ title: "Could not print", variant: "destructive" });
+    } finally {
+      setPrintingId(null);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <ArrowLeftRight className="w-5 h-5 text-primary" />
+            Material Transfer
+          </h2>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Log raw material sent to/from Store. A printable slip only — stock
+            quantities are not affected.
+          </p>
+        </div>
+        <Button
+          className="w-full sm:w-auto"
+          onClick={() => { resetForm(); setShowAdd(true); }}
+          data-testid="button-add-transfer"
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          New Transfer
+        </Button>
+      </div>
+
+      {isLoading ? (
+        <div className="text-center py-12 text-muted-foreground">
+          <Loader2 className="w-6 h-6 animate-spin mx-auto" />
+        </div>
+      ) : !transfers || transfers.length === 0 ? (
+        <div className="text-center py-16 border border-dashed rounded-lg">
+          <ArrowLeftRight className="mx-auto h-10 w-10 text-muted-foreground opacity-20 mb-3" />
+          <p className="text-sm text-muted-foreground">No material transfers logged yet.</p>
+        </div>
+      ) : (
+        <div className="rounded-lg border overflow-hidden">
+          {/* Desktop table */}
+          <div className="hidden md:block">
+            <div className="grid grid-cols-12 gap-2 px-4 py-2 text-xs uppercase text-muted-foreground font-medium bg-muted/50">
+              <div className="col-span-2">Transfer #</div>
+              <div className="col-span-2">Date</div>
+              <div className="col-span-3">Sent By</div>
+              <div className="col-span-2 text-right">Items</div>
+              <div className="col-span-3 text-right">Actions</div>
+            </div>
+            <div className="divide-y">
+              {transfers.map((t) => (
+                <div
+                  key={t.id}
+                  className="grid grid-cols-12 gap-2 px-4 py-3 items-center text-sm"
+                  data-testid={`transfer-row-${t.id}`}
+                >
+                  <div className="col-span-2 font-medium font-mono">{t.transferNo}</div>
+                  <div className="col-span-2 text-muted-foreground">
+                    {new Date(t.transferDate).toLocaleDateString("en-IN")}
+                  </div>
+                  <div className="col-span-3 text-muted-foreground line-clamp-1">{t.sentBy || "—"}</div>
+                  <div className="col-span-2 text-right tabular-nums">{t.itemCount}</div>
+                  <div className="col-span-3 flex items-center justify-end gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePrint(t.id)}
+                      disabled={printingId === t.id}
+                      data-testid={`button-print-transfer-${t.id}`}
+                    >
+                      {printingId === t.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Printer className="h-3.5 w-3.5" />
+                      )}
+                    </Button>
+                    {isAdmin && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive hover:text-destructive"
+                        onClick={() => handleDelete(t.id)}
+                        title="Delete"
+                        data-testid={`button-delete-transfer-${t.id}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Mobile cards */}
+          <div className="md:hidden divide-y">
+            {transfers.map((t) => (
+              <div key={t.id} className="p-4 space-y-2" data-testid={`transfer-row-mobile-${t.id}`}>
+                <div className="flex items-center justify-between">
+                  <div className="font-medium font-mono">{t.transferNo}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {new Date(t.transferDate).toLocaleDateString("en-IN")}
+                  </div>
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {t.sentBy ? `Sent by ${t.sentBy}` : "—"} · {t.itemCount} item{t.itemCount === 1 ? "" : "s"}
+                </div>
+                <div className="flex items-center gap-2 pt-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => handlePrint(t.id)}
+                    disabled={printingId === t.id}
+                    data-testid={`button-print-transfer-mobile-${t.id}`}
+                  >
+                    {printingId === t.id ? (
+                      <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                    ) : (
+                      <Printer className="h-3.5 w-3.5 mr-1.5" />
+                    )}
+                    Print
+                  </Button>
+                  {isAdmin && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0 text-destructive hover:text-destructive"
+                      onClick={() => handleDelete(t.id)}
+                      title="Delete"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Add Transfer Dialog */}
+      <Dialog open={showAdd} onOpenChange={setShowAdd}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>New Material Transfer</DialogTitle>
+            <DialogDescription>
+              Log items sent between Store and Manufacturing. This is a
+              printable record only — it does not change stock quantities.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Date</Label>
+                <Input
+                  type="date"
+                  value={transferDate}
+                  onChange={(e) => setTransferDate(e.target.value)}
+                  data-testid="input-transfer-date"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Sent By</Label>
+                <Input
+                  value={sentBy}
+                  onChange={(e) => setSentBy(e.target.value)}
+                  placeholder="Worker / store person name"
+                  data-testid="input-transfer-sent-by"
+                />
+              </div>
+            </div>
+
+            <div className="border rounded-md">
+              <div className="hidden gap-2 px-3 py-2 text-xs uppercase text-muted-foreground font-medium border-b bg-muted/50 sm:grid sm:grid-cols-[minmax(0,1fr)_100px_80px_36px]">
+                <div>Item</div>
+                <div className="text-right">Qty</div>
+                <div>Unit</div>
+                <div></div>
+              </div>
+              <div className="divide-y">
+                {items.map((row, idx) => (
+                  <div
+                    key={idx}
+                    className="flex flex-col gap-2 px-3 py-3 sm:grid sm:grid-cols-[minmax(0,1fr)_100px_80px_36px] sm:gap-2 sm:py-2 sm:items-center"
+                  >
+                    <Select
+                      value={row.productId}
+                      onValueChange={(v) => {
+                        const prod = productById.get(Number(v));
+                        updateRow(idx, { productId: v, unit: row.unit || prod?.unit || "QTY" });
+                      }}
+                    >
+                      <SelectTrigger className="min-w-0" data-testid={`select-transfer-item-${idx}`}>
+                        <SelectValue placeholder="Select item…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(products ?? []).map((p: any) => (
+                          <SelectItem key={p.id} value={String(p.id)}>
+                            {p.name}{p.itemCode ? ` · ${p.itemCode}` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <div className="grid grid-cols-2 gap-2 sm:contents">
+                      <div className="sm:contents">
+                        <Label className="mb-1 block text-[11px] text-muted-foreground sm:hidden">Qty</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.001"
+                          value={row.qty}
+                          onChange={(e) => updateRow(idx, { qty: e.target.value })}
+                          className="text-right"
+                          data-testid={`input-transfer-qty-${idx}`}
+                        />
+                      </div>
+                      <div className="sm:contents">
+                        <Label className="mb-1 block text-[11px] text-muted-foreground sm:hidden">Unit</Label>
+                        <Input
+                          value={row.unit}
+                          onChange={(e) => updateRow(idx, { unit: e.target.value })}
+                          placeholder="QTY"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex justify-end sm:contents">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 shrink-0"
+                        onClick={() => removeRow(idx)}
+                        disabled={items.length === 1}
+                        title="Remove row"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="p-2 border-t bg-muted/30">
+                <Button variant="outline" size="sm" onClick={addRow} data-testid="button-add-transfer-item">
+                  <Plus className="h-3.5 w-3.5 mr-1" />Add item
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Notes <span className="text-xs text-muted-foreground">(optional)</span></Label>
+              <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. reason for transfer" />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAdd(false)} disabled={createTransfer.isPending}>
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={!canSave} data-testid="button-save-transfer">
+              {createTransfer.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Save Transfer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

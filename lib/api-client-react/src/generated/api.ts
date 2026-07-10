@@ -101,6 +101,9 @@ import type {
   LookupEntityByMobileParams,
   LookupGstinParams,
   LowStockAlert,
+  MaterialTransfer,
+  MaterialTransferSummary,
+  CreateMaterialTransferInput,
   NumberSeries,
   NumberSeriesUpdate,
   Payment,
@@ -5814,6 +5817,295 @@ export const useUpdateWorkloadCard = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getUpdateWorkloadCardMutationOptions(options));
+    }
+
+export const getListMaterialTransfersUrl = () => {
+
+
+
+
+  return `/api/material-transfers`
+}
+
+/**
+ * @summary List material transfer slips (Store <-> Manufacturing), most recent first
+ */
+export const listMaterialTransfers = async ( options?: RequestInit): Promise<MaterialTransferSummary[]> => {
+
+  return customFetch<MaterialTransferSummary[]>(getListMaterialTransfersUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListMaterialTransfersQueryKey = () => {
+    return [
+    `/api/material-transfers`
+    ] as const;
+    }
+
+
+export const getListMaterialTransfersQueryOptions = <TData = Awaited<ReturnType<typeof listMaterialTransfers>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMaterialTransfers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListMaterialTransfersQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listMaterialTransfers>>> = ({ signal }) => listMaterialTransfers({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listMaterialTransfers>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListMaterialTransfersQueryResult = NonNullable<Awaited<ReturnType<typeof listMaterialTransfers>>>
+export type ListMaterialTransfersQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List material transfer slips (Store <-> Manufacturing), most recent first
+ */
+
+export function useListMaterialTransfers<TData = Awaited<ReturnType<typeof listMaterialTransfers>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMaterialTransfers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListMaterialTransfersQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+export const getCreateMaterialTransferUrl = () => {
+
+
+
+
+  return `/api/material-transfers`
+}
+
+/**
+ * @summary Log a material transfer slip (printable log only; does not adjust stock)
+ */
+export const createMaterialTransfer = async (createMaterialTransferInput: CreateMaterialTransferInput, options?: RequestInit): Promise<MaterialTransfer> => {
+
+  return customFetch<MaterialTransfer>(getCreateMaterialTransferUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createMaterialTransferInput,)
+  }
+);}
+
+
+
+
+export const getCreateMaterialTransferMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createMaterialTransfer>>, TError,{data: BodyType<CreateMaterialTransferInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createMaterialTransfer>>, TError,{data: BodyType<CreateMaterialTransferInput>}, TContext> => {
+
+const mutationKey = ['createMaterialTransfer'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createMaterialTransfer>>, {data: BodyType<CreateMaterialTransferInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createMaterialTransfer(data,requestOptions)
+        }
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateMaterialTransferMutationResult = NonNullable<Awaited<ReturnType<typeof createMaterialTransfer>>>
+    export type CreateMaterialTransferMutationBody = BodyType<CreateMaterialTransferInput>
+    export type CreateMaterialTransferMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Log a material transfer slip (printable log only; does not adjust stock)
+ */
+export const useCreateMaterialTransfer = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createMaterialTransfer>>, TError,{data: BodyType<CreateMaterialTransferInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createMaterialTransfer>>,
+        TError,
+        {data: BodyType<CreateMaterialTransferInput>},
+        TContext
+      > => {
+      return useMutation(getCreateMaterialTransferMutationOptions(options));
+    }
+
+export const getGetMaterialTransferUrl = (id: number,) => {
+
+
+
+
+  return `/api/material-transfers/${id}`
+}
+
+/**
+ * @summary Get a material transfer slip with line items (for view/print)
+ */
+export const getMaterialTransfer = async (id: number, options?: RequestInit): Promise<MaterialTransfer> => {
+
+  return customFetch<MaterialTransfer>(getGetMaterialTransferUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMaterialTransferQueryKey = (id: number,) => {
+    return [
+    `/api/material-transfers/${id}`
+    ] as const;
+    }
+
+
+export const getGetMaterialTransferQueryOptions = <TData = Awaited<ReturnType<typeof getMaterialTransfer>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMaterialTransfer>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMaterialTransferQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMaterialTransfer>>> = ({ signal }) => getMaterialTransfer(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMaterialTransfer>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMaterialTransferQueryResult = NonNullable<Awaited<ReturnType<typeof getMaterialTransfer>>>
+export type GetMaterialTransferQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get a material transfer slip with line items (for view/print)
+ */
+
+export function useGetMaterialTransfer<TData = Awaited<ReturnType<typeof getMaterialTransfer>>, TError = ErrorType<unknown>>(
+ id: number,
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMaterialTransfer>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMaterialTransferQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+export const getDeleteMaterialTransferUrl = (id: number,) => {
+
+
+
+
+  return `/api/material-transfers/${id}`
+}
+
+/**
+ * @summary Delete a material transfer slip (admin only)
+ */
+export const deleteMaterialTransfer = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteMaterialTransferUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteMaterialTransferMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteMaterialTransfer>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteMaterialTransfer>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteMaterialTransfer'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteMaterialTransfer>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteMaterialTransfer(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteMaterialTransferMutationResult = NonNullable<Awaited<ReturnType<typeof deleteMaterialTransfer>>>
+
+    export type DeleteMaterialTransferMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete a material transfer slip (admin only)
+ */
+export const useDeleteMaterialTransfer = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteMaterialTransfer>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteMaterialTransfer>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteMaterialTransferMutationOptions(options));
     }
 
 export const getGetDashboardSummaryUrl = () => {

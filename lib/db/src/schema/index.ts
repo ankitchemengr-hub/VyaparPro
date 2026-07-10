@@ -17,3 +17,4 @@ export * from "./subscriptions";
 export * from "./settings";
 export * from "./print-settings";
 export * from "./backups";
+export * from "./material-transfers";

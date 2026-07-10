@@ -1653,6 +1653,50 @@ export interface WorkloadCardUpdate {
   targetQty?: number;
 }
 
+export interface MaterialTransferSummary {
+  id: number;
+  transferNo: string;
+  transferDate: string;
+  /** @nullable */
+  sentBy?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  itemCount: number;
+  createdAt: string;
+}
+
+export interface MaterialTransferItem {
+  productId: number;
+  productName: string;
+  qty: number;
+  unit: string;
+}
+
+export interface MaterialTransfer {
+  id: number;
+  transferNo: string;
+  transferDate: string;
+  /** @nullable */
+  sentBy?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+  items: MaterialTransferItem[];
+}
+
+export interface CreateMaterialTransferInputItemsItem {
+  productId: number;
+  qty: number;
+  unit: string;
+}
+
+export interface CreateMaterialTransferInput {
+  transferDate?: string;
+  sentBy?: string;
+  notes?: string;
+  items: CreateMaterialTransferInputItemsItem[];
+}
+
 export interface DashboardSummary {
   totalSalesThisMonth: number;
   totalOutstanding: number;

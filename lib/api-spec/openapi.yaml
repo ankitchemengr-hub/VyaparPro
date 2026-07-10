@@ -1574,6 +1574,78 @@ paths:
               schema:
                 $ref: "#/components/schemas/WorkloadCard"
 
+  /material-transfers:
+    get:
+      operationId: listMaterialTransfers
+      tags: [manufacturing]
+      summary: List material transfer slips (Store <-> Manufacturing), most recent first
+      responses:
+        "200":
+          description: Material transfers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MaterialTransferSummary"
+    post:
+      operationId: createMaterialTransfer
+      tags: [manufacturing]
+      summary: Log a material transfer slip (printable log only; does not adjust stock)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMaterialTransferInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaterialTransfer"
+        "400":
+          description: Invalid request
+
+  /material-transfers/{id}:
+    get:
+      operationId: getMaterialTransfer
+      tags: [manufacturing]
+      summary: Get a material transfer slip with line items (for view/print)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Material transfer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaterialTransfer"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteMaterialTransfer
+      tags: [manufacturing]
+      summary: Delete a material transfer slip (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "403":
+          description: Admin only
+        "404":
+          description: Not found
+
   # DASHBOARD / ANALYTICS
   /dashboard/summary:
     get:
@@ -4344,6 +4416,83 @@ components:
             'done' — overrides the card's original targetQty so the worker can
             confirm what actually came off the line. Must be > 0.
           minimum: 0.001
+
+    MaterialTransferSummary:
+      type: object
+      required: [id, transferNo, transferDate, itemCount, createdAt]
+      properties:
+        id:
+          type: integer
+        transferNo:
+          type: string
+        transferDate:
+          type: string
+        sentBy:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        itemCount:
+          type: integer
+        createdAt:
+          type: string
+
+    MaterialTransferItem:
+      type: object
+      required: [productId, productName, qty, unit]
+      properties:
+        productId:
+          type: integer
+        productName:
+          type: string
+        qty:
+          type: number
+        unit:
+          type: string
+
+    MaterialTransfer:
+      type: object
+      required: [id, transferNo, transferDate, createdAt, items]
+      properties:
+        id:
+          type: integer
+        transferNo:
+          type: string
+        transferDate:
+          type: string
+        sentBy:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/MaterialTransferItem"
+
+    CreateMaterialTransferInput:
+      type: object
+      required: [items]
+      properties:
+        transferDate:
+          type: string
+        sentBy:
+          type: string
+        notes:
+          type: string
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [productId, qty, unit]
+            properties:
+              productId:
+                type: integer
+              qty:
+                type: number
+              unit:
+                type: string
 
     DashboardSummary:
       type: object
