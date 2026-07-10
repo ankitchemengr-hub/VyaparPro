@@ -295,11 +295,11 @@ export function BomDialog({
                 </div>
               ))}
             </div>
-            <div className="flex items-center justify-between gap-3 p-2 border-t bg-muted/30">
-              <Button variant="outline" size="sm" onClick={addRow} data-testid="button-add-material">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 p-2 border-t bg-muted/30">
+              <Button variant="outline" size="sm" onClick={addRow} className="w-full sm:w-auto" data-testid="button-add-material">
                 <Plus className="h-3.5 w-3.5 mr-1" />Add material
               </Button>
-              <div className="text-right text-sm">
+              <div className="text-left sm:text-right text-sm">
                 <div>
                   <span className="text-muted-foreground">Batch Cost: </span>
                   <span className="font-semibold tabular-nums" data-testid="text-total-batch-cost">
@@ -430,7 +430,7 @@ function QuickAddMaterialDialog({
               data-testid="input-quick-material-name"
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Item Code</Label>
               <Input
@@ -451,7 +451,7 @@ function QuickAddMaterialDialog({
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Group</Label>
               <Input
@@ -469,7 +469,7 @@ function QuickAddMaterialDialog({
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Opening Stock</Label>
               <Input
