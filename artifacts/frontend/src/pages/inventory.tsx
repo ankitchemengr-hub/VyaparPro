@@ -422,7 +422,7 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
         </DialogHeader>
 
         <Tabs value={tab} onValueChange={setTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="flex flex-wrap h-auto justify-start gap-1">
             <TabsTrigger value="details">Details</TabsTrigger>
             <TabsTrigger value="pricing">Pricing & Tax</TabsTrigger>
             <TabsTrigger value="stock">Stock & Image</TabsTrigger>
@@ -430,7 +430,7 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
 
           {/* ── Tab 1: Details ── */}
           <TabsContent value="details" className="space-y-4 pt-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="col-span-2 space-y-1.5">
                 <Label>Product Name *</Label>
                 <Input
@@ -530,7 +530,7 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
 
           {/* ── Tab 2: Pricing ── */}
           <TabsContent value="pricing" className="space-y-4 pt-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label>Product Type</Label>
                 <Select
@@ -569,9 +569,8 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
                 />
               </div>
             </div>
-            // Replace with:
-            <div className="rounded-lg border bg-muted/30 p-4 space-y-3">      
-                    <p className="text-sm font-medium">Selling Prices</p>
+            <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+              <p className="text-sm font-medium">Selling Prices</p>
               {/* GST Price calculator */}
               <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-3 space-y-2">
                 <p className="text-xs font-medium text-blue-700 dark:text-blue-400">
@@ -616,7 +615,7 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
                   </p>
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label>Wholesale Price (₹) *</Label>
                   <Input
@@ -652,7 +651,7 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
                 </div>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label>HSN Code</Label>
                 <Input
@@ -698,7 +697,7 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
 
           {/* ── Tab 3: Stock & Image ── */}
           <TabsContent value="stock" className="space-y-4 pt-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label>
                   {isEdit ? "Current Stock" : "Opening Stock"}
