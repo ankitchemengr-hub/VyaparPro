@@ -71,14 +71,17 @@ export default defineConfig({
             },
           },
           {
+            // API responses must never be cached by the service worker — the
+            // server already marks every JSON response Cache-Control:
+            // no-store (artifacts/api-server/src/app.ts), but Workbox's
+            // cacheableResponse plugin only checks HTTP status, not
+            // cache-control, so a prior NetworkFirst rule here silently
+            // cached everything (stock, invoices, print settings, ...) for
+            // up to 5 minutes and could serve it stale whenever the network
+            // round-trip was slow. Business data correctness matters more
+            // than offline API resilience for this app.
             urlPattern: ({ url }: { url: URL }) => url.pathname.startsWith("/api/"),
-            handler: "NetworkFirst",
-            options: {
-              cacheName: "api-cache",
-              networkTimeoutSeconds: 10,
-              expiration: { maxEntries: 50, maxAgeSeconds: 60 * 5 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
+            handler: "NetworkOnly",
           },
         ],
       },
