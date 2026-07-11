@@ -177,28 +177,22 @@ export default function InvoiceDetailScreen() {
 
       {invoice.items && invoice.items.length > 0 ? (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Items</Text>
+          <Text style={styles.sectionTitle}>Items ({invoice.items.length})</Text>
           <View style={styles.itemsCard}>
-            <View style={styles.itemHeader}>
-              <Text style={[styles.itemCol, { flex: 2 }]}>Item</Text>
-              <Text style={[styles.itemCol, { textAlign: "right" as const }]}>Qty</Text>
-              <Text style={[styles.itemCol, { textAlign: "right" as const }]}>Rate</Text>
-              <Text style={[styles.itemCol, { textAlign: "right" as const }]}>Amount</Text>
-            </View>
             {invoice.items.map((item, idx) => (
               <View key={item.id ?? idx}>
                 {idx > 0 ? <View style={styles.divider} /> : null}
-                <View style={styles.itemRow}>
-                  <Text style={[styles.itemName, { flex: 2 }]} numberOfLines={2}>
-                    {item.productName ?? `Item ${idx + 1}`}
-                  </Text>
-                  <Text style={styles.itemCell}>
-                    {item.qty}
-                    {item.unit ? ` ${item.unit}` : ""}
-                  </Text>
-                  <Text style={styles.itemCell}>{fmt(item.rate)}</Text>
-                  <Text style={[styles.itemCell, { fontWeight: "600" as const }]}>
-                    {fmt(item.amount)}
+                <View style={styles.itemBlock}>
+                  <View style={styles.itemBlockTop}>
+                    <Text style={styles.itemName} numberOfLines={2}>
+                      {item.productName ?? `Item ${idx + 1}`}
+                    </Text>
+                    <Text style={styles.itemAmount}>{fmt(item.amount)}</Text>
+                  </View>
+                  <Text style={styles.itemMeta}>
+                    {item.qty}{item.unit ? ` ${item.unit}` : ""} × {fmt(item.rate)}
+                    {item.discountPct ? ` · ${item.discountPct}% off` : ""}
+                    {item.taxPct ? ` · GST ${item.taxPct}%` : ""}
                   </Text>
                 </View>
               </View>
@@ -325,29 +319,16 @@ function makeStyles(colors: ReturnType<typeof useColors>, insets: ReturnType<typ
       borderColor: colors.border,
       overflow: "hidden",
     },
-    itemHeader: {
+    itemBlock: { padding: 14, gap: 4 },
+    itemBlockTop: {
       flexDirection: "row",
-      backgroundColor: colors.muted,
-      padding: 10,
-      paddingHorizontal: 14,
-      gap: 6,
-    },
-    itemCol: {
-      fontSize: 11,
-      fontWeight: "700" as const,
-      color: colors.mutedForeground,
-      textTransform: "uppercase" as const,
-      flex: 1,
-    },
-    itemRow: {
-      flexDirection: "row",
-      padding: 12,
-      paddingHorizontal: 14,
-      gap: 6,
+      justifyContent: "space-between",
       alignItems: "flex-start",
+      gap: 10,
     },
-    itemName: { fontSize: 13, color: colors.foreground },
-    itemCell: { flex: 1, fontSize: 13, color: colors.foreground, textAlign: "right" as const },
+    itemName: { flex: 1, fontSize: 14, fontWeight: "600" as const, color: colors.foreground },
+    itemAmount: { fontSize: 14, fontWeight: "700" as const, color: colors.foreground },
+    itemMeta: { fontSize: 12, color: colors.mutedForeground },
     summaryRow: { flexDirection: "row", justifyContent: "space-between", padding: 14 },
     summaryLabel: { fontSize: 14, color: colors.mutedForeground },
     summaryVal: { fontSize: 14, fontWeight: "500" as const, color: colors.foreground },
