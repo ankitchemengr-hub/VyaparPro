@@ -60,7 +60,17 @@ const DEFAULT_PRINT_SETTINGS = {
 async function resolvePrintSettings(companyId: number): Promise<Record<string, unknown>> {
   const r = await pool.query(`SELECT config FROM print_settings WHERE company_id = $1`, [companyId]);
   const stored = (r.rows[0]?.config ?? {}) as Record<string, unknown>;
-  return { ...DEFAULT_PRINT_SETTINGS, ...stored };
+  const merged: Record<string, unknown> = { ...DEFAULT_PRINT_SETTINGS, ...stored };
+
+  // A company that has never explicitly set a print companyName override
+  // would otherwise show a blank/placeholder name on every invoice — fall
+  // back to the company's actual registered name, which we always know.
+  if (!merged.companyName) {
+    const [company] = await db.select({ name: companiesTable.name }).from(companiesTable).where(eq(companiesTable.id, companyId));
+    if (company?.name) merged.companyName = company.name;
+  }
+
+  return merged;
 }
 
 async function requireAdmin(req: Request, res: Response, next: NextFunction): Promise<void> {

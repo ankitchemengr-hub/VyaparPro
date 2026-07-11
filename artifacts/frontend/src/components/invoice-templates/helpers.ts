@@ -125,6 +125,8 @@ export function getPrintCss(meta: TemplateMeta): string {
         left: 0 !important; top: 0 !important;
         width: 100% !important;
         box-shadow: none !important;
+        zoom: 1 !important;
+        display: block !important;
       }
       .sidebar, .topbar, .no-print, button, nav { display: none !important; }
       ${legacy}
