@@ -9,12 +9,15 @@ import {
   useLogPayment,
   useListAccounts,
   useListEntities,
+  useGetPrintSettings,
   getListInvoicesQueryKey,
   getListPaymentsQueryKey,
   getListAccountsQueryKey,
   getGetInvoiceQueryKey,
   type PaymentInputMode,
 } from "@workspace/api-client-react";
+import { InvoiceTemplateRenderer } from "@/components/invoice-templates/InvoiceTemplateRenderer";
+import { FALLBACK_PRINT_SETTINGS } from "@/components/invoice-templates/defaults";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -132,11 +135,18 @@ export default function Billing() {
   const { data: salesmanEntities } = useListEntities({ type: "salesman" } as any);
   const { data: existingInvoice } = useGetInvoice(editId as number, { query: { enabled: isEditMode } as any });
   const { data: accounts } = useListAccounts();
+  const { data: printSettingsData } = useGetPrintSettings();
+  const printSettings = printSettingsData ?? FALLBACK_PRINT_SETTINGS;
   const createInvoice = useCreateInvoice();
   const updateInvoice = useUpdateInvoice();
   const logPayment = useLogPayment();
 
   const invoiceType = docType === "invoice" ? invoiceSubtype : docType;
+
+  const printMaps = {
+    lpbByProduct: new Map<number, number>((products ?? []).map((p: any) => [p.id, Number(p.litersPerBox ?? 0) || 0])),
+    upbByProduct: new Map<number, number>((products ?? []).map((p: any) => [p.id, Number(p.unitsPerBox ?? 0) || 0])),
+  };
 
   // ── All useEffect hooks ──
   useEffect(() => {
@@ -412,7 +422,8 @@ export default function Billing() {
 
   if (saved && savedInvoice) {
     return (
-      <div className="max-w-3xl mx-auto py-8 space-y-6">
+      <>
+      <div className="max-w-3xl mx-auto py-8 space-y-6 print:hidden">
         <Card className="border-green-500/30 bg-green-500/5">
           <CardContent className="pt-6 pb-5">
             <div className="flex items-start gap-4">
@@ -615,11 +626,20 @@ export default function Billing() {
           <Button onClick={() => setLocation("/catalog")}>New Order</Button>
         </div>
       </div>
+
+      <InvoiceTemplateRenderer
+        invoice={savedInvoice}
+        settings={printSettings}
+        maps={printMaps}
+        templateId={printSettings.defaultTemplate}
+      />
+      </>
     );
   }
 
   return (
-    <div className="space-y-5 pb-10">
+    <>
+    <div className="space-y-5 pb-10 print:hidden">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-3 flex-wrap">
           <Button variant="ghost" size="icon" className="shrink-0" onClick={() => setLocation("/catalog")} data-testid="button-back-catalog">
@@ -654,9 +674,11 @@ export default function Billing() {
             {(createInvoice.isPending || updateInvoice.isPending) ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
             {isEditMode ? "Update" : ({ quotation: "Save Quotation", proforma_invoice: "Save Proforma", bill_of_supply: "Save Bill", delivery_challan: "Save Challan", sale_order: "Save Order" }[invoiceType] ?? "Save Invoice")}
           </Button>
-          <Button variant="outline" onClick={() => window.print()} data-testid="button-print-invoice">
-            <Printer className="w-4 h-4 mr-2" /> Print
-          </Button>
+          {isEditMode && existingInvoice && (
+            <Button variant="outline" onClick={() => window.print()} data-testid="button-print-invoice">
+              <Printer className="w-4 h-4 mr-2" /> Print
+            </Button>
+          )}
         </div>
       </div>
 
@@ -984,5 +1006,15 @@ export default function Billing() {
         </div>
       </div>
     </div>
+
+    {isEditMode && existingInvoice && (
+      <InvoiceTemplateRenderer
+        invoice={existingInvoice}
+        settings={printSettings}
+        maps={printMaps}
+        templateId={printSettings.defaultTemplate}
+      />
+    )}
+    </>
   );
 }
