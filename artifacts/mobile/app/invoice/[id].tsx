@@ -16,35 +16,36 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { apiGet } from "@/lib/api";
 import { useColors } from "@/hooks/useColors";
 
+// Must mirror formatInvoice()/formatItem() in
+// artifacts/api-server/src/routes/invoices.ts — a prior mismatched local
+// shape here meant every field on this screen was silently undefined.
 interface InvoiceItem {
   id: number;
   productId?: number;
   productName?: string;
-  description?: string;
-  quantity: string;
+  qty: number;
   unit?: string;
-  rate: string;
-  discount?: string;
-  taxRate?: string;
-  amount: string;
+  rate: number;
+  discountPct?: number;
+  taxPct?: number;
+  amount: number;
 }
 
 interface Invoice {
   id: number;
-  invoiceNumber: string;
+  invoiceNo: string;
   invoiceType: string;
   status: string;
-  customerId: number;
-  customerName?: string;
-  date: string;
-  dueDate?: string;
-  subtotal?: string;
-  discountAmount?: string;
-  taxAmount?: string;
-  totalAmount: string;
-  paidAmount?: string;
-  balance?: string;
-  notes?: string;
+  customerId: number | null;
+  customerName?: string | null;
+  invoiceDate: string;
+  dueDate?: string | null;
+  subtotal?: number;
+  totalDiscount?: number;
+  totalTax?: number;
+  grandTotal: number;
+  amountPaid?: number;
+  balanceDue?: number;
   items?: InvoiceItem[];
 }
 
@@ -68,10 +69,13 @@ function formatDate(s: string): string {
 }
 
 function typeLabel(t: string): string {
-  if (t === "gst_invoice") return "GST Invoice";
-  if (t === "non_gst_invoice") return "Non-GST Invoice";
+  if (t === "gst") return "GST Invoice";
+  if (t === "non_gst") return "Non-GST Invoice";
   if (t === "quotation") return "Quotation";
-  if (t === "service_charge") return "Service Charge";
+  if (t === "proforma_invoice") return "Proforma Invoice";
+  if (t === "bill_of_supply") return "Bill of Supply";
+  if (t === "delivery_challan") return "Delivery Challan";
+  if (t === "sale_order") return "Sale Order";
   return t;
 }
 
@@ -108,12 +112,12 @@ export default function InvoiceDetailScreen() {
     );
   }
 
-  const balance = parseFloat(invoice.balance ?? "0");
+  const balance = invoice.balanceDue ?? 0;
   const isPaid = balance <= 0;
-  const statusColor = invoice.status === "confirmed"
-    ? colors.success
-    : invoice.status === "cancelled"
+  const statusColor = invoice.status === "cancelled"
     ? colors.destructive
+    : invoice.status === "saved"
+    ? colors.success
     : colors.warning;
 
   return (
@@ -124,7 +128,7 @@ export default function InvoiceDetailScreen() {
     >
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={styles.invoiceNum}>{invoice.invoiceNumber}</Text>
+          <Text style={styles.invoiceNum}>{invoice.invoiceNo}</Text>
           <Text style={styles.typeName}>{typeLabel(invoice.invoiceType)}</Text>
         </View>
         <View style={styles.badges}>
@@ -157,7 +161,7 @@ export default function InvoiceDetailScreen() {
         <View style={styles.row}>
           <Feather name="calendar" size={14} color={colors.mutedForeground} />
           <Text style={styles.rowLabel}>Date</Text>
-          <Text style={styles.rowValue}>{formatDate(invoice.date)}</Text>
+          <Text style={styles.rowValue}>{formatDate(invoice.invoiceDate)}</Text>
         </View>
         {invoice.dueDate ? (
           <>
@@ -186,10 +190,10 @@ export default function InvoiceDetailScreen() {
                 {idx > 0 ? <View style={styles.divider} /> : null}
                 <View style={styles.itemRow}>
                   <Text style={[styles.itemName, { flex: 2 }]} numberOfLines={2}>
-                    {item.productName ?? item.description ?? `Item ${idx + 1}`}
+                    {item.productName ?? `Item ${idx + 1}`}
                   </Text>
                   <Text style={styles.itemCell}>
-                    {item.quantity}
+                    {item.qty}
                     {item.unit ? ` ${item.unit}` : ""}
                   </Text>
                   <Text style={styles.itemCell}>{fmt(item.rate)}</Text>
@@ -215,37 +219,37 @@ export default function InvoiceDetailScreen() {
               <View style={styles.divider} />
             </>
           ) : null}
-          {invoice.discountAmount && parseFloat(invoice.discountAmount) > 0 ? (
+          {invoice.totalDiscount && invoice.totalDiscount > 0 ? (
             <>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Discount</Text>
                 <Text style={[styles.summaryVal, { color: colors.success }]}>
-                  -{fmt(invoice.discountAmount)}
+                  -{fmt(invoice.totalDiscount)}
                 </Text>
               </View>
               <View style={styles.divider} />
             </>
           ) : null}
-          {invoice.taxAmount && parseFloat(invoice.taxAmount) > 0 ? (
+          {invoice.totalTax && invoice.totalTax > 0 ? (
             <>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Tax (GST)</Text>
-                <Text style={styles.summaryVal}>{fmt(invoice.taxAmount)}</Text>
+                <Text style={styles.summaryVal}>{fmt(invoice.totalTax)}</Text>
               </View>
               <View style={styles.divider} />
             </>
           ) : null}
           <View style={styles.summaryRow}>
             <Text style={styles.totalLabel}>Total</Text>
-            <Text style={styles.totalVal}>{fmt(invoice.totalAmount)}</Text>
+            <Text style={styles.totalVal}>{fmt(invoice.grandTotal)}</Text>
           </View>
-          {invoice.paidAmount && parseFloat(invoice.paidAmount) > 0 ? (
+          {invoice.amountPaid && invoice.amountPaid > 0 ? (
             <>
               <View style={styles.divider} />
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Paid</Text>
                 <Text style={[styles.summaryVal, { color: colors.success }]}>
-                  {fmt(invoice.paidAmount)}
+                  {fmt(invoice.amountPaid)}
                 </Text>
               </View>
               <View style={styles.divider} />
@@ -257,22 +261,13 @@ export default function InvoiceDetailScreen() {
                     { color: isPaid ? colors.success : colors.destructive },
                   ]}
                 >
-                  {fmt(invoice.balance)}
+                  {fmt(invoice.balanceDue)}
                 </Text>
               </View>
             </>
           ) : null}
         </View>
       </View>
-
-      {invoice.notes ? (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Notes</Text>
-          <View style={styles.card}>
-            <Text style={styles.notesText}>{invoice.notes}</Text>
-          </View>
-        </View>
-      ) : null}
     </ScrollView>
   );
 }
@@ -358,6 +353,5 @@ function makeStyles(colors: ReturnType<typeof useColors>, insets: ReturnType<typ
     summaryVal: { fontSize: 14, fontWeight: "500" as const, color: colors.foreground },
     totalLabel: { fontSize: 15, fontWeight: "700" as const, color: colors.foreground },
     totalVal: { fontSize: 17, fontWeight: "700" as const, color: colors.foreground },
-    notesText: { fontSize: 14, color: colors.mutedForeground, padding: 14, lineHeight: 20 },
   });
 }

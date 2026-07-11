@@ -19,17 +19,21 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { apiGet } from "@/lib/api";
 import { useColors } from "@/hooks/useColors";
 
+// Must mirror formatInvoice() in artifacts/api-server/src/routes/invoices.ts —
+// a prior mismatched local shape here meant every field on this screen was
+// silently undefined (blank invoice numbers, dates, ₹0 amounts, filters that
+// never matched anything).
 interface Invoice {
   id: number;
-  invoiceNumber: string;
+  invoiceNo: string;
   invoiceType: string;
   status: string;
-  customerId: number;
-  customerName?: string;
-  date: string;
-  totalAmount: string;
-  paidAmount?: string;
-  balance?: string;
+  customerId: number | null;
+  customerName?: string | null;
+  invoiceDate: string;
+  grandTotal: number;
+  amountPaid?: number;
+  balanceDue?: number;
 }
 
 const FILTERS = ["All", "GST", "Non-GST", "Quotation"] as const;
@@ -52,21 +56,24 @@ function formatDate(dateStr: string): string {
 }
 
 function typeLabel(type: string): string {
-  if (type === "gst_invoice") return "GST";
-  if (type === "non_gst_invoice") return "Non-GST";
+  if (type === "gst") return "GST";
+  if (type === "non_gst") return "Non-GST";
   if (type === "quotation") return "Quotation";
-  if (type === "service_charge") return "Service";
+  if (type === "proforma_invoice") return "Proforma";
+  if (type === "bill_of_supply") return "Bill of Supply";
+  if (type === "delivery_challan") return "Challan";
+  if (type === "sale_order") return "Sale Order";
   return type;
 }
 
 function statusColor(status: string, colors: ReturnType<typeof useColors>) {
-  if (status === "confirmed") return colors.success;
   if (status === "cancelled") return colors.destructive;
+  if (status === "saved") return colors.success;
   return colors.warning;
 }
 
-function balanceColor(balance: string | undefined, colors: ReturnType<typeof useColors>) {
-  const b = parseFloat(balance ?? "0");
+function balanceColor(balance: number | undefined, colors: ReturnType<typeof useColors>) {
+  const b = balance ?? 0;
   if (b <= 0) return colors.success;
   if (b > 0) return colors.destructive;
   return colors.mutedForeground;
@@ -89,13 +96,13 @@ export default function InvoicesScreen() {
     return data.filter((inv) => {
       const matchSearch =
         !search ||
-        inv.invoiceNumber?.toLowerCase().includes(search.toLowerCase()) ||
+        inv.invoiceNo?.toLowerCase().includes(search.toLowerCase()) ||
         inv.customerName?.toLowerCase().includes(search.toLowerCase());
 
       const matchFilter =
         filter === "All" ||
-        (filter === "GST" && inv.invoiceType === "gst_invoice") ||
-        (filter === "Non-GST" && inv.invoiceType === "non_gst_invoice") ||
+        (filter === "GST" && inv.invoiceType === "gst") ||
+        (filter === "Non-GST" && inv.invoiceType === "non_gst") ||
         (filter === "Quotation" && inv.invoiceType === "quotation");
 
       return matchSearch && matchFilter;
@@ -182,13 +189,13 @@ export default function InvoicesScreen() {
             >
               <View style={styles.cardTop}>
                 <View style={styles.cardLeft}>
-                  <Text style={styles.invoiceNum}>{item.invoiceNumber}</Text>
+                  <Text style={styles.invoiceNum}>{item.invoiceNo}</Text>
                   <Text style={styles.customerName} numberOfLines={1}>
                     {item.customerName ?? `Customer #${item.customerId}`}
                   </Text>
                 </View>
                 <View style={styles.cardRight}>
-                  <Text style={styles.amount}>{formatAmount(item.totalAmount)}</Text>
+                  <Text style={styles.amount}>{formatAmount(item.grandTotal)}</Text>
                   <View
                     style={[
                       styles.statusBadge,
@@ -210,16 +217,16 @@ export default function InvoicesScreen() {
                 <View style={styles.typePill}>
                   <Text style={styles.typeText}>{typeLabel(item.invoiceType)}</Text>
                 </View>
-                <Text style={styles.dateText}>{formatDate(item.date)}</Text>
-                {item.balance !== undefined && (
+                <Text style={styles.dateText}>{formatDate(item.invoiceDate)}</Text>
+                {item.balanceDue !== undefined && (
                   <Text
                     style={[
                       styles.balanceText,
-                      { color: balanceColor(item.balance, colors) },
+                      { color: balanceColor(item.balanceDue, colors) },
                     ]}
                   >
-                    {parseFloat(item.balance) > 0
-                      ? `Due: ${formatAmount(item.balance)}`
+                    {item.balanceDue > 0
+                      ? `Due: ${formatAmount(item.balanceDue)}`
                       : "Paid"}
                   </Text>
                 )}
