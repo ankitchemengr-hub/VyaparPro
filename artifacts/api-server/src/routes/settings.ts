@@ -52,6 +52,7 @@ const DEFAULT_PRINT_SETTINGS = {
   bankIfsc: "",
   bankBranch: "",
   upiId: "",
+  qrImage: null as string | null,
   printerA4: "",
   printerA5: "",
   thermalWidth: "72mm",
@@ -168,6 +169,10 @@ router.put("/print-settings", requireAdmin, async (req, res): Promise<void> => {
   const parsed = UpdatePrintSettingsBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid input", details: parsed.error.issues });
+    return;
+  }
+  if (parsed.data.qrImage != null && parsed.data.qrImage.length > 2_000_000) {
+    res.status(400).json({ error: "QR image must be a data URL under ~1.5MB" });
     return;
   }
   const session = (req as any).session;

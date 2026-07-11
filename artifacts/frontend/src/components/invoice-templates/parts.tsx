@@ -22,6 +22,13 @@ export function PaymentQr({
   size?: number;
   rule?: string;
 }) {
+  if (settings.qrImage) {
+    return (
+      <div className={`flex items-center justify-center border p-1 ${rule}`} style={{ height: size, width: size }}>
+        <img src={settings.qrImage} alt="Scan & Pay QR" className="h-full w-full object-contain" />
+      </div>
+    );
+  }
   const uri = buildUpiUri(settings, invoice);
   if (!uri) {
     return (

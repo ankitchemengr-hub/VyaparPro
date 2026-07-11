@@ -1,7 +1,7 @@
-// Per-company print settings editor. Four tabs: General, Document, Header & Terms,
-// Default Printers. Admin-only (the API enforces this on PUT).
+// Per-company print settings editor. Five tabs: General, Document, Header & Terms,
+// Payment, Default Printers. Admin-only (the API enforces this on PUT).
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   useGetPrintSettings,
   useUpdatePrintSettings,
@@ -24,13 +24,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Save, Eye } from "lucide-react";
+import { Save, Eye, Upload, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { TEMPLATES } from "@/components/invoice-templates/registry";
 import { InvoiceTemplateSelector } from "@/components/invoice-templates/InvoiceTemplateSelector";
 import { SAMPLE_INVOICE, SAMPLE_MAPS } from "@/components/invoice-templates/sample";
 import { PaymentQr } from "@/components/invoice-templates/parts";
 import { useCompanyLogo } from "@/hooks/use-company-logo";
+
+const MAX_QR_IMAGE_BYTES = 500 * 1024;
 
 function ToggleRow({
   label,
@@ -66,6 +68,7 @@ export function PrintSettingsPanel() {
   const [dirty, setDirty] = useState(false);
   const [selectorOpen, setSelectorOpen] = useState(false);
   const logo = useCompanyLogo();
+  const qrFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (data && !dirty) setForm(data);
@@ -78,6 +81,21 @@ export function PrintSettingsPanel() {
   const set = <K extends keyof PrintSettings>(key: K, value: PrintSettings[K]) => {
     setForm((prev) => (prev ? { ...prev, [key]: value } : prev));
     setDirty(true);
+  };
+
+  const handleQrFile = (file: File | undefined) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Invalid file", description: "Please choose an image file.", variant: "destructive" });
+      return;
+    }
+    if (file.size > MAX_QR_IMAGE_BYTES) {
+      toast({ title: "File too large", description: "QR image must be under 500 KB.", variant: "destructive" });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => set("qrImage", reader.result as string);
+    reader.readAsDataURL(file);
   };
 
   const handleSave = () => {
@@ -118,6 +136,7 @@ export function PrintSettingsPanel() {
           <TabsTrigger value="general" data-testid="tab-print-general">General</TabsTrigger>
           <TabsTrigger value="document" data-testid="tab-print-document">Document</TabsTrigger>
           <TabsTrigger value="header" data-testid="tab-print-header">Header &amp; Terms</TabsTrigger>
+          <TabsTrigger value="payment" data-testid="tab-print-payment">Payment</TabsTrigger>
           <TabsTrigger value="printers" data-testid="tab-print-printers">Default Printers</TabsTrigger>
         </TabsList>
 
@@ -178,8 +197,20 @@ export function PrintSettingsPanel() {
           <Card>
             <CardContent className="pt-6">
               <ToggleRow label="Show logo" checked={form.showLogo} onChange={(v) => set("showLogo", v)} testId="switch-show-logo" />
-              <ToggleRow label="Show QR / UPI" checked={form.showQr} onChange={(v) => set("showQr", v)} testId="switch-show-qr" />
-              <ToggleRow label="Show bank details" checked={form.showBankDetails} onChange={(v) => set("showBankDetails", v)} testId="switch-show-bank" />
+              <ToggleRow
+                label="Show QR / UPI"
+                description="Configure the QR code and bank details on the Payment tab."
+                checked={form.showQr}
+                onChange={(v) => set("showQr", v)}
+                testId="switch-show-qr"
+              />
+              <ToggleRow
+                label="Show bank details"
+                description="Configure bank details on the Payment tab."
+                checked={form.showBankDetails}
+                onChange={(v) => set("showBankDetails", v)}
+                testId="switch-show-bank"
+              />
               <ToggleRow label="Show signature" checked={form.showSignature} onChange={(v) => set("showSignature", v)} testId="switch-show-signature" />
               <ToggleRow label="Show amount in words" checked={form.showAmountInWords} onChange={(v) => set("showAmountInWords", v)} testId="switch-show-words" />
               <ToggleRow label="Show HSN column (GST)" checked={form.showHsn} onChange={(v) => set("showHsn", v)} testId="switch-show-hsn" />
@@ -235,6 +266,70 @@ export function PrintSettingsPanel() {
           </Card>
         </TabsContent>
 
+        {/* Payment */}
+        <TabsContent value="payment">
+          <Card>
+            <CardContent className="space-y-4 pt-6">
+              <div>
+                <div className="mb-2 text-sm font-medium">Bank Details</div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <Label htmlFor="bankName">Bank Name</Label>
+                    <Input id="bankName" value={form.bankName} onChange={(e) => set("bankName", e.target.value)} data-testid="input-bank-name" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="bankAccount">Account No.</Label>
+                    <Input id="bankAccount" value={form.bankAccount} onChange={(e) => set("bankAccount", e.target.value)} data-testid="input-bank-account" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="bankIfsc">IFSC</Label>
+                    <Input id="bankIfsc" value={form.bankIfsc} onChange={(e) => set("bankIfsc", e.target.value)} data-testid="input-bank-ifsc" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="bankBranch">Branch</Label>
+                    <Input id="bankBranch" value={form.bankBranch} onChange={(e) => set("bankBranch", e.target.value)} data-testid="input-bank-branch" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="upiId">UPI ID</Label>
+                    <Input id="upiId" value={form.upiId} onChange={(e) => set("upiId", e.target.value)} data-testid="input-upi-id" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t pt-4">
+                <div className="mb-2 text-sm font-medium">QR Code</div>
+                <div className="flex items-center gap-4">
+                  <PaymentQr invoice={SAMPLE_INVOICE} settings={form} size={72} />
+                  <div className="flex flex-col gap-2">
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant="outline" size="sm" onClick={() => qrFileRef.current?.click()} data-testid="button-upload-qr">
+                        <Upload className="h-3.5 w-3.5 mr-1.5" /> {form.qrImage ? "Replace QR image" : "Upload custom QR"}
+                      </Button>
+                      {form.qrImage && (
+                        <Button variant="ghost" size="sm" onClick={() => set("qrImage", null)} data-testid="button-remove-qr">
+                          <X className="h-3.5 w-3.5 mr-1.5" /> Remove
+                        </Button>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground max-w-sm">
+                      {form.qrImage
+                        ? "Using your uploaded image. Remove it to switch back to an auto-generated QR."
+                        : "Auto-generated from the UPI ID above and each invoice's total. Or upload your own QR (from your bank, Paytm, PhonePe, etc.) to use that instead."}
+                    </p>
+                  </div>
+                  <input
+                    ref={qrFileRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg,image/webp"
+                    className="hidden"
+                    onChange={(e) => { handleQrFile(e.target.files?.[0]); e.target.value = ""; }}
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* Default Printers */}
         <TabsContent value="printers">
           <Card>
@@ -263,39 +358,6 @@ export function PrintSettingsPanel() {
                       <SelectItem value="72mm">72 mm</SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
-              </div>
-              <div className="border-t pt-4">
-                <div className="mb-2 text-sm font-medium">Bank Details</div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label htmlFor="bankName">Bank Name</Label>
-                    <Input id="bankName" value={form.bankName} onChange={(e) => set("bankName", e.target.value)} data-testid="input-bank-name" />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="bankAccount">Account No.</Label>
-                    <Input id="bankAccount" value={form.bankAccount} onChange={(e) => set("bankAccount", e.target.value)} data-testid="input-bank-account" />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="bankIfsc">IFSC</Label>
-                    <Input id="bankIfsc" value={form.bankIfsc} onChange={(e) => set("bankIfsc", e.target.value)} data-testid="input-bank-ifsc" />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="bankBranch">Branch</Label>
-                    <Input id="bankBranch" value={form.bankBranch} onChange={(e) => set("bankBranch", e.target.value)} data-testid="input-bank-branch" />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="upiId">UPI ID</Label>
-                    <Input id="upiId" value={form.upiId} onChange={(e) => set("upiId", e.target.value)} data-testid="input-upi-id" />
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 border-t pt-4">
-                  <PaymentQr invoice={SAMPLE_INVOICE} settings={form} size={72} />
-                  <p className="text-xs text-muted-foreground">
-                    "Scan &amp; Pay" QR shown on invoices when "Show QR / UPI" is on (Document tab). It's
-                    generated automatically from the UPI ID above and each invoice's own total — change
-                    the UPI ID any time and every future bill's QR updates with it.
-                  </p>
                 </div>
               </div>
             </CardContent>

@@ -31,6 +31,7 @@ export const FALLBACK_PRINT_SETTINGS: PrintSettings = {
   bankIfsc: "",
   bankBranch: "",
   upiId: "",
+  qrImage: null,
   printerA4: "",
   printerA5: "",
   thermalWidth: "72mm",

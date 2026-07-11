@@ -3053,6 +3053,7 @@ components:
         - bankIfsc
         - bankBranch
         - upiId
+        - qrImage
         - printerA4
         - printerA5
         - thermalWidth
@@ -3112,6 +3113,9 @@ components:
           type: string
         upiId:
           type: string
+        qrImage:
+          description: Custom QR code image as a base64 data URL. When set, this is shown instead of the auto-generated UPI QR.
+          type: ["string", "null"]
         printerA4:
           type: string
         printerA5:
@@ -3178,6 +3182,8 @@ components:
           type: string
         upiId:
           type: string
+        qrImage:
+          type: ["string", "null"]
         printerA4:
           type: string
         printerA5:
