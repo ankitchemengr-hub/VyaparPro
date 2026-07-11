@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -20,7 +21,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { format, startOfMonth, startOfDay, subDays } from "date-fns";
-import { Pencil, Trash2, Loader2, UserCircle2, Eye, CalendarIcon, X, IndianRupee } from "lucide-react";
+import { Pencil, Trash2, Loader2, UserCircle2, Eye, CalendarIcon, X, IndianRupee, Filter } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
@@ -138,100 +139,125 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
       </div>
 
       <Card>
-        <CardContent className="p-4 space-y-3">
-          <div className="flex flex-wrap items-center gap-3">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-2">
             <Input
               placeholder="Search invoice number or customer..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="max-w-xs"
+              className="flex-1 min-w-0"
               data-testid="input-invoice-search"
             />
-            <Select value={type} onValueChange={setType}>
-              <SelectTrigger className="w-[150px]" data-testid="select-invoice-type">
-                <SelectValue placeholder="Invoice Type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="gst">GST</SelectItem>
-                <SelectItem value="non_gst">Non-GST</SelectItem>
-                <SelectItem value="quotation">Quotation</SelectItem>
-                <SelectItem value="proforma_invoice">Proforma Invoice</SelectItem>
-                <SelectItem value="bill_of_supply">Bill of Supply</SelectItem>
-                <SelectItem value="delivery_challan">Delivery Challan</SelectItem>
-                <SelectItem value="sale_order">Sale Order</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={payStatus} onValueChange={setPayStatus}>
-              <SelectTrigger className="w-[160px]" data-testid="select-invoice-status">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="not_paid">Not Paid</SelectItem>
-                <SelectItem value="partial">Partially Paid</SelectItem>
-                <SelectItem value="paid">Paid</SelectItem>
-                <SelectItem value="cancelled">Cancelled</SelectItem>
-              </SelectContent>
-            </Select>
 
             <Popover>
               <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn("justify-start font-normal w-[160px]", !dateFrom && "text-muted-foreground")}
-                  data-testid="button-date-from"
-                >
-                  <CalendarIcon className="h-4 w-4 mr-2" />
-                  {dateFrom ? format(dateFrom, "dd MMM yyyy") : "From date"}
+                <Button variant="outline" size="icon" className="relative shrink-0" data-testid="button-open-filters">
+                  <Filter className="h-4 w-4" />
+                  {hasFilters && (
+                    <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-primary" />
+                  )}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar mode="single" selected={dateFrom} onSelect={setDateFrom} initialFocus />
+              <PopoverContent className="w-80 space-y-4" align="end">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Invoice Type</Label>
+                  <Select value={type} onValueChange={setType}>
+                    <SelectTrigger className="w-full" data-testid="select-invoice-type">
+                      <SelectValue placeholder="Invoice Type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Types</SelectItem>
+                      <SelectItem value="gst">GST</SelectItem>
+                      <SelectItem value="non_gst">Non-GST</SelectItem>
+                      <SelectItem value="quotation">Quotation</SelectItem>
+                      <SelectItem value="proforma_invoice">Proforma Invoice</SelectItem>
+                      <SelectItem value="bill_of_supply">Bill of Supply</SelectItem>
+                      <SelectItem value="delivery_challan">Delivery Challan</SelectItem>
+                      <SelectItem value="sale_order">Sale Order</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Payment Status</Label>
+                  <Select value={payStatus} onValueChange={setPayStatus}>
+                    <SelectTrigger className="w-full" data-testid="select-invoice-status">
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Status</SelectItem>
+                      <SelectItem value="not_paid">Not Paid</SelectItem>
+                      <SelectItem value="partial">Partially Paid</SelectItem>
+                      <SelectItem value="paid">Paid</SelectItem>
+                      <SelectItem value="cancelled">Cancelled</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Date Range</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn("justify-start font-normal", !dateFrom && "text-muted-foreground")}
+                          data-testid="button-date-from"
+                        >
+                          <CalendarIcon className="h-4 w-4 mr-2 shrink-0" />
+                          <span className="truncate">{dateFrom ? format(dateFrom, "dd MMM yy") : "From"}</span>
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar mode="single" selected={dateFrom} onSelect={setDateFrom} initialFocus />
+                      </PopoverContent>
+                    </Popover>
+
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn("justify-start font-normal", !dateTo && "text-muted-foreground")}
+                          data-testid="button-date-to"
+                        >
+                          <CalendarIcon className="h-4 w-4 mr-2 shrink-0" />
+                          <span className="truncate">{dateTo ? format(dateTo, "dd MMM yy") : "To"}</span>
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={dateTo}
+                          onSelect={setDateTo}
+                          disabled={(d) => (dateFrom ? d < dateFrom : false)}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => applyPreset("today")} data-testid="preset-today">Today</Button>
+                    <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => applyPreset("7d")} data-testid="preset-7d">Last 7 days</Button>
+                    <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => applyPreset("30d")} data-testid="preset-30d">Last 30 days</Button>
+                    <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => applyPreset("mtd")} data-testid="preset-mtd">This month</Button>
+                  </div>
+                </div>
+
+                {hasFilters && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full"
+                    onClick={clearFilters}
+                    data-testid="button-clear-filters"
+                  >
+                    <X className="h-4 w-4 mr-1" />Clear filters
+                  </Button>
+                )}
               </PopoverContent>
             </Popover>
 
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn("justify-start font-normal w-[160px]", !dateTo && "text-muted-foreground")}
-                  data-testid="button-date-to"
-                >
-                  <CalendarIcon className="h-4 w-4 mr-2" />
-                  {dateTo ? format(dateTo, "dd MMM yyyy") : "To date"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={dateTo}
-                  onSelect={setDateTo}
-                  disabled={(d) => (dateFrom ? d < dateFrom : false)}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
-
-            {hasFilters && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={clearFilters}
-                data-testid="button-clear-filters"
-              >
-                <X className="h-4 w-4 mr-1" />Clear
-              </Button>
-            )}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className="text-muted-foreground">Quick range:</span>
-            <Button variant="outline" size="sm" className="h-7" onClick={() => applyPreset("today")} data-testid="preset-today">Today</Button>
-            <Button variant="outline" size="sm" className="h-7" onClick={() => applyPreset("7d")} data-testid="preset-7d">Last 7 days</Button>
-            <Button variant="outline" size="sm" className="h-7" onClick={() => applyPreset("30d")} data-testid="preset-30d">Last 30 days</Button>
-            <Button variant="outline" size="sm" className="h-7" onClick={() => applyPreset("mtd")} data-testid="preset-mtd">This month</Button>
-            <span className="ml-auto text-muted-foreground" data-testid="text-result-count">
+            <span className="shrink-0 text-sm text-muted-foreground" data-testid="text-result-count">
               {isLoading ? "Loading…" : `${displayedInvoices.length} invoice${displayedInvoices.length === 1 ? "" : "s"}`}
             </span>
           </div>
