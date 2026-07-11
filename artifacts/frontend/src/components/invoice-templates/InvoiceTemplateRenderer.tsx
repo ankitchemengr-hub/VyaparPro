@@ -49,7 +49,8 @@ function ScreenFitInvoiceSheet({
       // 100% natural width.
       const currentZoom = sheet.style.zoom ? Number(sheet.style.zoom) : 1;
       const naturalWidth = sheet.scrollWidth / (currentZoom || 1);
-      const available = container.clientWidth;
+      // Small safety margin so the sheet doesn't sit edge-to-edge on screen.
+      const available = container.clientWidth * 0.96;
       if (!naturalWidth || !available) return;
       setZoom(Math.min(1, available / naturalWidth));
     };

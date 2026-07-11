@@ -277,36 +277,39 @@ export default function InvoiceDetail() {
   return (
     <div className="p-6 space-y-6 max-w-5xl mx-auto print:p-0 print:max-w-none print:m-0">
       {/* Top toolbar */}
-      <div className="flex items-center justify-between print:hidden no-print">
-        <Button variant="outline" onClick={() => setLocation("/invoices")} data-testid="button-back">
-          <ArrowLeft className="h-4 w-4 mr-2" />Back to invoices
-        </Button>
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between print:hidden no-print">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button variant="outline" size="sm" onClick={() => setLocation("/invoices")} data-testid="button-back">
+            <ArrowLeft className="h-4 w-4 sm:mr-2" /><span className="hidden sm:inline">Back to invoices</span>
+          </Button>
           <Badge variant={isGst ? "default" : "secondary"}>{isGst ? "GST" : "Non-GST"}</Badge>
           {invPayStatus === "paid" && <Badge className="bg-green-600 text-white hover:bg-green-700">Paid</Badge>}
           {invPayStatus === "partial" && <Badge className="bg-amber-500 text-white hover:bg-amber-600">Partially Paid</Badge>}
           {invPayStatus === "not_paid" && <Badge variant="destructive">Not Paid</Badge>}
           {invPayStatus === "cancelled" && <Badge variant="destructive">Cancelled</Badge>}
           {invPayStatus === "na" && <Badge variant="secondary">{invoice.status}</Badge>}
-          <Button variant="outline" onClick={() => setSelectorOpen(true)} data-testid="button-choose-template">
-            <LayoutTemplate className="h-4 w-4 mr-2" />
-            {activeMeta?.name ?? "Choose Template"}
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button variant="outline" size="sm" onClick={() => setSelectorOpen(true)} data-testid="button-choose-template">
+            <LayoutTemplate className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">{activeMeta?.name ?? "Choose Template"}</span>
           </Button>
           {invoice.status !== "cancelled" && invPayStatus !== "paid" && Number(invoice.balanceDue) > 0 && (
-            <Button onClick={openPayDialog} data-testid="button-record-payment">
-              <IndianRupee className="h-4 w-4 mr-2" />Record Payment
+            <Button size="sm" onClick={openPayDialog} data-testid="button-record-payment">
+              <IndianRupee className="h-4 w-4 sm:mr-2" /><span className="hidden sm:inline">Record Payment</span>
             </Button>
           )}
           <Button
             variant="outline"
+            size="sm"
             onClick={openWaDialog}
             className="border-green-400 text-green-700 hover:bg-green-50"
             data-testid="button-whatsapp-send"
           >
-            <MessageCircle className="h-4 w-4 mr-2" />WhatsApp
+            <MessageCircle className="h-4 w-4 sm:mr-2" /><span className="hidden sm:inline">WhatsApp</span>
           </Button>
-          <Button variant="outline" onClick={() => window.print()} data-testid="button-print">
-            <Printer className="h-4 w-4 mr-2" />Print
+          <Button variant="outline" size="sm" onClick={() => window.print()} data-testid="button-print">
+            <Printer className="h-4 w-4 sm:mr-2" /><span className="hidden sm:inline">Print</span>
           </Button>
         </div>
       </div>
