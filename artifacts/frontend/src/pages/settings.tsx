@@ -296,22 +296,20 @@ export default function Settings() {
       </div>
 
       <Tabs defaultValue="sequences">
-        <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-          <TabsList className="w-max">
-            <TabsTrigger value="sequences" data-testid="tab-sequences">
-              <Hash className="mr-2 h-4 w-4" /> Document Sequences
-            </TabsTrigger>
-            <TabsTrigger value="permissions" data-testid="tab-permissions">
-              <ShieldCheck className="mr-2 h-4 w-4" /> Permissions
-            </TabsTrigger>
-            <TabsTrigger value="printing" data-testid="tab-printing">
-              <Printer className="mr-2 h-4 w-4" /> Printing
-            </TabsTrigger>
-            <TabsTrigger value="company" data-testid="tab-company">
-              <Building2 className="mr-2 h-4 w-4" /> Company
-            </TabsTrigger>
-          </TabsList>
-        </div>
+        <TabsList className="flex flex-wrap h-auto w-full justify-start gap-1">
+          <TabsTrigger value="sequences" data-testid="tab-sequences">
+            <Hash className="mr-2 h-4 w-4" /> Document Sequences
+          </TabsTrigger>
+          <TabsTrigger value="permissions" data-testid="tab-permissions">
+            <ShieldCheck className="mr-2 h-4 w-4" /> Permissions
+          </TabsTrigger>
+          <TabsTrigger value="printing" data-testid="tab-printing">
+            <Printer className="mr-2 h-4 w-4" /> Printing
+          </TabsTrigger>
+          <TabsTrigger value="company" data-testid="tab-company">
+            <Building2 className="mr-2 h-4 w-4" /> Company
+          </TabsTrigger>
+        </TabsList>
 
         <TabsContent value="sequences" className="space-y-4 mt-4">
           <SequencesTab />

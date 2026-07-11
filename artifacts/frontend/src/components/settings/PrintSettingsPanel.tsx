@@ -100,7 +100,7 @@ export function PrintSettingsPanel() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-end gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-2">
         <Button
           variant="outline"
           onClick={() => setSelectorOpen(true)}
@@ -114,7 +114,7 @@ export function PrintSettingsPanel() {
       </div>
 
       <Tabs defaultValue="general">
-        <TabsList>
+        <TabsList className="flex flex-wrap h-auto w-full justify-start gap-1">
           <TabsTrigger value="general" data-testid="tab-print-general">General</TabsTrigger>
           <TabsTrigger value="document" data-testid="tab-print-document">Document</TabsTrigger>
           <TabsTrigger value="header" data-testid="tab-print-header">Header &amp; Terms</TabsTrigger>
