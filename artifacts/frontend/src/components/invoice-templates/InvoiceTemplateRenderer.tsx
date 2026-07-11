@@ -56,9 +56,14 @@ function ScreenFitInvoiceSheet({
     };
 
     recalc();
+    // Only observe `container`, not `sheet`. `sheet` is the element this very
+    // effect resizes (via the zoom it sets below) — observing it too turns every
+    // zoom update into another resize event, which retriggers recalc() and
+    // compounds rounding error each pass until zoom drifts to ~0. `children`
+    // changes (template/invoice swap) already rerun this effect, so sheet's own
+    // box doesn't need a separate observer to stay in sync.
     const ro = new ResizeObserver(recalc);
     ro.observe(container);
-    ro.observe(sheet);
     window.addEventListener("resize", recalc);
     return () => {
       ro.disconnect();

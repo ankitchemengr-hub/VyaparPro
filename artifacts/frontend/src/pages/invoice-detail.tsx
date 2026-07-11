@@ -249,7 +249,10 @@ export default function InvoiceDetail() {
   );
   const maps = { lpbByProduct, upbByProduct };
 
-  if (isLoading || (!error && !invoice) || settingsLoading) {
+  // Print settings gate the printable sheet only, not the whole page — `settings`
+  // already has a safe fallback (FALLBACK_PRINT_SETTINGS) above, so there's no
+  // need to hold the entire invoice view hostage to that extra network round-trip.
+  if (isLoading || (!error && !invoice)) {
     return (
       <div className="p-12 flex justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -316,12 +319,18 @@ export default function InvoiceDetail() {
         </div>
       </div>
 
-      <InvoiceTemplateRenderer
-        invoice={invoice}
-        settings={settings}
-        maps={maps}
-        templateId={activeTemplate}
-      />
+      {settingsLoading ? (
+        <div className="py-12 flex justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <InvoiceTemplateRenderer
+          invoice={invoice}
+          settings={settings}
+          maps={maps}
+          templateId={activeTemplate}
+        />
+      )}
 
       <InvoiceTemplateSelector
         open={selectorOpen}
