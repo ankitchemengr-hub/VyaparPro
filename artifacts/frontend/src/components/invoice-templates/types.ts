@@ -1,8 +1,11 @@
 // Shared types for the invoice template engine.
 import type { ComponentType } from "react";
-import type { PrintSettings } from "@workspace/api-client-react";
+import type { PrintSettings as ApiPrintSettings } from "@workspace/api-client-react";
 
-export type { PrintSettings };
+// `logo` isn't part of the print-settings API schema — it's the company
+// profile's logo (a separate, per-tenant concept), merged in client-side by
+// whoever renders a template so templates have one settings object to read.
+export type PrintSettings = ApiPrintSettings & { logo?: string | null };
 
 export interface ProductMaps {
   lpbByProduct: Map<number, number>;

@@ -29,6 +29,8 @@ import { useToast } from "@/hooks/use-toast";
 import { TEMPLATES } from "@/components/invoice-templates/registry";
 import { InvoiceTemplateSelector } from "@/components/invoice-templates/InvoiceTemplateSelector";
 import { SAMPLE_INVOICE, SAMPLE_MAPS } from "@/components/invoice-templates/sample";
+import { PaymentQr } from "@/components/invoice-templates/parts";
+import { useCompanyLogo } from "@/hooks/use-company-logo";
 
 function ToggleRow({
   label,
@@ -63,6 +65,7 @@ export function PrintSettingsPanel() {
   const [form, setForm] = useState<PrintSettings | null>(null);
   const [dirty, setDirty] = useState(false);
   const [selectorOpen, setSelectorOpen] = useState(false);
+  const logo = useCompanyLogo();
 
   useEffect(() => {
     if (data && !dirty) setForm(data);
@@ -286,6 +289,14 @@ export function PrintSettingsPanel() {
                     <Input id="upiId" value={form.upiId} onChange={(e) => set("upiId", e.target.value)} data-testid="input-upi-id" />
                   </div>
                 </div>
+                <div className="flex items-center gap-3 border-t pt-4">
+                  <PaymentQr invoice={SAMPLE_INVOICE} settings={form} size={72} />
+                  <p className="text-xs text-muted-foreground">
+                    "Scan &amp; Pay" QR shown on invoices when "Show QR / UPI" is on (Document tab). It's
+                    generated automatically from the UPI ID above and each invoice's own total — change
+                    the UPI ID any time and every future bill's QR updates with it.
+                  </p>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -297,7 +308,7 @@ export function PrintSettingsPanel() {
         onOpenChange={setSelectorOpen}
         invoice={SAMPLE_INVOICE}
         maps={SAMPLE_MAPS}
-        settings={form}
+        settings={{ ...form, logo }}
         value={form.defaultTemplate}
         onSelect={(id) => set("defaultTemplate", id)}
       />

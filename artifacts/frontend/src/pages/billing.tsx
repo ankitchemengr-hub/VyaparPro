@@ -17,6 +17,7 @@ import {
   type PaymentInputMode,
 } from "@workspace/api-client-react";
 import { InvoiceTemplateRenderer } from "@/components/invoice-templates/InvoiceTemplateRenderer";
+import { useCompanyLogo } from "@/hooks/use-company-logo";
 import { FALLBACK_PRINT_SETTINGS } from "@/components/invoice-templates/defaults";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -136,7 +137,8 @@ export default function Billing() {
   const { data: existingInvoice } = useGetInvoice(editId as number, { query: { enabled: isEditMode } as any });
   const { data: accounts } = useListAccounts();
   const { data: printSettingsData } = useGetPrintSettings();
-  const printSettings = printSettingsData ?? FALLBACK_PRINT_SETTINGS;
+  const logo = useCompanyLogo();
+  const printSettings = { ...(printSettingsData ?? FALLBACK_PRINT_SETTINGS), logo };
   const createInvoice = useCreateInvoice();
   const updateInvoice = useUpdateInvoice();
   const logPayment = useLogPayment();

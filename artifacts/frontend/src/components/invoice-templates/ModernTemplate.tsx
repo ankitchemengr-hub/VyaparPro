@@ -2,7 +2,7 @@
 // title, rounded brand chip. This is the flagship "looks best" template.
 
 import { format } from "date-fns";
-import { TemplateBody, CustomerBlock, companyTitle, brandInitials } from "./parts";
+import { TemplateBody, CustomerBlock, companyTitle, CompanyLogo } from "./parts";
 import type { TemplateProps, TemplateTheme } from "./types";
 
 const theme: TemplateTheme = {
@@ -21,9 +21,11 @@ export function ModernTemplate({ invoice, maps, settings, computed }: TemplatePr
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             {settings.showLogo && (
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/20 text-lg font-bold backdrop-blur">
-                {brandInitials(companyName)}
-              </div>
+              <CompanyLogo
+                logo={settings.logo}
+                name={companyName}
+                className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/20 text-lg font-bold backdrop-blur"
+              />
             )}
             <div>
               <div className="text-xl font-extrabold tracking-wide">{companyName}</div>

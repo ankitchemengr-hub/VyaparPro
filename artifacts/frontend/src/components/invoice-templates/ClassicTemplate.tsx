@@ -2,7 +2,7 @@
 // title bar, company block left, invoice meta box right. Works at A4 or A5.
 
 import { format } from "date-fns";
-import { TemplateBody, CustomerBlock, companyTitle, brandInitials } from "./parts";
+import { TemplateBody, CustomerBlock, companyTitle, CompanyLogo } from "./parts";
 import type { TemplateProps, TemplateTheme } from "./types";
 
 const theme: TemplateTheme = {
@@ -23,9 +23,11 @@ export function ClassicTemplate({ invoice, maps, settings, computed }: TemplateP
       <div className="grid grid-cols-2 gap-4 border-b border-gray-400 py-3">
         <div className="flex gap-3">
           {settings.showLogo && (
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-2 border-gray-800 text-sm font-bold">
-              {brandInitials(companyName)}
-            </div>
+            <CompanyLogo
+              logo={settings.logo}
+              name={companyName}
+              className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-2 border-gray-800 text-sm font-bold"
+            />
           )}
           <div>
             <div className="text-lg font-bold tracking-wide">{companyName}</div>

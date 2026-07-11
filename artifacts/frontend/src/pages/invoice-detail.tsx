@@ -29,6 +29,7 @@ import { InvoiceTemplateRenderer } from "@/components/invoice-templates/InvoiceT
 import { InvoiceTemplateSelector } from "@/components/invoice-templates/InvoiceTemplateSelector";
 import { getTemplate } from "@/components/invoice-templates/registry";
 import { FALLBACK_PRINT_SETTINGS } from "@/components/invoice-templates/defaults";
+import { useCompanyLogo } from "@/hooks/use-company-logo";
 
 type PayMode = "cash" | "upi" | "cheque" | "bank_transfer" | "other";
 
@@ -85,7 +86,8 @@ export default function InvoiceDetail() {
   const { data: products } = useListProducts({});
   const { data: settingsData, isLoading: settingsLoading } = useGetPrintSettings();
   const { data: accounts } = useListAccounts();
-  const settings = settingsData ?? FALLBACK_PRINT_SETTINGS;
+  const logo = useCompanyLogo();
+  const settings = { ...(settingsData ?? FALLBACK_PRINT_SETTINGS), logo };
 
   const logPayment = useLogPayment();
 

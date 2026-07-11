@@ -2,7 +2,7 @@
 // clean rules, restrained accent. Suited to GST B2B invoices.
 
 import { format } from "date-fns";
-import { TemplateBody, CustomerBlock, companyTitle, brandInitials } from "./parts";
+import { TemplateBody, CustomerBlock, companyTitle, CompanyLogo } from "./parts";
 import type { TemplateProps, TemplateTheme } from "./types";
 
 const theme: TemplateTheme = {
@@ -20,9 +20,11 @@ export function ProfessionalTemplate({ invoice, maps, settings, computed }: Temp
       <div className="flex items-start justify-between border-b-4 border-slate-800 pb-3">
         <div className="flex items-center gap-3">
           {settings.showLogo && (
-            <div className="flex h-12 w-12 items-center justify-center rounded bg-slate-800 text-base font-bold text-white">
-              {brandInitials(companyName)}
-            </div>
+            <CompanyLogo
+              logo={settings.logo}
+              name={companyName}
+              className="flex h-12 w-12 items-center justify-center rounded bg-slate-800 text-base font-bold text-white"
+            />
           )}
           <div>
             <div className="text-lg font-bold text-slate-900">{companyName}</div>

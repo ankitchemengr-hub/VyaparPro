@@ -2,8 +2,43 @@
 // The legacy A5 Compact template stays self-contained to guarantee zero visual
 // regression; everything else composes these so column logic lives in one place.
 
-import { inr, num, lineLiters, rupeesInWords } from "./helpers";
+import type { ReactNode } from "react";
+import { QRCodeSVG } from "qrcode.react";
+import { inr, num, lineLiters, rupeesInWords, buildUpiUri } from "./helpers";
 import type { Computed, ProductMaps, PrintSettings, TemplateTheme } from "./types";
+
+// "Scan & Pay" QR, shared by every template. Encodes a UPI deep link built
+// from the configured UPI ID + the invoice's live grand total, so it always
+// reflects the current bill without any extra manual step. Falls back to a
+// text hint when no UPI ID is configured yet (edit it in Print Settings).
+export function PaymentQr({
+  invoice,
+  settings,
+  size = 64,
+  rule = "border-gray-300",
+}: {
+  invoice: any;
+  settings: PrintSettings;
+  size?: number;
+  rule?: string;
+}) {
+  const uri = buildUpiUri(settings, invoice);
+  if (!uri) {
+    return (
+      <div
+        className={`flex items-center justify-center border border-dashed p-1 text-center text-[7px] leading-tight text-gray-400 ${rule}`}
+        style={{ height: size, width: size }}
+      >
+        Add UPI ID in Print Settings
+      </div>
+    );
+  }
+  return (
+    <div className={`flex items-center justify-center border p-1 ${rule}`} style={{ height: size, width: size }}>
+      <QRCodeSVG value={uri} size={size - 8} level="M" />
+    </div>
+  );
+}
 
 interface ItemsTableProps {
   computed: Computed;
@@ -206,11 +241,7 @@ export function DocumentFooter({ invoice, settings, theme }: DocumentFooterProps
           )}
         </div>
         <div className="flex flex-col items-center gap-1 text-center">
-          {settings.showQr && (
-            <div className={`flex h-16 w-16 items-center justify-center border text-[8px] text-gray-400 ${theme.rule}`}>
-              QR
-            </div>
-          )}
+          {settings.showQr && <PaymentQr invoice={invoice} settings={settings} size={64} rule={theme.rule} />}
           {settings.showSignature && (
             <div className="pt-6 text-[10px]">
               <div className={`border-t px-4 pt-1 ${theme.rule}`}>Authorised Signatory</div>
@@ -271,6 +302,31 @@ export function TemplateBody({ invoice, maps, settings, computed, theme }: Templ
       </div>
       <DocumentFooter invoice={invoice} settings={settings} theme={theme} />
     </>
+  );
+}
+
+// Company logo chip shared by every template: renders the uploaded logo
+// (Settings → Company Profile) inside the caller's badge shape/sizing when
+// one is set, otherwise falls back to initials (or a custom fallback node).
+export function CompanyLogo({
+  logo,
+  name,
+  className,
+  fallback,
+}: {
+  logo?: string | null;
+  name: string;
+  className: string;
+  fallback?: ReactNode;
+}) {
+  return (
+    <div className={`${className} overflow-hidden`}>
+      {logo ? (
+        <img src={logo} alt={`${name} logo`} className="h-full w-full object-contain" />
+      ) : (
+        fallback ?? brandInitials(name)
+      )}
+    </div>
   );
 }
 

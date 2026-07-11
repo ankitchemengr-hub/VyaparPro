@@ -37,6 +37,27 @@ export function lineLiters(item: any, productLpb?: number | null): number {
   return 0;
 }
 
+// UPI deep link for the "Scan & Pay" QR. Amount always comes live from the
+// invoice's grand total (not a fixed setting), so it stays correct without
+// any manual edit — only the payee UPI ID is configured, in Print Settings.
+export function buildUpiUri(settings: { upiId?: string; companyName?: string }, invoice: any): string | null {
+  const pa = (settings.upiId ?? "").trim();
+  if (!pa) return null;
+  const amount = Number(invoice?.grandTotal);
+  const params = new URLSearchParams({
+    pa,
+    pn: settings.companyName || "Merchant",
+    cu: "INR",
+  });
+  if (Number.isFinite(amount) && amount > 0) {
+    params.set("am", amount.toFixed(2));
+  }
+  if (invoice?.invoiceNo) {
+    params.set("tn", `Invoice ${invoice.invoiceNo}`);
+  }
+  return `upi://pay?${params.toString()}`;
+}
+
 // Number → Indian English words (rupees only, no paise).
 export function rupeesInWords(n: number): string {
   const rupees = Math.floor(Math.abs(Number(n) || 0));

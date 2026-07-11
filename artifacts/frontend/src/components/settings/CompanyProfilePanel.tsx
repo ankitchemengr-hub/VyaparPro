@@ -2,6 +2,7 @@
 // on the login screen and company switcher. API is admin-only on PUT.
 
 import { useEffect, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2, Upload, X, Building2 } from "lucide-react";
@@ -14,34 +15,26 @@ interface CompanyProfile {
 }
 
 const MAX_LOGO_BYTES = 500 * 1024;
+const COMPANY_PROFILE_KEY = ["/api/company-profile"];
 
 export function CompanyProfilePanel() {
   const { toast } = useToast();
-  const [profile, setProfile] = useState<CompanyProfile | null>(null);
+  const queryClient = useQueryClient();
+  const { data: profile, isLoading: loading } = useQuery<CompanyProfile>({
+    queryKey: COMPANY_PROFILE_KEY,
+    queryFn: async () => {
+      const res = await fetch("/api/company-profile", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load");
+      return res.json();
+    },
+  });
   const [logo, setLogo] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch("/api/company-profile", { credentials: "include" });
-        if (!res.ok) throw new Error("Failed to load");
-        const data: CompanyProfile = await res.json();
-        if (!cancelled) {
-          setProfile(data);
-          setLogo(data.logo);
-        }
-      } catch {
-        if (!cancelled) toast({ title: "Failed to load company profile", variant: "destructive" });
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [toast]);
+    if (profile) setLogo(profile.logo);
+  }, [profile]);
 
   const dirty = profile != null && logo !== profile.logo;
 
@@ -74,9 +67,9 @@ export function CompanyProfilePanel() {
         throw new Error(err.error ?? "Save failed");
       }
       const updated: CompanyProfile = await res.json();
-      setProfile(updated);
+      queryClient.setQueryData(COMPANY_PROFILE_KEY, updated);
       setLogo(updated.logo);
-      toast({ title: "Company logo saved" });
+      toast({ title: "Company logo saved", description: "It will now appear on invoices too." });
     } catch (err: any) {
       toast({ title: "Save failed", description: err.message, variant: "destructive" });
     } finally {
@@ -97,7 +90,9 @@ export function CompanyProfilePanel() {
             <CardTitle>Company Logo</CardTitle>
           </div>
           <CardDescription>
-            Shown on the login screen for <strong>{profile.name}</strong>. Only visible to your company — other companies on this platform manage their own logo separately.
+            Shown on the login screen and on printed/PDF invoices for <strong>{profile.name}</strong>
+            (when "Show logo" is on in Print Settings). Only visible to your company — other companies
+            on this platform manage their own logo separately.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

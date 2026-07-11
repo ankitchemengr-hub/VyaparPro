@@ -18,17 +18,22 @@ export function MinimalTemplate({ invoice, maps, settings, computed }: TemplateP
   return (
     <div className="invoice-sheet bg-white text-gray-900 font-sans p-8">
       <div className="flex items-end justify-between">
-        <div>
-          <div className="text-2xl font-semibold tracking-tight">{companyName}</div>
-          <div className="mt-1 h-0.5 w-12 bg-amber-500" />
-          <div className="mt-2 text-[11px] text-gray-500">
-            {[settings.addressLine, settings.contact, settings.email]
-              .filter(Boolean)
-              .join("  ·  ")}
-          </div>
-          {computed.isGst && settings.gstin && (
-            <div className="text-[11px] text-gray-500">GSTIN {settings.gstin}</div>
+        <div className="flex items-center gap-3">
+          {settings.showLogo && settings.logo && (
+            <img src={settings.logo} alt={`${companyName} logo`} className="h-10 w-10 shrink-0 object-contain" />
           )}
+          <div>
+            <div className="text-2xl font-semibold tracking-tight">{companyName}</div>
+            <div className="mt-1 h-0.5 w-12 bg-amber-500" />
+            <div className="mt-2 text-[11px] text-gray-500">
+              {[settings.addressLine, settings.contact, settings.email]
+                .filter(Boolean)
+                .join("  ·  ")}
+            </div>
+            {computed.isGst && settings.gstin && (
+              <div className="text-[11px] text-gray-500">GSTIN {settings.gstin}</div>
+            )}
+          </div>
         </div>
         <div className="text-right">
           <div className="text-xs font-medium uppercase tracking-[0.3em] text-amber-600">

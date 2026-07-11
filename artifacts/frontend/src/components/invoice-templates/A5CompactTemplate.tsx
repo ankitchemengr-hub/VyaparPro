@@ -5,6 +5,7 @@
 
 import { format } from "date-fns";
 import { inr, num, lineLiters, rupeesInWords } from "./helpers";
+import { PaymentQr, CompanyLogo } from "./parts";
 import type { TemplateProps } from "./types";
 
 const DEFAULT_TERMS = [
@@ -47,15 +48,22 @@ export function A5CompactTemplate({ invoice, maps, settings, computed }: Templat
       <div className="grid grid-cols-12 border-b border-black">
         <div className="col-span-7 border-r border-black p-3 flex gap-3">
           {settings.showLogo && (
-            <div className="w-16 h-16 rounded-full border border-black flex items-center justify-center text-[10px] text-center shrink-0">
-              {logoLine1}
-              {logoLine2 && (
+            <CompanyLogo
+              logo={settings.logo}
+              name={companyName}
+              className="w-16 h-16 rounded-full border border-black flex items-center justify-center text-[10px] text-center shrink-0"
+              fallback={
                 <>
-                  <br />
-                  {logoLine2}
+                  {logoLine1}
+                  {logoLine2 && (
+                    <>
+                      <br />
+                      {logoLine2}
+                    </>
+                  )}
                 </>
-              )}
-            </div>
+              }
+            />
           )}
           <div className="flex-1">
             <div className="font-bold text-lg tracking-wide">{companyName}</div>
@@ -246,9 +254,7 @@ export function A5CompactTemplate({ invoice, maps, settings, computed }: Templat
         <div className="col-span-2 border-r border-black p-2 flex flex-col items-center justify-center text-center">
           {settings.showQr && (
             <>
-              <div className="w-20 h-20 border border-black flex items-center justify-center text-[8px] text-muted-foreground">
-                QR / UPI
-              </div>
+              <PaymentQr invoice={invoice} settings={settings} size={80} rule="border-black" />
               <div className="text-[9px] mt-1 font-semibold">Scan &amp; Pay</div>
             </>
           )}
