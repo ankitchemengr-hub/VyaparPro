@@ -620,9 +620,9 @@ export default function Billing() {
 
   return (
     <div className="space-y-5 pb-10">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => setLocation("/catalog")} data-testid="button-back-catalog">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <Button variant="ghost" size="icon" className="shrink-0" onClick={() => setLocation("/catalog")} data-testid="button-back-catalog">
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <h1 className="text-2xl font-bold tracking-tight">
@@ -634,16 +634,16 @@ export default function Billing() {
             </Badge>
           )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Select value={docType} onValueChange={setDocType}>
-            <SelectTrigger className="w-[170px]" data-testid="select-doc-type"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-[150px] sm:w-[170px]" data-testid="select-doc-type"><SelectValue /></SelectTrigger>
             <SelectContent>
               {DOC_TYPE_OPTIONS.map((opt) => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
             </SelectContent>
           </Select>
           {docType === "invoice" && (
             <Select value={invoiceSubtype} onValueChange={(v) => setInvoiceSubtype(v as "gst" | "non_gst")}>
-              <SelectTrigger className="w-[110px]" data-testid="select-invoice-subtype"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-[100px] sm:w-[110px]" data-testid="select-invoice-subtype"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="gst">GST</SelectItem>
                 <SelectItem value="non_gst">Non-GST</SelectItem>
@@ -762,7 +762,8 @@ export default function Billing() {
               )}
             </div>
             <CardContent className="p-0">
-              <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
+              {/* Desktop / tablet: dense table */}
+              <div className="hidden md:block overflow-x-auto max-h-[400px] overflow-y-auto">
                 <Table>
                   <TableHeader>
                     <TableRow className="text-xs">
@@ -836,6 +837,84 @@ export default function Billing() {
                     ))}
                   </TableBody>
                 </Table>
+              </div>
+
+              {/* Mobile: stacked cards — the table's 8 fixed-width columns
+                  (~780px) never fit a phone screen, so each line item gets
+                  its own labeled block instead of a cramped row. */}
+              <div className="md:hidden max-h-[500px] overflow-y-auto divide-y">
+                {items.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground text-sm">No items — search above to add products</div>
+                ) : items.map((item, idx) => (
+                  <div key={idx} className="p-4 space-y-3" data-testid={`billing-row-mobile-${idx}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="font-medium text-sm leading-tight">{item.name}</div>
+                        <div className="text-xs text-muted-foreground">{item.unit}</div>
+                      </div>
+                      <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0 text-destructive hover:text-destructive"
+                        onClick={() => removeItem(idx)} data-testid={`button-remove-item-mobile-${idx}`}>
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-[11px] text-muted-foreground">Qty</Label>
+                        <div className="flex items-center gap-1">
+                          <Input type="number" min={1} step="any" value={item.qty}
+                            onChange={(e) => updateItem(idx, "qty", Number(e.target.value))}
+                            className="h-8 text-sm" data-testid={`input-qty-mobile-${idx}`} />
+                          <Select value={item.qtyMode} onValueChange={(v) => updateItem(idx, "qtyMode", v as QtyMode)}>
+                            <SelectTrigger className="h-8 w-[62px] px-2 text-xs shrink-0" data-testid={`select-qty-mode-mobile-${idx}`}><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="unit">QTY</SelectItem>
+                              <SelectItem value="box" disabled={item.unitsPerBox <= 0}>BOX</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {item.qtyMode === "box" && item.unitsPerBox > 0 && (
+                          <span className="text-[10px] text-muted-foreground block" data-testid={`hint-billed-units-mobile-${idx}`}>= {billedUnits(item).toLocaleString()} {item.unit}</span>
+                        )}
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[11px] text-muted-foreground">Rate (₹)</Label>
+                        <Input type="number" min={0} value={item.rate} onChange={(e) => updateItem(idx, "rate", Number(e.target.value))}
+                          className="h-8 text-sm disabled:opacity-100 disabled:cursor-not-allowed"
+                          data-testid={`input-rate-mobile-${idx}`} disabled={user?.role !== "admin"}
+                          title={user?.role !== "admin" ? "Only admin can edit rate" : undefined} />
+                      </div>
+                    </div>
+
+                    <div className={`grid gap-2 ${isGstInvoiceType(invoiceType) ? "grid-cols-3" : "grid-cols-2"}`}>
+                      {isGstInvoiceType(invoiceType) && (
+                        <div className="space-y-1">
+                          <Label className="text-[11px] text-muted-foreground">Tax%</Label>
+                          <Input type="number" min={0} max={28} value={item.taxPct}
+                            onChange={(e) => updateItem(idx, "taxPct", Number(e.target.value))}
+                            className="h-8 text-sm" data-testid={`input-tax-mobile-${idx}`} />
+                        </div>
+                      )}
+                      <div className="space-y-1">
+                        <Label className="text-[11px] text-muted-foreground">Disc%</Label>
+                        <Input type="number" min={0} max={100} value={item.discountPct}
+                          onChange={(e) => updateItem(idx, "discountPct", Number(e.target.value))}
+                          className="h-8 text-sm" data-testid={`input-discount-mobile-${idx}`} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[11px] text-muted-foreground">LTR</Label>
+                        <div className="h-8 flex items-center text-sm tabular-nums" data-testid={`cell-ltr-mobile-${idx}`}>
+                          {(() => { const ltr = lineLiters(item); return ltr > 0 ? ltr.toLocaleString(undefined, { maximumFractionDigits: 3 }) : "—"; })()}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1 border-t text-sm">
+                      <span className="text-muted-foreground">Amount</span>
+                      <span className="font-bold">₹{item.amount.toLocaleString()}</span>
+                    </div>
+                  </div>
+                ))}
               </div>
             </CardContent>
           </Card>
