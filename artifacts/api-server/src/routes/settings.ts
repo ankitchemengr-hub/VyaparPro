@@ -22,7 +22,7 @@ const ALL_SERIES_TYPES: SeriesType[] = [
 const DEFAULT_TEMPLATE_KEY = "default_invoice_template";
 
 const DEFAULT_PRINT_SETTINGS = {
-  defaultTemplate: "a5-compact",
+  defaultTemplate: "minimal-a5",
   copies: 1,
   copyLabels: true,
   colorMode: "color",

@@ -271,7 +271,7 @@ export default function InvoiceDetail() {
 
   const isGst = invoice.invoiceType === "gst";
   const isAdmin = user?.role === "admin";
-  const activeTemplate = templateOverride ?? settings.defaultTemplate ?? "a5-compact";
+  const activeTemplate = templateOverride ?? settings.defaultTemplate ?? "minimal-a5";
   const activeMeta = getTemplate(activeTemplate);
 
   return (

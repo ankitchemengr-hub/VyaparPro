@@ -5,7 +5,7 @@
 import type { PrintSettings } from "./types";
 
 export const FALLBACK_PRINT_SETTINGS: PrintSettings = {
-  defaultTemplate: "a5-compact",
+  defaultTemplate: "minimal-a5",
   copies: 1,
   copyLabels: true,
   colorMode: "color",
