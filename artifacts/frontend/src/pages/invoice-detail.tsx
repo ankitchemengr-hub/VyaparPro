@@ -259,7 +259,12 @@ export default function InvoiceDetail() {
       </div>
     );
   }
-  if (error || !invoice) {
+  // Only bail to "not found" when there's genuinely no data — React Query
+  // keeps the last successful `invoice` around even if a later background
+  // refetch fails (e.g. a transient blip on window refocus). Treating any
+  // `error` as fatal here discarded perfectly good, already-loaded data and
+  // flashed the invoice away seconds after it had rendered fine.
+  if (!invoice) {
     return (
       <div className="p-6">
         <Card>
