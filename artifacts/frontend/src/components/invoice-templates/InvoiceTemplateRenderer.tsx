@@ -4,11 +4,16 @@
 // The sheet itself is a fixed real-world paper width (A4/A5) with no
 // responsive treatment — that's correct for printing, but on a phone screen
 // it just overflows the viewport. ScreenFitInvoiceSheet below shrinks the
-// whole sheet to fit its container using CSS zoom (not transform — zoom
-// reflows layout at the zoomed size, so there's no separate wrapper box to
-// keep in sync with the visually-scaled content, unlike transform: scale).
-// The injected print CSS resets zoom back to 1 for the actual printed/PDF
-// output so nothing about the paper document changes.
+// whole sheet to fit its container using transform: scale, wrapped in a
+// div explicitly sized to the scaled footprint (transform doesn't reflow
+// layout, so without that wrapper the container would still be forced to
+// the sheet's full unscaled width). An earlier version used CSS `zoom`
+// instead — simpler (it reflows, so no wrapper was needed) but `zoom` is a
+// legacy, non-standard property with real cross-browser/mobile quirks, and
+// it silently failed to render at all on at least one mobile browser.
+// transform is a long-standardized property with uniform support everywhere.
+// The injected print CSS resets the transform/wrapper back to natural size
+// for the actual printed/PDF output so nothing about the paper document changes.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getTemplate } from "./registry";
@@ -32,7 +37,7 @@ function ScreenFitInvoiceSheet({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
-  const [zoom, setZoom] = useState(1);
+  const [dims, setDims] = useState<{ scale: number; width?: number; height?: number }>({ scale: 1 });
 
   useEffect(() => {
     const container = containerRef.current;
@@ -40,39 +45,24 @@ function ScreenFitInvoiceSheet({
     if (!container || !sheet) return;
 
     const recalc = () => {
-      // `sheet` is display:inline-block (see className below), so its own
-      // scrollWidth here is genuinely the content's natural/intrinsic width
-      // — not "however wide the container happens to be", which is what a
-      // plain block-level div would report instead (it stretches to fill
-      // its container by default). zoom reflows layout, so once a zoom is
-      // already applied we have to divide it back out to recover the true
-      // 100% natural width.
-      const currentZoom = sheet.style.zoom ? Number(sheet.style.zoom) : 1;
-      const naturalWidth = sheet.scrollWidth / (currentZoom || 1);
+      // Unlike CSS zoom, transform never reflows layout, so `sheet`'s own
+      // scrollWidth/Height always reflect its true natural size regardless
+      // of whatever scale is currently applied — no reverse-division needed.
+      const naturalWidth = sheet.scrollWidth;
+      const naturalHeight = sheet.scrollHeight;
       // Small safety margin so the sheet doesn't sit edge-to-edge on screen.
       const available = container.clientWidth * 0.96;
       if (!naturalWidth || !available) return;
-      setZoom(Math.min(1, available / naturalWidth));
+      const scale = Math.min(1, available / naturalWidth);
+      setDims({ scale, width: naturalWidth * scale, height: naturalHeight * scale });
     };
 
     recalc();
     // Web fonts often finish loading after this first measurement, which can
-    // widen text enough to blow past the zoomed sheet's right edge — recalc
-    // once more when they're actually ready. This is a one-shot event, not a
-    // continuous observer, so it can't compound rounding error the way
-    // observing `sheet` itself would.
+    // widen text enough to blow past the scaled sheet's right edge — recalc
+    // once more when they're actually ready.
     document.fonts?.ready?.then(recalc).catch(() => {});
 
-    // Only observe `container`, not `sheet`. `sheet` is the element this very
-    // effect resizes (via the zoom it sets below) — observing it too turns every
-    // zoom update into another resize event. Under CSS zoom, `scrollWidth` is
-    // rounded to whole pixels, and dividing that back out to recover the
-    // natural width amplifies the rounding error at each pass (worse at small
-    // zoom levels) — even a "only update if changed" guard doesn't stop a slow
-    // drift, it only blocks an exact-repeat loop, so zoom kept shrinking a
-    // little further on every self-triggered pass until it drifted to ~0.
-    // `children` changes (template/invoice swap) already rerun this effect,
-    // so sheet's own box doesn't need a separate observer to stay in sync.
     const ro = new ResizeObserver(recalc);
     ro.observe(container);
     window.addEventListener("resize", recalc);
@@ -84,12 +74,20 @@ function ScreenFitInvoiceSheet({
 
   return (
     <div ref={containerRef} className="w-full overflow-x-auto print:overflow-visible">
+      {/* Explicitly sized to the scaled footprint so the page layout reserves
+          the right amount of space; overflow hidden clips the sheet's own
+          unscaled (full-size) layout box, which transform leaves behind. */}
       <div
-        ref={sheetRef}
-        className={`${className} inline-block align-top`}
-        style={{ zoom } as React.CSSProperties}
+        className="invoice-scale-wrapper"
+        style={{ width: dims.width, height: dims.height, overflow: dims.width ? "hidden" : "visible" }}
       >
-        {children}
+        <div
+          ref={sheetRef}
+          className={`${className} inline-block align-top`}
+          style={{ transform: `scale(${dims.scale})`, transformOrigin: "top left" }}
+        >
+          {children}
+        </div>
       </div>
     </div>
   );

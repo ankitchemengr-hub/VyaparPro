@@ -155,8 +155,13 @@ export function getPrintCss(
         left: 0 !important; top: 0 !important;
         width: 100% !important;
         box-shadow: none !important;
-        zoom: 1 !important;
+        transform: none !important;
         display: block !important;
+      }
+      .invoice-scale-wrapper {
+        width: auto !important;
+        height: auto !important;
+        overflow: visible !important;
       }
       .sidebar, .topbar, .no-print, button, nav { display: none !important; }
       ${legacy}
