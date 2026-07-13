@@ -784,6 +784,33 @@ export const CreateStockMovementResponse = zod.object({
 
 
 /**
+ * Takes a list of { productId, countedStock, reason } entries, computes the signed difference against each product's current system stock, and records one "adjustment" stock movement + stock update per item.
+ * @summary Bulk physical stock reconciliation (admin only)
+ */
+export const BulkStockReconciliationBody = zod.object({
+  "items": zod.array(zod.object({
+  "productId": zod.number(),
+  "countedStock": zod.number().nullish().describe('Physical count. Items with a null count are skipped.'),
+  "reason": zod.string().optional()
+}))
+})
+
+export const BulkStockReconciliationResponse = zod.object({
+  "adjustments": zod.array(zod.object({
+  "id": zod.number(),
+  "productId": zod.number(),
+  "type": zod.enum(['inward', 'outward', 'adjustment', 'manufacturing_consume', 'manufacturing_produce', 'damage']),
+  "quantity": zod.number(),
+  "reason": zod.string(),
+  "referenceId": zod.number().nullish(),
+  "referenceType": zod.string().nullish(),
+  "userId": zod.number().optional(),
+  "createdAt": zod.string()
+}))
+})
+
+
+/**
  * @summary List product groups
  */
 export const ListProductGroupsResponseItem = zod.string()

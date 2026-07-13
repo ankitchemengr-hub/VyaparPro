@@ -37,6 +37,8 @@ import type {
   Bom,
   BomInput,
   BomUpdate,
+  BulkStockReconciliation201,
+  BulkStockReconciliationInput,
   CapitalSnapshot,
   CashbookSummary,
   ChangePlanInput,
@@ -2549,6 +2551,77 @@ export const useCreateStockMovement = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getCreateStockMovementMutationOptions(options));
+    }
+
+export const getBulkStockReconciliationUrl = () => {
+
+
+
+
+  return `/api/products/stock-reconciliation`
+}
+
+/**
+ * Takes a list of { productId, countedStock, reason } entries, computes the signed difference against each product's current system stock, and records one "adjustment" stock movement + stock update per item.
+ * @summary Bulk physical stock reconciliation (admin only)
+ */
+export const bulkStockReconciliation = async (bulkStockReconciliationInput: BulkStockReconciliationInput, options?: RequestInit): Promise<BulkStockReconciliation201> => {
+
+  return customFetch<BulkStockReconciliation201>(getBulkStockReconciliationUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(bulkStockReconciliationInput)
+  }
+);}
+
+
+
+
+export const getBulkStockReconciliationMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkStockReconciliation>>, TError,{data: BodyType<BulkStockReconciliationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof bulkStockReconciliation>>, TError,{data: BodyType<BulkStockReconciliationInput>}, TContext> => {
+
+const mutationKey = ['bulkStockReconciliation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof bulkStockReconciliation>>, {data: BodyType<BulkStockReconciliationInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  bulkStockReconciliation(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type BulkStockReconciliationMutationResult = NonNullable<Awaited<ReturnType<typeof bulkStockReconciliation>>>
+    export type BulkStockReconciliationMutationBody = BodyType<BulkStockReconciliationInput>
+    export type BulkStockReconciliationMutationError = ErrorType<void>
+
+    /**
+ * @summary Bulk physical stock reconciliation (admin only)
+ */
+export const useBulkStockReconciliation = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkStockReconciliation>>, TError,{data: BodyType<BulkStockReconciliationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof bulkStockReconciliation>>,
+        TError,
+        {data: BodyType<BulkStockReconciliationInput>},
+        TContext
+      > => {
+      return useMutation(getBulkStockReconciliationMutationOptions(options));
     }
 
 export const getListProductGroupsUrl = () => {

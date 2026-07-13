@@ -863,6 +863,20 @@ export interface StockMovementInput {
   referenceType?: string;
 }
 
+export type BulkStockReconciliationInputItemsItem = {
+  productId: number;
+  /**
+     * Physical count. Items with a null count are skipped.
+     * @nullable
+     */
+  countedStock?: number | null;
+  reason?: string;
+};
+
+export interface BulkStockReconciliationInput {
+  items: BulkStockReconciliationInputItemsItem[];
+}
+
 export type EntityType = typeof EntityType[keyof typeof EntityType];
 
 
@@ -2356,6 +2370,10 @@ group?: string;
 brand?: string;
 forSale?: boolean;
 forManufacturing?: boolean;
+};
+
+export type BulkStockReconciliation201 = {
+  adjustments: StockMovement[];
 };
 
 export type ListEntitiesParams = {
