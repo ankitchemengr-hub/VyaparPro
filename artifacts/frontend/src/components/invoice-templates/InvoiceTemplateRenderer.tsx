@@ -58,31 +58,26 @@ function ScreenFitInvoiceSheet({
     recalc();
     // Web fonts often finish loading after this first measurement, which can
     // widen text enough to blow past the zoomed sheet's right edge — recalc
-    // once more when they're actually ready.
+    // once more when they're actually ready. This is a one-shot event, not a
+    // continuous observer, so it can't compound rounding error the way
+    // observing `sheet` itself would.
     document.fonts?.ready?.then(recalc).catch(() => {});
 
-    // Observe `container` for viewport/layout changes, and `sheet` for content
-    // that changes the invoice's own natural size after mount (e.g. late image
-    // loads) without the `children` prop identity changing. Naively observing
-    // `sheet` would turn every zoom write into another resize event and
-    // compound rounding error each pass until zoom drifts to ~0 — guarded here
-    // by only updating state when the recomputed zoom actually differs.
-    const recalcIfChanged = () => {
-      const current = sheet.style.zoom ? Number(sheet.style.zoom) : 1;
-      const naturalWidth = sheet.scrollWidth / (current || 1);
-      const available = container.clientWidth * 0.96;
-      if (!naturalWidth || !available) return;
-      const next = Math.min(1, available / naturalWidth);
-      if (Math.abs(next - current) > 0.005) setZoom(next);
-    };
+    // Only observe `container`, not `sheet`. `sheet` is the element this very
+    // effect resizes (via the zoom it sets below) — observing it too turns every
+    // zoom update into another resize event. Under CSS zoom, `scrollWidth` is
+    // rounded to whole pixels, and dividing that back out to recover the
+    // natural width amplifies the rounding error at each pass (worse at small
+    // zoom levels) — even a "only update if changed" guard doesn't stop a slow
+    // drift, it only blocks an exact-repeat loop, so zoom kept shrinking a
+    // little further on every self-triggered pass until it drifted to ~0.
+    // `children` changes (template/invoice swap) already rerun this effect,
+    // so sheet's own box doesn't need a separate observer to stay in sync.
     const ro = new ResizeObserver(recalc);
     ro.observe(container);
-    const sheetRo = new ResizeObserver(recalcIfChanged);
-    sheetRo.observe(sheet);
     window.addEventListener("resize", recalc);
     return () => {
       ro.disconnect();
-      sheetRo.disconnect();
       window.removeEventListener("resize", recalc);
     };
   }, [children]);
