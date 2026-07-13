@@ -1,6 +1,7 @@
 import React from "react";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ApiError } from "@workspace/api-client-react";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/contexts/auth-context";
@@ -43,7 +44,24 @@ import Transporters from "@/pages/transporters";
 import Vehicles from "@/pages/vehicles";
 import Dispatches from "@/pages/dispatches";
 
-const queryClient = new QueryClient();
+// Bare `new QueryClient()` used React Query's raw defaults: 3 retries with
+// exponential backoff (1s, 2s, 4s...) on every failed query — including 401s
+// and 404s that retrying can never fix. On a phone's imperfect connection
+// that added up to ~7s of silent retrying before a page either showed data
+// late or gave up into a "not found" state, which read as slow and flaky
+// ("appears on one refresh, disappears on the next"). Client errors (4xx)
+// fail fast now; only transient/server errors get a couple of retries.
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 15_000,
+      retry: (failureCount, error) => {
+        if (error instanceof ApiError && error.status >= 400 && error.status < 500) return false;
+        return failureCount < 2;
+      },
+    },
+  },
+});
 
 function ProtectedRoutes() {
   return (
