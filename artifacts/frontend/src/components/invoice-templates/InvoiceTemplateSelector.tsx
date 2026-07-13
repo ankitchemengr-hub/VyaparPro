@@ -1,7 +1,10 @@
-// Template chooser popup: size tabs (All / A4 / A5), template list on the left,
-// scaled live preview of the highlighted template on the right, Select to apply.
+// Template chooser popup: size tabs (All / A4 / A5), template list, scaled
+// live preview of the highlighted template, Select to apply. Stacks to a
+// single column on narrow screens; the preview scales to fit its own
+// container width dynamically rather than a fixed desktop-tuned constant, so
+// it never forces the dialog wider than the viewport.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -26,10 +29,36 @@ interface InvoiceTemplateSelectorProps {
   onSelect: (templateId: string) => void;
 }
 
-// On-screen preview width (px) per paper/orientation, for the scaled preview.
+// Real on-screen sheet width (px) per paper/orientation — this is the
+// preview's true, unscaled layout size; `scale` below shrinks it to fit.
 function sheetWidth(paper: PaperSize, orientation: string): number {
   if (orientation === "landscape") return paper === "A4" ? 1123 : 794;
   return paper === "A4" ? 794 : 559;
+}
+
+// Scales the fixed-width preview sheet down to fit whatever width its
+// container actually has, recalculating on resize (dialog open, orientation
+// change, window resize) instead of using desktop-tuned constants that
+// overflow narrow phone screens.
+function useFitScale(naturalWidth: number) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(0.5);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const recalc = () => {
+      const available = container.clientWidth - 32; // p-4 on both sides
+      if (!available || !naturalWidth) return;
+      setScale(Math.min(0.6, available / naturalWidth));
+    };
+    recalc();
+    const ro = new ResizeObserver(recalc);
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, [naturalWidth]);
+
+  return { containerRef, scale };
 }
 
 export function InvoiceTemplateSelector({
@@ -55,11 +84,11 @@ export function InvoiceTemplateSelector({
   const Preview = meta.component;
   const computed = computeTotals(invoice, maps);
   const width = sheetWidth(meta.paper, meta.orientation);
-  const scale = meta.orientation === "landscape" ? 0.42 : 0.55;
+  const { containerRef, scale } = useFitScale(width);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl">
+      <DialogContent className="max-w-5xl w-[calc(100%-2rem)] sm:w-full">
         <DialogHeader>
           <DialogTitle>Choose Invoice Template</DialogTitle>
         </DialogHeader>
@@ -78,9 +107,9 @@ export function InvoiceTemplateSelector({
           ))}
         </div>
 
-        <div className="grid grid-cols-[260px_1fr] gap-4">
-          <ScrollArea className="h-[460px] pr-2">
-            <div className="space-y-2">
+        <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-4 min-w-0">
+          <ScrollArea className="h-[180px] lg:h-[460px]">
+            <div className="space-y-2 pr-2">
               {list.map((t) => {
                 const active = t.id === previewId;
                 return (
@@ -112,7 +141,10 @@ export function InvoiceTemplateSelector({
             </div>
           </ScrollArea>
 
-          <div className="h-[460px] overflow-auto rounded-lg border bg-muted/30 p-4">
+          <div
+            ref={containerRef}
+            className="h-[280px] lg:h-[460px] min-w-0 overflow-auto rounded-lg border bg-muted/30 p-4"
+          >
             <div
               style={{
                 width,
