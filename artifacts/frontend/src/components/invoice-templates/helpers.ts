@@ -110,8 +110,17 @@ export function computeTotals(invoice: any, maps: ProductMaps): Computed {
 
 // Print stylesheet tailored to a template's paper size + orientation. Isolates
 // the `.invoice-print-area` so only the sheet prints, hiding all app chrome.
-export function getPrintCss(meta: TemplateMeta): string {
-  const sizeRule = `${meta.paper} ${meta.orientation}`;
+// `paperOverride`/`orientationOverride` let Print Settings force a different
+// paper size/orientation than the template's own default (e.g. print a
+// portrait template landscape) without needing a per-template redesign.
+export function getPrintCss(
+  meta: TemplateMeta,
+  paperOverride?: "auto" | "A4" | "A5" | null,
+  orientationOverride?: "auto" | "portrait" | "landscape" | null,
+): string {
+  const paper = paperOverride && paperOverride !== "auto" ? paperOverride : meta.paper;
+  const orientation = orientationOverride && orientationOverride !== "auto" ? orientationOverride : meta.orientation;
+  const sizeRule = `${paper} ${orientation}`;
   // The legacy a5-compact bill must print byte-identically to the original
   // hardcoded sheet, so reproduce its exact width/font/padding overrides.
   const legacy =
@@ -130,7 +139,7 @@ export function getPrintCss(meta: TemplateMeta): string {
       .invoice-print-area .invoice-sheet th { padding: 2px 4px !important; }`
       : "";
   return `
-    @page { size: ${sizeRule}; margin: ${meta.paper === "A5" ? "5mm" : "8mm"}; }
+    @page { size: ${sizeRule}; margin: ${paper === "A5" ? "5mm" : "8mm"}; }
     @media print {
       html, body {
         background: #fff !important;
@@ -151,6 +160,32 @@ export function getPrintCss(meta: TemplateMeta): string {
       }
       .sidebar, .topbar, .no-print, button, nav { display: none !important; }
       ${legacy}
+    }
+  `;
+}
+
+// Faint background watermark, layered behind the sheet's own content via a
+// negative-z-index ::before pseudo-element (a real DOM sibling would paint
+// over in-flow content by default, since positioned z-index:0 descendants
+// paint after non-positioned in-flow ones — negative z-index is what pushes
+// it behind). Applies on-screen and in print alike; opaque cells (table
+// headers, totals rows) still occlude it in their own area, same as any
+// paper watermark would.
+export function getWatermarkCss(watermarkImage?: string | null, show?: boolean): string {
+  if (!show || !watermarkImage) return "";
+  return `
+    .invoice-print-area .invoice-sheet { position: relative; }
+    .invoice-print-area .invoice-sheet::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      background-image: url("${watermarkImage}");
+      background-size: 60% auto;
+      background-position: center;
+      background-repeat: no-repeat;
+      opacity: 0.08;
+      pointer-events: none;
     }
   `;
 }

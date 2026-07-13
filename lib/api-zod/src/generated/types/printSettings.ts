@@ -6,6 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { PrintSettingsColorMode } from './printSettingsColorMode';
+import type { PrintSettingsOrientation } from './printSettingsOrientation';
+import type { PrintSettingsPaperSize } from './printSettingsPaperSize';
 import type { PrintSettingsThermalWidth } from './printSettingsThermalWidth';
 
 export interface PrintSettings {
@@ -13,6 +15,16 @@ export interface PrintSettings {
   copies: number;
   copyLabels: boolean;
   colorMode: PrintSettingsColorMode;
+  /** Overrides the chosen template's paper size for printing. "auto" uses whatever the template is designed for. */
+  paperSize: PrintSettingsPaperSize;
+  /** Overrides the chosen template's print orientation. "auto" uses whatever the template is designed for. */
+  orientation: PrintSettingsOrientation;
+  /**
+     * Faint background watermark image (base64 data URL) shown behind invoice content.
+     * @nullable
+     */
+  watermarkImage: string | null;
+  showWatermark: boolean;
   showLogo: boolean;
   showQr: boolean;
   showBankDetails: boolean;

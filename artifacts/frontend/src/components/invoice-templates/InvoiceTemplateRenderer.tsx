@@ -12,7 +12,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getTemplate } from "./registry";
-import { computeTotals, getPrintCss } from "./helpers";
+import { computeTotals, getPrintCss, getWatermarkCss } from "./helpers";
 import type { ProductMaps, PrintSettings } from "./types";
 
 interface InvoiceTemplateRendererProps {
@@ -56,17 +56,33 @@ function ScreenFitInvoiceSheet({
     };
 
     recalc();
-    // Only observe `container`, not `sheet`. `sheet` is the element this very
-    // effect resizes (via the zoom it sets below) — observing it too turns every
-    // zoom update into another resize event, which retriggers recalc() and
-    // compounds rounding error each pass until zoom drifts to ~0. `children`
-    // changes (template/invoice swap) already rerun this effect, so sheet's own
-    // box doesn't need a separate observer to stay in sync.
+    // Web fonts often finish loading after this first measurement, which can
+    // widen text enough to blow past the zoomed sheet's right edge — recalc
+    // once more when they're actually ready.
+    document.fonts?.ready?.then(recalc).catch(() => {});
+
+    // Observe `container` for viewport/layout changes, and `sheet` for content
+    // that changes the invoice's own natural size after mount (e.g. late image
+    // loads) without the `children` prop identity changing. Naively observing
+    // `sheet` would turn every zoom write into another resize event and
+    // compound rounding error each pass until zoom drifts to ~0 — guarded here
+    // by only updating state when the recomputed zoom actually differs.
+    const recalcIfChanged = () => {
+      const current = sheet.style.zoom ? Number(sheet.style.zoom) : 1;
+      const naturalWidth = sheet.scrollWidth / (current || 1);
+      const available = container.clientWidth * 0.96;
+      if (!naturalWidth || !available) return;
+      const next = Math.min(1, available / naturalWidth);
+      if (Math.abs(next - current) > 0.005) setZoom(next);
+    };
     const ro = new ResizeObserver(recalc);
     ro.observe(container);
+    const sheetRo = new ResizeObserver(recalcIfChanged);
+    sheetRo.observe(sheet);
     window.addEventListener("resize", recalc);
     return () => {
       ro.disconnect();
+      sheetRo.disconnect();
       window.removeEventListener("resize", recalc);
     };
   }, [children]);
@@ -97,7 +113,10 @@ export function InvoiceTemplateRenderer({
 
   return (
     <>
-      <style>{getPrintCss(meta)}</style>
+      <style>
+        {getPrintCss(meta, settings.paperSize, settings.orientation)}
+        {getWatermarkCss(settings.watermarkImage, settings.showWatermark)}
+      </style>
       <ScreenFitInvoiceSheet className={`invoice-print-area ${className}`}>
         <Template invoice={invoice} maps={maps} settings={settings} computed={computed} />
       </ScreenFitInvoiceSheet>

@@ -33,6 +33,7 @@ import { PaymentQr } from "@/components/invoice-templates/parts";
 import { useCompanyLogo } from "@/hooks/use-company-logo";
 
 const MAX_QR_IMAGE_BYTES = 500 * 1024;
+const MAX_WATERMARK_IMAGE_BYTES = 500 * 1024;
 
 function ToggleRow({
   label,
@@ -69,6 +70,7 @@ export function PrintSettingsPanel() {
   const [selectorOpen, setSelectorOpen] = useState(false);
   const logo = useCompanyLogo();
   const qrFileRef = useRef<HTMLInputElement>(null);
+  const watermarkFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (data && !dirty) setForm(data);
@@ -95,6 +97,21 @@ export function PrintSettingsPanel() {
     }
     const reader = new FileReader();
     reader.onload = () => set("qrImage", reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const handleWatermarkFile = (file: File | undefined) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Invalid file", description: "Please choose an image file.", variant: "destructive" });
+      return;
+    }
+    if (file.size > MAX_WATERMARK_IMAGE_BYTES) {
+      toast({ title: "File too large", description: "Watermark image must be under 500 KB.", variant: "destructive" });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => set("watermarkImage", reader.result as string);
     reader.readAsDataURL(file);
   };
 
@@ -180,6 +197,35 @@ export function PrintSettingsPanel() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="space-y-1">
+                  <Label>Paper Size</Label>
+                  <Select value={form.paperSize} onValueChange={(v) => set("paperSize", v as PrintSettings["paperSize"])}>
+                    <SelectTrigger data-testid="select-paper-size">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">Auto (match template)</SelectItem>
+                      <SelectItem value="A4">A4</SelectItem>
+                      <SelectItem value="A5">A5</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Orientation</Label>
+                  <Select value={form.orientation} onValueChange={(v) => set("orientation", v as PrintSettings["orientation"])}>
+                    <SelectTrigger data-testid="select-orientation">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">Auto (match template)</SelectItem>
+                      <SelectItem value="portrait">Portrait</SelectItem>
+                      <SelectItem value="landscape">Landscape</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Overrides the template's default for printing/PDF. Leave on Auto unless your printer needs a specific size.
+                  </p>
+                </div>
               </div>
               <ToggleRow
                 label="Copy labels"
@@ -218,6 +264,52 @@ export function PrintSettingsPanel() {
               <ToggleRow label="Show BOX column" checked={form.showBoxColumn} onChange={(v) => set("showBoxColumn", v)} testId="switch-show-box" />
               <ToggleRow label="Show terms & conditions" checked={form.showTerms} onChange={(v) => set("showTerms", v)} testId="switch-show-terms" />
               <ToggleRow label="Filler rows" description="Pad short bills with empty rows." checked={form.fillerRows} onChange={(v) => set("fillerRows", v)} testId="switch-filler-rows" />
+              <ToggleRow
+                label="Show watermark"
+                description="Faint background image/logo behind the invoice content."
+                checked={form.showWatermark}
+                onChange={(v) => set("showWatermark", v)}
+                testId="switch-show-watermark"
+              />
+
+              <div className="border-t pt-4 mt-1">
+                <div className="mb-2 text-sm font-medium">Watermark Image</div>
+                <div className="flex items-center gap-4">
+                  {form.watermarkImage ? (
+                    <img
+                      src={form.watermarkImage}
+                      alt="Watermark preview"
+                      className="h-16 w-16 rounded border object-contain bg-muted/30"
+                    />
+                  ) : (
+                    <div className="h-16 w-16 rounded border border-dashed flex items-center justify-center text-[10px] text-muted-foreground text-center px-1">
+                      No image
+                    </div>
+                  )}
+                  <div className="flex flex-col gap-2">
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant="outline" size="sm" onClick={() => watermarkFileRef.current?.click()} data-testid="button-upload-watermark">
+                        <Upload className="h-3.5 w-3.5 mr-1.5" /> {form.watermarkImage ? "Replace watermark" : "Upload watermark"}
+                      </Button>
+                      {form.watermarkImage && (
+                        <Button variant="ghost" size="sm" onClick={() => set("watermarkImage", null)} data-testid="button-remove-watermark">
+                          <X className="h-3.5 w-3.5 mr-1.5" /> Remove
+                        </Button>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground max-w-sm">
+                      Shown faded behind the invoice content when "Show watermark" is on. Use your logo or a "COPY" / "PAID" stamp.
+                    </p>
+                  </div>
+                  <input
+                    ref={watermarkFileRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg,image/webp"
+                    className="hidden"
+                    onChange={(e) => { handleWatermarkFile(e.target.files?.[0]); e.target.value = ""; }}
+                  />
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

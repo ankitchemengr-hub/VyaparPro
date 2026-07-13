@@ -6,6 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { PrintSettingsUpdateColorMode } from './printSettingsUpdateColorMode';
+import type { PrintSettingsUpdateOrientation } from './printSettingsUpdateOrientation';
+import type { PrintSettingsUpdatePaperSize } from './printSettingsUpdatePaperSize';
 import type { PrintSettingsUpdateThermalWidth } from './printSettingsUpdateThermalWidth';
 
 export interface PrintSettingsUpdate {
@@ -13,6 +15,11 @@ export interface PrintSettingsUpdate {
   copies?: number;
   copyLabels?: boolean;
   colorMode?: PrintSettingsUpdateColorMode;
+  paperSize?: PrintSettingsUpdatePaperSize;
+  orientation?: PrintSettingsUpdateOrientation;
+  /** @nullable */
+  watermarkImage?: string | null;
+  showWatermark?: boolean;
   showLogo?: boolean;
   showQr?: boolean;
   showBankDetails?: boolean;

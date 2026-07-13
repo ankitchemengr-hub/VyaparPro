@@ -461,6 +461,30 @@ export const PrintSettingsColorMode = {
   bw: 'bw',
 } as const;
 
+/**
+ * Overrides the chosen template's paper size for printing. "auto" uses whatever the template is designed for.
+ */
+export type PrintSettingsPaperSize = typeof PrintSettingsPaperSize[keyof typeof PrintSettingsPaperSize];
+
+
+export const PrintSettingsPaperSize = {
+  auto: 'auto',
+  A4: 'A4',
+  A5: 'A5',
+} as const;
+
+/**
+ * Overrides the chosen template's print orientation. "auto" uses whatever the template is designed for.
+ */
+export type PrintSettingsOrientation = typeof PrintSettingsOrientation[keyof typeof PrintSettingsOrientation];
+
+
+export const PrintSettingsOrientation = {
+  auto: 'auto',
+  portrait: 'portrait',
+  landscape: 'landscape',
+} as const;
+
 export type PrintSettingsThermalWidth = typeof PrintSettingsThermalWidth[keyof typeof PrintSettingsThermalWidth];
 
 
@@ -474,6 +498,16 @@ export interface PrintSettings {
   copies: number;
   copyLabels: boolean;
   colorMode: PrintSettingsColorMode;
+  /** Overrides the chosen template's paper size for printing. "auto" uses whatever the template is designed for. */
+  paperSize: PrintSettingsPaperSize;
+  /** Overrides the chosen template's print orientation. "auto" uses whatever the template is designed for. */
+  orientation: PrintSettingsOrientation;
+  /**
+     * Faint background watermark image (base64 data URL) shown behind invoice content.
+     * @nullable
+     */
+  watermarkImage: string | null;
+  showWatermark: boolean;
   showLogo: boolean;
   showQr: boolean;
   showBankDetails: boolean;
@@ -514,6 +548,24 @@ export const PrintSettingsUpdateColorMode = {
   bw: 'bw',
 } as const;
 
+export type PrintSettingsUpdatePaperSize = typeof PrintSettingsUpdatePaperSize[keyof typeof PrintSettingsUpdatePaperSize];
+
+
+export const PrintSettingsUpdatePaperSize = {
+  auto: 'auto',
+  A4: 'A4',
+  A5: 'A5',
+} as const;
+
+export type PrintSettingsUpdateOrientation = typeof PrintSettingsUpdateOrientation[keyof typeof PrintSettingsUpdateOrientation];
+
+
+export const PrintSettingsUpdateOrientation = {
+  auto: 'auto',
+  portrait: 'portrait',
+  landscape: 'landscape',
+} as const;
+
 export type PrintSettingsUpdateThermalWidth = typeof PrintSettingsUpdateThermalWidth[keyof typeof PrintSettingsUpdateThermalWidth];
 
 
@@ -527,6 +579,11 @@ export interface PrintSettingsUpdate {
   copies?: number;
   copyLabels?: boolean;
   colorMode?: PrintSettingsUpdateColorMode;
+  paperSize?: PrintSettingsUpdatePaperSize;
+  orientation?: PrintSettingsUpdateOrientation;
+  /** @nullable */
+  watermarkImage?: string | null;
+  showWatermark?: boolean;
   showLogo?: boolean;
   showQr?: boolean;
   showBankDetails?: boolean;

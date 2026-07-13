@@ -3054,6 +3054,10 @@ components:
         - bankBranch
         - upiId
         - qrImage
+        - paperSize
+        - orientation
+        - watermarkImage
+        - showWatermark
         - printerA4
         - printerA5
         - thermalWidth
@@ -3067,6 +3071,19 @@ components:
         colorMode:
           type: string
           enum: [color, bw]
+        paperSize:
+          description: Overrides the chosen template's paper size for printing. "auto" uses whatever the template is designed for.
+          type: string
+          enum: [auto, A4, A5]
+        orientation:
+          description: Overrides the chosen template's print orientation. "auto" uses whatever the template is designed for.
+          type: string
+          enum: [auto, portrait, landscape]
+        watermarkImage:
+          description: Faint background watermark image (base64 data URL) shown behind invoice content.
+          type: ["string", "null"]
+        showWatermark:
+          type: boolean
         showLogo:
           type: boolean
         showQr:
@@ -3136,6 +3153,16 @@ components:
         colorMode:
           type: string
           enum: [color, bw]
+        paperSize:
+          type: string
+          enum: [auto, A4, A5]
+        orientation:
+          type: string
+          enum: [auto, portrait, landscape]
+        watermarkImage:
+          type: ["string", "null"]
+        showWatermark:
+          type: boolean
         showLogo:
           type: boolean
         showQr:
