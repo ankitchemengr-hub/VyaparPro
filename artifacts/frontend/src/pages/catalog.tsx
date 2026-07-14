@@ -8,7 +8,9 @@ import {
   useLookupEntityByMobile,
   useCreateEntity,
   useCreateCustomerOrder,
+  useGetEntity,
   getListCustomerOrdersQueryKey,
+  getGetEntityQueryKey,
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
@@ -67,10 +69,15 @@ export default function Catalog() {
   const isB2B = user?.role === "customer";
   const isManufacturing = user?.role === "manufacturing";
   const isSalesman = user?.role === "salesman";
-  const showRetailOnly = isB2B || isManufacturing;
+  const customerId = user?.customerId ?? 0;
+  const { data: ownEntity } = useGetEntity(customerId, {
+    query: { enabled: isB2B && !!user?.customerId, queryKey: getGetEntityQueryKey(customerId) },
+  });
+  const isWholesaleCustomer = isB2B && (ownEntity as any)?.pricingTier === "wholesale";
+  const showRetailOnly = (isB2B && !isWholesaleCustomer) || isManufacturing;
   const hidePrices = false;
   const showAdvancedFilters = !isSalesman;
-  const showNonGstRate = hasRole(["admin", "salesman", "store"]);
+  const showNonGstRate = hasRole(["admin", "salesman", "store"]) || isWholesaleCustomer;
   const { toast } = useToast();
   const placeOrder = useCreateCustomerOrder();
   const queryClient = useQueryClient();
@@ -436,6 +443,16 @@ const proceedToOrderWithCustomer = (customer: any) => {
                     {!hidePrices && (
                       showRetailOnly ? (
                         <div className="text-primary font-bold text-sm">₹{product.retailPrice}</div>
+                      ) : isWholesaleCustomer ? (
+                        <div className="flex items-center gap-1 text-[11px] text-muted-foreground flex-wrap">
+                          <span>W: <span className="text-foreground font-medium">₹{product.wholesalePrice}</span></span>
+                          {product.nonGstPrice != null && (
+                            <>
+                              <span className="text-border">|</span>
+                              <span>NG: <span className="text-foreground font-medium">₹{product.nonGstPrice}</span></span>
+                            </>
+                          )}
+                        </div>
                       ) : (
                         <div className="flex items-center gap-1 text-[11px] text-muted-foreground flex-wrap">
                           <span>W: <span className="text-foreground font-medium">₹{product.wholesalePrice}</span></span>
