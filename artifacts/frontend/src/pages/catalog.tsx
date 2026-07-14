@@ -70,6 +70,7 @@ export default function Catalog() {
   const showRetailOnly = isB2B || isManufacturing;
   const hidePrices = false;
   const showAdvancedFilters = !isSalesman;
+  const showNonGstRate = hasRole(["admin", "salesman"]);
   const { toast } = useToast();
   const placeOrder = useCreateCustomerOrder();
   const queryClient = useQueryClient();
@@ -140,7 +141,7 @@ export default function Catalog() {
             variant: "destructive",
           });
         },
-      },<div className="text-[10px] text-muted-foreground font-mono">{product.itemCode}</div>
+      }
     );
   };
 
@@ -151,7 +152,7 @@ export default function Catalog() {
     const product = products?.find((p) => p.id === productId);
     if (!product) return null;
     const rate = showRetailOnly ? Number(product.retailPrice) : Number(product.wholesalePrice);
-    const gstRate = Number(product.gstRate ?? 0);
+    const gstRate = Number(product.taxRate ?? 0);
     const baseAmount = rate * qty;
     const gstAmount = (baseAmount * gstRate) / 100;
     const lineTotal = baseAmount + gstAmount;
@@ -440,6 +441,12 @@ const proceedToOrderWithCustomer = (customer: any) => {
                           <span>W: <span className="text-foreground font-medium">₹{product.wholesalePrice}</span></span>
                           <span className="text-border">|</span>
                           <span>R: <span className="text-foreground font-medium">₹{product.retailPrice}</span></span>
+                          {showNonGstRate && product.nonGstPrice != null && (
+                            <>
+                              <span className="text-border">|</span>
+                              <span>NG: <span className="text-foreground font-medium">₹{product.nonGstPrice}</span></span>
+                            </>
+                          )}
                         </div>
                       )
                     )}
