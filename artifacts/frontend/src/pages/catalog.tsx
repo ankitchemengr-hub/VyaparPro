@@ -70,7 +70,7 @@ export default function Catalog() {
   const showRetailOnly = isB2B || isManufacturing;
   const hidePrices = false;
   const showAdvancedFilters = !isSalesman;
-  const showNonGstRate = hasRole(["admin", "salesman"]);
+  const showNonGstRate = hasRole(["admin", "salesman", "store"]);
   const { toast } = useToast();
   const placeOrder = useCreateCustomerOrder();
   const queryClient = useQueryClient();
