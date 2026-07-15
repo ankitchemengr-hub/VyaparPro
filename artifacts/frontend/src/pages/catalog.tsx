@@ -182,6 +182,7 @@ export default function Catalog() {
   }>;
 
   const grandTotal = cartSummaryRows.reduce((sum, r) => sum + r.lineTotal, 0);
+  const grandGstAmount = cartSummaryRows.reduce((sum, r) => sum + r.gstAmount, 0);
 
   // Lookup hook — only fires when searchMobile is set
   const { data: lookupResult, isFetching: isLooking } = useLookupEntityByMobile(
@@ -543,7 +544,7 @@ const proceedToOrderWithCustomer = (customer: any) => {
                 onClick={() => setInvoiceMode("gst")}
                 data-testid="button-invoice-mode-gst"
               >
-                E-Invoice (GST)
+                E-Invoice
               </Button>
               <Button
                 type="button"
@@ -553,7 +554,7 @@ const proceedToOrderWithCustomer = (customer: any) => {
                 onClick={() => setInvoiceMode("non_gst")}
                 data-testid="button-invoice-mode-non-gst"
               >
-                Cash Memo (Non-GST)
+                Cash Memo
               </Button>
             </div>
           )}
@@ -603,8 +604,12 @@ const proceedToOrderWithCustomer = (customer: any) => {
               </tbody>
               <tfoot>
                 <tr className="border-t-2">
-                  <td colSpan={4} className="pt-3 px-1 font-bold text-right text-sm">Grand Total</td>
-                  <td className="pt-3 px-1 text-right font-bold text-primary">₹{grandTotal.toFixed(2)}</td>
+                  <td colSpan={4} className="pt-3 px-1 text-right text-sm text-muted-foreground">GST Amount</td>
+                  <td className="pt-3 px-1 text-right text-muted-foreground">₹{grandGstAmount.toFixed(2)}</td>
+                </tr>
+                <tr>
+                  <td colSpan={4} className="pt-1 px-1 font-bold text-right text-sm">Grand Total</td>
+                  <td className="pt-1 px-1 text-right font-bold text-primary">₹{grandTotal.toFixed(2)}</td>
                 </tr>
               </tfoot>
             </table>
