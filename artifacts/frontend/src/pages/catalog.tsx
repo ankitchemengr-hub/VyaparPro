@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/use-auth";
 import {
@@ -65,6 +65,28 @@ export default function Catalog() {
   });
   const { data: groups } = useListProductGroups();
   const { data: brands } = useListBrands();
+
+  // Cart items must stay resolvable after the user changes the search/filter
+  // text — `products` only ever holds the current search results, so a cart
+  // item added under a previous search term would otherwise vanish from the
+  // Order Summary (and its total) once that term no longer matches. This
+  // cache accumulates every product seen so far, keyed by id, and is used
+  // anywhere cart items are resolved back into product details.
+  const [productCache, setProductCache] = useState<Record<number, NonNullable<typeof products>[number]>>({});
+  useEffect(() => {
+    if (!products || products.length === 0) return;
+    setProductCache((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const p of products) {
+        if (next[p.id] !== p) {
+          next[p.id] = p;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [products]);
 
   const isB2B = user?.role === "customer";
   const isManufacturing = user?.role === "manufacturing";
@@ -163,7 +185,7 @@ export default function Catalog() {
   // Cart summary rows — join cart with product details
   const useNonGstRate = showInvoiceTypeChoice && invoiceMode === "non_gst";
   const cartSummaryRows = cartItems.map(({ productId, qty }) => {
-    const product = products?.find((p) => p.id === productId);
+    const product = productCache[productId] ?? products?.find((p) => p.id === productId);
     if (!product) return null;
     const baseRate = showRetailOnly ? Number(product.retailPrice) : Number(product.wholesalePrice);
     const nonGstRate = Number(product.nonGstPrice ?? 0);
