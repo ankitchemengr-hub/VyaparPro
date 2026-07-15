@@ -70,7 +70,8 @@ router.post("/customer-orders", async (req, res): Promise<void> => {
   if (
     session.role !== "customer" &&
     session.role !== "admin" &&
-    session.role !== "salesman"
+    session.role !== "salesman" &&
+    session.role !== "store"
   ) {
     res.status(403).json({ error: "Not allowed to place orders" });
     return;
@@ -129,11 +130,12 @@ router.post("/customer-orders", async (req, res): Promise<void> => {
     if (!Number.isFinite(pid) || !Number.isFinite(qty) || qty <= 0) continue;
     const p = byId.get(pid);
     if (!p) continue;
-    // Salesman-created orders and wholesale-tier customers are quoted at the
-    // wholesale (B2B) rate; other customers are billed at retail. When the
-    // order is placed as a cash memo (non_gst), the snapshot uses the
+    // Salesman/store-created orders and wholesale-tier customers are quoted
+    // at the wholesale (B2B) rate; other customers are billed at retail. When
+    // the order is placed as a cash memo (non_gst), the snapshot uses the
     // product's non-GST rate instead (falling back to the base rate if unset).
-    const isWholesaleBase = session.role === "salesman" || customerPricingTier === "wholesale";
+    const isWholesaleBase =
+      session.role === "salesman" || session.role === "store" || customerPricingTier === "wholesale";
     const baseRate = isWholesaleBase
       ? Number(p.wholesalePrice ?? p.retailPrice ?? 0)
       : Number(p.retailPrice ?? 0);

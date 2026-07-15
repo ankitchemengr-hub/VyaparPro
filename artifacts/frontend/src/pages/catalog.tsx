@@ -69,6 +69,7 @@ export default function Catalog() {
   const isB2B = user?.role === "customer";
   const isManufacturing = user?.role === "manufacturing";
   const isSalesman = user?.role === "salesman";
+  const isStore = user?.role === "store";
   const customerId = user?.customerId ?? 0;
   const { data: ownEntity } = useGetEntity(customerId, {
     query: { enabled: isB2B && !!user?.customerId, queryKey: getGetEntityQueryKey(customerId) },
@@ -78,10 +79,10 @@ export default function Catalog() {
   const hidePrices = false;
   const showAdvancedFilters = !isSalesman;
   const showNonGstRate = hasRole(["admin", "salesman", "store"]) || isWholesaleCustomer;
-  // Wholesale customers and salesmen pick Cash Memo (non-GST) vs E-Invoice (GST)
-  // before the order is placed; other roles keep the existing behavior (admin/
-  // store/etc. redirect to billing.tsx, which has its own GST/Non-GST select).
-  const showInvoiceTypeChoice = isWholesaleCustomer || isSalesman;
+  // Wholesale customers, salesmen, and store users pick Cash Memo (non-GST) vs
+  // E-Invoice (GST) before the order is placed. The choice carries through to
+  // billing.tsx (for salesman/store, who redirect there) via the invoiceType param.
+  const showInvoiceTypeChoice = isWholesaleCustomer || isSalesman || isStore;
   const [invoiceMode, setInvoiceMode] = useState<"gst" | "non_gst">("gst");
   const { toast } = useToast();
   const placeOrder = useCreateCustomerOrder();
@@ -212,8 +213,10 @@ export default function Catalog() {
 
 
 const proceedToOrderWithCustomer = (customer: any) => {
-  if (isSalesman) {
-    // Salesman places order directly with customer info
+  if (isSalesman || isStore) {
+    // Salesman and store users place the order directly with customer info,
+    // same flow, same Cash Memo/E-Invoice choice — rather than being routed
+    // through the admin-only billing.tsx.
     placeOrder.mutate(
       { data: { items: cartItems, customerName: customer?.name, customerMobile: customer?.mobile, invoiceType: invoiceMode } },
       {
@@ -225,7 +228,7 @@ const proceedToOrderWithCustomer = (customer: any) => {
           setCart({});
           setShowCustomerDialog(false);
           queryClient.invalidateQueries({ queryKey: getListCustomerOrdersQueryKey() });
-          setLocation("/my-orders");
+          setLocation(isStore ? "/customer-orders" : "/my-orders");
         },
         onError: (err: any) => {
           toast({
