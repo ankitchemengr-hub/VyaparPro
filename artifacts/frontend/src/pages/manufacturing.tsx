@@ -169,6 +169,7 @@ function WorkloadTab({
     status: "pending" | "processing";
   } | null>(null);
   const [busyProductId, setBusyProductId] = useState<number | null>(null);
+  const [search, setSearch] = useState("");
 
   const bomByFinishedProduct = useMemo(() => {
     const m = new Map<number, any>();
@@ -188,6 +189,15 @@ function WorkloadTab({
   const manufacturingAlerts = useMemo(() => {
     return (alerts ?? []).filter((a: any) => productById.get(a.id)?.addForManufacturing);
   }, [alerts, productById]);
+
+  const filteredAlerts = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return manufacturingAlerts;
+    return manufacturingAlerts.filter((a: any) => {
+      const itemCode = productById.get(a.id)?.itemCode ?? "";
+      return a.name?.toLowerCase().includes(q) || itemCode.toLowerCase().includes(q);
+    });
+  }, [manufacturingAlerts, productById, search]);
 
   // Most recent active (pending/processing) card per product. If a worker
   // accidentally created multiple, we honour the latest one.
@@ -421,8 +431,30 @@ function WorkloadTab({
           </p>
         </div>
         <Badge variant="destructive" data-testid="badge-workload-count">
-          {manufacturingAlerts.length} item{manufacturingAlerts.length === 1 ? "" : "s"}
+          {filteredAlerts.length} item{filteredAlerts.length === 1 ? "" : "s"}
         </Badge>
+      </div>
+
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by product name or item code…"
+          className="pl-9 pr-9"
+          data-testid="input-workload-search"
+        />
+        {search && (
+          <button
+            type="button"
+            onClick={() => setSearch("")}
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+            aria-label="Clear search"
+            data-testid="button-clear-workload-search"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       <div className="rounded-lg border overflow-hidden">
@@ -436,7 +468,7 @@ function WorkloadTab({
           <div className="col-span-4 text-center">Status</div>
         </div>
         <div className="divide-y">
-          {manufacturingAlerts.map((a: any) => {
+          {filteredAlerts.map((a: any) => {
             const bom = bomByFinishedProduct.get(a.id);
             const product = productById.get(a.id);
             const imageUrl = product?.imageUrl;
@@ -633,7 +665,7 @@ function WorkloadTab({
             BOM button) need their own full-width rows since a fixed-width select
             plus buttons never fit inside a narrow grid column on a phone. */}
         <div className="md:hidden divide-y">
-          {manufacturingAlerts.map((a: any) => {
+          {filteredAlerts.map((a: any) => {
             const bom = bomByFinishedProduct.get(a.id);
             const product = productById.get(a.id);
             const imageUrl = product?.imageUrl;
