@@ -92,7 +92,12 @@ function lineLiters(i: { qty: number; qtyMode: QtyMode; unit: string; unitsPerBo
 
 function parseSearch(search: string) {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
-  return { cart: params.get("cart"), customer: params.get("customer"), edit: params.get("edit") };
+  return {
+    cart: params.get("cart"),
+    customer: params.get("customer"),
+    edit: params.get("edit"),
+    invoiceType: params.get("invoiceType"),
+  };
 }
 
 export default function Billing() {
@@ -110,7 +115,9 @@ export default function Billing() {
     try { return params.customer ? JSON.parse(decodeURIComponent(params.customer)) : null; } catch { return null; }
   });
   const [docType, setDocType] = useState<string>("invoice");
-  const [invoiceSubtype, setInvoiceSubtype] = useState<"gst" | "non_gst">("gst");
+  const [invoiceSubtype, setInvoiceSubtype] = useState<"gst" | "non_gst">(
+    () => (params.invoiceType === "non_gst" ? "non_gst" : "gst")
+  );
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
   const [placeOfSupply, setPlaceOfSupply] = useState(customer?.state || "Maharashtra");
   const [items, setItems] = useState<BillingItem[]>([]);

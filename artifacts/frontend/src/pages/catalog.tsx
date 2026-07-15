@@ -78,6 +78,11 @@ export default function Catalog() {
   const hidePrices = false;
   const showAdvancedFilters = !isSalesman;
   const showNonGstRate = hasRole(["admin", "salesman", "store"]) || isWholesaleCustomer;
+  // Wholesale customers and salesmen pick Cash Memo (non-GST) vs E-Invoice (GST)
+  // before the order is placed; other roles keep the existing behavior (admin/
+  // store/etc. redirect to billing.tsx, which has its own GST/Non-GST select).
+  const showInvoiceTypeChoice = isWholesaleCustomer || isSalesman;
+  const [invoiceMode, setInvoiceMode] = useState<"gst" | "non_gst">("gst");
   const { toast } = useToast();
   const placeOrder = useCreateCustomerOrder();
   const queryClient = useQueryClient();
@@ -130,7 +135,7 @@ export default function Catalog() {
   const handlePlaceOrder = () => {
     if (!hasSelection) return;
     placeOrder.mutate(
-      { data: { items: cartItems } },
+      { data: { items: cartItems, invoiceType: invoiceMode } },
       {
         onSuccess: (order: any) => {
           toast({
@@ -155,11 +160,14 @@ export default function Catalog() {
   const isStaff = hasRole(["admin", "salesman", "store", "manufacturing", "accountant"]);
 
   // Cart summary rows — join cart with product details
+  const useNonGstRate = showInvoiceTypeChoice && invoiceMode === "non_gst";
   const cartSummaryRows = cartItems.map(({ productId, qty }) => {
     const product = products?.find((p) => p.id === productId);
     if (!product) return null;
-    const rate = showRetailOnly ? Number(product.retailPrice) : Number(product.wholesalePrice);
-    const gstRate = Number(product.taxRate ?? 0);
+    const baseRate = showRetailOnly ? Number(product.retailPrice) : Number(product.wholesalePrice);
+    const nonGstRate = Number(product.nonGstPrice ?? 0);
+    const rate = useNonGstRate && nonGstRate > 0 ? nonGstRate : baseRate;
+    const gstRate = useNonGstRate ? 0 : Number(product.taxRate ?? 0);
     const baseAmount = rate * qty;
     const gstAmount = (baseAmount * gstRate) / 100;
     const lineTotal = baseAmount + gstAmount;
@@ -206,7 +214,7 @@ const proceedToOrderWithCustomer = (customer: any) => {
   if (isSalesman) {
     // Salesman places order directly with customer info
     placeOrder.mutate(
-      { data: { items: cartItems, customerName: customer?.name, customerMobile: customer?.mobile } },
+      { data: { items: cartItems, customerName: customer?.name, customerMobile: customer?.mobile, invoiceType: invoiceMode } },
       {
         onSuccess: (order: any) => {
           toast({
@@ -231,24 +239,15 @@ const proceedToOrderWithCustomer = (customer: any) => {
   }
   const cartParam = encodeURIComponent(JSON.stringify(cartItems));
   const customerParam = encodeURIComponent(JSON.stringify(customer));
-  setLocation(`/billing?cart=${cartParam}&customer=${customerParam}`);
+  setLocation(`/billing?cart=${cartParam}&customer=${customerParam}&invoiceType=${invoiceMode}`);
 };
 
-  // Opens cart review dialog; non-staff customers skip straight to place order
+  // Opens cart review dialog for everyone — salesmen and wholesale customers
+  // also need it to pick Cash Memo (non-GST) vs E-Invoice (GST) before proceeding.
   const handleProceedClick = () => {
-  if (!hasSelection) return;
-  if (isSalesman) {
-    // Salesman skips cart review — goes straight to customer lookup
-    setMobileInput("");
-    setSearchMobile("");
-    setStep("mobile");
-    setFoundCustomer(null);
-    newCustomerForm.reset({ name: "", mobile: "", gstin: "", address: "", city: "", state: "Maharashtra", pricingTier: "retail" });
-    setShowCustomerDialog(true);
-  } else {
+    if (!hasSelection) return;
     setShowCartReview(true);
-  }
-};
+  };
 
   // Called when user confirms cart review and is staff — opens customer lookup
   const openCustomerDialog = () => {
@@ -533,6 +532,31 @@ const proceedToOrderWithCustomer = (customer: any) => {
               Order Summary
             </DialogTitle>
           </DialogHeader>
+
+          {showInvoiceTypeChoice && (
+            <div className="flex gap-2 pb-1">
+              <Button
+                type="button"
+                variant={invoiceMode === "gst" ? "default" : "outline"}
+                size="sm"
+                className="flex-1"
+                onClick={() => setInvoiceMode("gst")}
+                data-testid="button-invoice-mode-gst"
+              >
+                E-Invoice (GST)
+              </Button>
+              <Button
+                type="button"
+                variant={invoiceMode === "non_gst" ? "default" : "outline"}
+                size="sm"
+                className="flex-1"
+                onClick={() => setInvoiceMode("non_gst")}
+                data-testid="button-invoice-mode-non-gst"
+              >
+                Cash Memo (Non-GST)
+              </Button>
+            </div>
+          )}
 
           <div className="overflow-x-auto -mx-1">
             <table className="w-full text-sm">

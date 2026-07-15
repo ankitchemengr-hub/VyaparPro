@@ -1812,6 +1812,14 @@ export const CustomerOrderStatus = {
   cancelled: 'cancelled',
 } as const;
 
+export type CustomerOrderInvoiceType = typeof CustomerOrderInvoiceType[keyof typeof CustomerOrderInvoiceType];
+
+
+export const CustomerOrderInvoiceType = {
+  gst: 'gst',
+  non_gst: 'non_gst',
+} as const;
+
 export interface CustomerOrder {
   id: number;
   /** @nullable */
@@ -1825,6 +1833,7 @@ export interface CustomerOrder {
   customerMobile?: string | null;
   status: CustomerOrderStatus;
   isDraft?: boolean;
+  invoiceType?: CustomerOrderInvoiceType;
   totalItems: number;
   totalAmount: number;
   /** @nullable */
@@ -1862,6 +1871,14 @@ export type CustomerOrderDetail = CustomerOrder & {
   items: CustomerOrderItem[];
 };
 
+export type CustomerOrderInputInvoiceType = typeof CustomerOrderInputInvoiceType[keyof typeof CustomerOrderInputInvoiceType];
+
+
+export const CustomerOrderInputInvoiceType = {
+  gst: 'gst',
+  non_gst: 'non_gst',
+} as const;
+
 export type CustomerOrderInputItemsItem = {
   productId: number;
   /** @minimum 0.01 */
@@ -1873,6 +1890,7 @@ export interface CustomerOrderInput {
   customerMobile?: string;
   entityId?: number;
   isDraft?: boolean;
+  invoiceType?: CustomerOrderInputInvoiceType;
   notes?: string;
   /** @minItems 1 */
   items: CustomerOrderInputItemsItem[];

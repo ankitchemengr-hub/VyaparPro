@@ -32,6 +32,7 @@ function formatOrder(row: any) {
     customerMobile: row.customer_mobile ?? null,
     status: row.status as OrderStatus,
     isDraft: row.is_draft ?? false,
+    invoiceType: row.invoice_type ?? "gst",
     totalItems: Number(row.total_items ?? 0),
     totalAmount: Number(row.total_amount ?? 0),
     notes: row.notes ?? null,
@@ -79,6 +80,7 @@ router.post("/customer-orders", async (req, res): Promise<void> => {
 
   const body = req.body ?? {};
   const isDraft = body.isDraft === true;
+  const invoiceType: "gst" | "non_gst" = body.invoiceType === "non_gst" ? "non_gst" : "gst";
   const items: Array<{ productId: number; qty: number }> = Array.isArray(body.items) ? body.items : [];
   if (items.length === 0) {
     res.status(400).json({ error: "Order must have at least one item" });
@@ -90,16 +92,18 @@ router.post("/customer-orders", async (req, res): Promise<void> => {
   let customerMobile = String(body.customerMobile ?? "").trim() || null;
   let entityId: number | null = body.entityId != null ? Number(body.entityId) : null;
 
+  let customerPricingTier: string | null = null;
   if (session.role === "customer") {
     // Link is stored on users.entity_id → look up through the users table
     const entRows = await pool.query(
-      `SELECT e.id, e.name, e.mobile FROM entities e
+      `SELECT e.id, e.name, e.mobile, e.pricing_tier FROM entities e
        JOIN users u ON u.entity_id = e.id
        WHERE u.id = $1 AND e.type = 'customer' AND e.company_id = $2 LIMIT 1`,
       [session.userId, companyId]
     );
     if (entRows.rows[0]) {
       entityId = entRows.rows[0].id;
+      customerPricingTier = entRows.rows[0].pricing_tier ?? null;
       if (!customerName) customerName = entRows.rows[0].name;
       if (!customerMobile) customerMobile = entRows.rows[0].mobile ?? null;
     }
@@ -125,12 +129,16 @@ router.post("/customer-orders", async (req, res): Promise<void> => {
     if (!Number.isFinite(pid) || !Number.isFinite(qty) || qty <= 0) continue;
     const p = byId.get(pid);
     if (!p) continue;
-    // Salesman-created orders are quoted at the wholesale (B2B) tier, matching
-    // the salesman order-entry UI; customers are billed at retail.
-    const price =
-      session.role === "salesman"
-        ? Number(p.wholesalePrice ?? p.retailPrice ?? 0)
-        : Number(p.retailPrice ?? 0);
+    // Salesman-created orders and wholesale-tier customers are quoted at the
+    // wholesale (B2B) rate; other customers are billed at retail. When the
+    // order is placed as a cash memo (non_gst), the snapshot uses the
+    // product's non-GST rate instead (falling back to the base rate if unset).
+    const isWholesaleBase = session.role === "salesman" || customerPricingTier === "wholesale";
+    const baseRate = isWholesaleBase
+      ? Number(p.wholesalePrice ?? p.retailPrice ?? 0)
+      : Number(p.retailPrice ?? 0);
+    const nonGstRate = Number(p.nonGstPrice ?? 0);
+    const price = invoiceType === "non_gst" && nonGstRate > 0 ? nonGstRate : baseRate;
     const lineTotal = qty * price;
     resolvedItems.push({
       productId: pid,
@@ -161,10 +169,10 @@ router.post("/customer-orders", async (req, res): Promise<void> => {
         : "pending";
     const ins = await client.query(
       `INSERT INTO customer_orders
-         (company_id, user_id, entity_id, customer_name, customer_mobile, status, is_draft, total_items, total_amount, notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+         (company_id, user_id, entity_id, customer_name, customer_mobile, status, is_draft, invoice_type, total_items, total_amount, notes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
        RETURNING *`,
-      [companyId, session.userId, entityId, customerName, customerMobile, initialStatus, isDraft, totalItems, totalAmount, body.notes ?? null]
+      [companyId, session.userId, entityId, customerName, customerMobile, initialStatus, isDraft, invoiceType, totalItems, totalAmount, body.notes ?? null]
     );
     const order = ins.rows[0];
 

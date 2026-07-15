@@ -186,7 +186,8 @@ export default function CustomerOrdersAdmin() {
           pricingTier: "retail",
           outstandingBalance: 0,
         };
-    const qs = `?cart=${encodeURIComponent(JSON.stringify(cart))}&customer=${encodeURIComponent(JSON.stringify(customer))}&order=${detail.id}`;
+    const invoiceType = (detail as any).invoiceType === "non_gst" ? "non_gst" : "gst";
+    const qs = `?cart=${encodeURIComponent(JSON.stringify(cart))}&customer=${encodeURIComponent(JSON.stringify(customer))}&order=${detail.id}&invoiceType=${invoiceType}`;
     setLocation(`/billing${qs}`);
   };
 

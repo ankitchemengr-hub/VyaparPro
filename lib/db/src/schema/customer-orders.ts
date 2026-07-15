@@ -10,6 +10,7 @@ export const customerOrdersTable = pgTable("customer_orders", {
   customerMobile: text("customer_mobile"),
   status: text("status").notNull().default("pending"), // pending, production, ready_for_dispatch, dispatched, delivered, cancelled (legacy: processing, done)
   isDraft: boolean("is_draft").notNull().default(false), // salesman draft not yet submitted to admin
+  invoiceType: text("invoice_type").notNull().default("gst"), // gst (e-invoice, GST added later at billing) or non_gst (cash memo, snapshot uses non_gst_price)
   totalItems: integer("total_items").notNull().default(0),
   totalAmount: numeric("total_amount", { precision: 14, scale: 2 }).notNull().default("0"),
   notes: text("notes"),

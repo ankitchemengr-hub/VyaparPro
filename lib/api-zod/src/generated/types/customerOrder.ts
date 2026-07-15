@@ -5,6 +5,7 @@
  * Shradha Oil Center ERP API
  * OpenAPI spec version: 0.1.0
  */
+import type { CustomerOrderInvoiceType } from './customerOrderInvoiceType';
 import type { CustomerOrderStatus } from './customerOrderStatus';
 
 export interface CustomerOrder {
@@ -20,6 +21,7 @@ export interface CustomerOrder {
   customerMobile?: string | null;
   status: CustomerOrderStatus;
   isDraft?: boolean;
+  invoiceType?: CustomerOrderInvoiceType;
   totalItems: number;
   totalAmount: number;
   /** @nullable */

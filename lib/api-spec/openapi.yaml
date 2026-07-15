@@ -4646,6 +4646,9 @@ components:
           enum: [pending, processing, production, ready_for_dispatch, dispatched, delivered, done, cancelled]
         isDraft:
           type: boolean
+        invoiceType:
+          type: string
+          enum: [gst, non_gst]
         totalItems:
           type: integer
         totalAmount:
@@ -4713,6 +4716,9 @@ components:
           type: integer
         isDraft:
           type: boolean
+        invoiceType:
+          type: string
+          enum: [gst, non_gst]
         notes:
           type: string
         items:

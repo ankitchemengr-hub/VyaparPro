@@ -5,6 +5,7 @@
  * Shradha Oil Center ERP API
  * OpenAPI spec version: 0.1.0
  */
+import type { CustomerOrderInputInvoiceType } from './customerOrderInputInvoiceType';
 import type { CustomerOrderInputItemsItem } from './customerOrderInputItemsItem';
 
 export interface CustomerOrderInput {
@@ -12,6 +13,7 @@ export interface CustomerOrderInput {
   customerMobile?: string;
   entityId?: number;
   isDraft?: boolean;
+  invoiceType?: CustomerOrderInputInvoiceType;
   notes?: string;
   /** @minItems 1 */
   items: CustomerOrderInputItemsItem[];

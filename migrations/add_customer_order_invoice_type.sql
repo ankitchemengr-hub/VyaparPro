@@ -1,0 +1,1 @@
+ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS invoice_type TEXT NOT NULL DEFAULT 'gst';
