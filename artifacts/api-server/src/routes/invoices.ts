@@ -59,6 +59,10 @@ router.get("/invoices", async (req, res): Promise<void> => {
     // Salesmen may only ever see invoices from the last 7 days — enforced
     // server-side so the restriction can't be bypassed from the client.
     conditions.push(sql`${invoicesTable.invoiceDate} >= (CURRENT_DATE - INTERVAL '7 days')`);
+  } else if (session?.role === "store") {
+    // Store users only see invoices they personally created (e.g. via the
+    // catalog checkout flow), not the full company invoice list.
+    conditions.push(eq(invoicesTable.createdByUserId, session.userId));
   } else if (params.data.salesmanId) {
     conditions.push(eq(invoicesTable.salesmanId, params.data.salesmanId));
   }
@@ -386,6 +390,14 @@ router.get("/invoices/:id", async (req, res): Promise<void> => {
   const session = (req as any).session;
   if (session?.role === "salesman") {
     if (!session.entityId || inv.salesmanId !== session.entityId) {
+      res.status(404).json({ error: "Invoice not found" });
+      return;
+    }
+  } else if (session?.role === "store") {
+    // Store scoping (defence against IDOR): a store user may only read
+    // invoices they personally created. Return 404 (not 403) so existence
+    // isn't leaked.
+    if (inv.createdByUserId !== session.userId) {
       res.status(404).json({ error: "Invoice not found" });
       return;
     }
