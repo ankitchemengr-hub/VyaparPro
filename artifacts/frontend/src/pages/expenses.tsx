@@ -21,7 +21,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Loader2, Trash2, Receipt, IndianRupee, Tag, FolderPlus, CalendarDays } from "lucide-react";
+import { Plus, Loader2, Trash2, Receipt, Tag, FolderPlus, CalendarDays, FileBarChart, Printer } from "lucide-react";
 
 const formatRs = (n: number) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(n);
@@ -40,48 +40,11 @@ const MODE_TONE: Record<string, string> = {
 };
 
 export default function ExpensesPage() {
-  const qc = useQueryClient();
-  const { toast } = useToast();
-  const [from, setFrom] = useState<string>(firstOfMonth());
-  const [to, setTo] = useState<string>(todayISO());
-  const [categoryId, setCategoryId] = useState<string>("all");
   const [open, setOpen] = useState(false);
-  const [catOpen, setCatOpen] = useState(false);
-  const [groupBy, setGroupBy] = useState<"category" | "date">("category");
-
-  const params = {
-    from,
-    to,
-    ...(categoryId !== "all" ? { categoryId: Number(categoryId) } : {}),
-  };
-  const { data: list, isLoading } = useListExpenses(params);
-  const { data: categories } = useListExpenseCategories();
-  const activeCats = useMemo(() => (categories ?? []).filter((c) => c.isActive), [categories]);
-
-  const byDate = useMemo(() => {
-    const totals = new Map<string, number>();
-    for (const e of list?.items ?? []) {
-      totals.set(e.date, (totals.get(e.date) ?? 0) + Number(e.amount));
-    }
-    return Array.from(totals.entries())
-      .map(([date, total]) => ({ date, total }))
-      .sort((a, b) => (a.date < b.date ? 1 : -1));
-  }, [list?.items]);
-
-  const del = useDeleteExpense();
-
-  const handleDelete = (id: number) => {
-    if (!confirm("Delete this expense?")) return;
-    del.mutate({ id }, {
-      onSuccess: () => {
-        qc.invalidateQueries({ queryKey: getListExpensesQueryKey(params) });
-        toast({ title: "Expense deleted" });
-      },
-    });
-  };
+  const [reportOpen, setReportOpen] = useState(false);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 print:hidden">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Expenses</h1>
@@ -90,8 +53,8 @@ export default function ExpensesPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="flex-1 sm:flex-none" onClick={() => setCatOpen(true)} data-testid="button-manage-categories">
-            <FolderPlus className="w-4 h-4 mr-2" /> Categories
+          <Button variant="outline" className="flex-1 sm:flex-none" onClick={() => setReportOpen(true)} data-testid="button-expense-report">
+            <FileBarChart className="w-4 h-4 mr-2" /> Report
           </Button>
           <Button className="flex-1 sm:flex-none" onClick={() => setOpen(true)} data-testid="button-new-expense">
             <Plus className="w-4 h-4 mr-2" /> Add Expense
@@ -99,160 +62,19 @@ export default function ExpensesPage() {
         </div>
       </div>
 
-      {/* Filters */}
-      <Card>
-        <CardContent className="py-3 flex flex-wrap items-end gap-3">
-          <div>
-            <Label className="text-xs">From</Label>
-            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-40" data-testid="filter-from" />
-          </div>
-          <div>
-            <Label className="text-xs">To</Label>
-            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-40" data-testid="filter-to" />
-          </div>
-          <div>
-            <Label className="text-xs">Category</Label>
-            <Select value={categoryId} onValueChange={setCategoryId}>
-              <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All categories</SelectItem>
-                {activeCats.map((c) => (
-                  <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="ml-auto text-right">
-            <div className="text-xs text-muted-foreground">Total in range</div>
-            <div className="text-2xl font-bold font-mono">{formatRs(list?.total ?? 0)}</div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2"><Receipt className="w-4 h-4" /> Expense Entries</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            {isLoading ? (
-              <div className="p-12 text-center text-muted-foreground"><Loader2 className="w-6 h-6 animate-spin mx-auto" /></div>
-            ) : (list?.items ?? []).length === 0 ? (
-              <div className="p-12 text-center text-muted-foreground">No expenses in this range.</div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Paid To</TableHead>
-                    <TableHead>Mode</TableHead>
-                    <TableHead>Notes</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
-                    <TableHead></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {(list?.items ?? []).map((e) => (
-                    <TableRow key={e.id} data-testid={`row-expense-${e.id}`}>
-                      <TableCell className="text-xs">{e.date}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30">{e.categoryName}</Badge>
-                      </TableCell>
-                      <TableCell className="text-sm">{e.paidTo || "—"}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className={MODE_TONE[e.paymentMode]}>{MODE_LABEL[e.paymentMode]}</Badge>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">{e.notes || "—"}</TableCell>
-                      <TableCell className="text-right font-mono font-medium">{formatRs(e.amount)}</TableCell>
-                      <TableCell>
-                        <Button size="sm" variant="ghost" onClick={() => handleDelete(e.id)} data-testid={`button-delete-expense-${e.id}`}>
-                          <Trash2 className="w-4 h-4 text-destructive" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-            <CardTitle className="text-base flex items-center gap-2">
-              {groupBy === "category" ? <Tag className="w-4 h-4" /> : <CalendarDays className="w-4 h-4" />}
-              By {groupBy === "category" ? "Category" : "Date"}
-            </CardTitle>
-            <div className="flex gap-1">
-              <Button
-                size="sm"
-                variant={groupBy === "category" ? "default" : "outline"}
-                className="h-7 px-2 text-xs"
-                onClick={() => setGroupBy("category")}
-                data-testid="button-group-by-category"
-              >
-                Category
-              </Button>
-              <Button
-                size="sm"
-                variant={groupBy === "date" ? "default" : "outline"}
-                className="h-7 px-2 text-xs"
-                onClick={() => setGroupBy("date")}
-                data-testid="button-group-by-date"
-              >
-                Date
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {groupBy === "category" ? (
-              (list?.byCategory ?? []).length === 0 ? (
-                <div className="text-sm text-muted-foreground text-center py-6">No data.</div>
-              ) : (list?.byCategory ?? []).map((row) => {
-                const pct = (list?.total ?? 0) > 0 ? (row.total / (list?.total ?? 1)) * 100 : 0;
-                return (
-                  <div key={`${row.categoryId}-${row.categoryName}`} className="space-y-1">
-                    <div className="flex justify-between text-sm">
-                      <span className="font-medium">{row.categoryName}</span>
-                      <span className="font-mono">{formatRs(row.total)}</span>
-                    </div>
-                    <div className="h-2 bg-muted rounded">
-                      <div className="h-full bg-primary rounded" style={{ width: `${pct}%` }} />
-                    </div>
-                  </div>
-                );
-              })
-            ) : byDate.length === 0 ? (
-              <div className="text-sm text-muted-foreground text-center py-6">No data.</div>
-            ) : byDate.map((row) => {
-              const pct = (list?.total ?? 0) > 0 ? (row.total / (list?.total ?? 1)) * 100 : 0;
-              return (
-                <div key={row.date} className="space-y-1">
-                  <div className="flex justify-between text-sm">
-                    <span className="font-medium">{row.date}</span>
-                    <span className="font-mono">{formatRs(row.total)}</span>
-                  </div>
-                  <div className="h-2 bg-muted rounded">
-                    <div className="h-full bg-primary rounded" style={{ width: `${pct}%` }} />
-                  </div>
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
-      </div>
-
-      <ExpenseDialog open={open} onOpenChange={setOpen} categories={activeCats} params={params} />
-      <CategoriesDialog open={catOpen} onOpenChange={setCatOpen} categories={categories ?? []} />
+      <ExpenseDialog open={open} onOpenChange={setOpen} />
+      <ExpenseReportDialog open={reportOpen} onOpenChange={setReportOpen} />
     </div>
   );
 }
 
-function ExpenseDialog({ open, onOpenChange, categories, params }: { open: boolean; onOpenChange: (b: boolean) => void; categories: { id: number; name: string }[]; params: any }) {
+function ExpenseDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b: boolean) => void }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const create = useCreateExpense();
+  const [catOpen, setCatOpen] = useState(false);
+  const { data: categories } = useListExpenseCategories();
+  const activeCats = useMemo(() => (categories ?? []).filter((c) => c.isActive), [categories]);
   const [form, setForm] = useState<ExpenseInput>({
     date: todayISO(),
     categoryId: 0,
@@ -277,7 +99,7 @@ function ExpenseDialog({ open, onOpenChange, categories, params }: { open: boole
       { data: { ...form, paidTo: form.paidTo || undefined, notes: form.notes || undefined } },
       {
         onSuccess: () => {
-          qc.invalidateQueries({ queryKey: getListExpensesQueryKey(params) });
+          qc.invalidateQueries({ queryKey: getListExpensesQueryKey() });
           toast({ title: "Expense recorded" });
           reset();
           onOpenChange(false);
@@ -287,6 +109,7 @@ function ExpenseDialog({ open, onOpenChange, categories, params }: { open: boole
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) reset(); }}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
@@ -305,11 +128,21 @@ function ExpenseDialog({ open, onOpenChange, categories, params }: { open: boole
             </div>
           </div>
           <div>
-            <Label>Category *</Label>
+            <div className="flex items-center justify-between">
+              <Label>Category *</Label>
+              <button
+                type="button"
+                className="text-xs text-primary hover:underline flex items-center gap-1"
+                onClick={() => setCatOpen(true)}
+                data-testid="button-manage-categories"
+              >
+                <FolderPlus className="w-3 h-3" /> Manage
+              </button>
+            </div>
             <Select value={form.categoryId ? String(form.categoryId) : ""} onValueChange={(v) => setForm({ ...form, categoryId: Number(v) })}>
               <SelectTrigger data-testid="select-expense-category"><SelectValue placeholder="Choose category" /></SelectTrigger>
               <SelectContent>
-                {categories.map((c) => (
+                {activeCats.map((c) => (
                   <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
                 ))}
               </SelectContent>
@@ -343,6 +176,216 @@ function ExpenseDialog({ open, onOpenChange, categories, params }: { open: boole
             {create.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Save
           </Button>
         </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    <CategoriesDialog open={catOpen} onOpenChange={setCatOpen} categories={categories ?? []} />
+    </>
+  );
+}
+
+function ExpenseReportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b: boolean) => void }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [from, setFrom] = useState<string>(firstOfMonth());
+  const [to, setTo] = useState<string>(todayISO());
+  const [categoryId, setCategoryId] = useState<string>("all");
+  const [groupBy, setGroupBy] = useState<"category" | "date">("category");
+
+  const params = {
+    from,
+    to,
+    ...(categoryId !== "all" ? { categoryId: Number(categoryId) } : {}),
+  };
+  const { data: list, isLoading } = useListExpenses(params, {
+    query: { enabled: open, queryKey: getListExpensesQueryKey(params) },
+  });
+  const { data: categories } = useListExpenseCategories({
+    query: { enabled: open, queryKey: getListExpenseCategoriesQueryKey() },
+  });
+  const activeCats = useMemo(() => (categories ?? []).filter((c) => c.isActive), [categories]);
+
+  const byDate = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const e of list?.items ?? []) {
+      totals.set(e.date, (totals.get(e.date) ?? 0) + Number(e.amount));
+    }
+    return Array.from(totals.entries())
+      .map(([date, total]) => ({ date, total }))
+      .sort((a, b) => (a.date < b.date ? 1 : -1));
+  }, [list?.items]);
+
+  const del = useDeleteExpense();
+
+  const handleDelete = (id: number) => {
+    if (!confirm("Delete this expense?")) return;
+    del.mutate({ id }, {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getListExpensesQueryKey(params) });
+        toast({ title: "Expense deleted" });
+      },
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto">
+        <DialogHeader className="print:hidden">
+          <DialogTitle className="flex items-center gap-2"><FileBarChart className="w-5 h-5" /> Expense Report</DialogTitle>
+          <DialogDescription>Filter by date range and category, then print if needed.</DialogDescription>
+        </DialogHeader>
+
+        {/* Print-only heading — hidden on screen, shown when printing */}
+        <div className="hidden print:block mb-2">
+          <h1 className="text-xl font-bold">Expense Report</h1>
+          <p className="text-sm text-muted-foreground">
+            {from} to {to}{categoryId !== "all" ? ` — ${activeCats.find((c) => String(c.id) === categoryId)?.name ?? ""}` : ""}
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-end gap-3 print:hidden">
+          <div>
+            <Label className="text-xs">From</Label>
+            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-40" data-testid="filter-from" />
+          </div>
+          <div>
+            <Label className="text-xs">To</Label>
+            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-40" data-testid="filter-to" />
+          </div>
+          <div>
+            <Label className="text-xs">Category</Label>
+            <Select value={categoryId} onValueChange={setCategoryId}>
+              <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All categories</SelectItem>
+                {activeCats.map((c) => (
+                  <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button variant="outline" size="sm" className="ml-auto" onClick={() => window.print()} data-testid="button-print-expense-report">
+            <Printer className="w-4 h-4 mr-1.5" /> Print
+          </Button>
+        </div>
+
+        <div className="flex items-center justify-between text-sm border-b pb-2">
+          <span className="text-muted-foreground">Total in range</span>
+          <span className="text-xl font-bold font-mono">{formatRs(list?.total ?? 0)}</span>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-3">
+          <Card className="lg:col-span-2 print:border-0 print:shadow-none">
+            <CardHeader className="print:hidden">
+              <CardTitle className="text-base flex items-center gap-2"><Receipt className="w-4 h-4" /> Expense Entries</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {isLoading ? (
+                <div className="p-12 text-center text-muted-foreground"><Loader2 className="w-6 h-6 animate-spin mx-auto" /></div>
+              ) : (list?.items ?? []).length === 0 ? (
+                <div className="p-12 text-center text-muted-foreground">No expenses in this range.</div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead>Paid To</TableHead>
+                      <TableHead>Mode</TableHead>
+                      <TableHead>Notes</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                      <TableHead className="print:hidden"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(list?.items ?? []).map((e) => (
+                      <TableRow key={e.id} data-testid={`row-expense-${e.id}`}>
+                        <TableCell className="text-xs">{e.date}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30">{e.categoryName}</Badge>
+                        </TableCell>
+                        <TableCell className="text-sm">{e.paidTo || "—"}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={MODE_TONE[e.paymentMode]}>{MODE_LABEL[e.paymentMode]}</Badge>
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">{e.notes || "—"}</TableCell>
+                        <TableCell className="text-right font-mono font-medium">{formatRs(e.amount)}</TableCell>
+                        <TableCell className="print:hidden">
+                          <Button size="sm" variant="ghost" onClick={() => handleDelete(e.id)} data-testid={`button-delete-expense-${e.id}`}>
+                            <Trash2 className="w-4 h-4 text-destructive" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="print:border-0 print:shadow-none print:break-inside-avoid">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+              <CardTitle className="text-base flex items-center gap-2">
+                {groupBy === "category" ? <Tag className="w-4 h-4" /> : <CalendarDays className="w-4 h-4" />}
+                By {groupBy === "category" ? "Category" : "Date"}
+              </CardTitle>
+              <div className="flex gap-1 print:hidden">
+                <Button
+                  size="sm"
+                  variant={groupBy === "category" ? "default" : "outline"}
+                  className="h-7 px-2 text-xs"
+                  onClick={() => setGroupBy("category")}
+                  data-testid="button-group-by-category"
+                >
+                  Category
+                </Button>
+                <Button
+                  size="sm"
+                  variant={groupBy === "date" ? "default" : "outline"}
+                  className="h-7 px-2 text-xs"
+                  onClick={() => setGroupBy("date")}
+                  data-testid="button-group-by-date"
+                >
+                  Date
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {groupBy === "category" ? (
+                (list?.byCategory ?? []).length === 0 ? (
+                  <div className="text-sm text-muted-foreground text-center py-6">No data.</div>
+                ) : (list?.byCategory ?? []).map((row) => {
+                  const pct = (list?.total ?? 0) > 0 ? (row.total / (list?.total ?? 1)) * 100 : 0;
+                  return (
+                    <div key={`${row.categoryId}-${row.categoryName}`} className="space-y-1">
+                      <div className="flex justify-between text-sm">
+                        <span className="font-medium">{row.categoryName}</span>
+                        <span className="font-mono">{formatRs(row.total)}</span>
+                      </div>
+                      <div className="h-2 bg-muted rounded print:hidden">
+                        <div className="h-full bg-primary rounded" style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                  );
+                })
+              ) : byDate.length === 0 ? (
+                <div className="text-sm text-muted-foreground text-center py-6">No data.</div>
+              ) : byDate.map((row) => {
+                const pct = (list?.total ?? 0) > 0 ? (row.total / (list?.total ?? 1)) * 100 : 0;
+                return (
+                  <div key={row.date} className="space-y-1">
+                    <div className="flex justify-between text-sm">
+                      <span className="font-medium">{row.date}</span>
+                      <span className="font-mono">{formatRs(row.total)}</span>
+                    </div>
+                    <div className="h-2 bg-muted rounded print:hidden">
+                      <div className="h-full bg-primary rounded" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+        </div>
       </DialogContent>
     </Dialog>
   );
