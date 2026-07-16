@@ -42,7 +42,8 @@ router.get("/products", async (req, res): Promise<void> => {
       or(
         ilike(productsTable.name, `%${search}%`),
         ilike(productsTable.itemCode, `%${search}%`),
-        ilike(productsTable.brand, `%${search}%`)
+        ilike(productsTable.brand, `%${search}%`),
+        ilike(productsTable.group, `%${search}%`)
       )
     );
   }
