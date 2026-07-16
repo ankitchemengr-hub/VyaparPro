@@ -21,7 +21,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Loader2, Trash2, Receipt, IndianRupee, Tag, FolderPlus } from "lucide-react";
+import { Plus, Loader2, Trash2, Receipt, IndianRupee, Tag, FolderPlus, CalendarDays } from "lucide-react";
 
 const formatRs = (n: number) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(n);
@@ -47,6 +47,7 @@ export default function ExpensesPage() {
   const [categoryId, setCategoryId] = useState<string>("all");
   const [open, setOpen] = useState(false);
   const [catOpen, setCatOpen] = useState(false);
+  const [groupBy, setGroupBy] = useState<"category" | "date">("category");
 
   const params = {
     from,
@@ -56,6 +57,16 @@ export default function ExpensesPage() {
   const { data: list, isLoading } = useListExpenses(params);
   const { data: categories } = useListExpenseCategories();
   const activeCats = useMemo(() => (categories ?? []).filter((c) => c.isActive), [categories]);
+
+  const byDate = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const e of list?.items ?? []) {
+      totals.set(e.date, (totals.get(e.date) ?? 0) + Number(e.amount));
+    }
+    return Array.from(totals.entries())
+      .map(([date, total]) => ({ date, total }))
+      .sort((a, b) => (a.date < b.date ? 1 : -1));
+  }, [list?.items]);
 
   const del = useDeleteExpense();
 
@@ -71,7 +82,7 @@ export default function ExpensesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Expenses</h1>
           <p className="text-muted-foreground text-sm mt-1">
@@ -79,10 +90,10 @@ export default function ExpensesPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setCatOpen(true)} data-testid="button-manage-categories">
+          <Button variant="outline" className="flex-1 sm:flex-none" onClick={() => setCatOpen(true)} data-testid="button-manage-categories">
             <FolderPlus className="w-4 h-4 mr-2" /> Categories
           </Button>
-          <Button onClick={() => setOpen(true)} data-testid="button-new-expense">
+          <Button className="flex-1 sm:flex-none" onClick={() => setOpen(true)} data-testid="button-new-expense">
             <Plus className="w-4 h-4 mr-2" /> Add Expense
           </Button>
         </div>
@@ -168,18 +179,58 @@ export default function ExpensesPage() {
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2"><Tag className="w-4 h-4" /> By Category</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+            <CardTitle className="text-base flex items-center gap-2">
+              {groupBy === "category" ? <Tag className="w-4 h-4" /> : <CalendarDays className="w-4 h-4" />}
+              By {groupBy === "category" ? "Category" : "Date"}
+            </CardTitle>
+            <div className="flex gap-1">
+              <Button
+                size="sm"
+                variant={groupBy === "category" ? "default" : "outline"}
+                className="h-7 px-2 text-xs"
+                onClick={() => setGroupBy("category")}
+                data-testid="button-group-by-category"
+              >
+                Category
+              </Button>
+              <Button
+                size="sm"
+                variant={groupBy === "date" ? "default" : "outline"}
+                className="h-7 px-2 text-xs"
+                onClick={() => setGroupBy("date")}
+                data-testid="button-group-by-date"
+              >
+                Date
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="space-y-2">
-            {(list?.byCategory ?? []).length === 0 ? (
+            {groupBy === "category" ? (
+              (list?.byCategory ?? []).length === 0 ? (
+                <div className="text-sm text-muted-foreground text-center py-6">No data.</div>
+              ) : (list?.byCategory ?? []).map((row) => {
+                const pct = (list?.total ?? 0) > 0 ? (row.total / (list?.total ?? 1)) * 100 : 0;
+                return (
+                  <div key={`${row.categoryId}-${row.categoryName}`} className="space-y-1">
+                    <div className="flex justify-between text-sm">
+                      <span className="font-medium">{row.categoryName}</span>
+                      <span className="font-mono">{formatRs(row.total)}</span>
+                    </div>
+                    <div className="h-2 bg-muted rounded">
+                      <div className="h-full bg-primary rounded" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })
+            ) : byDate.length === 0 ? (
               <div className="text-sm text-muted-foreground text-center py-6">No data.</div>
-            ) : (list?.byCategory ?? []).map((row) => {
+            ) : byDate.map((row) => {
               const pct = (list?.total ?? 0) > 0 ? (row.total / (list?.total ?? 1)) * 100 : 0;
               return (
-                <div key={`${row.categoryId}-${row.categoryName}`} className="space-y-1">
+                <div key={row.date} className="space-y-1">
                   <div className="flex justify-between text-sm">
-                    <span className="font-medium">{row.categoryName}</span>
+                    <span className="font-medium">{row.date}</span>
                     <span className="font-mono">{formatRs(row.total)}</span>
                   </div>
                   <div className="h-2 bg-muted rounded">
