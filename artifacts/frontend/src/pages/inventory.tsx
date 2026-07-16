@@ -431,7 +431,7 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
           {/* ── Tab 1: Details ── */}
           <TabsContent value="details" className="space-y-4 pt-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="col-span-2 space-y-1.5">
+              <div className="sm:col-span-2 space-y-1.5">
                 <Label>Product Name *</Label>
                 <Input
                   value={form.name}
@@ -576,8 +576,8 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
                 <p className="text-xs font-medium text-blue-700 dark:text-blue-400">
                   GST Price → Auto-calculate Wholesale Price
                 </p>
-                <div className="flex items-end gap-2">
-                  <div className="flex-1 space-y-1">
+                <div className="flex flex-col sm:flex-row sm:items-end gap-2">
+                  <div className="flex-1 min-w-0 space-y-1">
                     <Label className="text-xs">GST Price / Market Rate (₹)</Label>
                     <Input
                       type="number" min={0}
@@ -594,10 +594,10 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
                       placeholder="e.g. 105"
                     />
                   </div>
-                  <div className="text-xs text-muted-foreground pb-2">
+                  <div className="text-xs text-muted-foreground sm:pb-2 text-center sm:text-left">
                     ÷ (1 + {form.taxRate || 0}%) =
                   </div>
-                  <div className="flex-1 space-y-1">
+                  <div className="flex-1 min-w-0 space-y-1">
                     <Label className="text-xs">Base Wholesale Price (₹)</Label>
                     <Input
                       type="number"
@@ -777,16 +777,16 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
               />
 
               {imagePreview ? (
-                <div className="relative w-full rounded-lg border overflow-hidden bg-muted/30 flex items-center gap-4 p-3">
+                <div className="relative w-full rounded-lg border overflow-hidden bg-muted/30 flex flex-col sm:flex-row items-center sm:items-center gap-3 sm:gap-4 p-3">
                   <img
                     src={imagePreview}
                     alt="Product preview"
                     className="w-24 h-24 object-contain rounded border bg-white shrink-0"
                   />
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 w-full text-center sm:text-left">
                     <p className="text-sm font-medium">Image selected</p>
                     <p className="text-xs text-muted-foreground mt-0.5">Click to replace or remove</p>
-                    <div className="flex gap-2 mt-2">
+                    <div className="flex flex-wrap justify-center sm:justify-start gap-2 mt-2">
                       <Button
                         type="button"
                         size="sm"
