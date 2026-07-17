@@ -31,7 +31,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Search, Plus, Minus, ShoppingCart, Phone, User, CheckCircle, UserPlus, Loader2, X, SlidersHorizontal } from "lucide-react";
+import { Search, Plus, Minus, ShoppingCart, Phone, User, CheckCircle, UserPlus, Loader2, X, SlidersHorizontal, ZoomIn } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getLookupEntityByMobileQueryKey } from "@workspace/api-client-react";
 import { useForm } from "react-hook-form";
@@ -46,6 +46,7 @@ export default function Catalog() {
   // Multi-product cart: productId -> quantity
   const [cart, setCart] = useState<Record<number, number>>({});
   const [showFilters, setShowFilters] = useState(false);
+  const [zoomImage, setZoomImage] = useState<{ url: string; name: string } | null>(null);
 
   // Cart review dialog (shown before customer lookup)
   const [showCartReview, setShowCartReview] = useState(false);
@@ -441,7 +442,18 @@ const proceedToOrderWithCustomer = (customer: any) => {
                 >
                   <div className="aspect-square bg-muted flex items-center justify-center relative p-1 sm:p-2">
                     {product.imageUrl ? (
-                      <img src={product.imageUrl} alt={product.name} className="object-contain h-full w-full" />
+                      <button
+                        type="button"
+                        className="group relative h-full w-full cursor-zoom-in"
+                        onClick={() => setZoomImage({ url: product.imageUrl!, name: product.name })}
+                        data-testid={`button-zoom-product-${product.id}`}
+                        aria-label={`View larger image of ${product.name}`}
+                      >
+                        <img src={product.imageUrl} alt={product.name} className="object-contain h-full w-full" />
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/10 transition-colors">
+                          <ZoomIn className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 drop-shadow transition-opacity" />
+                        </div>
+                      </button>
                     ) : (
                       <div className="w-16 h-16 opacity-10 text-foreground">
                         <ShoppingCart className="w-full h-full" />
@@ -919,6 +931,20 @@ const proceedToOrderWithCustomer = (customer: any) => {
                 </Form>
               </div>
             </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Product Image Zoom ── */}
+      <Dialog open={!!zoomImage} onOpenChange={(open) => { if (!open) setZoomImage(null); }}>
+        <DialogContent className="max-w-lg p-2">
+          <DialogTitle className="sr-only">{zoomImage?.name}</DialogTitle>
+          {zoomImage && (
+            <img
+              src={zoomImage.url}
+              alt={zoomImage.name}
+              className="w-full h-auto max-h-[80vh] object-contain rounded"
+            />
           )}
         </DialogContent>
       </Dialog>
