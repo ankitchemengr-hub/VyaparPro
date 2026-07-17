@@ -3166,6 +3166,76 @@ export const useUpdateEntity = <TError = ErrorType<unknown>,
       return useMutation(getUpdateEntityMutationOptions(options));
     }
 
+export const getDeleteEntityUrl = (id: number,) => {
+
+
+
+
+  return `/api/entities/${id}`
+}
+
+/**
+ * @summary Permanently delete an entity (admin only; blocked if referenced by invoices/payments/purchases/rewards/ledger history)
+ */
+export const deleteEntity = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteEntityUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteEntityMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteEntity>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteEntity>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteEntity'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteEntity>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteEntity(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteEntityMutationResult = NonNullable<Awaited<ReturnType<typeof deleteEntity>>>
+
+    export type DeleteEntityMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Permanently delete an entity (admin only; blocked if referenced by invoices/payments/purchases/rewards/ledger history)
+ */
+export const useDeleteEntity = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteEntity>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteEntity>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteEntityMutationOptions(options));
+    }
+
 export const getGetEntityLedgerUrl = (id: number,) => {
 
 

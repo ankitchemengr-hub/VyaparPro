@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, and, sql, or, ne } from "drizzle-orm";
 import { db, pool } from "@workspace/db";
-import { entitiesTable, ledgerEntriesTable } from "@workspace/db";
+import { entitiesTable, ledgerEntriesTable, customerOrdersTable } from "@workspace/db";
 import {
   ListEntitiesQueryParams,
   CreateEntityBody,
@@ -9,6 +9,7 @@ import {
   GetEntityParams,
   UpdateEntityParams,
   UpdateEntityBody,
+  DeleteEntityParams,
   GetEntityLedgerParams,
   CreateLedgerAdjustmentParams,
   CreateLedgerAdjustmentBody,
@@ -260,6 +261,65 @@ router.patch("/entities/:id", async (req, res): Promise<void> => {
   }
 
   res.json({ ...formatEntity(entity), assignedSalesmanName });
+});
+
+// DELETE /entities/:id — admin only. A genuine hard delete, not a soft
+// deactivate: entities' FKs (invoices.customerId, payments.customerId,
+// purchases.vendorId, rewards.customerId, ledger_entries.entityId) have no
+// ON DELETE cascade/set-null, so Postgres itself blocks deleting an entity
+// that has any real transaction/ledger history — we just turn that FK
+// violation into a readable error instead of a raw DB message.
+router.delete("/entities/:id", async (req, res): Promise<void> => {
+  const session = (req as any).session;
+  if (session?.role !== "admin") {
+    res.status(403).json({ error: "Only admin can permanently delete a customer/vendor" });
+    return;
+  }
+
+  const params = DeleteEntityParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const companyId = getCompanyId(req);
+  try {
+    // customer_orders.entity_id has no DB-level FK (unlike invoices/payments/
+    // purchases/rewards/ledger_entries), so Postgres won't block this case —
+    // check it ourselves, otherwise a deleted entity would leave orders with
+    // a silently dangling entity_id.
+    const [order] = await db
+      .select({ id: customerOrdersTable.id })
+      .from(customerOrdersTable)
+      .where(and(eq(customerOrdersTable.companyId, companyId), eq(customerOrdersTable.entityId, params.data.id)))
+      .limit(1);
+    if (order) {
+      res.status(409).json({
+        error: "Cannot delete — this customer/vendor has existing customer orders that must be preserved.",
+      });
+      return;
+    }
+
+    const [deleted] = await db
+      .delete(entitiesTable)
+      .where(and(eq(entitiesTable.companyId, companyId), eq(entitiesTable.id, params.data.id)))
+      .returning({ id: entitiesTable.id });
+
+    if (!deleted) {
+      res.status(404).json({ error: "Entity not found" });
+      return;
+    }
+    res.sendStatus(204);
+  } catch (err: any) {
+    if (err?.code === "23503") {
+      res.status(409).json({
+        error: "Cannot delete — this customer/vendor has existing invoices, payments, purchases, rewards, or ledger history that must be preserved.",
+      });
+      return;
+    }
+    logger.error({ err }, "DELETE /entities/:id failed");
+    res.status(500).json({ error: "Failed to delete entity" });
+  }
 });
 
 // GET /entities/:id/ledger

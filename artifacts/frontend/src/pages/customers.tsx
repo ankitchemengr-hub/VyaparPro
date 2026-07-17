@@ -4,9 +4,11 @@ import {
   useListEntities,
   useCreateEntity,
   useUpdateEntity,
+  useDeleteEntity,
   getListEntitiesQueryKey,
   EntityType,
 } from "@workspace/api-client-react";
+import { useAuth } from "@/contexts/use-auth";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
@@ -18,10 +20,14 @@ import {
   DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
 } from "@/components/ui/form";
 import { Link } from "wouter";
-import { Search, UserPlus, Pencil, Loader2, RefreshCw, MessageCircle, MapPin } from "lucide-react";
+import { Search, UserPlus, Pencil, Loader2, RefreshCw, MessageCircle, MapPin, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -70,6 +76,8 @@ type EditFormValues = {
 };
 
 export default function Customers() {
+  const { hasRole } = useAuth();
+  const isAdmin = hasRole(["admin"]);
   const [search, setSearch] = useState("");
   const [type, setType] = useState<FilterType>("customer");
   const [sort, setSort] = useState("name_asc");
@@ -77,6 +85,7 @@ export default function Customers() {
   const [assignedSalesmanId, setAssignedSalesmanId] = useState<string>("");
 
   const [editingEntity, setEditingEntity] = useState<any | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
   const [editSalesmanId, setEditSalesmanId] = useState<string>("");
   const [editWaNumber, setEditWaNumber] = useState<string>("");
   const [gstFetching, setGstFetching] = useState(false);
@@ -130,6 +139,30 @@ export default function Customers() {
 
   const createEntity = useCreateEntity();
   const updateEntity = useUpdateEntity();
+  const deleteEntity = useDeleteEntity();
+
+  const confirmDelete = () => {
+    if (!deleteTarget) return;
+    deleteEntity.mutate(
+      { id: deleteTarget.id },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getListEntitiesQueryKey() });
+          toast({ title: `Deleted "${deleteTarget.name}"` });
+          setDeleteTarget(null);
+          setEditingEntity(null);
+        },
+        onError: async (err: any) => {
+          let desc = err?.message ?? "Server error";
+          try {
+            const body = err?.response ? await err.response.json() : null;
+            if (body?.error) desc = String(body.error).slice(0, 300);
+          } catch {}
+          toast({ title: "Failed to delete", description: desc, variant: "destructive" });
+        },
+      },
+    );
+  };
 
   const form = useForm({
     defaultValues: {
@@ -958,6 +991,18 @@ export default function Customers() {
               </div>
 
               <DialogFooter className="pt-2">
+                {isAdmin && (
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    className="sm:mr-auto"
+                    onClick={() => setDeleteTarget(editingEntity)}
+                    data-testid="button-delete-entity"
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete Permanently
+                  </Button>
+                )}
                 <Button type="button" variant="outline" onClick={() => setEditingEntity(null)} disabled={updateEntity.isPending}>
                   Cancel
                 </Button>
@@ -970,6 +1015,29 @@ export default function Customers() {
           </Form>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(v) => { if (!v) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Permanently delete {deleteTarget?.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This cannot be undone — the record itself is removed, not just deactivated.
+              If this customer/vendor has any invoices, payments, purchases, rewards, or ledger history, deletion will be blocked by the server to protect that history.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              disabled={deleteEntity.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteEntity.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Delete Permanently
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

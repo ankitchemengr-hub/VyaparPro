@@ -999,6 +999,16 @@ export const UpdateEntityResponse = zod.object({
 
 
 /**
+ * @summary Permanently delete an entity (admin only; blocked if referenced by invoices/payments/purchases/rewards/ledger history)
+ */
+export const DeleteEntityParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteEntityResponse = zod.void()
+
+
+/**
  * @summary Get customer ledger
  */
 export const GetEntityLedgerParams = zod.object({
