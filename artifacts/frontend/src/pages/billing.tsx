@@ -10,10 +10,15 @@ import {
   useListAccounts,
   useListEntities,
   useGetPrintSettings,
+  useLookupEntityByMobile,
+  useCreateEntity,
+  useUpdateEntity,
   getListInvoicesQueryKey,
   getListPaymentsQueryKey,
   getListAccountsQueryKey,
   getGetInvoiceQueryKey,
+  getLookupEntityByMobileQueryKey,
+  getListEntitiesQueryKey,
   type PaymentInputMode,
 } from "@workspace/api-client-react";
 import { InvoiceTemplateRenderer } from "@/components/invoice-templates/InvoiceTemplateRenderer";
@@ -33,9 +38,12 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog";
+import {
   Trash2, Printer, Save, CheckCircle, Loader2, User, Phone, MapPin,
   ArrowLeft, Banknote, CreditCard, Building2, Smartphone, Clock, SkipForward,
-  Search, Plus,
+  Search, Plus, Pencil, UserPlus,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -114,6 +122,8 @@ export default function Billing() {
   const [customer, setCustomer] = useState<any>(() => {
     try { return params.customer ? JSON.parse(decodeURIComponent(params.customer)) : null; } catch { return null; }
   });
+  const [showCustomerSearch, setShowCustomerSearch] = useState(false);
+  const [showCustomerEdit, setShowCustomerEdit] = useState(false);
   const [docType, setDocType] = useState<string>("invoice");
   const [invoiceSubtype, setInvoiceSubtype] = useState<"gst" | "non_gst">(
     () => (params.invoiceType === "non_gst" ? "non_gst" : "gst")
@@ -712,12 +722,19 @@ export default function Billing() {
                       {Number(customer.outstandingBalance) > 0 && <Badge variant="destructive" className="text-[10px]">Outstanding: ₹{Number(customer.outstandingBalance).toLocaleString()}</Badge>}
                     </div>
                   </div>
-                  <Button variant="ghost" size="sm" onClick={() => setLocation("/catalog")} className="text-xs shrink-0">Change</Button>
+                  <div className="flex flex-col gap-1 shrink-0">
+                    {customer.id != null && (
+                      <Button variant="outline" size="sm" onClick={() => setShowCustomerEdit(true)} className="text-xs" data-testid="button-edit-customer">
+                        <Pencil className="w-3 h-3 mr-1.5" /> Edit
+                      </Button>
+                    )}
+                    <Button variant="ghost" size="sm" onClick={() => setShowCustomerSearch(true)} className="text-xs" data-testid="button-change-customer">Change</Button>
+                  </div>
                 </div>
               ) : (
                 <div className="text-muted-foreground text-sm flex items-center gap-2">
                   <User className="w-4 h-4" /> Walk-in / Cash customer
-                  <Button variant="link" size="sm" className="p-0 h-auto text-xs" onClick={() => setLocation("/catalog")}>Change</Button>
+                  <Button variant="link" size="sm" className="p-0 h-auto text-xs" onClick={() => setShowCustomerSearch(true)} data-testid="button-change-customer">Change</Button>
                 </div>
               )}
             </CardContent>
@@ -1024,6 +1041,276 @@ export default function Billing() {
         templateId={printSettings.defaultTemplate}
       />
     )}
+
+    <CustomerSearchDialog
+      open={showCustomerSearch}
+      onOpenChange={setShowCustomerSearch}
+      onSelect={(c) => {
+        setCustomer(c);
+        if (c?.state) setPlaceOfSupply(c.state);
+        setShowCustomerSearch(false);
+      }}
+    />
+    <CustomerEditDialog
+      open={showCustomerEdit}
+      onOpenChange={setShowCustomerEdit}
+      customer={customer}
+      onSaved={(updated) => {
+        setCustomer(updated);
+        if (updated?.state) setPlaceOfSupply(updated.state);
+        setShowCustomerEdit(false);
+      }}
+    />
     </>
+  );
+}
+
+function CustomerSearchDialog({
+  open, onOpenChange, onSelect,
+}: {
+  open: boolean;
+  onOpenChange: (b: boolean) => void;
+  onSelect: (customer: any) => void;
+}) {
+  const { toast } = useToast();
+  const [mobileInput, setMobileInput] = useState("");
+  const [searchMobile, setSearchMobile] = useState("");
+  const [step, setStep] = useState<"mobile" | "found" | "not_found">("mobile");
+  const [foundCustomer, setFoundCustomer] = useState<any>(null);
+  const [newCustomer, setNewCustomer] = useState({
+    name: "", gstin: "", address: "", city: "", state: "Maharashtra", pricingTier: "retail" as "retail" | "wholesale",
+  });
+
+  const reset = () => {
+    setMobileInput(""); setSearchMobile(""); setStep("mobile"); setFoundCustomer(null);
+    setNewCustomer({ name: "", gstin: "", address: "", city: "", state: "Maharashtra", pricingTier: "retail" });
+  };
+
+  const { data: lookupResult, isFetching: isLooking } = useLookupEntityByMobile(
+    { mobile: searchMobile },
+    { query: { enabled: searchMobile.length === 10, queryKey: getLookupEntityByMobileQueryKey({ mobile: searchMobile }) } }
+  );
+
+  if (lookupResult !== undefined && searchMobile && step === "mobile" && !isLooking) {
+    if (lookupResult.found && lookupResult.entity) {
+      setFoundCustomer(lookupResult.entity);
+      setStep("found");
+    } else {
+      setStep("not_found");
+    }
+  }
+
+  const handleLookup = () => {
+    if (mobileInput.length !== 10) return;
+    setSearchMobile(mobileInput);
+  };
+
+  const createEntity = useCreateEntity();
+  const queryClient = useQueryClient();
+
+  const handleCreate = () => {
+    createEntity.mutate(
+      { data: { type: "customer", mobile: mobileInput, ...newCustomer } },
+      {
+        onSuccess: (created) => {
+          queryClient.invalidateQueries({ queryKey: getListEntitiesQueryKey() });
+          toast({ title: "Customer added" });
+          onSelect(created);
+          reset();
+        },
+        onError: (err: any) => toast({ title: "Failed to add customer", description: err?.message, variant: "destructive" }),
+      }
+    );
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) reset(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><Search className="w-4 h-4" /> Change Customer</DialogTitle>
+          <DialogDescription>Search by mobile number, or register a new customer.</DialogDescription>
+        </DialogHeader>
+
+        {step === "mobile" && (
+          <div className="space-y-3">
+            <div className="flex gap-2">
+              <Input
+                placeholder="10-digit mobile number"
+                value={mobileInput}
+                maxLength={10}
+                onChange={(e) => { setMobileInput(e.target.value.replace(/\D/g, "")); setSearchMobile(""); }}
+                onKeyDown={(e) => { if (e.key === "Enter") handleLookup(); }}
+                className="font-mono tracking-wider"
+                data-testid="input-customer-search-mobile"
+              />
+              <Button onClick={handleLookup} disabled={mobileInput.length !== 10 || isLooking} data-testid="button-lookup-customer">
+                {isLooking ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+              </Button>
+            </div>
+            <Button variant="outline" className="w-full" onClick={() => onSelect(null)} data-testid="button-select-walkin">
+              Walk-in / Cash Customer
+            </Button>
+          </div>
+        )}
+
+        {step === "found" && foundCustomer && (
+          <div className="space-y-3">
+            <div className="bg-muted rounded-lg p-4 space-y-1">
+              <div className="font-semibold">{foundCustomer.name}</div>
+              <div className="text-sm text-muted-foreground flex items-center gap-1"><Phone className="w-3 h-3" />{foundCustomer.mobile}</div>
+              <Badge variant="outline" className="capitalize text-[10px] mt-1">{foundCustomer.pricingTier} pricing</Badge>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={() => { setStep("mobile"); setSearchMobile(""); }}>Change</Button>
+              <Button className="flex-1" onClick={() => { onSelect(foundCustomer); reset(); }} data-testid="button-confirm-customer">Select</Button>
+            </div>
+          </div>
+        )}
+
+        {step === "not_found" && (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">No customer registered for {mobileInput}. Register one now:</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2 space-y-1">
+                <Label className="text-xs">Name</Label>
+                <Input value={newCustomer.name} onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })} placeholder="Business / customer name" data-testid="input-new-customer-name" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">GSTIN</Label>
+                <Input value={newCustomer.gstin} onChange={(e) => setNewCustomer({ ...newCustomer, gstin: e.target.value })} placeholder="Optional" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Pricing Tier</Label>
+                <Select value={newCustomer.pricingTier} onValueChange={(v) => setNewCustomer({ ...newCustomer, pricingTier: v as "retail" | "wholesale" })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="retail">Retail</SelectItem>
+                    <SelectItem value="wholesale">Wholesale</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="col-span-2 space-y-1">
+                <Label className="text-xs">Address</Label>
+                <Input value={newCustomer.address} onChange={(e) => setNewCustomer({ ...newCustomer, address: e.target.value })} placeholder="Street address" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">City</Label>
+                <Input value={newCustomer.city} onChange={(e) => setNewCustomer({ ...newCustomer, city: e.target.value })} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">State</Label>
+                <Input value={newCustomer.state} onChange={(e) => setNewCustomer({ ...newCustomer, state: e.target.value })} />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={() => { setStep("mobile"); setSearchMobile(""); }}>Back</Button>
+              <Button className="flex-1" onClick={handleCreate} disabled={createEntity.isPending} data-testid="button-save-new-customer">
+                {createEntity.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <UserPlus className="w-4 h-4 mr-2" />}
+                Register & Select
+              </Button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function CustomerEditDialog({
+  open, onOpenChange, customer, onSaved,
+}: {
+  open: boolean;
+  onOpenChange: (b: boolean) => void;
+  customer: any;
+  onSaved: (customer: any) => void;
+}) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const updateEntity = useUpdateEntity();
+  const [form, setForm] = useState({
+    name: "", mobile: "", gstin: "", address: "", city: "", state: "", pricingTier: "retail" as "retail" | "wholesale",
+  });
+
+  useEffect(() => {
+    if (open && customer) {
+      setForm({
+        name: customer.name ?? "",
+        mobile: customer.mobile ?? "",
+        gstin: customer.gstin ?? "",
+        address: customer.address ?? "",
+        city: customer.city ?? "",
+        state: customer.state ?? "",
+        pricingTier: customer.pricingTier === "wholesale" ? "wholesale" : "retail",
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, customer?.id]);
+
+  const handleSave = () => {
+    if (!customer?.id) return;
+    updateEntity.mutate(
+      { id: customer.id, data: { ...form, name: form.name.trim(), mobile: form.mobile.trim() } },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getListEntitiesQueryKey() });
+          toast({ title: "Customer updated" });
+          onSaved({ ...customer, ...form });
+        },
+        onError: (err: any) => toast({ title: "Update failed", description: err?.message, variant: "destructive" }),
+      }
+    );
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><Pencil className="w-4 h-4" /> Edit Customer</DialogTitle>
+          <DialogDescription>Update this customer's details.</DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="col-span-2 space-y-1">
+            <Label className="text-xs">Name</Label>
+            <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} data-testid="input-edit-customer-name" />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Mobile</Label>
+            <Input value={form.mobile} maxLength={10} onChange={(e) => setForm({ ...form, mobile: e.target.value.replace(/\D/g, "") })} data-testid="input-edit-customer-mobile" />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">GSTIN</Label>
+            <Input value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value })} />
+          </div>
+          <div className="col-span-2 space-y-1">
+            <Label className="text-xs">Address</Label>
+            <Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">City</Label>
+            <Input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">State</Label>
+            <Input value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} />
+          </div>
+          <div className="col-span-2 space-y-1">
+            <Label className="text-xs">Pricing Tier</Label>
+            <Select value={form.pricingTier} onValueChange={(v) => setForm({ ...form, pricingTier: v as "retail" | "wholesale" })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="retail">Retail</SelectItem>
+                <SelectItem value="wholesale">Wholesale</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button onClick={handleSave} disabled={updateEntity.isPending} data-testid="button-save-customer-edit">
+            {updateEntity.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
