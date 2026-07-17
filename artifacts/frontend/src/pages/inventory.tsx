@@ -21,15 +21,28 @@ import { useQueryClient } from "@tanstack/react-query";
 import { getListProductsQueryKey } from "@workspace/api-client-react";
 import {
   PackageSearch, PackagePlus, Upload, X, ImageIcon, Loader2, ChevronRight,
-  Pencil, Trash2, Save,
+  Pencil, Trash2, Save, Eye, EyeOff,
 } from "lucide-react";
 
 export default function Inventory() {
+  const { hasRole } = useAuth();
+  const isAdmin = hasRole(["admin"]);
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [editProduct, setEditProduct] = useState<any | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  const [showValue, setShowValue] = useState(false);
   const { data: products, isLoading } = useListProducts({ search: search || undefined });
+  // Unfiltered product list, used only to total the whole inventory's value —
+  // independent of whatever search text is narrowing the table below.
+  const { data: allProducts } = useListProducts(
+    {},
+    { query: { enabled: isAdmin, queryKey: getListProductsQueryKey({}) } },
+  );
+  const totalValue = (allProducts ?? []).reduce(
+    (sum, p) => sum + Number(p.currentStock ?? 0) * Number(p.purchasePrice ?? 0),
+    0,
+  );
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const deleteProduct = useDeleteProduct();
@@ -58,13 +71,38 @@ export default function Inventory() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <h1 className="text-3xl font-bold tracking-tight">Inventory Management</h1>
         <Button onClick={() => setAddOpen(true)} data-testid="button-add-product">
           <PackagePlus className="h-4 w-4 mr-2" />
           Add Product
         </Button>
       </div>
+
+      {isAdmin && (
+        <Card className="max-w-xs">
+          <CardContent className="p-4 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-xs text-muted-foreground">Total Inventory Value</div>
+              <div className="text-xl font-bold font-mono break-all" data-testid="text-inventory-total-value">
+                {showValue
+                  ? `₹${totalValue.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                  : "₹ •••••••"}
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="shrink-0"
+              onClick={() => setShowValue((v) => !v)}
+              data-testid="button-toggle-inventory-value"
+              aria-label={showValue ? "Hide inventory value" : "Show inventory value"}
+            >
+              {showValue ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="flex gap-4">
         <div className="relative w-full max-w-sm">
