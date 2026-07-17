@@ -1815,6 +1815,23 @@ paths:
         "403":
           description: Forbidden
 
+  /dashboard/liters-trend:
+    get:
+      operationId: getLitersTrend
+      tags: [dashboard]
+      summary: Admin-only last 12 months of total liters sold, for a growth chart
+      responses:
+        "200":
+          description: Monthly liters totals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LitersTrendPoint"
+        "403":
+          description: Forbidden
+
   # REPORTS
   /reports/ledger:
     get:
@@ -4916,6 +4933,16 @@ components:
         thisMonth:
           type: number
           description: Total liters sold this calendar month (saved invoices only)
+
+    LitersTrendPoint:
+      type: object
+      required: [month, liters]
+      properties:
+        month:
+          type: string
+          description: "YYYY-MM"
+        liters:
+          type: number
 
     SalesTrendPoint:
       type: object

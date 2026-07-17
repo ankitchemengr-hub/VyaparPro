@@ -102,6 +102,7 @@ import type {
   ListWorkersParams,
   ListWorkloadCardsParams,
   LitersSold,
+  LitersTrendPoint,
   LoginInput,
   LookupEntityByMobileParams,
   LookupGstinParams,
@@ -6865,6 +6866,83 @@ export function useGetLitersSold<TData = Awaited<ReturnType<typeof getLitersSold
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetLitersSoldQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetLitersTrendUrl = () => {
+
+
+
+
+  return `/api/dashboard/liters-trend`
+}
+
+/**
+ * @summary Admin-only last 12 months of total liters sold, for a growth chart
+ */
+export const getLitersTrend = async ( options?: RequestInit): Promise<LitersTrendPoint[]> => {
+
+  return customFetch<LitersTrendPoint[]>(getGetLitersTrendUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetLitersTrendQueryKey = () => {
+    return [
+    `/api/dashboard/liters-trend`
+    ] as const;
+    }
+
+
+export const getGetLitersTrendQueryOptions = <TData = Awaited<ReturnType<typeof getLitersTrend>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLitersTrend>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetLitersTrendQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLitersTrend>>> = ({ signal }) => getLitersTrend({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getLitersTrend>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetLitersTrendQueryResult = NonNullable<Awaited<ReturnType<typeof getLitersTrend>>>
+export type GetLitersTrendQueryError = ErrorType<void>
+
+
+/**
+ * @summary Admin-only last 12 months of total liters sold, for a growth chart
+ */
+
+export function useGetLitersTrend<TData = Awaited<ReturnType<typeof getLitersTrend>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLitersTrend>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetLitersTrendQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

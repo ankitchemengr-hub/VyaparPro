@@ -296,6 +296,38 @@ router.get("/dashboard/liters-sold", async (req, res): Promise<void> => {
   });
 });
 
+// GET /dashboard/liters-trend (admin only) — last 12 calendar months of total
+// liters sold, for a month-over-month growth chart. Same unit-agnostic
+// invoice_items.total_liters figure as /dashboard/liters-sold above.
+router.get("/dashboard/liters-trend", async (req, res): Promise<void> => {
+  const role = (req as any).session?.role;
+  if (role !== "admin") {
+    res.status(403).json({ error: "Admin only" });
+    return;
+  }
+
+  const companyId = getCompanyId(req);
+  const rows = await queryMany(
+    `WITH months AS (
+       SELECT to_char(date_trunc('month', (CURRENT_DATE - (n || ' months')::interval)), 'YYYY-MM') AS month
+       FROM generate_series(0, 11) AS n
+     )
+     SELECT m.month, COALESCE(SUM(ii.total_liters), 0) AS liters
+     FROM months m
+     LEFT JOIN invoices i
+       ON to_char(i.invoice_date, 'YYYY-MM') = m.month AND i.company_id = $1 AND i.status = 'saved'
+     LEFT JOIN invoice_items ii ON ii.invoice_id = i.id
+     GROUP BY m.month
+     ORDER BY m.month ASC`,
+    [companyId]
+  );
+
+  res.json(rows.map((r) => ({
+    month: r.month,
+    liters: Number(r.liters ?? 0),
+  })));
+});
+
 // GET /reports/ledger
 router.get("/reports/ledger", async (req, res): Promise<void> => {
   const role = (req as any).session?.role;

@@ -8,8 +8,13 @@ import {
   getGetCapitalSnapshotQueryKey,
   useGetLitersSold,
   getGetLitersSoldQueryKey,
+  useGetLitersTrend,
+  getGetLitersTrendQueryKey,
   useListWorkloadCards,
 } from "@workspace/api-client-react";
+import {
+  ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip,
+} from "recharts";
 import {
   IndianRupee,
   AlertTriangle,
@@ -51,6 +56,9 @@ export default function Dashboard() {
   });
   const { data: litersSold, isLoading: isLoadingLiters } = useGetLitersSold({
     query: { queryKey: getGetLitersSoldQueryKey(), enabled: isAdmin },
+  });
+  const { data: litersTrend } = useGetLitersTrend({
+    query: { queryKey: getGetLitersTrendQueryKey(), enabled: isAdmin },
   });
   const { data: workloadCards } = useListWorkloadCards();
   const assembledItems = (workloadCards ?? []).filter((c: any) => c.status === "pending");
@@ -208,6 +216,35 @@ export default function Dashboard() {
         </div>
       ) : null}
 
+      {isAdmin && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Droplets className="h-5 w-5 text-sky-600" />
+              <CardTitle>Growth in Liters per Month</CardTitle>
+            </div>
+            <CardDescription>Total liters sold each of the last 12 months.</CardDescription>
+          </CardHeader>
+          <CardContent className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={litersTrend ?? []}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis
+                  dataKey="month"
+                  fontSize={11}
+                  tickFormatter={(m: string) => {
+                    const [y, mo] = m.split("-");
+                    return new Date(Number(y), Number(mo) - 1, 1).toLocaleString(undefined, { month: "short" });
+                  }}
+                />
+                <YAxis fontSize={11} allowDecimals={false} />
+                <Tooltip formatter={(v: number) => [`${Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 })} L`, "Liters"]} />
+                <Line type="monotone" dataKey="liters" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

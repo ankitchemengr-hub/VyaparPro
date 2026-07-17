@@ -1992,6 +1992,12 @@ export interface LitersSold {
   thisMonth: number;
 }
 
+export interface LitersTrendPoint {
+  /** YYYY-MM */
+  month: string;
+  liters: number;
+}
+
 export interface SalesTrendPoint {
   /** ISO date (YYYY-MM-DD) for this trend point */
   date: string;

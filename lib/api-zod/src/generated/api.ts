@@ -2508,6 +2508,16 @@ export const GetLitersSoldResponse = zod.object({
 
 
 /**
+ * @summary Admin-only last 12 months of total liters sold, for a growth chart
+ */
+export const GetLitersTrendResponseItem = zod.object({
+  "month": zod.string().describe('YYYY-MM'),
+  "liters": zod.number()
+})
+export const GetLitersTrendResponse = zod.array(GetLitersTrendResponseItem)
+
+
+/**
  * @summary Ledger report
  */
 export const GetLedgerReportQueryParams = zod.object({
