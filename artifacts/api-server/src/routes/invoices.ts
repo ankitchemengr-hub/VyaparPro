@@ -21,16 +21,31 @@ import {
   DeleteInvoiceParams,
 } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
-import { generateSeriesNumber } from "../lib/number-series";
+import { generateSeriesNumber, type SeriesType } from "../lib/number-series";
 import { getCompanyId } from "../lib/tenant";
 
 const router: IRouter = Router();
 
-// Invoice numbers come from the configurable `invoice` series (see number-series.ts).
-// The series engine seeds itself from the legacy invoice_sequence counter on first
-// use, so the running number is preserved across the cutover.
-async function generateInvoiceNumber(client: any, companyId: number): Promise<string> {
-  return generateSeriesNumber(client, "invoice", companyId);
+// Invoice numbers come from the configurable per-document-type series (see
+// number-series.ts / Settings > Document Sequences) — a GST invoice follows
+// its own "gst_invoice" sequence, not the generic "invoice" one, and other
+// doc types (quotation, proforma, etc.) each follow their own series too.
+// The "invoice" series itself seeds from the legacy invoice_sequence counter
+// on first use, so the running number is preserved across the cutover.
+function seriesTypeForInvoiceType(invoiceType: string): SeriesType {
+  switch (invoiceType) {
+    case "gst": return "gst_invoice";
+    case "quotation": return "quotation";
+    case "proforma_invoice": return "proforma_invoice";
+    case "bill_of_supply": return "bill_of_supply";
+    case "delivery_challan": return "delivery_challan";
+    case "sale_order": return "sale_order";
+    default: return "invoice"; // non_gst and anything else
+  }
+}
+
+async function generateInvoiceNumber(client: any, companyId: number, invoiceType: string): Promise<string> {
+  return generateSeriesNumber(client, seriesTypeForInvoiceType(invoiceType), companyId);
 }
 
 // GET /invoices
@@ -115,7 +130,7 @@ router.post("/invoices", async (req, res): Promise<void> => {
     await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
 
     // Generate invoice number
-    const invoiceNo = await generateInvoiceNumber(client, companyId);
+    const invoiceNo = await generateInvoiceNumber(client, companyId, data.invoiceType);
 
     // Calculate totals
     let subtotal = 0;
