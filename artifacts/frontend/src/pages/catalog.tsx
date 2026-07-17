@@ -235,10 +235,10 @@ export default function Catalog() {
 
 
 const proceedToOrderWithCustomer = (customer: any) => {
-  if (isSalesman || isStore) {
-    // Salesman and store users place the order directly with customer info,
-    // same flow, same Cash Memo/E-Invoice choice — rather than being routed
-    // through the admin-only billing.tsx.
+  if (isSalesman) {
+    // Salesman places the order directly with customer info — store now
+    // creates invoices directly via billing.tsx instead (see the else
+    // branch below), same as admin.
     placeOrder.mutate(
       { data: { items: cartItems, customerName: customer?.name, customerMobile: customer?.mobile, invoiceType: invoiceMode } },
       {
@@ -250,7 +250,7 @@ const proceedToOrderWithCustomer = (customer: any) => {
           setCart({});
           setShowCustomerDialog(false);
           queryClient.invalidateQueries({ queryKey: getListCustomerOrdersQueryKey() });
-          setLocation(isStore ? "/customer-orders" : "/my-orders");
+          setLocation("/my-orders");
         },
         onError: (err: any) => {
           toast({

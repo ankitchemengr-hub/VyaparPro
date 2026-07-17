@@ -263,8 +263,15 @@ export default function Billing() {
   }, [searchOpen]);
 
   // ── Guard — after ALL hooks ──
-  if (!hasRole("admin")) {
+  // Store can create invoices directly (no catalog/order detour), same as
+  // admin, but editing an existing invoice by id stays admin-only — store
+  // has no ownership check here and could otherwise open/edit any invoice.
+  if (!hasRole(["admin", "store"])) {
     setLocation("/");
+    return null;
+  }
+  if (isEditMode && !hasRole(["admin"])) {
+    setLocation("/invoices");
     return null;
   }
 

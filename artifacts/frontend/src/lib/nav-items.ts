@@ -52,7 +52,7 @@ export const moduleNavItems: NavItem[] = [
   { name: "My Statement", href: "/my-statement", icon: FileText, roles: ["customer"], description: "View your balance and transaction history" },
   { name: "Customer Orders", href: "/customer-orders", icon: Inbox, roles: ["admin", "store", "manufacturing"], description: "Manage incoming orders" },
   { name: "My Dashboard", href: "/salesman-dashboard", icon: LayoutDashboard, roles: ["salesman"], description: "My commission and sales overview" },
-  { name: "Billing", href: "/billing", icon: FileText, roles: ["admin"], description: "Create GST / non-GST invoices" },
+  { name: "Billing", href: "/billing", icon: FileText, roles: ["admin", "store"], description: "Create GST / non-GST invoices" },
   { name: "Invoices", href: "/invoices", icon: FileText, roles: ["admin", "salesman", "accountant", "store"], description: "Browse and print invoices" },
   { name: "Quotations", href: "/quotations", icon: ClipboardList, roles: ["admin", "salesman", "accountant"], description: "Browse and manage quotations" },
   { name: "Inventory", href: "/inventory", icon: Package, roles: ["admin", "store"], description: "Products and stock" },
