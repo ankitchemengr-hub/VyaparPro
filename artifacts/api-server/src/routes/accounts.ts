@@ -393,6 +393,39 @@ router.post("/account-transactions", async (req, res): Promise<void> => {
       [delta, companyId, accountId],
     );
 
+    // Vendor payment: a "Payment Out" linked to a vendor entity settles part of
+    // what the business owes them. Mirrors purchases.ts's payable increase
+    // (outstanding_balance + grandTotal, credit-side ledger entry) with the
+    // opposite, debit-side move — same subtraction the customer /payments
+    // flow already does, just for the vendor side of the ledger. Scoped
+    // strictly to direction="out" + type="vendor" so this never touches
+    // customer balances (the dedicated Payments page already owns that,
+    // and double-adjusting would double-count) or non-payable entities
+    // (workers/salesmen) linked to a cash-book entry for other reasons.
+    if (direction === "out" && partyEntityId) {
+      const vendorRes = await client.query(
+        `SELECT id, type, name FROM entities WHERE company_id = $1 AND id = $2`,
+        [companyId, partyEntityId],
+      );
+      const vendor = vendorRes.rows[0];
+      if (vendor?.type === "vendor") {
+        await client.query(
+          `UPDATE entities SET outstanding_balance = outstanding_balance - $1 WHERE company_id = $2 AND id = $3`,
+          [amount, companyId, vendor.id],
+        );
+        const balRes = await client.query(
+          `SELECT outstanding_balance FROM entities WHERE company_id = $1 AND id = $2`,
+          [companyId, vendor.id],
+        );
+        const newBal = balRes.rows[0].outstanding_balance;
+        await client.query(
+          `INSERT INTO ledger_entries (company_id, entity_id, date, description, debit, credit, balance, type, reference_id, reference_no)
+           VALUES ($1, $2, NOW(), $3, $4, 0, $5, 'payment', $6, $7)`,
+          [companyId, vendor.id, `Payment made (${mode})`, amount, newBal, txn.id, receiptNo],
+        );
+      }
+    }
+
     await client.query("COMMIT");
 
     res.status(201).json({

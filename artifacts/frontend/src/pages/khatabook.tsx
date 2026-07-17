@@ -55,23 +55,32 @@ function KhatabookTab({ type }: { type: "customer" | "vendor" }) {
 
   const today = new Date().toISOString().slice(0, 10);
   const partyLabel = type === "customer" ? "Customer" : "Supplier";
+  // Vendors and customers store outstandingBalance with opposite meaning:
+  // a positive customer balance means they owe the business (You Will Get),
+  // but a positive vendor balance means the business owes them (per
+  // purchases.ts: "Vendor payable: increase outstanding (we owe them)") —
+  // i.e. You Will Give. Flipping the sign for vendors lets every "You Will
+  // Get" computation below stay written the same way for both tabs.
+  const sign = type === "vendor" ? -1 : 1;
 
   const { youWillGet, youWillGive } = useMemo(() => {
     let get = 0, give = 0;
     for (const e of data ?? []) {
-      if (e.outstandingBalance > 0) get += e.outstandingBalance;
-      else if (e.outstandingBalance < 0) give += Math.abs(e.outstandingBalance);
+      const bal = e.outstandingBalance * sign;
+      if (bal > 0) get += bal;
+      else if (bal < 0) give += Math.abs(bal);
     }
     return { youWillGet: get, youWillGive: give };
-  }, [data]);
+  }, [data, sign]);
 
   const filtered = useMemo(() => {
     let rows = (data ?? []).filter((e) => e.name.toLowerCase().includes(search.trim().toLowerCase()));
     rows = rows.filter((e) => {
+      const bal = e.outstandingBalance * sign;
       switch (status) {
-        case "you_will_get": return e.outstandingBalance > 0;
-        case "you_will_give": return e.outstandingBalance < 0;
-        case "settled": return e.outstandingBalance === 0;
+        case "you_will_get": return bal > 0;
+        case "you_will_give": return bal < 0;
+        case "settled": return bal === 0;
         case "due_today": return e.nextDueDate === today;
         case "upcoming": return !!e.nextDueDate && e.nextDueDate > today;
         case "no_due_date": return !e.nextDueDate;
@@ -162,7 +171,7 @@ function KhatabookTab({ type }: { type: "customer" | "vendor" }) {
                     <div className="text-xs text-muted-foreground truncate">{e.mobile}</div>
                   </div>
                   <div className="text-right shrink-0">
-                    <div className={`font-mono font-semibold text-sm sm:text-base ${e.outstandingBalance > 0 ? "text-emerald-600" : e.outstandingBalance < 0 ? "text-red-600" : "text-muted-foreground"}`}>
+                    <div className={`font-mono font-semibold text-sm sm:text-base ${e.outstandingBalance * sign > 0 ? "text-emerald-600" : e.outstandingBalance * sign < 0 ? "text-red-600" : "text-muted-foreground"}`}>
                       {formatRs(e.outstandingBalance)}
                     </div>
                     {e.nextDueDate && <div className="text-[10px] text-muted-foreground">Due {e.nextDueDate}</div>}
@@ -174,17 +183,19 @@ function KhatabookTab({ type }: { type: "customer" | "vendor" }) {
         </CardContent>
       </Card>
 
-      <KhatabookDetailDialog party={selected} onOpenChange={(open) => { if (!open) setSelected(null); }} />
+      <KhatabookDetailDialog party={selected} type={type} onOpenChange={(open) => { if (!open) setSelected(null); }} />
     </div>
   );
 }
 
 function KhatabookDetailDialog({
-  party, onOpenChange,
+  party, type, onOpenChange,
 }: {
   party: { id: number; name: string; mobile: string } | null;
+  type: "customer" | "vendor";
   onOpenChange: (open: boolean) => void;
 }) {
+  const sign = type === "vendor" ? -1 : 1;
   const { toast } = useToast();
   const [waOpen, setWaOpen] = useState(false);
   const [waNumber, setWaNumber] = useState("");
@@ -224,7 +235,7 @@ function KhatabookDetailDialog({
     }
   };
 
-  const balance = ledger?.outstandingBalance ?? 0;
+  const balance = (ledger?.outstandingBalance ?? 0) * sign;
 
   return (
     <>
