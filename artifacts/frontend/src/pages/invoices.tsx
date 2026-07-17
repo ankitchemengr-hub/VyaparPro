@@ -118,8 +118,8 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
           toast({
-            title: "Invoice cancelled",
-            description: `${deleting.invoiceNo} cancelled. Inventory was not changed; action recorded in audit log.`,
+            title: "Moved to Recycle Bin",
+            description: `${deleting.invoiceNo} removed from the list. Inventory was not changed; permanently delete it from the Recycle Bin if needed.`,
           });
           setDeleting(null);
         },
@@ -429,12 +429,12 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
       <AlertDialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Cancel invoice {deleting?.invoiceNo}?</AlertDialogTitle>
+            <AlertDialogTitle>Delete invoice {deleting?.invoiceNo}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This invoice will be marked <strong>Cancelled</strong>. Inventory will
-              <strong> not</strong> be changed — stock is left as-is because the goods
-              have typically already left the premises. The cancellation will be
-              recorded in the system audit log.
+              This removes it from your invoice list and moves it to the <strong>Recycle Bin</strong>,
+              where it can be permanently deleted later. Inventory will <strong>not</strong> be
+              changed — stock is left as-is because the goods have typically already left the
+              premises. This action is recorded in the system audit log.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -446,7 +446,7 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
               data-testid="button-confirm-delete-invoice"
             >
               {deleteInvoice.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Yes, cancel invoice
+              Yes, delete invoice
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

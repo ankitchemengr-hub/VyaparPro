@@ -1395,6 +1395,16 @@ export const DeleteInvoiceResponse = zod.void()
 
 
 /**
+ * @summary Permanently delete an already-cancelled invoice (Recycle Bin) — admin only; does not affect stock/ledger history
+ */
+export const PermanentlyDeleteInvoiceParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const PermanentlyDeleteInvoiceResponse = zod.void()
+
+
+/**
  * @summary List payments
  */
 export const ListPaymentsQueryParams = zod.object({

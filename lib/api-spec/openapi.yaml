@@ -991,6 +991,21 @@ paths:
         "204":
           description: Deleted
 
+  /invoices/{id}/permanent:
+    delete:
+      operationId: permanentlyDeleteInvoice
+      tags: [invoices]
+      summary: Permanently delete an already-cancelled invoice (Recycle Bin) — admin only; does not affect stock/ledger history
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
   # PAYMENTS
   /payments:
     get:

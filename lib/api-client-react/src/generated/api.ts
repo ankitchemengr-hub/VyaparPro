@@ -3756,6 +3756,76 @@ export const useDeleteInvoice = <TError = ErrorType<unknown>,
       return useMutation(getDeleteInvoiceMutationOptions(options));
     }
 
+export const getPermanentlyDeleteInvoiceUrl = (id: number,) => {
+
+
+
+
+  return `/api/invoices/${id}/permanent`
+}
+
+/**
+ * @summary Permanently delete an already-cancelled invoice (Recycle Bin) — admin only; does not affect stock/ledger history
+ */
+export const permanentlyDeleteInvoice = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getPermanentlyDeleteInvoiceUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getPermanentlyDeleteInvoiceMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof permanentlyDeleteInvoice>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof permanentlyDeleteInvoice>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['permanentlyDeleteInvoice'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof permanentlyDeleteInvoice>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  permanentlyDeleteInvoice(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PermanentlyDeleteInvoiceMutationResult = NonNullable<Awaited<ReturnType<typeof permanentlyDeleteInvoice>>>
+
+    export type PermanentlyDeleteInvoiceMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Permanently delete an already-cancelled invoice (Recycle Bin) — admin only; does not affect stock/ledger history
+ */
+export const usePermanentlyDeleteInvoice = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof permanentlyDeleteInvoice>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof permanentlyDeleteInvoice>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getPermanentlyDeleteInvoiceMutationOptions(options));
+    }
+
 export const getListPaymentsUrl = (params?: ListPaymentsParams,) => {
   const normalizedParams = new URLSearchParams();
 

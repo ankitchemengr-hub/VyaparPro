@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, ilike, sql, or } from "drizzle-orm";
+import { eq, and, ilike, sql, or, ne } from "drizzle-orm";
 import { db, pool } from "@workspace/db";
 import {
   invoicesTable,
@@ -104,6 +104,12 @@ router.get("/invoices", async (req, res): Promise<void> => {
   }
   if (params.data.status) {
     conditions.push(eq(invoicesTable.status, params.data.status));
+  } else {
+    // Cancelled = soft-deleted (moved to the Recycle Bin) — hide from the
+    // default/unfiltered list. The Recycle Bin page explicitly requests
+    // status=cancelled to see them; any other explicit status filter above
+    // already narrows to that one status regardless of this branch.
+    conditions.push(ne(invoicesTable.status, "cancelled"));
   }
 
   const invoices = conditions.length > 0
@@ -830,6 +836,79 @@ router.delete("/invoices/:id", async (req, res): Promise<void> => {
     await client.query("ROLLBACK");
     logger.error({ err }, "Failed to delete invoice");
     res.status(500).json({ error: "Failed to delete invoice" });
+  } finally {
+    client.release();
+  }
+});
+
+// DELETE /invoices/:id/permanent — admin only. Genuinely removes the invoice
+// row (Recycle Bin's "permanently delete"). Only allowed once an invoice is
+// already cancelled (i.e. already in the Recycle Bin) — you can't permanently
+// delete a live invoice in one step.
+//
+// invoice_items cascades automatically (FK onDelete: "cascade"). stock_movements
+// and ledger_entries reference the invoice only via a loose reference_id/
+// reference_no (no FK) and are deliberately left untouched: the stock/ledger
+// effects the invoice already caused are historical fact and must survive
+// the invoice document being deleted, per business policy.
+router.delete("/invoices/:id/permanent", async (req, res): Promise<void> => {
+  const session = (req as any).session;
+  const companyId = getCompanyId(req);
+  if (session?.role !== "admin") {
+    res.status(403).json({ error: "Only admins can permanently delete invoices" });
+    return;
+  }
+  const params = DeleteInvoiceParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
+
+    const existing = await client.query(
+      `SELECT id, invoice_no, invoice_type, grand_total, status FROM invoices WHERE id = $1 AND company_id = $2`,
+      [params.data.id, companyId]
+    );
+    if (existing.rowCount === 0) {
+      await client.query("ROLLBACK");
+      res.status(404).json({ error: "Invoice not found" });
+      return;
+    }
+    const inv = existing.rows[0];
+    if (inv.status !== "cancelled") {
+      await client.query("ROLLBACK");
+      res.status(409).json({ error: "Only a cancelled invoice (in the Recycle Bin) can be permanently deleted" });
+      return;
+    }
+
+    await client.query(`DELETE FROM invoices WHERE id = $1 AND company_id = $2`, [params.data.id, companyId]);
+
+    await client.query(
+      `INSERT INTO audit_log (company_id, action, description, user_id, user_name, metadata)
+       VALUES ($1, 'invoice_permanently_deleted', $2, $3, $4, $5)`,
+      [
+        companyId,
+        `${inv.invoice_type === "gst" ? "GST" : "Non-GST"} invoice ${inv.invoice_no} permanently deleted by admin from Recycle Bin — stock/ledger history NOT affected`,
+        session?.userId ?? 1,
+        session?.name ?? "Unknown",
+        JSON.stringify({
+          invoiceId: params.data.id,
+          invoiceNo: inv.invoice_no,
+          invoiceType: inv.invoice_type,
+          grandTotal: Number(inv.grand_total),
+        }),
+      ]
+    );
+
+    await client.query("COMMIT");
+    res.sendStatus(204);
+  } catch (err) {
+    await client.query("ROLLBACK");
+    logger.error({ err }, "Failed to permanently delete invoice");
+    res.status(500).json({ error: "Failed to permanently delete invoice" });
   } finally {
     client.release();
   }
