@@ -91,17 +91,17 @@ function KhatabookTab({ type }: { type: "customer" | "vendor" }) {
 
   return (
     <div className="space-y-4 pt-4">
-      <div className="grid grid-cols-2 gap-3">
-        <Card className="border-emerald-200 bg-emerald-50 dark:bg-emerald-950/20 dark:border-emerald-900">
-          <CardContent className="p-4">
-            <div className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">You Will Get</div>
-            <div className="text-2xl font-bold font-mono text-emerald-700 dark:text-emerald-400">{formatRs(youWillGet)}</div>
+      <div className="grid grid-cols-2 gap-2 sm:gap-3">
+        <Card className="border-emerald-200 bg-emerald-50 dark:bg-emerald-950/20 dark:border-emerald-900 min-w-0">
+          <CardContent className="p-3 sm:p-4 min-w-0">
+            <div className="text-[11px] sm:text-xs text-emerald-700 dark:text-emerald-400 font-medium truncate">You Will Get</div>
+            <div className="text-base sm:text-2xl font-bold font-mono text-emerald-700 dark:text-emerald-400 break-all">{formatRs(youWillGet)}</div>
           </CardContent>
         </Card>
-        <Card className="border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-900">
-          <CardContent className="p-4">
-            <div className="text-xs text-red-700 dark:text-red-400 font-medium">You Will Give</div>
-            <div className="text-2xl font-bold font-mono text-red-700 dark:text-red-400">{formatRs(youWillGive)}</div>
+        <Card className="border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-900 min-w-0">
+          <CardContent className="p-3 sm:p-4 min-w-0">
+            <div className="text-[11px] sm:text-xs text-red-700 dark:text-red-400 font-medium truncate">You Will Give</div>
+            <div className="text-base sm:text-2xl font-bold font-mono text-red-700 dark:text-red-400 break-all">{formatRs(youWillGive)}</div>
           </CardContent>
         </Card>
       </div>
@@ -117,9 +117,9 @@ function KhatabookTab({ type }: { type: "customer" | "vendor" }) {
             data-testid={`input-khatabook-search-${type}`}
           />
         </div>
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex flex-col sm:flex-row gap-2">
           <Select value={status} onValueChange={(v) => setStatus(v as StatusFilter)}>
-            <SelectTrigger className="w-[160px]" data-testid={`select-khatabook-filter-${type}`}><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-full sm:w-[160px]" data-testid={`select-khatabook-filter-${type}`}><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All</SelectItem>
               <SelectItem value="you_will_get">You Will Get</SelectItem>
@@ -131,7 +131,7 @@ function KhatabookTab({ type }: { type: "customer" | "vendor" }) {
             </SelectContent>
           </Select>
           <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortBy)}>
-            <SelectTrigger className="w-[160px]" data-testid={`select-khatabook-sort-${type}`}><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-full sm:w-[160px]" data-testid={`select-khatabook-sort-${type}`}><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="highest">Highest Amount</SelectItem>
               <SelectItem value="oldest">Oldest</SelectItem>
@@ -153,16 +153,16 @@ function KhatabookTab({ type }: { type: "customer" | "vendor" }) {
                 <button
                   key={e.id}
                   type="button"
-                  className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/50 text-left"
+                  className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/50 text-left"
                   onClick={() => setSelected({ id: e.id, name: e.name, mobile: e.mobile })}
                   data-testid={`row-khatabook-${type}-${e.id}`}
                 >
-                  <div>
-                    <div className="font-medium">{e.name}</div>
-                    <div className="text-xs text-muted-foreground">{e.mobile}</div>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium truncate">{e.name}</div>
+                    <div className="text-xs text-muted-foreground truncate">{e.mobile}</div>
                   </div>
-                  <div className="text-right">
-                    <div className={`font-mono font-semibold ${e.outstandingBalance > 0 ? "text-emerald-600" : e.outstandingBalance < 0 ? "text-red-600" : "text-muted-foreground"}`}>
+                  <div className="text-right shrink-0">
+                    <div className={`font-mono font-semibold text-sm sm:text-base ${e.outstandingBalance > 0 ? "text-emerald-600" : e.outstandingBalance < 0 ? "text-red-600" : "text-muted-foreground"}`}>
                       {formatRs(e.outstandingBalance)}
                     </div>
                     {e.nextDueDate && <div className="text-[10px] text-muted-foreground">Due {e.nextDueDate}</div>}
@@ -240,18 +240,18 @@ function KhatabookDetailDialog({
           <p className="text-sm text-muted-foreground">{party?.mobile}</p>
         </div>
 
-        <div className="flex items-center justify-between border-b pb-3">
-          <div>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b pb-3">
+          <div className="min-w-0">
             <div className="text-xs text-muted-foreground">Total Balance</div>
-            <div className={`text-2xl font-bold font-mono ${balance > 0 ? "text-emerald-600" : balance < 0 ? "text-red-600" : "text-muted-foreground"}`}>
+            <div className={`text-lg sm:text-2xl font-bold font-mono break-all ${balance > 0 ? "text-emerald-600" : balance < 0 ? "text-red-600" : "text-muted-foreground"}`}>
               {formatRs(balance)} {balance > 0 ? "(You Will Get)" : balance < 0 ? "(You Will Give)" : "(Settled)"}
             </div>
           </div>
           <div className="flex gap-2 print:hidden">
-            <Button variant="outline" size="sm" onClick={openWaDialog} data-testid="button-whatsapp-reminder">
+            <Button variant="outline" size="sm" className="flex-1 sm:flex-none" onClick={openWaDialog} data-testid="button-whatsapp-reminder">
               <MessageCircle className="w-4 h-4 mr-1.5" /> Remind
             </Button>
-            <Button variant="outline" size="sm" onClick={() => window.print()} data-testid="button-print-ledger">
+            <Button variant="outline" size="sm" className="flex-1 sm:flex-none" onClick={() => window.print()} data-testid="button-print-ledger">
               <Printer className="w-4 h-4 mr-1.5" /> Report
             </Button>
           </div>
@@ -262,31 +262,33 @@ function KhatabookDetailDialog({
         ) : (ledger?.entries ?? []).length === 0 ? (
           <div className="p-12 text-center text-muted-foreground">No ledger entries yet.</div>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead className="text-right">Debit</TableHead>
-                <TableHead className="text-right">Credit</TableHead>
-                <TableHead className="text-right">Balance</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {(ledger?.entries ?? []).map((entry) => (
-                <TableRow key={entry.id}>
-                  <TableCell className="text-xs">{entry.date?.slice(0, 10)}</TableCell>
-                  <TableCell className="text-sm">
-                    {entry.description}
-                    {entry.referenceNo && <div className="text-[10px] text-muted-foreground font-mono">{entry.referenceNo}</div>}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-sm">{entry.debit > 0 ? formatRs(entry.debit) : "—"}</TableCell>
-                  <TableCell className="text-right font-mono text-sm">{entry.credit > 0 ? formatRs(entry.credit) : "—"}</TableCell>
-                  <TableCell className="text-right font-mono text-sm font-medium">{formatRs(entry.balance)}</TableCell>
+          <div className="overflow-x-auto -mx-1">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead className="text-right">Debit</TableHead>
+                  <TableHead className="text-right">Credit</TableHead>
+                  <TableHead className="text-right">Balance</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {(ledger?.entries ?? []).map((entry) => (
+                  <TableRow key={entry.id}>
+                    <TableCell className="text-xs whitespace-nowrap">{entry.date?.slice(0, 10)}</TableCell>
+                    <TableCell className="text-sm max-w-[160px]">
+                      <div className="truncate">{entry.description}</div>
+                      {entry.referenceNo && <div className="text-[10px] text-muted-foreground font-mono truncate">{entry.referenceNo}</div>}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-sm whitespace-nowrap">{entry.debit > 0 ? formatRs(entry.debit) : "—"}</TableCell>
+                    <TableCell className="text-right font-mono text-sm whitespace-nowrap">{entry.credit > 0 ? formatRs(entry.credit) : "—"}</TableCell>
+                    <TableCell className="text-right font-mono text-sm font-medium whitespace-nowrap">{formatRs(entry.balance)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </DialogContent>
     </Dialog>
