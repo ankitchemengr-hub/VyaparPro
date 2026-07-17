@@ -138,6 +138,25 @@ export function getPrintCss(
       .invoice-print-area .invoice-sheet td,
       .invoice-print-area .invoice-sheet th { padding: 2px 4px !important; }`
       : "";
+  // The other four templates (Modern/Professional/Classic/Minimal) are the
+  // same component for both their -a4 and -a5 registry entries — nothing
+  // about their own markup/CSS actually shrinks for A5. Left alone, printing
+  // one on A5 constrains `.invoice-print-area` to the A5 page's ~138mm
+  // content width (see `width: 100%` below), which *reflows* the same A4-
+  // designed content into a much narrower column — making it taller, not
+  // shorter, and overflowing a 2-item invoice onto a second page with the
+  // totals cut off the first sheet. Fix: lay the sheet out at its natural
+  // A4-ish width first (so text wraps exactly as designed), then shrink the
+  // whole result with `zoom` (unlike `transform`, zoom reflows and is
+  // respected for print pagination) to fit A5's usable width.
+  const a5Shrink =
+    paper === "A5" && meta.id !== "a5-compact"
+      ? `
+      .invoice-print-area .invoice-sheet {
+        width: 190mm !important;
+        zoom: 0.72;
+      }`
+      : "";
   return `
     @page { size: ${sizeRule}; margin: ${paper === "A5" ? "5mm" : "8mm"}; }
     @media print {
@@ -165,6 +184,7 @@ export function getPrintCss(
       }
       .sidebar, .topbar, .no-print, button, nav { display: none !important; }
       ${legacy}
+      ${a5Shrink}
     }
   `;
 }
