@@ -711,6 +711,11 @@ paths:
           in: query
           schema:
             type: string
+        - name: includeInactive
+          in: query
+          description: Include deactivated entities (excluded by default).
+          schema:
+            type: boolean
       responses:
         "200":
           description: Entities
@@ -3647,6 +3652,8 @@ components:
           type: number
         creditLimit:
           type: ["number", "null"]
+        isActive:
+          type: boolean
         userId:
           type: ["integer", "null"]
         createdAt:
@@ -3737,6 +3744,8 @@ components:
           type: string
         creditLimit:
           type: number
+        isActive:
+          type: boolean
 
     EntityLookup:
       type: object

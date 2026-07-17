@@ -830,7 +830,8 @@ export const ListBrandsResponse = zod.array(ListBrandsResponseItem)
 export const ListEntitiesQueryParams = zod.object({
   "type": zod.enum(['customer', 'vendor', 'worker', 'salesman']).optional(),
   "search": zod.coerce.string().optional(),
-  "mobile": zod.coerce.string().optional()
+  "mobile": zod.coerce.string().optional(),
+  "includeInactive": zod.coerce.boolean().optional().describe('Include deactivated entities (excluded by default).')
 })
 
 export const ListEntitiesResponseItem = zod.object({
@@ -849,6 +850,7 @@ export const ListEntitiesResponseItem = zod.object({
   "pricingTier": zod.union([zod.literal('retail'),zod.literal('wholesale'),zod.literal(null)]).nullish(),
   "outstandingBalance": zod.number().optional(),
   "creditLimit": zod.number().nullish(),
+  "isActive": zod.boolean().optional(),
   "userId": zod.number().nullish(),
   "createdAt": zod.string().optional()
 })
@@ -890,6 +892,7 @@ export const CreateEntityResponse = zod.object({
   "pricingTier": zod.union([zod.literal('retail'),zod.literal('wholesale'),zod.literal(null)]).nullish(),
   "outstandingBalance": zod.number().optional(),
   "creditLimit": zod.number().nullish(),
+  "isActive": zod.boolean().optional(),
   "userId": zod.number().nullish(),
   "createdAt": zod.string().optional()
 })
@@ -920,6 +923,7 @@ export const LookupEntityByMobileResponse = zod.object({
   "pricingTier": zod.union([zod.literal('retail'),zod.literal('wholesale'),zod.literal(null)]).nullish(),
   "outstandingBalance": zod.number().optional(),
   "creditLimit": zod.number().nullish(),
+  "isActive": zod.boolean().optional(),
   "userId": zod.number().nullish(),
   "createdAt": zod.string().optional()
 }).optional()
@@ -949,6 +953,7 @@ export const GetEntityResponse = zod.object({
   "pricingTier": zod.union([zod.literal('retail'),zod.literal('wholesale'),zod.literal(null)]).nullish(),
   "outstandingBalance": zod.number().optional(),
   "creditLimit": zod.number().nullish(),
+  "isActive": zod.boolean().optional(),
   "userId": zod.number().nullish(),
   "createdAt": zod.string().optional()
 })
@@ -974,7 +979,8 @@ export const UpdateEntityBody = zod.object({
   "pinCode": zod.string().optional(),
   "gpsLocation": zod.string().optional(),
   "pricingTier": zod.string().optional(),
-  "creditLimit": zod.number().optional()
+  "creditLimit": zod.number().optional(),
+  "isActive": zod.boolean().optional()
 })
 
 export const UpdateEntityResponse = zod.object({
@@ -993,6 +999,7 @@ export const UpdateEntityResponse = zod.object({
   "pricingTier": zod.union([zod.literal('retail'),zod.literal('wholesale'),zod.literal(null)]).nullish(),
   "outstandingBalance": zod.number().optional(),
   "creditLimit": zod.number().nullish(),
+  "isActive": zod.boolean().optional(),
   "userId": zod.number().nullish(),
   "createdAt": zod.string().optional()
 })
@@ -1032,6 +1039,7 @@ export const GetEntityLedgerResponse = zod.object({
   "pricingTier": zod.union([zod.literal('retail'),zod.literal('wholesale'),zod.literal(null)]).nullish(),
   "outstandingBalance": zod.number().optional(),
   "creditLimit": zod.number().nullish(),
+  "isActive": zod.boolean().optional(),
   "userId": zod.number().nullish(),
   "createdAt": zod.string().optional()
 }),
@@ -2838,6 +2846,7 @@ export const GlobalSearchResponse = zod.object({
   "pricingTier": zod.union([zod.literal('retail'),zod.literal('wholesale'),zod.literal(null)]).nullish(),
   "outstandingBalance": zod.number().optional(),
   "creditLimit": zod.number().nullish(),
+  "isActive": zod.boolean().optional(),
   "userId": zod.number().nullish(),
   "createdAt": zod.string().optional()
 })),

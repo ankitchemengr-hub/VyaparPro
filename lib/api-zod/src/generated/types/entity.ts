@@ -34,6 +34,7 @@ export interface Entity {
   outstandingBalance?: number;
   /** @nullable */
   creditLimit?: number | null;
+  isActive?: boolean;
   /** @nullable */
   userId?: number | null;
   createdAt?: string;

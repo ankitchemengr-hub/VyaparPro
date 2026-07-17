@@ -11,4 +11,8 @@ export type ListEntitiesParams = {
 type?: ListEntitiesType;
 search?: string;
 mobile?: string;
+/**
+ * Include deactivated entities (excluded by default).
+ */
+includeInactive?: boolean;
 };

@@ -82,6 +82,7 @@ export default function Customers() {
   const [type, setType] = useState<FilterType>("customer");
   const [sort, setSort] = useState("name_asc");
   const [showAdd, setShowAdd] = useState(false);
+  const [showInactive, setShowInactive] = useState(false);
   const [assignedSalesmanId, setAssignedSalesmanId] = useState<string>("");
 
   const [editingEntity, setEditingEntity] = useState<any | null>(null);
@@ -133,6 +134,7 @@ export default function Customers() {
   const { data: entities, isLoading } = useListEntities({
     type: type !== "all" ? (type as EntityType) : undefined,
     search: search || undefined,
+    includeInactive: showInactive,
   });
 
   const { data: salesmanEntities } = useListEntities({ type: "salesman" as EntityType });
@@ -140,6 +142,29 @@ export default function Customers() {
   const createEntity = useCreateEntity();
   const updateEntity = useUpdateEntity();
   const deleteEntity = useDeleteEntity();
+
+  const toggleActive = () => {
+    if (!editingEntity) return;
+    const nextActive = (editingEntity as any).isActive === false;
+    updateEntity.mutate(
+      { id: editingEntity.id, data: { isActive: nextActive } },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getListEntitiesQueryKey() });
+          toast({ title: nextActive ? `"${editingEntity.name}" reactivated` : `"${editingEntity.name}" deactivated` });
+          setEditingEntity(null);
+        },
+        onError: async (err: any) => {
+          let desc = err?.message ?? "Server error";
+          try {
+            const body = err?.response ? await err.response.json() : null;
+            if (body?.error) desc = String(body.error).slice(0, 300);
+          } catch {}
+          toast({ title: "Failed to update", description: desc, variant: "destructive" });
+        },
+      },
+    );
+  };
 
   const confirmDelete = () => {
     if (!deleteTarget) return;
@@ -350,7 +375,7 @@ export default function Customers() {
         </Button>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 sm:gap-4">
         <div className="relative w-full sm:max-w-sm">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
@@ -385,6 +410,16 @@ export default function Customers() {
             </SelectContent>
           </Select>
         </div>
+        <label className="flex items-center gap-2 text-sm text-muted-foreground shrink-0">
+          <input
+            type="checkbox"
+            checked={showInactive}
+            onChange={(e) => setShowInactive(e.target.checked)}
+            className="h-4 w-4"
+            data-testid="checkbox-show-inactive"
+          />
+          Show inactive
+        </label>
       </div>
 
       <Card>
@@ -422,11 +457,16 @@ export default function Customers() {
                   }).map((entity) => {
                     const mapsUrl = getMapsUrl(entity as any);
                     return (
-                      <TableRow key={entity.id} data-testid={`row-entity-${entity.id}`}>
+                      <TableRow key={entity.id} data-testid={`row-entity-${entity.id}`} className={(entity as any).isActive === false ? "opacity-60" : undefined}>
                         <TableCell className="font-medium">
-                          <Link href={`/customers/${entity.id}`} className="text-primary hover:underline">
-                            {entity.name}
-                          </Link>
+                          <div className="flex items-center gap-2">
+                            <Link href={`/customers/${entity.id}`} className="text-primary hover:underline">
+                              {entity.name}
+                            </Link>
+                            {(entity as any).isActive === false && (
+                              <Badge variant="outline" className="text-[10px] text-muted-foreground">Inactive</Badge>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="capitalize">{entity.type}</TableCell>
                         <TableCell>{entity.mobile}</TableCell>
@@ -992,16 +1032,26 @@ export default function Customers() {
 
               <DialogFooter className="pt-2">
                 {isAdmin && (
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    className="sm:mr-auto"
-                    onClick={() => setDeleteTarget(editingEntity)}
-                    data-testid="button-delete-entity"
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Delete Permanently
-                  </Button>
+                  <div className="flex gap-2 sm:mr-auto">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={toggleActive}
+                      disabled={updateEntity.isPending}
+                      data-testid="button-toggle-active-entity"
+                    >
+                      {(editingEntity as any)?.isActive === false ? "Reactivate" : "Deactivate"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      onClick={() => setDeleteTarget(editingEntity)}
+                      data-testid="button-delete-entity"
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Delete Permanently
+                    </Button>
+                  </div>
                 )}
                 <Button type="button" variant="outline" onClick={() => setEditingEntity(null)} disabled={updateEntity.isPending}>
                   Cancel

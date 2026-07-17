@@ -51,6 +51,7 @@ router.get("/entities", async (req, res): Promise<void> => {
 
   const companyId = getCompanyId(req);
   const conditions: any[] = [eq(entitiesTable.companyId, companyId)];
+  if (!params.data.includeInactive) conditions.push(eq(entitiesTable.isActive, true));
   if (params.data.type) conditions.push(eq(entitiesTable.type, params.data.type));
   if (params.data.mobile) conditions.push(eq(entitiesTable.mobile, params.data.mobile));
   if (params.data.search) {
@@ -503,6 +504,7 @@ function formatEntity(e: any) {
     pricingTier: e.pricingTier ?? null,
     outstandingBalance: Number(e.outstandingBalance ?? 0),
     creditLimit: e.creditLimit != null ? Number(e.creditLimit) : null,
+    isActive: e.isActive ?? true,
     userId: e.userId ?? null,
     assignedSalesmanId: e.assignedSalesmanId ?? null,
     assignedSalesmanName: e.assignedSalesmanName ?? null,

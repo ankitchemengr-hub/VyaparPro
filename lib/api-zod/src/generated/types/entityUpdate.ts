@@ -20,4 +20,5 @@ export interface EntityUpdate {
   gpsLocation?: string;
   pricingTier?: string;
   creditLimit?: number;
+  isActive?: boolean;
 }

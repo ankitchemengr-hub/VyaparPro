@@ -924,6 +924,7 @@ export interface Entity {
   outstandingBalance?: number;
   /** @nullable */
   creditLimit?: number | null;
+  isActive?: boolean;
   /** @nullable */
   userId?: number | null;
   createdAt?: string;
@@ -995,6 +996,7 @@ export interface EntityUpdate {
   gpsLocation?: string;
   pricingTier?: string;
   creditLimit?: number;
+  isActive?: boolean;
 }
 
 export interface EntityLookup {
@@ -2411,6 +2413,10 @@ export type ListEntitiesParams = {
 type?: ListEntitiesType;
 search?: string;
 mobile?: string;
+/**
+ * Include deactivated entities (excluded by default).
+ */
+includeInactive?: boolean;
 };
 
 export type ListEntitiesType = typeof ListEntitiesType[keyof typeof ListEntitiesType];
