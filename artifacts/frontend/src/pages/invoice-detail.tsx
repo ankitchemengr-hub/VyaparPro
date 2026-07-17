@@ -318,8 +318,17 @@ export default function InvoiceDetail() {
           >
             <MessageCircle className="h-4 w-4 sm:mr-2" /><span className="hidden sm:inline">WhatsApp</span>
           </Button>
-          <Button variant="outline" size="sm" onClick={() => window.print()} data-testid="button-print">
-            <Printer className="h-4 w-4 sm:mr-2" /><span className="hidden sm:inline">Print</span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.print()}
+            disabled={settingsLoading}
+            data-testid="button-print"
+          >
+            {settingsLoading
+              ? <Loader2 className="h-4 w-4 sm:mr-2 animate-spin" />
+              : <Printer className="h-4 w-4 sm:mr-2" />}
+            <span className="hidden sm:inline">Print</span>
           </Button>
         </div>
       </div>
