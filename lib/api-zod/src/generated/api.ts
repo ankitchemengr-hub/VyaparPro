@@ -2503,18 +2503,9 @@ export const GetSalesTrendResponse = zod.array(GetSalesTrendResponseItem)
  */
 export const GetLitersSoldResponse = zod.object({
   "today": zod.number().describe('Total liters sold today (saved invoices only)'),
-  "thisMonth": zod.number().describe('Total liters sold this calendar month (saved invoices only)')
+  "thisMonth": zod.number().describe('Total liters sold this calendar month (saved invoices only)'),
+  "lastMonth": zod.number().describe('Total liters sold last calendar month (saved invoices only), for month-over-month growth')
 })
-
-
-/**
- * @summary Admin-only last 12 months of total liters sold, for a growth chart
- */
-export const GetLitersTrendResponseItem = zod.object({
-  "month": zod.string().describe('YYYY-MM'),
-  "liters": zod.number()
-})
-export const GetLitersTrendResponse = zod.array(GetLitersTrendResponseItem)
 
 
 /**

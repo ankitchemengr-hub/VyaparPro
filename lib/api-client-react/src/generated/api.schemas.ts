@@ -1990,12 +1990,8 @@ export interface LitersSold {
   today: number;
   /** Total liters sold this calendar month (saved invoices only) */
   thisMonth: number;
-}
-
-export interface LitersTrendPoint {
-  /** YYYY-MM */
-  month: string;
-  liters: number;
+  /** Total liters sold last calendar month (saved invoices only), for month-over-month growth */
+  lastMonth: number;
 }
 
 export interface SalesTrendPoint {

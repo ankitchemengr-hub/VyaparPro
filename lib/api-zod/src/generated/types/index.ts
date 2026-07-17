@@ -149,7 +149,6 @@ export * from './listWorkersParams';
 export * from './listWorkloadCardsParams';
 export * from './listWorkloadCardsStatus';
 export * from './litersSold';
-export * from './litersTrendPoint';
 export * from './loginInput';
 export * from './lookupEntityByMobileParams';
 export * from './lookupGstinParams';

@@ -266,9 +266,10 @@ router.get("/dashboard/sales-trend", async (req, res): Promise<void> => {
   })));
 });
 
-// GET /dashboard/liters-sold (admin only) — total liters sold today and this
-// calendar month, combining every product regardless of volume_unit (liter or
-// kg) since invoice_items.total_liters already holds the unit-agnostic figure.
+// GET /dashboard/liters-sold (admin only) — total liters sold today, this
+// calendar month, and last calendar month (for month-over-month growth),
+// combining every product regardless of volume_unit (liter or kg) since
+// invoice_items.total_liters already holds the unit-agnostic figure.
 router.get("/dashboard/liters-sold", async (req, res): Promise<void> => {
   const role = (req as any).session?.role;
   if (role !== "admin") {
@@ -281,9 +282,10 @@ router.get("/dashboard/liters-sold", async (req, res): Promise<void> => {
     `SELECT
        COALESCE(SUM(CASE WHEN i.invoice_date::date = CURRENT_DATE
          THEN ii.total_liters ELSE 0 END), 0) AS today,
-       COALESCE(SUM(CASE WHEN EXTRACT(MONTH FROM i.invoice_date) = EXTRACT(MONTH FROM CURRENT_DATE)
-         AND EXTRACT(YEAR FROM i.invoice_date) = EXTRACT(YEAR FROM CURRENT_DATE)
-         THEN ii.total_liters ELSE 0 END), 0) AS "thisMonth"
+       COALESCE(SUM(CASE WHEN to_char(i.invoice_date, 'YYYY-MM') = to_char(CURRENT_DATE, 'YYYY-MM')
+         THEN ii.total_liters ELSE 0 END), 0) AS "thisMonth",
+       COALESCE(SUM(CASE WHEN to_char(i.invoice_date, 'YYYY-MM') = to_char(CURRENT_DATE - INTERVAL '1 month', 'YYYY-MM')
+         THEN ii.total_liters ELSE 0 END), 0) AS "lastMonth"
      FROM invoice_items ii
      JOIN invoices i ON i.id = ii.invoice_id
      WHERE i.company_id = $1 AND i.status = 'saved'`,
@@ -293,39 +295,8 @@ router.get("/dashboard/liters-sold", async (req, res): Promise<void> => {
   res.json({
     today: Number(row.today ?? 0),
     thisMonth: Number(row.thisMonth ?? 0),
+    lastMonth: Number(row.lastMonth ?? 0),
   });
-});
-
-// GET /dashboard/liters-trend (admin only) — last 12 calendar months of total
-// liters sold, for a month-over-month growth chart. Same unit-agnostic
-// invoice_items.total_liters figure as /dashboard/liters-sold above.
-router.get("/dashboard/liters-trend", async (req, res): Promise<void> => {
-  const role = (req as any).session?.role;
-  if (role !== "admin") {
-    res.status(403).json({ error: "Admin only" });
-    return;
-  }
-
-  const companyId = getCompanyId(req);
-  const rows = await queryMany(
-    `WITH months AS (
-       SELECT to_char(date_trunc('month', (CURRENT_DATE - (n || ' months')::interval)), 'YYYY-MM') AS month
-       FROM generate_series(0, 11) AS n
-     )
-     SELECT m.month, COALESCE(SUM(ii.total_liters), 0) AS liters
-     FROM months m
-     LEFT JOIN invoices i
-       ON to_char(i.invoice_date, 'YYYY-MM') = m.month AND i.company_id = $1 AND i.status = 'saved'
-     LEFT JOIN invoice_items ii ON ii.invoice_id = i.id
-     GROUP BY m.month
-     ORDER BY m.month ASC`,
-    [companyId]
-  );
-
-  res.json(rows.map((r) => ({
-    month: r.month,
-    liters: Number(r.liters ?? 0),
-  })));
 });
 
 // GET /reports/ledger
