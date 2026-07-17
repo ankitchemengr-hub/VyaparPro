@@ -929,6 +929,19 @@ export interface Entity {
   createdAt?: string;
 }
 
+export interface KhatabookEntry {
+  id: number;
+  name: string;
+  mobile: string;
+  /** @nullable */
+  gstin?: string | null;
+  /** @nullable */
+  pricingTier?: string | null;
+  outstandingBalance: number;
+  /** @nullable */
+  nextDueDate?: string | null;
+}
+
 export type EntityInputType = typeof EntityInputType[keyof typeof EntityInputType];
 
 
@@ -2601,6 +2614,18 @@ salesmanId?: number;
 export type GlobalSearchParams = {
 q: string;
 };
+
+export type ListKhatabookParams = {
+type: ListKhatabookType;
+};
+
+export type ListKhatabookType = typeof ListKhatabookType[keyof typeof ListKhatabookType];
+
+
+export const ListKhatabookType = {
+  customer: 'customer',
+  vendor: 'vendor',
+} as const;
 
 export type ListWorkersParams = {
 includeInactive?: boolean;

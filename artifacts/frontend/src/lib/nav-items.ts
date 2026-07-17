@@ -22,6 +22,7 @@ import {
   LayoutGrid,
   DatabaseBackup,
   Tag,
+  BookOpen,
   type LucideIcon,
 } from "lucide-react";
 
@@ -50,8 +51,6 @@ export const moduleNavItems: NavItem[] = [
   { name: "My Orders", href: "/my-orders", icon: ClipboardList, roles: ["customer", "salesman"], description: "Track your placed orders" },
   { name: "My Statement", href: "/my-statement", icon: FileText, roles: ["customer"], description: "View your balance and transaction history" },
   { name: "Customer Orders", href: "/customer-orders", icon: Inbox, roles: ["admin", "store", "manufacturing"], description: "Manage incoming orders" },
-  // Simply delete this entire line
-{ name: "Salesman Orders", href: "/salesman-orders", icon: ClipboardList, roles: ["admin"], description: "Create and submit orders" },
   { name: "My Dashboard", href: "/salesman-dashboard", icon: LayoutDashboard, roles: ["salesman"], description: "My commission and sales overview" },
   { name: "Billing", href: "/billing", icon: FileText, roles: ["admin"], description: "Create GST / non-GST invoices" },
   { name: "Invoices", href: "/invoices", icon: FileText, roles: ["admin", "salesman", "accountant", "store"], description: "Browse and print invoices" },
@@ -59,6 +58,7 @@ export const moduleNavItems: NavItem[] = [
   { name: "Inventory", href: "/inventory", icon: Package, roles: ["admin", "store"], description: "Products and stock" },
   { name: "Stock Adjustment", href: "/stock-adjustment", icon: ClipboardCheck, roles: ["admin"], description: "Physical stock reconciliation and adjustments" },
   { name: "Customers", href: "/customers", icon: Users, roles: ["admin", "salesman", "accountant"], description: "Customer directory and ledgers" },
+  { name: "Khatabook", href: "/khatabook", icon: BookOpen, roles: ["admin", "accountant"], description: "Customer and supplier balances at a glance" },
   { name: "Payments", href: "/payments", icon: CreditCard, roles: ["admin", "salesman", "accountant"], description: "Collections and approvals" },
   { name: "Commission", href: "/commission", icon: BadgeIndianRupee, roles: ["admin", "accountant", "salesman"], description: "Salesman commission report" },
   { name: "Cash Book", href: "/cashbook", icon: HandCoins, roles: ["admin", "accountant"], description: "Daily cash movements" },

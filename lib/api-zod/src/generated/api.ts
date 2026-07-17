@@ -2833,6 +2833,25 @@ export const GlobalSearchResponse = zod.object({
 
 
 /**
+ * @summary List khatabook entries (customer or supplier balances)
+ */
+export const ListKhatabookQueryParams = zod.object({
+  "type": zod.enum(['customer', 'vendor'])
+})
+
+export const ListKhatabookResponseItem = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "mobile": zod.string(),
+  "gstin": zod.string().nullish(),
+  "pricingTier": zod.string().nullish(),
+  "outstandingBalance": zod.number(),
+  "nextDueDate": zod.string().nullish()
+})
+export const ListKhatabookResponse = zod.array(ListKhatabookResponseItem)
+
+
+/**
  * @summary List workers
  */
 export const ListWorkersQueryParams = zod.object({

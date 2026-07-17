@@ -17,6 +17,7 @@ import InvoiceDetail from "@/pages/invoice-detail";
 import StockAdjustment from "@/pages/stock-adjustment";
 import Customers from "@/pages/customers";
 import CustomerProfile from "@/pages/customer-profile";
+import Khatabook from "@/pages/khatabook";
 import Payments from "@/pages/payments";
 import Rewards from "@/pages/rewards";
 import Manufacturing from "@/pages/manufacturing";
@@ -82,6 +83,7 @@ function ProtectedRoutes() {
         <Route path="/stock-adjustment" component={StockAdjustment} />
         <Route path="/customers" component={Customers} />
         <Route path="/customers/:id" component={CustomerProfile} />
+        <Route path="/khatabook" component={Khatabook} />
         <Route path="/payments" component={Payments} />
         <Route path="/rewards" component={Rewards} />
         <Route path="/manufacturing" component={Manufacturing} />

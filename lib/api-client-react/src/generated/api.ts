@@ -84,6 +84,7 @@ import type {
   InvoiceSummary,
   InvoiceUpdate,
   ItemWiseSalesReport,
+  KhatabookEntry,
   LedgerAdjustmentInput,
   LedgerEntry,
   ListAccountTransactionsParams,
@@ -91,6 +92,7 @@ import type {
   ListEntitiesParams,
   ListExpensesParams,
   ListInvoicesParams,
+  ListKhatabookParams,
   ListPaymentsParams,
   ListProductsParams,
   ListPurchasesParams,
@@ -7558,6 +7560,90 @@ export function useGlobalSearch<TData = Awaited<ReturnType<typeof globalSearch>>
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGlobalSearchQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListKhatabookUrl = (params: ListKhatabookParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/khatabook?${stringifiedParams}` : `/api/khatabook`
+}
+
+/**
+ * @summary List khatabook entries (customer or supplier balances)
+ */
+export const listKhatabook = async (params: ListKhatabookParams, options?: RequestInit): Promise<KhatabookEntry[]> => {
+
+  return customFetch<KhatabookEntry[]>(getListKhatabookUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListKhatabookQueryKey = (params?: ListKhatabookParams,) => {
+    return [
+    `/api/khatabook`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListKhatabookQueryOptions = <TData = Awaited<ReturnType<typeof listKhatabook>>, TError = ErrorType<unknown>>(params: ListKhatabookParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listKhatabook>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListKhatabookQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listKhatabook>>> = ({ signal }) => listKhatabook(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listKhatabook>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListKhatabookQueryResult = NonNullable<Awaited<ReturnType<typeof listKhatabook>>>
+export type ListKhatabookQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List khatabook entries (customer or supplier balances)
+ */
+
+export function useListKhatabook<TData = Awaited<ReturnType<typeof listKhatabook>>, TError = ErrorType<unknown>>(
+ params: ListKhatabookParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listKhatabook>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListKhatabookQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
