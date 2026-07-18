@@ -18,4 +18,6 @@ export interface AccountTransactionInput {
   partyMobile?: string;
   partyEntityId?: number;
   notes?: string;
+  /** Admin-only override to let a "Payment Out" push the account balance negative instead of being blocked. */
+  allowNegative?: boolean;
 }

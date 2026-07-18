@@ -1425,6 +1425,7 @@ export const ListPaymentsResponseItem = zod.object({
   "receiptId": zod.string().optional(),
   "customerId": zod.number(),
   "customerName": zod.string().nullish(),
+  "invoiceId": zod.number().nullish(),
   "salesmanId": zod.number().nullish(),
   "salesmanName": zod.string().nullish(),
   "amount": zod.number(),
@@ -1445,6 +1446,7 @@ export const ListPaymentsResponse = zod.array(ListPaymentsResponseItem)
  */
 export const LogPaymentBody = zod.object({
   "customerId": zod.number().optional().describe('Omit for walk-in \/ cash sales — server resolves to a Walk-in Customer entity.'),
+  "invoiceId": zod.number().optional().describe('If set, this payment also reduces that specific invoice\'s own balance_due (capped to it — any excess still reduces the customer\'s overall outstanding balance).'),
   "amount": zod.number(),
   "mode": zod.enum(['cash', 'cheque', 'upi', 'bank_transfer', 'other']),
   "notes": zod.string().optional(),
@@ -1456,6 +1458,7 @@ export const LogPaymentResponse = zod.object({
   "receiptId": zod.string().optional(),
   "customerId": zod.number(),
   "customerName": zod.string().nullish(),
+  "invoiceId": zod.number().nullish(),
   "salesmanId": zod.number().nullish(),
   "salesmanName": zod.string().nullish(),
   "amount": zod.number(),
@@ -1482,6 +1485,7 @@ export const ApprovePaymentResponse = zod.object({
   "receiptId": zod.string().optional(),
   "customerId": zod.number(),
   "customerName": zod.string().nullish(),
+  "invoiceId": zod.number().nullish(),
   "salesmanId": zod.number().nullish(),
   "salesmanName": zod.string().nullish(),
   "amount": zod.number(),
@@ -1508,6 +1512,7 @@ export const RejectPaymentResponse = zod.object({
   "receiptId": zod.string().optional(),
   "customerId": zod.number(),
   "customerName": zod.string().nullish(),
+  "invoiceId": zod.number().nullish(),
   "salesmanId": zod.number().nullish(),
   "salesmanName": zod.string().nullish(),
   "amount": zod.number(),
@@ -1674,7 +1679,8 @@ export const CreateAccountTransactionBody = zod.object({
   "partyName": zod.string().optional(),
   "partyMobile": zod.string().optional(),
   "partyEntityId": zod.number().optional(),
-  "notes": zod.string().optional()
+  "notes": zod.string().optional(),
+  "allowNegative": zod.boolean().optional().describe('Admin-only override to let a \"Payment Out\" push the account balance negative instead of being blocked.')
 })
 
 export const CreateAccountTransactionResponse = zod.object({

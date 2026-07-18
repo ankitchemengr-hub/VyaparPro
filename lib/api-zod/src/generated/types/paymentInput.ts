@@ -10,6 +10,8 @@ import type { PaymentInputMode } from './paymentInputMode';
 export interface PaymentInput {
   /** Omit for walk-in / cash sales — server resolves to a Walk-in Customer entity. */
   customerId?: number;
+  /** If set, this payment also reduces that specific invoice's own balance_due (capped to it — any excess still reduces the customer's overall outstanding balance). */
+  invoiceId?: number;
   amount: number;
   mode: PaymentInputMode;
   notes?: string;

@@ -15,6 +15,8 @@ export interface Payment {
   /** @nullable */
   customerName?: string | null;
   /** @nullable */
+  invoiceId?: number | null;
+  /** @nullable */
   salesmanId?: number | null;
   /** @nullable */
   salesmanName?: string | null;

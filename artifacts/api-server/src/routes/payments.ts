@@ -15,6 +15,7 @@ import {
 import { logger } from "../lib/logger";
 import { getCompanyId } from "../lib/tenant";
 import { generateSeriesNumber } from "../lib/number-series";
+import { applyEntityPayment } from "../lib/entity-payment";
 
 const router: IRouter = Router();
 
@@ -104,6 +105,7 @@ router.post("/payments", async (req, res): Promise<void> => {
         receiptId,
         customerId,
         customerName: customer.name,
+        invoiceId: parsed.data.invoiceId ?? null,
         salesmanId: null,
         salesmanName: null,
         amount: String(parsed.data.amount),
@@ -129,7 +131,9 @@ router.post("/payments", async (req, res): Promise<void> => {
         }
       }
 
-      // If payment is tied to a specific invoice, update its amount_paid / balance_due atomically
+      // If payment is tied to a specific invoice, validate it before applying —
+      // the actual balance_due/amount_paid reduction happens inside
+      // applyEntityPayment below, alongside the entity/ledger update.
       if (parsed.data.invoiceId) {
         const invCheck = await client.query(
           `SELECT id, balance_due FROM invoices WHERE id = $1 AND company_id = $2 AND status != 'cancelled'`,
@@ -138,36 +142,20 @@ router.post("/payments", async (req, res): Promise<void> => {
         if (invCheck.rowCount === 0) {
           throw new Error("Invoice not found or cancelled");
         }
-        const currentBalance = Number(invCheck.rows[0].balance_due);
-        if (currentBalance <= 0) {
+        if (Number(invCheck.rows[0].balance_due) <= 0) {
           throw new Error("Invoice is already fully paid");
         }
-        const applyAmount = Math.min(parsed.data.amount, currentBalance);
-        await client.query(
-          `UPDATE invoices
-           SET amount_paid = amount_paid + $1,
-               balance_due = GREATEST(0, balance_due - $1)
-           WHERE id = $2 AND company_id = $3`,
-          [applyAmount, parsed.data.invoiceId, companyId]
-        );
       }
 
-      await client.query(
-        `UPDATE entities SET outstanding_balance = outstanding_balance - $1 WHERE id = $2 AND company_id = $3`,
-        [parsed.data.amount, customerId, companyId]
-      );
-
-      const balResult = await client.query(
-        `SELECT outstanding_balance FROM entities WHERE id = $1 AND company_id = $2`,
-        [customerId, companyId]
-      );
-      const newBal = balResult.rows[0].outstanding_balance;
-
-      await client.query(
-        `INSERT INTO ledger_entries (company_id, entity_id, date, description, debit, credit, balance, type, reference_id, reference_no)
-         VALUES ($1, $2, NOW(), $3, 0, $4, $5, 'payment', $6, $7)`,
-        [companyId, customerId, `Payment received (${parsed.data.mode})`, parsed.data.amount, newBal, payment.id, receiptId]
-      );
+      await applyEntityPayment(client, {
+        companyId,
+        entityId: customerId,
+        amount: parsed.data.amount,
+        mode: parsed.data.mode,
+        receiptNo: receiptId,
+        referenceId: payment.id,
+        invoiceId: parsed.data.invoiceId ?? null,
+      });
 
       await client.query("COMMIT");
       res.status(201).json(formatPayment(payment));
@@ -198,6 +186,7 @@ router.post("/payments", async (req, res): Promise<void> => {
       receiptId,
       customerId,
       customerName: customer.name,
+      invoiceId: parsed.data.invoiceId ?? null,
       salesmanId: session?.userId ?? null,
       salesmanName: session?.name ?? null,
       amount: String(parsed.data.amount),
@@ -250,22 +239,15 @@ router.post("/payments/:id/approve", async (req, res): Promise<void> => {
       if (upd.rowCount === 0) throw new Error(`Account ${body.accountId} not found or inactive`);
     }
 
-    await client.query(
-      `UPDATE entities SET outstanding_balance = outstanding_balance - $1 WHERE id = $2 AND company_id = $3`,
-      [payment.amount, payment.customerId, companyId]
-    );
-
-    const balResult = await client.query(
-      `SELECT outstanding_balance FROM entities WHERE id = $1 AND company_id = $2`,
-      [payment.customerId, companyId]
-    );
-    const newBal = balResult.rows[0].outstanding_balance;
-
-    await client.query(
-      `INSERT INTO ledger_entries (company_id, entity_id, date, description, debit, credit, balance, type, reference_id, reference_no)
-       VALUES ($1, $2, NOW(), $3, 0, $4, $5, 'payment', $6, $7)`,
-      [companyId, payment.customerId, `Payment received (${payment.mode})`, payment.amount, newBal, payment.id, payment.receiptId]
-    );
+    await applyEntityPayment(client, {
+      companyId,
+      entityId: payment.customerId,
+      amount: Number(payment.amount),
+      mode: payment.mode,
+      receiptNo: payment.receiptId,
+      referenceId: payment.id,
+      invoiceId: payment.invoiceId ?? null,
+    });
 
     const [updated] = await db
       .update(paymentsTable)
@@ -320,6 +302,7 @@ function formatPayment(p: any) {
     receiptId: p.receiptId,
     customerId: p.customerId,
     customerName: p.customerName ?? null,
+    invoiceId: p.invoiceId ?? null,
     salesmanId: p.salesmanId ?? null,
     salesmanName: p.salesmanName ?? null,
     amount: Number(p.amount),

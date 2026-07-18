@@ -11,6 +11,7 @@ import {
   type Entity,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/contexts/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
@@ -61,6 +62,8 @@ export function CashEntryDialog({
 }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { hasRole } = useAuth();
+  const isAdmin = hasRole(["admin"]);
   const create = useCreateAccountTransaction();
 
   const [accountId, setAccountId] = useState<string>("");
@@ -71,6 +74,7 @@ export function CashEntryDialog({
   const [partyEntityId, setPartyEntityId] = useState<number | null>(null);
   const [notes, setNotes] = useState("");
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
+  const [negativeConfirmMsg, setNegativeConfirmMsg] = useState<string | null>(null);
 
   // dropdown state for name autocomplete
   const [nameOpen, setNameOpen] = useState(false);
@@ -119,6 +123,7 @@ export function CashEntryDialog({
       setNameOpen(false);
       setMobileOpen(false);
       setReceiptPreview(null);
+      setNegativeConfirmMsg(null);
       if (direction === "in") {
         fetchReceiptPreview().then(setReceiptPreview);
       }
@@ -149,12 +154,13 @@ export function CashEntryDialog({
     setPartyEntityId(null);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = (allowNegative = false) => {
     const amt = Number(amount);
     if (!accountId || !amt || amt <= 0) {
       toast({ title: "Pick an account and enter a positive amount", variant: "destructive" });
       return;
     }
+    setNegativeConfirmMsg(null);
     create.mutate(
       {
         data: {
@@ -166,6 +172,7 @@ export function CashEntryDialog({
           partyMobile: partyMobile.trim() || undefined,
           partyEntityId: partyEntityId ?? undefined,
           notes: notes.trim() || undefined,
+          ...(allowNegative ? { allowNegative: true } : {}),
         },
       },
       {
@@ -181,7 +188,12 @@ export function CashEntryDialog({
           onClose();
         },
         onError: (err: any) => {
-          toast({ title: "Failed", description: err?.message ?? "Server error", variant: "destructive" });
+          const serverMsg: string | undefined = err?.data?.error;
+          if (isAdmin && direction === "out" && serverMsg?.includes("Insufficient balance")) {
+            setNegativeConfirmMsg(serverMsg);
+            return;
+          }
+          toast({ title: "Failed", description: serverMsg ?? err?.message ?? "Server error", variant: "destructive" });
         },
       },
     );
@@ -373,12 +385,31 @@ export function CashEntryDialog({
             <Label>Notes <span className="text-muted-foreground text-xs">(optional)</span></Label>
             <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
           </div>
+
+          {negativeConfirmMsg && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 space-y-2">
+              <p>{negativeConfirmMsg}. Allow this account to go negative?</p>
+              <div className="flex gap-2 justify-end">
+                <Button size="sm" variant="outline" onClick={() => setNegativeConfirmMsg(null)}>Cancel</Button>
+                <Button
+                  size="sm"
+                  className="bg-amber-600 hover:bg-amber-700"
+                  onClick={() => handleSubmit(true)}
+                  disabled={create.isPending}
+                  data-testid="button-confirm-negative-balance"
+                >
+                  {create.isPending && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}
+                  Yes, allow negative balance
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button
-            onClick={handleSubmit}
+            onClick={() => handleSubmit(false)}
             disabled={create.isPending}
             className={isIn ? "bg-green-600 hover:bg-green-700" : "bg-rose-600 hover:bg-rose-700"}
             data-testid="button-confirm-entry"

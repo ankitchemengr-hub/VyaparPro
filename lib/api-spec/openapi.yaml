@@ -4060,6 +4060,8 @@ components:
           type: integer
         customerName:
           type: ["string", "null"]
+        invoiceId:
+          type: ["integer", "null"]
         salesmanId:
           type: ["integer", "null"]
         salesmanName:
@@ -4092,6 +4094,9 @@ components:
         customerId:
           type: integer
           description: Omit for walk-in / cash sales — server resolves to a Walk-in Customer entity.
+        invoiceId:
+          type: integer
+          description: If set, this payment also reduces that specific invoice's own balance_due (capped to it — any excess still reduces the customer's overall outstanding balance).
         amount:
           type: number
         mode:
@@ -4247,6 +4252,9 @@ components:
           type: integer
         notes:
           type: string
+        allowNegative:
+          type: boolean
+          description: Admin-only override to let a "Payment Out" push the account balance negative instead of being blocked.
 
     RewardScheme:
       type: object

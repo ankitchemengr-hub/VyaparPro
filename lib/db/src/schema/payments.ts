@@ -9,6 +9,10 @@ export const paymentsTable = pgTable("payments", {
   receiptId: text("receipt_id").notNull(),
   customerId: integer("customer_id").notNull().references(() => entitiesTable.id),
   customerName: text("customer_name"),
+  // Loose reference (no FK), matching ledger_entries/stock_movements' existing
+  // convention — a later Recycle-Bin permanent-delete of the invoice must
+  // never block or corrupt this payment's history.
+  invoiceId: integer("invoice_id"),
   salesmanId: integer("salesman_id"),
   salesmanName: text("salesman_name"),
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),

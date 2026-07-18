@@ -13,6 +13,8 @@ import {
 } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
 import { getCompanyId } from "../lib/tenant";
+import { generateSeriesNumber } from "../lib/number-series";
+import { applyEntityPayment } from "../lib/entity-payment";
 
 const router: IRouter = Router();
 
@@ -336,7 +338,7 @@ router.post("/account-transactions", async (req, res): Promise<void> => {
   }
   const session = (req as any).session;
   const companyId = getCompanyId(req);
-  const { accountId, direction, amount, mode, partyName, partyMobile, partyEntityId, notes } = parsed.data;
+  const { accountId, direction, amount, mode, partyName, partyMobile, partyEntityId, notes, allowNegative } = parsed.data;
 
   const client = await pool.connect();
   try {
@@ -353,16 +355,22 @@ router.post("/account-transactions", async (req, res): Promise<void> => {
     }
     const acct = acctRes.rows[0];
     const current = Number(acct.current_balance);
-    if (direction === "out" && current < amount - 0.001) {
+    // Admin can explicitly override the insufficient-balance block (e.g. an
+    // opening balance was never fully entered) — everyone else is always
+    // blocked, and admin is blocked too unless they pass allowNegative.
+    const canOverride = session?.role === "admin" && allowNegative === true;
+    if (direction === "out" && current < amount - 0.001 && !canOverride) {
       await client.query("ROLLBACK");
       res.status(400).json({ error: `Insufficient balance in ${acct.name} (₹${current.toFixed(2)})` });
       return;
     }
 
+    const receiptNo = await generateSeriesNumber(client, "payment_receipt", companyId);
+
     const ins = await client.query(
       `INSERT INTO account_transactions
-        (company_id, account_id, direction, amount, mode, party_name, party_mobile, party_entity_id, notes, created_by_id, created_by_name, created_by_role)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+        (company_id, account_id, direction, amount, mode, party_name, party_mobile, party_entity_id, notes, receipt_no, created_by_id, created_by_name, created_by_role)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
        RETURNING *`,
       [
         companyId,
@@ -374,6 +382,7 @@ router.post("/account-transactions", async (req, res): Promise<void> => {
         partyMobile ?? null,
         partyEntityId ?? null,
         notes ?? null,
+        receiptNo,
         session?.userId ?? null,
         session?.name ?? session?.username ?? null,
         session?.role ?? null,
@@ -381,48 +390,39 @@ router.post("/account-transactions", async (req, res): Promise<void> => {
     );
     const txn = ins.rows[0];
 
-    // Build receipt number: RCP-YYYYMM-<id padded>
-    const d = new Date(txn.created_at);
-    const yyyymm = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
-    const receiptNo = `RCP-${yyyymm}-${String(txn.id).padStart(5, "0")}`;
-    await client.query(`UPDATE account_transactions SET receipt_no = $1 WHERE company_id = $2 AND id = $3`, [receiptNo, companyId, txn.id]);
-
     const delta = direction === "in" ? amount : -amount;
     const updAcct = await client.query(
       `UPDATE accounts SET current_balance = current_balance + $1 WHERE company_id = $2 AND id = $3 RETURNING current_balance`,
       [delta, companyId, accountId],
     );
 
-    // Vendor payment: a "Payment Out" linked to a vendor entity settles part of
-    // what the business owes them. Mirrors purchases.ts's payable increase
-    // (outstanding_balance + grandTotal, credit-side ledger entry) with the
-    // opposite, debit-side move — same subtraction the customer /payments
-    // flow already does, just for the vendor side of the ledger. Scoped
-    // strictly to direction="out" + type="vendor" so this never touches
-    // customer balances (the dedicated Payments page already owns that,
-    // and double-adjusting would double-count) or non-payable entities
+    // A Cash Book entry linked to a party settles part of what's owed on
+    // their account — same subtraction the customer /payments flow already
+    // does, applied here for the two directions that represent an actual
+    // settlement: "Payment Out" to a vendor (we're paying down what we owe
+    // them) and "Payment In" from a customer (they're paying down what they
+    // owe us). Scoped strictly to these two combinations so this never
+    // touches the wrong side of a ledger, double-counts against the
+    // dedicated Payments page, or fires for non-payable entities
     // (workers/salesmen) linked to a cash-book entry for other reasons.
-    if (direction === "out" && partyEntityId) {
-      const vendorRes = await client.query(
+    if (partyEntityId && ((direction === "out") || (direction === "in"))) {
+      const partyRes = await client.query(
         `SELECT id, type, name FROM entities WHERE company_id = $1 AND id = $2`,
         [companyId, partyEntityId],
       );
-      const vendor = vendorRes.rows[0];
-      if (vendor?.type === "vendor") {
-        await client.query(
-          `UPDATE entities SET outstanding_balance = outstanding_balance - $1 WHERE company_id = $2 AND id = $3`,
-          [amount, companyId, vendor.id],
-        );
-        const balRes = await client.query(
-          `SELECT outstanding_balance FROM entities WHERE company_id = $1 AND id = $2`,
-          [companyId, vendor.id],
-        );
-        const newBal = balRes.rows[0].outstanding_balance;
-        await client.query(
-          `INSERT INTO ledger_entries (company_id, entity_id, date, description, debit, credit, balance, type, reference_id, reference_no)
-           VALUES ($1, $2, NOW(), $3, $4, 0, $5, 'payment', $6, $7)`,
-          [companyId, vendor.id, `Payment made (${mode})`, amount, newBal, txn.id, receiptNo],
-        );
+      const party = partyRes.rows[0];
+      const isVendorPayout = direction === "out" && party?.type === "vendor";
+      const isCustomerReceipt = direction === "in" && party?.type === "customer";
+      if (isVendorPayout || isCustomerReceipt) {
+        await applyEntityPayment(client, {
+          companyId,
+          entityId: party.id,
+          amount,
+          mode,
+          receiptNo,
+          referenceId: txn.id,
+          description: isVendorPayout ? `Payment made (${mode})` : `Payment received (${mode})`,
+        });
       }
     }
 

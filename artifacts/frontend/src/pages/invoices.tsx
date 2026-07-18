@@ -7,7 +7,7 @@ import {
   useDeleteInvoice,
   getListInvoicesQueryKey,
 } from "@workspace/api-client-react";
-import { useMutation } from "@tanstack/react-query";
+import { RecordPaymentDialog } from "@/components/record-payment-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -79,20 +79,9 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
 
   const deleteInvoice = useDeleteInvoice();
 
-  const [markingPaid, setMarkingPaid] = useState<{ id: number; invoiceNo: string } | null>(null);
-  const markPaidMut = useMutation({
-    mutationFn: async (id: number) => {
-      const res = await fetch(`/api/invoices/${id}/mark-paid`, { method: "PATCH", credentials: "include" });
-      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error ?? "Failed"); }
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
-      toast({ title: "Invoice marked as paid", description: `${markingPaid?.invoiceNo} is now paid.` });
-      setMarkingPaid(null);
-    },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
-  });
+  const [payingInvoice, setPayingInvoice] = useState<{
+    id: number; invoiceNo: string; customerId: number | null; balanceDue: number; grandTotal: number; customerName: string | null;
+  } | null>(null);
 
   const noPayTypes = new Set(["quotation", "proforma_invoice", "sale_order", "delivery_challan"]);
   const getPayStatus = (inv: any): string => {
@@ -341,23 +330,33 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
+                        {(isAdmin || isSalesman) && invoice.status !== "cancelled" && (() => {
+                          const ps = getPayStatus(invoice);
+                          const isPaid = ps === "paid";
+                          return (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className={`h-8 w-8 ${isPaid ? "text-green-600" : "text-muted-foreground hover:text-green-600"}`}
+                              onClick={() => setPayingInvoice({
+                                id: invoice.id,
+                                invoiceNo: invoice.invoiceNo,
+                                customerId: invoice.customerId ?? null,
+                                balanceDue: Number(invoice.balanceDue),
+                                grandTotal: Number(invoice.grandTotal),
+                                customerName: invoice.customerName ?? null,
+                              })}
+                              disabled={isPaid}
+                              title={isPaid ? "Fully paid" : "Record payment"}
+                              aria-label={isPaid ? "Fully paid" : "Record payment"}
+                              data-testid={`button-record-payment-${invoice.id}`}
+                            >
+                              <IndianRupee className={`h-4 w-4 ${isPaid ? "fill-green-600/20" : ""}`} />
+                            </Button>
+                          );
+                        })()}
                         {isAdmin && (
                           <>
-                            {(() => {
-                              const ps = getPayStatus(invoice);
-                              return (ps === "not_paid" || ps === "partial") ? (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 text-green-600 hover:text-green-700"
-                                  onClick={() => setMarkingPaid({ id: invoice.id, invoiceNo: invoice.invoiceNo })}
-                                  title="Mark as paid"
-                                  aria-label="Mark as paid"
-                                >
-                                  <IndianRupee className="h-4 w-4" />
-                                </Button>
-                              ) : null;
-                            })()}
                             <Button
                               variant="ghost"
                               size="icon"
@@ -400,30 +399,16 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
         </CardContent>
       </Card>
 
-      {/* Mark Paid confirm */}
-      <AlertDialog open={!!markingPaid} onOpenChange={(o) => !o && setMarkingPaid(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Mark {markingPaid?.invoiceNo} as Paid?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will set the invoice balance to <strong>₹0</strong> and mark it <strong>Paid</strong>.
-              Use this when payment was already recorded in the khata or cash book.
-              No new payment receipt will be created.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={markPaidMut.isPending}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={(e) => { e.preventDefault(); if (markingPaid) markPaidMut.mutate(markingPaid.id); }}
-              disabled={markPaidMut.isPending}
-              className="bg-green-600 text-white hover:bg-green-700"
-            >
-              {markPaidMut.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Yes, mark as paid
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <RecordPaymentDialog
+        open={!!payingInvoice}
+        onOpenChange={(o) => !o && setPayingInvoice(null)}
+        entityId={payingInvoice?.customerId}
+        entityName={payingInvoice?.customerName}
+        invoiceId={payingInvoice?.id}
+        invoiceNo={payingInvoice?.invoiceNo}
+        maxAmount={payingInvoice?.balanceDue}
+        totalAmount={payingInvoice?.grandTotal}
+      />
 
       {/* Delete confirm */}
       <AlertDialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>

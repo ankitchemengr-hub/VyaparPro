@@ -1266,6 +1266,8 @@ export interface Payment {
   /** @nullable */
   customerName?: string | null;
   /** @nullable */
+  invoiceId?: number | null;
+  /** @nullable */
   salesmanId?: number | null;
   /** @nullable */
   salesmanName?: string | null;
@@ -1299,6 +1301,8 @@ export const PaymentInputMode = {
 export interface PaymentInput {
   /** Omit for walk-in / cash sales — server resolves to a Walk-in Customer entity. */
   customerId?: number;
+  /** If set, this payment also reduces that specific invoice's own balance_due (capped to it — any excess still reduces the customer's overall outstanding balance). */
+  invoiceId?: number;
   amount: number;
   mode: PaymentInputMode;
   notes?: string;
@@ -1443,6 +1447,8 @@ export interface AccountTransactionInput {
   partyMobile?: string;
   partyEntityId?: number;
   notes?: string;
+  /** Admin-only override to let a "Payment Out" push the account balance negative instead of being blocked. */
+  allowNegative?: boolean;
 }
 
 export type RewardSchemeRewardType = typeof RewardSchemeRewardType[keyof typeof RewardSchemeRewardType];

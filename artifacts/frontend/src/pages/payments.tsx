@@ -1,6 +1,9 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useAuth } from "@/contexts/use-auth";
-import { useListPayments, useApprovePayment, useRejectPayment, PaymentStatus } from "@workspace/api-client-react";
+import {
+  useListPayments, useApprovePayment, useRejectPayment, PaymentStatus,
+  useListEntities, getListEntitiesQueryKey,
+} from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -8,9 +11,83 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
 import { format } from "date-fns";
-import { CheckCircle2, XCircle, X, Filter, Clock } from "lucide-react";
+import { CheckCircle2, XCircle, X, Filter, Clock, Search, Loader2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { RecordPaymentDialog } from "@/components/record-payment-dialog";
+
+function useDebounced<T>(value: T, ms = 250): T {
+  const [v, setV] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setV(value), ms);
+    return () => clearTimeout(id);
+  }, [value, ms]);
+  return v;
+}
+
+function PickCustomerDialog({
+  open, onOpenChange, onSelect,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  onSelect: (customer: { id: number; name: string }) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const debounced = useDebounced(search, 250);
+  const params = { type: "customer" as const, search: debounced.trim() };
+  const { data: matches = [], isFetching } = useListEntities(params, {
+    query: { queryKey: getListEntitiesQueryKey(params), enabled: open && debounced.trim().length >= 1 },
+  });
+
+  useEffect(() => {
+    if (!open) setSearch("");
+  }, [open]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><Search className="w-4 h-4" /> Select Customer</DialogTitle>
+          <DialogDescription>Search by name or mobile to record a payment.</DialogDescription>
+        </DialogHeader>
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Type customer name or mobile..."
+          autoComplete="off"
+          data-testid="input-pick-customer-search"
+        />
+        <div className="max-h-72 overflow-y-auto space-y-1">
+          {isFetching ? (
+            <div className="p-3 text-sm text-muted-foreground flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin" /> Searching...
+            </div>
+          ) : debounced.trim().length < 1 ? (
+            <div className="p-3 text-sm text-muted-foreground">Start typing to search customers.</div>
+          ) : matches.length === 0 ? (
+            <div className="p-3 text-sm text-muted-foreground">No matching customer.</div>
+          ) : (
+            matches.map((e) => (
+              <button
+                key={e.id}
+                type="button"
+                onClick={() => onSelect({ id: e.id, name: e.name })}
+                className="w-full text-left px-3 py-2 rounded-md hover:bg-accent text-sm"
+                data-testid={`option-pick-customer-${e.id}`}
+              >
+                <div className="font-medium">{e.name}</div>
+                <div className="text-xs text-muted-foreground">{e.mobile}</div>
+              </button>
+            ))
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const firstOfMonth = () => {
@@ -24,6 +101,8 @@ export default function Payments() {
   const [status, setStatus] = useState<PaymentStatus | "all">("all");
   const [from, setFrom] = useState<string>(firstOfMonth());
   const [to, setTo] = useState<string>(todayISO());
+  const [pickCustomerOpen, setPickCustomerOpen] = useState(false);
+  const [payingCustomer, setPayingCustomer] = useState<{ id: number; name: string } | null>(null);
 
   const queryClient = useQueryClient();
   const approvePayment = useApprovePayment();
@@ -71,7 +150,9 @@ export default function Payments() {
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Payments & Receipts</h1>
           <p className="text-muted-foreground mt-2">Manage incoming payments and escrow approvals.</p>
         </div>
-        <Button className="w-full sm:w-auto">Log Payment</Button>
+        <Button className="w-full sm:w-auto" onClick={() => setPickCustomerOpen(true)} data-testid="button-log-payment">
+          Log Payment
+        </Button>
       </div>
 
       <Card>
@@ -209,6 +290,21 @@ export default function Payments() {
           </div>
         </CardContent>
       </Card>
+
+      <PickCustomerDialog
+        open={pickCustomerOpen}
+        onOpenChange={setPickCustomerOpen}
+        onSelect={(c) => {
+          setPayingCustomer(c);
+          setPickCustomerOpen(false);
+        }}
+      />
+      <RecordPaymentDialog
+        open={!!payingCustomer}
+        onOpenChange={(o) => !o && setPayingCustomer(null)}
+        entityId={payingCustomer?.id}
+        entityName={payingCustomer?.name}
+      />
     </div>
   );
 }
