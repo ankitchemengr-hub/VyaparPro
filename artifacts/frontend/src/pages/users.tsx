@@ -27,7 +27,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/use-auth";
 
-const ROLES = ["admin", "salesman", "store", "manufacturing", "accountant", "customer"] as const;
+const ROLES = ["admin", "salesman", "store", "manufacturing", "accountant", "customer", "counter"] as const;
 type Role = typeof ROLES[number];
 
 const ROLE_LABELS: Record<Role, string> = {
@@ -37,6 +37,7 @@ const ROLE_LABELS: Record<Role, string> = {
   manufacturing: "Manufacturing",
   accountant: "Accountant",
   customer: "Customer (B2B portal)",
+  counter: "Counter (shared retail/wholesale login)",
 };
 
 const ROLE_TO_ENTITY_TYPE: Partial<Record<Role, "customer" | "vendor" | "worker" | "salesman">> = {
@@ -277,6 +278,7 @@ function EditUserDialog({
   const [role, setRole] = useState<Role>("salesman");
   const [name, setName] = useState("");
   const [entityId, setEntityId] = useState("");
+  const [pricingTier, setPricingTier] = useState<"retail" | "wholesale">("retail");
 
   const linkableType = ROLE_TO_ENTITY_TYPE[role];
   const { data: linkableEntities } = useListEntities(
@@ -295,6 +297,7 @@ function EditUserDialog({
       setRole(target.role as Role);
       setName(target.name ?? "");
       setEntityId(target.entityId ? String(target.entityId) : "");
+      setPricingTier((target as any).pricingTier === "wholesale" ? "wholesale" : "retail");
     }
   }, [target]);
 
@@ -307,6 +310,7 @@ function EditUserDialog({
           role,
           name: name.trim() || undefined,
           entityId: entityId ? Number(entityId) : null,
+          pricingTier: role === "counter" ? pricingTier : null,
         },
       },
       {
@@ -352,6 +356,19 @@ function EditUserDialog({
               placeholder="Falls back to entity name if linked"
             />
           </div>
+
+          {role === "counter" && (
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Pricing Tier</label>
+              <Select value={pricingTier} onValueChange={(v) => setPricingTier(v as "retail" | "wholesale")}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="retail">Retail</SelectItem>
+                  <SelectItem value="wholesale">Wholesale</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {linkableType && (
             <div className="space-y-1.5">
@@ -409,6 +426,7 @@ function AddUserDialog({
       name: "",
       role: "salesman" as Role,
       entityId: "" as string,
+      pricingTier: "retail" as "retail" | "wholesale",
     },
   });
   const role = form.watch("role");
@@ -448,6 +466,7 @@ function AddUserDialog({
           name: values.name.trim() || undefined,
           role: values.role,
           entityId,
+          pricingTier: values.role === "counter" ? values.pricingTier : undefined,
         },
       },
       {
@@ -498,6 +517,30 @@ function AddUserDialog({
                 </FormItem>
               )}
             />
+
+            {role === "counter" && (
+              <FormField
+                control={form.control}
+                name="pricingTier"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Pricing Tier</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-pricing-tier"><SelectValue /></SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="retail">Retail</SelectItem>
+                        <SelectItem value="wholesale">Wholesale</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Fixes which rate this shared login sees in the catalog — never both.
+                    </p>
+                  </FormItem>
+                )}
+              />
+            )}
 
             <FormField
               control={form.control}

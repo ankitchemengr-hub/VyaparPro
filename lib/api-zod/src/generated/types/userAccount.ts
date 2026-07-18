@@ -5,6 +5,7 @@
  * Shradha Oil Center ERP API
  * OpenAPI spec version: 0.1.0
  */
+import type { UserAccountPricingTier } from './userAccountPricingTier';
 import type { UserAccountRole } from './userAccountRole';
 
 export interface UserAccount {
@@ -14,6 +15,8 @@ export interface UserAccount {
   role: UserAccountRole;
   /** @nullable */
   entityId?: number | null;
+  /** @nullable */
+  pricingTier?: UserAccountPricingTier;
   isActive: boolean;
   createdAt: string;
 }

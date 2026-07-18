@@ -71,7 +71,8 @@ router.post("/customer-orders", async (req, res): Promise<void> => {
     session.role !== "customer" &&
     session.role !== "admin" &&
     session.role !== "salesman" &&
-    session.role !== "store"
+    session.role !== "store" &&
+    session.role !== "counter"
   ) {
     res.status(403).json({ error: "Not allowed to place orders" });
     return;
@@ -134,8 +135,13 @@ router.post("/customer-orders", async (req, res): Promise<void> => {
     // at the wholesale (B2B) rate; other customers are billed at retail. When
     // the order is placed as a cash memo (non_gst), the snapshot uses the
     // product's non-GST rate instead (falling back to the base rate if unset).
+    // A "counter" login's tier is fixed on the account itself (session.pricingTier),
+    // since it isn't tied to one customer the way session.role === "customer" is.
     const isWholesaleBase =
-      session.role === "salesman" || session.role === "store" || customerPricingTier === "wholesale";
+      session.role === "salesman" ||
+      session.role === "store" ||
+      customerPricingTier === "wholesale" ||
+      (session.role === "counter" && session.pricingTier === "wholesale");
     const baseRate = isWholesaleBase
       ? Number(p.wholesalePrice ?? p.retailPrice ?? 0)
       : Number(p.retailPrice ?? 0);
@@ -285,7 +291,9 @@ router.get("/customer-orders", async (req, res): Promise<void> => {
   const params: any[] = [companyId];
   const where: string[] = [`company_id = $1`];
 
-  if (session.role === "customer") {
+  if (session.role === "customer" || session.role === "counter") {
+    // A "counter" login is shared, so it only ever sees the orders it placed
+    // itself — same scoping as a self-service customer.
     params.push(session.userId);
     where.push(`user_id = $${params.length}`);
   } else if (session.role === "salesman") {
@@ -336,7 +344,7 @@ router.get("/customer-orders/:id", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Not found" });
     return;
   }
-  if (session.role === "customer") {
+  if (session.role === "customer" || session.role === "counter") {
     if (order.user_id !== session.userId) {
       res.status(403).json({ error: "Forbidden" });
       return;

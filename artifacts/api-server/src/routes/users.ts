@@ -36,6 +36,7 @@ function toPublic(u: typeof usersTable.$inferSelect) {
     name: u.name,
     role: u.role,
     entityId: u.entityId,
+    pricingTier: u.pricingTier,
     isActive: u.isActive,
     createdAt: u.createdAt.toISOString(),
   };
@@ -108,7 +109,7 @@ router.post("/users", requireAdmin, async (req, res): Promise<void> => {
   }
   const companyId = getCompanyId(req);
   const session = (req as any).session;
-  const { password, name, role, entityId } = parsed.data;
+  const { password, name, role, entityId, pricingTier } = parsed.data;
   const username = parsed.data.username.trim();
   if (username.length < 3) {
     res.status(400).json({ error: "Username must be at least 3 characters" });
@@ -154,6 +155,7 @@ router.post("/users", requireAdmin, async (req, res): Promise<void> => {
         name: resolvedName,
         role,
         entityId: entityId ?? null,
+        pricingTier: pricingTier ?? null,
         isActive: true,
       })
       .returning();
@@ -232,6 +234,7 @@ router.patch("/users/:id", requireAdmin, async (req, res): Promise<void> => {
   if (parsed.data.role !== undefined) patch.role = parsed.data.role;
   if (parsed.data.isActive !== undefined) patch.isActive = parsed.data.isActive;
   if (parsed.data.entityId !== undefined) patch.entityId = parsed.data.entityId;
+  if (parsed.data.pricingTier !== undefined) patch.pricingTier = parsed.data.pricingTier;
   if (parsed.data.password !== undefined && parsed.data.password.length > 0) {
     patch.passwordHash = parsed.data.password;
   }

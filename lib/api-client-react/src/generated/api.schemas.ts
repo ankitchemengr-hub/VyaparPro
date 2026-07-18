@@ -212,6 +212,18 @@ export const AuthSessionRole = {
   manufacturing: 'manufacturing',
   accountant: 'accountant',
   customer: 'customer',
+  counter: 'counter',
+} as const;
+
+/**
+ * @nullable
+ */
+export type AuthSessionPricingTier = typeof AuthSessionPricingTier[keyof typeof AuthSessionPricingTier] | null;
+
+
+export const AuthSessionPricingTier = {
+  retail: 'retail',
+  wholesale: 'wholesale',
 } as const;
 
 export interface AuthSession {
@@ -225,6 +237,8 @@ export interface AuthSession {
   companyId?: number | null;
   /** @nullable */
   activeCompanyId?: number | null;
+  /** @nullable */
+  pricingTier?: AuthSessionPricingTier;
 }
 
 export interface CompanyOption {
@@ -282,6 +296,18 @@ export const UserAccountRole = {
   manufacturing: 'manufacturing',
   accountant: 'accountant',
   customer: 'customer',
+  counter: 'counter',
+} as const;
+
+/**
+ * @nullable
+ */
+export type UserAccountPricingTier = typeof UserAccountPricingTier[keyof typeof UserAccountPricingTier] | null;
+
+
+export const UserAccountPricingTier = {
+  retail: 'retail',
+  wholesale: 'wholesale',
 } as const;
 
 export interface UserAccount {
@@ -291,6 +317,8 @@ export interface UserAccount {
   role: UserAccountRole;
   /** @nullable */
   entityId?: number | null;
+  /** @nullable */
+  pricingTier?: UserAccountPricingTier;
   isActive: boolean;
   createdAt: string;
 }
@@ -305,6 +333,18 @@ export const CreateUserInputRole = {
   manufacturing: 'manufacturing',
   accountant: 'accountant',
   customer: 'customer',
+  counter: 'counter',
+} as const;
+
+/**
+ * @nullable
+ */
+export type CreateUserInputPricingTier = typeof CreateUserInputPricingTier[keyof typeof CreateUserInputPricingTier] | null;
+
+
+export const CreateUserInputPricingTier = {
+  retail: 'retail',
+  wholesale: 'wholesale',
 } as const;
 
 /**
@@ -324,6 +364,8 @@ export interface CreateUserInput {
   role: CreateUserInputRole;
   /** @nullable */
   entityId?: number | null;
+  /** @nullable */
+  pricingTier?: CreateUserInputPricingTier;
 }
 
 export type UpdateUserInputRole = typeof UpdateUserInputRole[keyof typeof UpdateUserInputRole];
@@ -336,6 +378,18 @@ export const UpdateUserInputRole = {
   manufacturing: 'manufacturing',
   accountant: 'accountant',
   customer: 'customer',
+  counter: 'counter',
+} as const;
+
+/**
+ * @nullable
+ */
+export type UpdateUserInputPricingTier = typeof UpdateUserInputPricingTier[keyof typeof UpdateUserInputPricingTier] | null;
+
+
+export const UpdateUserInputPricingTier = {
+  retail: 'retail',
+  wholesale: 'wholesale',
 } as const;
 
 /**
@@ -344,6 +398,8 @@ export const UpdateUserInputRole = {
 export interface UpdateUserInput {
   name?: string;
   role?: UpdateUserInputRole;
+  /** @nullable */
+  pricingTier?: UpdateUserInputPricingTier;
   isActive?: boolean;
   /** @nullable */
   entityId?: number | null;
@@ -980,6 +1036,11 @@ export interface EntityInput {
   gpsLocation?: string;
   pricingTier?: EntityInputPricingTier;
   creditLimit?: number;
+  /**
+     * Optional salesman to credit commission to — only applies when type is customer.
+     * @nullable
+     */
+  assignedSalesmanId?: number | null;
 }
 
 export interface EntityUpdate {

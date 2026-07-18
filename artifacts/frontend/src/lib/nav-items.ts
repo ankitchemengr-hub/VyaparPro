@@ -27,7 +27,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-export type Role = "super_admin" | "admin" | "salesman" | "store" | "manufacturing" | "accountant" | "customer";
+export type Role = "super_admin" | "admin" | "salesman" | "store" | "manufacturing" | "accountant" | "customer" | "counter";
 
 export interface NavItem {
   name: string;
@@ -41,8 +41,8 @@ export interface NavItem {
 export const topNavItems: NavItem[] = [
   { name: "Platform Console", href: "/subscriptions", icon: BadgeIndianRupee, roles: ["super_admin"] },
   { name: "Dashboard", href: "/", icon: LayoutDashboard, roles: ["admin", "accountant"] },
-  { name: "Menu", href: "/menu", icon: LayoutGrid, roles: ["admin", "salesman", "store", "manufacturing", "accountant", "customer"] },
-  { name: "Catalog", href: "/catalog", icon: ShoppingCart, roles: ["admin", "salesman", "store", "manufacturing", "customer"] },
+  { name: "Menu", href: "/menu", icon: LayoutGrid, roles: ["admin", "salesman", "store", "manufacturing", "accountant", "customer", "counter"] },
+  { name: "Catalog", href: "/catalog", icon: ShoppingCart, roles: ["admin", "salesman", "store", "manufacturing", "customer", "counter"] },
   { name: "My Statement", href: "/my-statement", icon: FileText, roles: ["customer"] },
   { name: "My Orders", href: "/my-orders", icon: ClipboardList, roles: ["customer", "salesman"] },
 ];
@@ -51,7 +51,7 @@ export const topNavItems: NavItem[] = [
 export const moduleNavItems: NavItem[] = [
   { name: "My Orders", href: "/my-orders", icon: ClipboardList, roles: ["customer", "salesman"], description: "Track your placed orders" },
   { name: "My Statement", href: "/my-statement", icon: FileText, roles: ["customer"], description: "View your balance and transaction history" },
-  { name: "Customer Orders", href: "/customer-orders", icon: Inbox, roles: ["admin", "store", "manufacturing"], description: "Manage incoming orders" },
+  { name: "Customer Orders", href: "/customer-orders", icon: Inbox, roles: ["admin", "store", "manufacturing", "counter"], description: "Manage incoming orders" },
   { name: "My Dashboard", href: "/salesman-dashboard", icon: LayoutDashboard, roles: ["salesman"], description: "My commission and sales overview" },
   { name: "Billing", href: "/billing", icon: FileText, roles: ["admin", "store"], description: "Create GST / non-GST invoices" },
   { name: "Invoices", href: "/invoices", icon: FileText, roles: ["admin", "salesman", "accountant", "store"], description: "Browse and print invoices" },

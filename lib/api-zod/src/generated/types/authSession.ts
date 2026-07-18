@@ -5,6 +5,7 @@
  * Shradha Oil Center ERP API
  * OpenAPI spec version: 0.1.0
  */
+import type { AuthSessionPricingTier } from './authSessionPricingTier';
 import type { AuthSessionRole } from './authSessionRole';
 
 export interface AuthSession {
@@ -18,4 +19,6 @@ export interface AuthSession {
   companyId?: number | null;
   /** @nullable */
   activeCompanyId?: number | null;
+  /** @nullable */
+  pricingTier?: AuthSessionPricingTier;
 }

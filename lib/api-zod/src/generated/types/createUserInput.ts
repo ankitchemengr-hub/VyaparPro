@@ -5,6 +5,7 @@
  * Shradha Oil Center ERP API
  * OpenAPI spec version: 0.1.0
  */
+import type { CreateUserInputPricingTier } from './createUserInputPricingTier';
 import type { CreateUserInputRole } from './createUserInputRole';
 
 /**
@@ -24,4 +25,6 @@ export interface CreateUserInput {
   role: CreateUserInputRole;
   /** @nullable */
   entityId?: number | null;
+  /** @nullable */
+  pricingTier?: CreateUserInputPricingTier;
 }

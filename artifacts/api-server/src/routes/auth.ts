@@ -200,6 +200,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     role: user.role,
     name: user.name,
     entityId: user.entityId ?? null,
+    pricingTier: user.pricingTier ?? null,
     companyId: sessionCompanyId,
     companySwitch: user.role !== "super_admin" && switchTarget != null,
   };
@@ -212,6 +213,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     role: user.role,
     name: user.name,
     customerId: user.entityId ?? null,
+    pricingTier: user.pricingTier ?? null,
     companyId: sessionCompanyId,
     company: loginCompany ? { name: loginCompany.name, logo: loginCompany.logo ?? null } : null,
   });
@@ -262,6 +264,7 @@ router.get("/auth/me", async (req, res): Promise<void> => {
     role: user.role,
     name: user.name,
     entityId: user.entityId ?? null,
+    pricingTier: user.pricingTier ?? null,
     companyId: user.companyId ?? null,
     // Preserve session-only fields that have NO DB column. Re-stamping would
     // otherwise drop them and the res.json patch would rewrite the cookie
@@ -284,6 +287,7 @@ router.get("/auth/me", async (req, res): Promise<void> => {
     role: user.role,
     name: user.name,
     customerId: user.entityId ?? null,
+    pricingTier: user.pricingTier ?? null,
     companyId: user.companyId ?? null,
     // Surface the super_admin's currently switched-into company so the SPA can
     // show the right company context and unlock ERP navigation. Null for normal

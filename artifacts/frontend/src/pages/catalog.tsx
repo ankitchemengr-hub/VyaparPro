@@ -5,12 +5,14 @@ import {
   useListProducts,
   useListProductGroups,
   useListBrands,
+  useListEntities,
   useLookupEntityByMobile,
   useCreateEntity,
   useCreateCustomerOrder,
   useGetEntity,
   getListCustomerOrdersQueryKey,
   getGetEntityQueryKey,
+  getListEntitiesQueryKey,
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
@@ -93,19 +95,27 @@ export default function Catalog() {
   const isManufacturing = user?.role === "manufacturing";
   const isSalesman = user?.role === "salesman";
   const isStore = user?.role === "store";
+  // "Counter" is a shared retail/wholesale login (not tied to one customer) —
+  // its pricing tier is fixed on the account itself rather than looked up from
+  // an entity, since many different people may use the same login.
+  const isCounter = user?.role === "counter";
+  const counterTier = (user as any)?.pricingTier as "retail" | "wholesale" | null | undefined;
+  const isCounterRetail = isCounter && counterTier === "retail";
+  const isCounterWholesale = isCounter && counterTier === "wholesale";
   const customerId = user?.customerId ?? 0;
   const { data: ownEntity } = useGetEntity(customerId, {
     query: { enabled: isB2B && !!user?.customerId, queryKey: getGetEntityQueryKey(customerId) },
   });
   const isWholesaleCustomer = isB2B && (ownEntity as any)?.pricingTier === "wholesale";
-  const showRetailOnly = (isB2B && !isWholesaleCustomer) || isManufacturing;
+  const showRetailOnly = (isB2B && !isWholesaleCustomer) || isManufacturing || isCounterRetail;
   const hidePrices = false;
   const showAdvancedFilters = !isSalesman;
-  const showNonGstRate = hasRole(["admin", "salesman", "store"]) || isWholesaleCustomer;
-  // Wholesale customers, salesmen, and store users pick Cash Memo (non-GST) vs
-  // E-Invoice (GST) before the order is placed. The choice carries through to
-  // billing.tsx (for salesman/store, who redirect there) via the invoiceType param.
-  const showInvoiceTypeChoice = isWholesaleCustomer || isSalesman || isStore;
+  const showNonGstRate = hasRole(["admin", "salesman", "store"]) || isWholesaleCustomer || isCounter;
+  // Wholesale customers, salesmen, store users, and counter logins pick Cash Memo
+  // (non-GST) vs E-Invoice (GST) before the order is placed. The choice carries
+  // through to billing.tsx (for salesman/store, who redirect there) via the
+  // invoiceType param.
+  const showInvoiceTypeChoice = isWholesaleCustomer || isSalesman || isStore || isCounter;
   const [invoiceMode, setInvoiceMode] = useState<"gst" | "non_gst">("gst");
   const { toast } = useToast();
   const placeOrder = useCreateCustomerOrder();
@@ -181,7 +191,12 @@ export default function Catalog() {
     );
   };
 
-  const isStaff = hasRole(["admin", "salesman", "store", "manufacturing", "accountant"]);
+  const isStaff = hasRole(["admin", "salesman", "store", "manufacturing", "accountant", "counter"]);
+  // Registering a brand-new customer (as opposed to looking one up by mobile
+  // and ordering for them) is restricted to admin/salesman — store, counter,
+  // manufacturing, and accountant can place orders for existing customers here
+  // but cannot add new ones through this flow.
+  const canRegisterNewCustomer = hasRole(["admin", "salesman"]);
 
   // Cart summary rows — join cart with product details
   const useNonGstRate = showInvoiceTypeChoice && invoiceMode === "non_gst";
@@ -236,8 +251,8 @@ export default function Catalog() {
 
 
 const proceedToOrderWithCustomer = (customer: any) => {
-  if (isSalesman) {
-    // Salesman places the order directly with customer info — store now
+  if (isSalesman || isCounter) {
+    // Salesman/counter places the order directly with customer info — store now
     // creates invoices directly via billing.tsx instead (see the else
     // branch below), same as admin.
     placeOrder.mutate(
@@ -251,7 +266,9 @@ const proceedToOrderWithCustomer = (customer: any) => {
           setCart({});
           setShowCustomerDialog(false);
           queryClient.invalidateQueries({ queryKey: getListCustomerOrdersQueryKey() });
-          setLocation("/my-orders");
+          // Counter logins have no invoice-based "My Orders" — their placed
+          // orders live at /customer-orders instead.
+          setLocation(isCounter ? "/customer-orders" : "/my-orders");
         },
         onError: (err: any) => {
           toast({
@@ -283,7 +300,7 @@ const proceedToOrderWithCustomer = (customer: any) => {
     setSearchMobile("");
     setStep("mobile");
     setFoundCustomer(null);
-    newCustomerForm.reset({ name: "", mobile: "", gstin: "", address: "", city: "", state: "Maharashtra", pricingTier: "retail" });
+    newCustomerForm.reset({ name: "", mobile: "", gstin: "", address: "", city: "", state: "Maharashtra", pricingTier: "retail", assignedSalesmanId: "" });
     setShowCustomerDialog(true);
   };
 
@@ -297,14 +314,32 @@ const proceedToOrderWithCustomer = (customer: any) => {
       city: "",
       state: "Maharashtra",
       pricingTier: "retail" as "retail" | "wholesale",
+      assignedSalesmanId: "" as string,
     },
   });
+
+  // Salesman picker for new customers registered on the fly — without this,
+  // commission attribution (which is keyed off the customer's own
+  // assignedSalesmanId, not who's logged in) silently never gets set for a
+  // brand-new customer created through this dialog.
+  const { data: salesmenList } = useListEntities(
+    { type: "salesman" },
+    { query: { enabled: isStaff, queryKey: getListEntitiesQueryKey({ type: "salesman" }) } },
+  );
 
   const createEntity = useCreateEntity();
 
   const handleCreateCustomer = newCustomerForm.handleSubmit(async (data) => {
+    const { assignedSalesmanId, ...rest } = data;
     createEntity.mutate(
-      { data: { type: "customer", ...data, mobile: mobileInput } },
+      {
+        data: {
+          type: "customer",
+          ...rest,
+          mobile: mobileInput,
+          ...(assignedSalesmanId ? { assignedSalesmanId: Number(assignedSalesmanId) } : {}),
+        },
+      },
       {
         onSuccess: (newCustomer) => {
           proceedToOrderWithCustomer(newCustomer);
@@ -480,7 +515,7 @@ const proceedToOrderWithCustomer = (customer: any) => {
                     {!hidePrices && (
                       showRetailOnly ? (
                         <div className="text-primary font-bold text-sm">₹{product.retailPrice}</div>
-                      ) : isWholesaleCustomer ? (
+                      ) : (isWholesaleCustomer || isCounterWholesale) ? (
                         <div className="flex items-center gap-1 text-[11px] text-muted-foreground flex-wrap">
                           <span>W: <span className="text-foreground font-medium">₹{product.wholesalePrice}</span></span>
                           {product.nonGstPrice != null && (
@@ -794,7 +829,32 @@ const proceedToOrderWithCustomer = (customer: any) => {
             </>
           )}
 
-          {step === "not_found" && (
+          {step === "not_found" && !canRegisterNewCustomer && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Phone className="w-5 h-5 text-primary" />
+                  Customer Not Found — {mobileInput}
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3 pt-2">
+                <p className="text-sm text-muted-foreground">
+                  This mobile number isn't registered yet. New customers can only be registered by a
+                  salesman or admin — ask one of them to add this customer first.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => { setStep("mobile"); setSearchMobile(""); }}
+                >
+                  Back
+                </Button>
+              </div>
+            </>
+          )}
+
+          {step === "not_found" && canRegisterNewCustomer && (
             <>
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
@@ -885,6 +945,34 @@ const proceedToOrderWithCustomer = (customer: any) => {
                         </FormItem>
                       )}
                     />
+                    {isStaff && salesmenList && salesmenList.length > 0 && (
+                      <FormField
+                        control={newCustomerForm.control}
+                        name="assignedSalesmanId"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Assigned Salesman (optional)</FormLabel>
+                            <Select value={field.value || "none"} onValueChange={(v) => field.onChange(v === "none" ? "" : v)}>
+                              <FormControl>
+                                <SelectTrigger data-testid="select-assigned-salesman">
+                                  <SelectValue placeholder="No salesman" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="none">— No salesman —</SelectItem>
+                                {salesmenList.map((s: any) => (
+                                  <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <p className="text-xs text-muted-foreground">
+                              Credits this salesman's commission on future orders from this customer.
+                            </p>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    )}
                     <div className="grid grid-cols-2 gap-3">
                       <FormField
                         control={newCustomerForm.control}

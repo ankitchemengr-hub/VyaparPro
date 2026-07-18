@@ -16,4 +16,5 @@ export const UserAccountRole = {
   manufacturing: 'manufacturing',
   accountant: 'accountant',
   customer: 'customer',
+  counter: 'counter',
 } as const;

@@ -27,4 +27,9 @@ export interface EntityInput {
   gpsLocation?: string;
   pricingTier?: EntityInputPricingTier;
   creditLimit?: number;
+  /**
+     * Optional salesman to credit commission to — only applies when type is customer.
+     * @nullable
+     */
+  assignedSalesmanId?: number | null;
 }

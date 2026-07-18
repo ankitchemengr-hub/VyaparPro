@@ -2827,7 +2827,7 @@ components:
           type: string
         role:
           type: string
-          enum: [super_admin, admin, salesman, store, manufacturing, accountant, customer]
+          enum: [super_admin, admin, salesman, store, manufacturing, accountant, customer, counter]
         name:
           type: string
         customerId:
@@ -2836,6 +2836,9 @@ components:
           type: ["integer", "null"]
         activeCompanyId:
           type: ["integer", "null"]
+        pricingTier:
+          type: ["string", "null"]
+          enum: [retail, wholesale, null]
 
     CompanyOption:
       type: object
@@ -2901,9 +2904,12 @@ components:
           type: string
         role:
           type: string
-          enum: [admin, salesman, store, manufacturing, accountant, customer]
+          enum: [admin, salesman, store, manufacturing, accountant, customer, counter]
         entityId:
           type: ["integer", "null"]
+        pricingTier:
+          type: ["string", "null"]
+          enum: [retail, wholesale, null]
         isActive:
           type: boolean
         createdAt:
@@ -2928,9 +2934,12 @@ components:
           type: string
         role:
           type: string
-          enum: [admin, salesman, store, manufacturing, accountant, customer]
+          enum: [admin, salesman, store, manufacturing, accountant, customer, counter]
         entityId:
           type: ["integer", "null"]
+        pricingTier:
+          type: ["string", "null"]
+          enum: [retail, wholesale, null]
 
     UpdateUserInput:
       type: object
@@ -2940,7 +2949,10 @@ components:
           type: string
         role:
           type: string
-          enum: [admin, salesman, store, manufacturing, accountant, customer]
+          enum: [admin, salesman, store, manufacturing, accountant, customer, counter]
+        pricingTier:
+          type: ["string", "null"]
+          enum: [retail, wholesale, null]
         isActive:
           type: boolean
         entityId:
@@ -3714,6 +3726,9 @@ components:
           enum: [retail, wholesale]
         creditLimit:
           type: number
+        assignedSalesmanId:
+          type: ["integer", "null"]
+          description: Optional salesman to credit commission to — only applies when type is customer.
 
     EntityUpdate:
       type: object

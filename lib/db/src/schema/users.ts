@@ -14,6 +14,10 @@ export const usersTable = pgTable("users", {
   role: text("role").notNull().default("salesman"),
   name: text("name").notNull(),
   entityId: integer("entity_id"),
+  // Only meaningful for role="counter" (shared retailer/wholesale login) — fixes
+  // which tier's rates the catalog shows, since a counter login isn't tied to
+  // a single customer entity the way role="customer" is.
+  pricingTier: text("pricing_tier"),
   // Tenant company this user belongs to. NULL only for platform super_admin.
   companyId: integer("company_id"),
   isActive: boolean("is_active").notNull().default(true),
