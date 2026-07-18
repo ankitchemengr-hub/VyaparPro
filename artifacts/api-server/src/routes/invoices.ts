@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, ilike, sql, or, ne } from "drizzle-orm";
+import { eq, and, ilike, sql, or, ne, inArray } from "drizzle-orm";
 import { db, pool } from "@workspace/db";
 import {
   invoicesTable,
@@ -150,6 +150,19 @@ router.post("/invoices", async (req, res): Promise<void> => {
     const isGst = data.invoiceType === "gst" || data.invoiceType === "proforma_invoice";
     const isQuotation = data.invoiceType === "quotation";
 
+    // Liters-per-unit must come from the product master, not the client
+    // payload — a stale/incomplete client value here silently drops that
+    // line's volume from the liters-sold dashboard and commission totals
+    // while the invoice itself still prints fine (the PDF recomputes from
+    // the live catalog as a fallback), so the two views can quietly diverge.
+    const productIds = [...new Set(data.items.map((item) => item.productId))];
+    const productRows = productIds.length > 0
+      ? await db.select({ id: productsTable.id, name: productsTable.name, litersPerBox: productsTable.litersPerBox })
+          .from(productsTable)
+          .where(and(eq(productsTable.companyId, companyId), inArray(productsTable.id, productIds)))
+      : [];
+    const productById = new Map(productRows.map((p) => [p.id, p]));
+
     const processedItems = data.items.map((item) => {
       const qty = Number(item.qty);
       const rate = Number(item.rate);
@@ -178,16 +191,17 @@ router.post("/invoices", async (req, res): Promise<void> => {
         }
       }
 
+      // total_liters = qty × liters-per-unit (litersPerBox, despite its name,
+      // holds liters per single unit — see inventory form field "Liters per
+      // QTY"). This feeds the commission calculation, so it must not depend
+      // on qtyBoxes/box-mode being set.
+      const litersPerBox = productById.get(item.productId)?.litersPerBox;
       return {
         ...item,
         qty: String(qty),
         qtyBoxes: item.qtyBoxes != null ? String(item.qtyBoxes) : null,
-       // total_liters = qty × liters-per-unit (the litersPerBox field, despite
-        // its name, holds liters per single unit — see inventory form field
-        // "Liters per QTY"). This feeds the commission calculation, so it must
-        // not depend on qtyBoxes/box-mode being set.
-        totalLiters: item.litersPerBox != null
-          ? String(qty * Number(item.litersPerBox))
+        totalLiters: litersPerBox != null
+          ? String(qty * Number(litersPerBox))
           : null,
         rate: String(rate),
         mrp: String(item.mrp),
@@ -284,7 +298,7 @@ router.post("/invoices", async (req, res): Promise<void> => {
           companyId,
           invRow.id,
           item.productId,
-          (await db.select({ name: productsTable.name }).from(productsTable).where(and(eq(productsTable.companyId, companyId), eq(productsTable.id, item.productId))))[0]?.name ?? "Unknown",
+          productById.get(item.productId)?.name ?? "Unknown",
           null,
           item.qty,
           item.qtyBoxes,
@@ -560,6 +574,17 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
     const placeOfSupply = data.placeOfSupply ?? existing.place_of_supply;
     const isInterstate = placeOfSupply !== "Maharashtra";
     let subtotal = 0, totalDiscount = 0, totalTax = 0, cgst = 0, sgst = 0, igst = 0;
+
+    // Liters-per-unit comes from the product master, not the client payload
+    // — see comment in the create-invoice route above.
+    const productIds = [...new Set(data.items.map((item) => item.productId))];
+    const productRows = productIds.length > 0
+      ? await db.select({ id: productsTable.id, name: productsTable.name, litersPerBox: productsTable.litersPerBox })
+          .from(productsTable)
+          .where(and(eq(productsTable.companyId, companyId), inArray(productsTable.id, productIds)))
+      : [];
+    const productById = new Map(productRows.map((p) => [p.id, p]));
+
     const processedItems = data.items.map((item) => {
       const qty = Number(item.qty);
       const rate = Number(item.rate);
@@ -578,10 +603,9 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
         if (isInterstate) igst += taxAmt; else { cgst += taxAmt / 2; sgst += taxAmt / 2; }
       }
       const qtyBoxes = item.qtyBoxes != null ? Number(item.qtyBoxes) : null;
-      const litersPerBox = item.litersPerBox != null ? Number(item.litersPerBox) : null;
-     // total_liters = qty × liters-per-unit (see comment in the
-      // create-invoice route above). Feeds the commission calculation.
-      const totalLiters = litersPerBox != null ? qty * litersPerBox : null;
+      const litersPerBoxVal = productById.get(item.productId)?.litersPerBox;
+      // total_liters = qty × liters-per-unit. Feeds the commission calculation.
+      const totalLiters = litersPerBoxVal != null ? qty * Number(litersPerBoxVal) : null;
       return {
         ...item,
         qty: String(qty), rate: String(rate), mrp: String(item.mrp),
@@ -661,7 +685,7 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
 
     // 5. Insert new line items + outward stock movements (skip stock for quotations)
     for (const item of processedItems) {
-      const prodName = (await db.select({ name: productsTable.name }).from(productsTable).where(and(eq(productsTable.companyId, companyId), eq(productsTable.id, item.productId))))[0]?.name ?? "Unknown";
+      const prodName = productById.get(item.productId)?.name ?? "Unknown";
       await client.query(
         `INSERT INTO invoice_items (company_id, invoice_id, product_id, product_name, hsn_code, qty, qty_boxes, total_liters, unit, rate, mrp, discount_pct, discount_amt, tax_pct, cess_pct, net_price, amount)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
