@@ -746,6 +746,11 @@ function AttachmentsSection({ purchaseId }: { purchaseId: number }) {
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  // Previewed in-app instead of navigating to the file URL — on a phone with
+  // this app added to the home screen, target="_blank"/full navigation to a
+  // PDF/image hands off to the OS's native viewer, and its back button has no
+  // app history to return to, so it looks like the whole app was closed.
+  const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
@@ -838,14 +843,18 @@ function AttachmentsSection({ purchaseId }: { purchaseId: number }) {
             )}
             <span className="text-sm truncate flex-1" title={a.originalName}>{a.originalName}</span>
             <span className="text-xs text-muted-foreground shrink-0">{formatSize(a.fileSize)}</span>
-            <a
-              href={`/api/purchases/attachments/${a.id}/file`}
-              target="_blank"
-              rel="noopener noreferrer"
-              title="View / Download"
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7"
+              onClick={() => setPreviewAttachment(a)}
+              title="View"
             >
+              <Eye className="w-3.5 h-3.5" />
+            </Button>
+            <a href={`/api/purchases/attachments/${a.id}/file`} download={a.originalName} title="Download">
               <Button size="icon" variant="ghost" className="h-7 w-7">
-                <Eye className="w-3.5 h-3.5" />
+                <Download className="w-3.5 h-3.5" />
               </Button>
             </a>
             <Button
@@ -861,6 +870,33 @@ function AttachmentsSection({ purchaseId }: { purchaseId: number }) {
           </div>
         ))}
       </div>
+
+      <Dialog open={!!previewAttachment} onOpenChange={(open) => { if (!open) setPreviewAttachment(null); }}>
+        <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="truncate">{previewAttachment?.originalName}</DialogTitle>
+          </DialogHeader>
+          {previewAttachment && (
+            previewAttachment.mimeType.startsWith("image/") ? (
+              <img
+                src={`/api/purchases/attachments/${previewAttachment.id}/file`}
+                alt={previewAttachment.originalName}
+                className="max-h-[75vh] w-full object-contain rounded"
+              />
+            ) : previewAttachment.mimeType === "application/pdf" ? (
+              <iframe
+                src={`/api/purchases/attachments/${previewAttachment.id}/file`}
+                title={previewAttachment.originalName}
+                className="w-full h-[75vh] rounded border"
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground py-8 text-center">
+                Preview isn't available for this file type — use Download instead.
+              </p>
+            )
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
