@@ -1214,7 +1214,8 @@ export const ListInvoicesResponseItem = zod.object({
   "taxPct": zod.number().optional(),
   "cessPct": zod.number().optional(),
   "netPrice": zod.number().optional(),
-  "amount": zod.number()
+  "amount": zod.number(),
+  "costPrice": zod.number().nullish()
 })).optional(),
   "createdAt": zod.string().optional()
 })
@@ -1300,7 +1301,8 @@ export const CreateInvoiceResponse = zod.object({
   "taxPct": zod.number().optional(),
   "cessPct": zod.number().optional(),
   "netPrice": zod.number().optional(),
-  "amount": zod.number()
+  "amount": zod.number(),
+  "costPrice": zod.number().nullish()
 })).optional(),
   "createdAt": zod.string().optional()
 })
@@ -1358,7 +1360,8 @@ export const GetInvoiceResponse = zod.object({
   "taxPct": zod.number().optional(),
   "cessPct": zod.number().optional(),
   "netPrice": zod.number().optional(),
-  "amount": zod.number()
+  "amount": zod.number(),
+  "costPrice": zod.number().nullish()
 })).optional(),
   "createdAt": zod.string().optional()
 })
@@ -1447,7 +1450,8 @@ export const UpdateInvoiceResponse = zod.object({
   "taxPct": zod.number().optional(),
   "cessPct": zod.number().optional(),
   "netPrice": zod.number().optional(),
-  "amount": zod.number()
+  "amount": zod.number(),
+  "costPrice": zod.number().nullish()
 })).optional(),
   "createdAt": zod.string().optional()
 })

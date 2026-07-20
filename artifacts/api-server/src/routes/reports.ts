@@ -359,7 +359,11 @@ router.get("/reports/profit-loss", async (req, res): Promise<void> => {
   const [salesRow, cogsRow, purchaseRow, expRow, expByCat] = await Promise.all([
     queryOne(`SELECT COALESCE(SUM(subtotal),0) AS revenue, COALESCE(SUM(total_tax),0) AS tax, COALESCE(SUM(grand_total),0) AS total FROM invoices i WHERE ${salesClause}`, ps),
     queryOne(
-      `SELECT COALESCE(SUM(ii.qty * COALESCE(prod.purchase_price, 0)), 0) AS cogs
+      // Prefer the cost snapshotted on the item at sale time (cost_price) so
+      // historical COGS doesn't shift when a product's purchase price later
+      // changes. Falls back to the product's current price only for rows
+      // saved before cost_price existed.
+      `SELECT COALESCE(SUM(ii.qty * COALESCE(ii.cost_price, prod.purchase_price, 0)), 0) AS cogs
        FROM invoice_items ii
        JOIN invoices i ON i.id = ii.invoice_id
        JOIN products prod ON prod.id = ii.product_id

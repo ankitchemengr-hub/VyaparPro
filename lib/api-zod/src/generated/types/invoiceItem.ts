@@ -27,4 +27,6 @@ export interface InvoiceItem {
   cessPct?: number;
   netPrice?: number;
   amount: number;
+  /** @nullable */
+  costPrice?: number | null;
 }

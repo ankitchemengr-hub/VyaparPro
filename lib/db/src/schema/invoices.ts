@@ -63,6 +63,12 @@ export const invoiceItemsTable = pgTable("invoice_items", {
   cessPct: numeric("cess_pct", { precision: 5, scale: 2 }).notNull().default("0"),
   netPrice: numeric("net_price", { precision: 12, scale: 2 }).notNull().default("0"),
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+  // Snapshot of the product's purchase price at the time of this sale — lets
+  // P&L/COGS reporting reflect the cost that was actually in effect for this
+  // sale, instead of recomputing against today's (possibly since-changed)
+  // purchase price. Null on rows created before this column existed; reports
+  // fall back to the current product price for those.
+  costPrice: numeric("cost_price", { precision: 12, scale: 2 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   index("invoice_items_company_idx").on(t.companyId),

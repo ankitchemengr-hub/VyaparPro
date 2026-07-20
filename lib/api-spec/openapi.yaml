@@ -4052,6 +4052,8 @@ components:
           type: number
         amount:
           type: number
+        costPrice:
+          type: ["number", "null"]
 
     InvoiceInput:
       type: object

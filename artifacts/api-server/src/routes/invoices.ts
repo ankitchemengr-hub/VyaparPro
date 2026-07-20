@@ -157,7 +157,12 @@ router.post("/invoices", async (req, res): Promise<void> => {
     // the live catalog as a fallback), so the two views can quietly diverge.
     const productIds = [...new Set(data.items.map((item) => item.productId))];
     const productRows = productIds.length > 0
-      ? await db.select({ id: productsTable.id, name: productsTable.name, litersPerBox: productsTable.litersPerBox })
+      ? await db.select({
+          id: productsTable.id,
+          name: productsTable.name,
+          litersPerBox: productsTable.litersPerBox,
+          purchasePrice: productsTable.purchasePrice,
+        })
           .from(productsTable)
           .where(and(eq(productsTable.companyId, companyId), inArray(productsTable.id, productIds)))
       : [];
@@ -196,6 +201,10 @@ router.post("/invoices", async (req, res): Promise<void> => {
       // QTY"). This feeds the commission calculation, so it must not depend
       // on qtyBoxes/box-mode being set.
       const litersPerBox = productById.get(item.productId)?.litersPerBox;
+      // costPrice snapshots the product's purchase price at sale time, so
+      // P&L/COGS reporting reflects what this sale actually cost rather than
+      // whatever the purchase price happens to be whenever the report runs.
+      const costPrice = productById.get(item.productId)?.purchasePrice;
       return {
         ...item,
         qty: String(qty),
@@ -203,6 +212,7 @@ router.post("/invoices", async (req, res): Promise<void> => {
         totalLiters: litersPerBox != null
           ? String(qty * Number(litersPerBox))
           : null,
+        costPrice: costPrice != null ? String(costPrice) : null,
         rate: String(rate),
         mrp: String(item.mrp),
         discountPct: String(discPct),
@@ -292,8 +302,8 @@ router.post("/invoices", async (req, res): Promise<void> => {
     // Insert items + deduct stock
     for (const item of processedItems) {
       await client.query(
-        `INSERT INTO invoice_items (company_id, invoice_id, product_id, product_name, hsn_code, qty, qty_boxes, total_liters, unit, rate, mrp, discount_pct, discount_amt, tax_pct, cess_pct, net_price, amount)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+        `INSERT INTO invoice_items (company_id, invoice_id, product_id, product_name, hsn_code, qty, qty_boxes, total_liters, unit, rate, mrp, discount_pct, discount_amt, tax_pct, cess_pct, net_price, amount, cost_price)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
         [
           companyId,
           invRow.id,
@@ -312,6 +322,7 @@ router.post("/invoices", async (req, res): Promise<void> => {
           item.cessPct,
           item.netPrice,
           item.amount,
+          item.costPrice,
         ]
       );
 
@@ -579,7 +590,12 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
     // — see comment in the create-invoice route above.
     const productIds = [...new Set(data.items.map((item) => item.productId))];
     const productRows = productIds.length > 0
-      ? await db.select({ id: productsTable.id, name: productsTable.name, litersPerBox: productsTable.litersPerBox })
+      ? await db.select({
+          id: productsTable.id,
+          name: productsTable.name,
+          litersPerBox: productsTable.litersPerBox,
+          purchasePrice: productsTable.purchasePrice,
+        })
           .from(productsTable)
           .where(and(eq(productsTable.companyId, companyId), inArray(productsTable.id, productIds)))
       : [];
@@ -606,6 +622,7 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
       const litersPerBoxVal = productById.get(item.productId)?.litersPerBox;
       // total_liters = qty × liters-per-unit. Feeds the commission calculation.
       const totalLiters = litersPerBoxVal != null ? qty * Number(litersPerBoxVal) : null;
+      const costPriceVal = productById.get(item.productId)?.purchasePrice;
       return {
         ...item,
         qty: String(qty), rate: String(rate), mrp: String(item.mrp),
@@ -615,6 +632,7 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
         amount: String(amount),
         qtyBoxesVal: qtyBoxes != null ? String(qtyBoxes) : null,
         totalLitersVal: totalLiters != null ? String(totalLiters) : null,
+        costPriceVal: costPriceVal != null ? String(costPriceVal) : null,
       };
     });
     const freight = Number(data.freight ?? existing.freight ?? 0);
@@ -687,9 +705,9 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
     for (const item of processedItems) {
       const prodName = productById.get(item.productId)?.name ?? "Unknown";
       await client.query(
-        `INSERT INTO invoice_items (company_id, invoice_id, product_id, product_name, hsn_code, qty, qty_boxes, total_liters, unit, rate, mrp, discount_pct, discount_amt, tax_pct, cess_pct, net_price, amount)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
-        [companyId, invoiceId, item.productId, prodName, null, item.qty, item.qtyBoxesVal, item.totalLitersVal, item.unit, item.rate, item.mrp, item.discountPct, item.discountAmt, item.taxPct, item.cessPct, item.netPrice, item.amount]
+        `INSERT INTO invoice_items (company_id, invoice_id, product_id, product_name, hsn_code, qty, qty_boxes, total_liters, unit, rate, mrp, discount_pct, discount_amt, tax_pct, cess_pct, net_price, amount, cost_price)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+        [companyId, invoiceId, item.productId, prodName, null, item.qty, item.qtyBoxesVal, item.totalLitersVal, item.unit, item.rate, item.mrp, item.discountPct, item.discountAmt, item.taxPct, item.cessPct, item.netPrice, item.amount, item.costPriceVal]
       );
       if (!isQuotationEdit) {
         await client.query(
@@ -964,6 +982,7 @@ function formatItem(i: any) {
     cessPct: Number(i.cessPct),
     netPrice: Number(i.netPrice),
     amount: Number(i.amount),
+    costPrice: i.costPrice != null ? Number(i.costPrice) : null,
   };
 }
 
