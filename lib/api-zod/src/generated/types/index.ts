@@ -38,6 +38,8 @@ export * from './bomInputItemsItem';
 export * from './bomItem';
 export * from './bomUpdate';
 export * from './bomUpdateItemsItem';
+export * from './brand';
+export * from './brandInput';
 export * from './bulkStockReconciliation201';
 export * from './bulkStockReconciliationInput';
 export * from './bulkStockReconciliationInputItemsItem';

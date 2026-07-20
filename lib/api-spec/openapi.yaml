@@ -691,6 +691,88 @@ paths:
                 items:
                   type: string
 
+  # BRAND MASTER — a managed list of brand names, separate from the distinct
+  # values above (which are just whatever strings existing products happen to
+  # use). Products still store brand as a plain string; picking from this list
+  # when adding a product keeps that string consistent (no "Bosch"/"BOSCH" drift).
+  /brands:
+    get:
+      operationId: listBrandMaster
+      tags: [products]
+      summary: List brand master entries
+      responses:
+        "200":
+          description: Brands
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Brand"
+    post:
+      operationId: createBrand
+      tags: [products]
+      summary: Create a brand master entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BrandInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Brand"
+        "409":
+          description: Brand name already exists
+
+  /brands/{id}:
+    patch:
+      operationId: updateBrand
+      tags: [products]
+      summary: Rename a brand master entry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BrandInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Brand"
+        "404":
+          description: Brand not found
+        "409":
+          description: Brand name already exists
+    delete:
+      operationId: deleteBrand
+      tags: [products]
+      summary: Delete a brand master entry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Brand not found
+
   # ENTITIES (customers, vendors, workers, salesmen)
   /entities:
     get:
@@ -3394,6 +3476,24 @@ components:
         pinCode:
           type: string
         error:
+          type: string
+
+    Brand:
+      type: object
+      required: [id, name, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        createdAt:
+          type: string
+
+    BrandInput:
+      type: object
+      required: [name]
+      properties:
+        name:
           type: string
 
     Product:

@@ -4,6 +4,7 @@ import authRouter from "./auth";
 import systemRouter from "./system";
 import usersRouter from "./users";
 import productsRouter from "./products";
+import brandsRouter from "./brands";
 import entitiesRouter from "./entities";
 import invoicesRouter from "./invoices";
 import purchasesRouter from "./purchases";
@@ -41,6 +42,7 @@ router.use(requireAuth);
 
 router.use(usersRouter);
 router.use(productsRouter);
+router.use(brandsRouter);
 router.use(entitiesRouter);
 router.use(invoicesRouter);
 router.use(purchasesRouter);

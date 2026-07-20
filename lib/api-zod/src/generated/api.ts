@@ -832,6 +832,59 @@ export const ListBrandsResponse = zod.array(ListBrandsResponseItem)
 
 
 /**
+ * @summary List brand master entries
+ */
+export const ListBrandMasterResponseItem = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "createdAt": zod.string()
+})
+export const ListBrandMasterResponse = zod.array(ListBrandMasterResponseItem)
+
+
+/**
+ * @summary Create a brand master entry
+ */
+export const CreateBrandBody = zod.object({
+  "name": zod.string()
+})
+
+export const CreateBrandResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Rename a brand master entry
+ */
+export const UpdateBrandParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateBrandBody = zod.object({
+  "name": zod.string()
+})
+
+export const UpdateBrandResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Delete a brand master entry
+ */
+export const DeleteBrandParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteBrandResponse = zod.void()
+
+
+/**
  * @summary List entities
  */
 export const ListEntitiesQueryParams = zod.object({

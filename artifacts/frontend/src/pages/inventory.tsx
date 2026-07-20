@@ -1,6 +1,9 @@
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/contexts/use-auth";
-import { useListProducts, useCreateProduct, useUpdateProduct, useDeleteProduct } from "@workspace/api-client-react";
+import {
+  useListProducts, useCreateProduct, useUpdateProduct, useDeleteProduct,
+  useListBrandMaster, useCreateBrand, getListBrandMasterQueryKey,
+} from "@workspace/api-client-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,14 +18,97 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { ImageAdjustDialog } from "@/components/image-adjust-dialog";
 import { useQueryClient } from "@tanstack/react-query";
 import { getListProductsQueryKey } from "@workspace/api-client-react";
 import {
   PackageSearch, PackagePlus, Upload, X, ImageIcon, Loader2, ChevronRight,
-  Pencil, Trash2, Save, Eye, EyeOff,
+  Pencil, Trash2, Save, Eye, EyeOff, Check, ChevronsUpDown, Plus,
 } from "lucide-react";
+
+// Brand field for the product form — picks from the Brand Master list, or
+// creates a new master entry inline if the typed name doesn't exist yet.
+function BrandCombobox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const { data: brands } = useListBrandMaster();
+  const queryClient = useQueryClient();
+  const createBrand = useCreateBrand();
+  const list = brands ?? [];
+  const trimmedQuery = query.trim();
+  const filtered = trimmedQuery
+    ? list.filter((b) => b.name.toLowerCase().includes(trimmedQuery.toLowerCase()))
+    : list;
+  const exactMatch = list.some((b) => b.name.toLowerCase() === trimmedQuery.toLowerCase());
+
+  const handleCreate = () => {
+    if (!trimmedQuery) return;
+    createBrand.mutate(
+      { data: { name: trimmedQuery } },
+      {
+        onSuccess: (created) => {
+          queryClient.invalidateQueries({ queryKey: getListBrandMasterQueryKey() });
+          onChange(created.name);
+          setOpen(false);
+          setQuery("");
+        },
+      },
+    );
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          type="button"
+          className="w-full justify-between font-normal"
+          data-testid="input-brand"
+        >
+          <span className={cn("truncate", !value && "text-muted-foreground")}>{value || "Select brand"}</span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[280px] max-w-[calc(100vw-2rem)] p-0" align="start">
+        <Command shouldFilter={false}>
+          <CommandInput placeholder="Search or add brand…" value={query} onValueChange={setQuery} />
+          <CommandList className="max-h-60">
+            {filtered.length === 0 && (
+              <CommandEmpty className="py-2 px-3 text-sm text-muted-foreground">
+                {trimmedQuery ? "No matching brand." : "No brands yet."}
+              </CommandEmpty>
+            )}
+            <CommandGroup>
+              {filtered.map((b) => (
+                <CommandItem
+                  key={b.id}
+                  value={b.name}
+                  onSelect={() => { onChange(b.name); setOpen(false); setQuery(""); }}
+                >
+                  <Check className={cn("mr-2 h-4 w-4", value === b.name ? "opacity-100" : "opacity-0")} />
+                  {b.name}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+            {trimmedQuery && !exactMatch && (
+              <CommandGroup>
+                <CommandItem onSelect={handleCreate} disabled={createBrand.isPending}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add "{trimmedQuery}" as new brand
+                </CommandItem>
+              </CommandGroup>
+            )}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 export default function Inventory() {
   const { hasRole } = useAuth();
@@ -497,12 +583,7 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
               </div>
               <div className="space-y-1.5">
                 <Label>Brand *</Label>
-                <Input
-                  value={form.brand}
-                  onChange={(e) => set("brand", e.target.value)}
-                  placeholder="e.g. Vipro"
-                  data-testid="input-brand"
-                />
+                <BrandCombobox value={form.brand} onChange={(v) => set("brand", v)} />
               </div>
               <div className="space-y-1.5">
                 <Label>Group / Category *</Label>

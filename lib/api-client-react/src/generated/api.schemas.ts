@@ -755,6 +755,16 @@ export interface GstinLookupResult {
   error?: string;
 }
 
+export interface Brand {
+  id: number;
+  name: string;
+  createdAt: string;
+}
+
+export interface BrandInput {
+  name: string;
+}
+
 export type ProductPricingBasis = typeof ProductPricingBasis[keyof typeof ProductPricingBasis];
 
 
