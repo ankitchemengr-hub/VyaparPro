@@ -14,6 +14,7 @@ import {
   GetPurchaseParams,
   UpdatePurchaseParams,
   UpdatePurchaseBody,
+  DeletePurchaseParams,
 } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
 import { getCompanyId } from "../lib/tenant";
@@ -662,6 +663,103 @@ router.put("/purchases/:id", async (req, res): Promise<void> => {
     await client.query("ROLLBACK");
     logger.error({ err }, "Failed to update purchase");
     res.status(500).json({ error: "Failed to update purchase" });
+  } finally {
+    client.release();
+  }
+});
+
+// DELETE /purchases/:id — cancel a bill: reverse its stock/vendor payable/ledger
+// effects (same reversal used by PUT above), then mark it cancelled. Unlike
+// invoice cancellation, purchases DO reverse stock — a mis-entered bill hasn't
+// sent real goods anywhere, so leaving stock/payable inflated would just be
+// wrong going forward, not a record of something that already happened.
+router.delete("/purchases/:id", async (req, res): Promise<void> => {
+  const auth = requireSession(req, res, PURCHASE_WRITE_ROLES);
+  if (!auth) return;
+
+  const paramsParsed = DeletePurchaseParams.safeParse(req.params);
+  if (!paramsParsed.success) {
+    res.status(400).json({ error: paramsParsed.error.message });
+    return;
+  }
+  const companyId = getCompanyId(req);
+  const purchaseId = paramsParsed.data.id;
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
+
+    const oldRes = await client.query(
+      `SELECT * FROM purchases WHERE company_id = $1 AND id = $2`,
+      [companyId, purchaseId],
+    );
+    if (oldRes.rows.length === 0) {
+      await client.query("ROLLBACK");
+      res.status(404).json({ error: "Purchase not found" });
+      return;
+    }
+    const old = oldRes.rows[0];
+    if (old.status === "cancelled") {
+      await client.query("ROLLBACK");
+      res.status(409).json({ error: "Purchase is already cancelled" });
+      return;
+    }
+
+    const oldItemsRes = await client.query(
+      `SELECT product_id, qty FROM purchase_items WHERE company_id = $1 AND purchase_id = $2`,
+      [companyId, purchaseId],
+    );
+    for (const oldItem of oldItemsRes.rows) {
+      await client.query(
+        `UPDATE products SET current_stock = current_stock - $1 WHERE company_id = $2 AND id = $3`,
+        [oldItem.qty, companyId, oldItem.product_id],
+      );
+      await client.query(
+        `INSERT INTO stock_movements (company_id, product_id, type, quantity, reason, reference_id, reference_type, user_id)
+         VALUES ($1, $2, 'outward', $3, 'Purchase cancelled', $4, 'purchase', $5)`,
+        [companyId, oldItem.product_id, oldItem.qty, purchaseId, auth.userId],
+      );
+    }
+
+    if (old.vendor_id) {
+      await client.query(
+        `UPDATE entities SET outstanding_balance = outstanding_balance - $1 WHERE company_id = $2 AND id = $3`,
+        [Number(old.grand_total), companyId, old.vendor_id],
+      );
+    }
+
+    await client.query(
+      `DELETE FROM ledger_entries WHERE company_id = $1 AND type = 'purchase' AND reference_id = $2`,
+      [companyId, purchaseId],
+    );
+
+    const updated = await client.query(
+      `UPDATE purchases SET status = 'cancelled' WHERE company_id = $1 AND id = $2 RETURNING *`,
+      [companyId, purchaseId],
+    );
+
+    await client.query(
+      `INSERT INTO audit_log (company_id, action, description, user_id, user_name, metadata)
+       VALUES ($1, 'purchase_cancelled', $2, $3, $4, $5)`,
+      [
+        companyId,
+        `Purchase bill ${old.bill_no} cancelled — stock and vendor payable reversed`,
+        auth.userId,
+        (req as any).session?.name ?? auth.role,
+        JSON.stringify({ purchaseId, billNo: old.bill_no, grandTotal: old.grand_total }),
+      ],
+    );
+
+    await client.query("COMMIT");
+
+    const items = await db.select().from(purchaseItemsTable).where(
+      and(eq(purchaseItemsTable.companyId, companyId), eq(purchaseItemsTable.purchaseId, purchaseId))
+    );
+    res.json(formatPurchase(updated.rows[0], items));
+  } catch (err) {
+    await client.query("ROLLBACK");
+    logger.error({ err }, "Failed to cancel purchase");
+    res.status(500).json({ error: "Failed to cancel purchase" });
   } finally {
     client.release();
   }

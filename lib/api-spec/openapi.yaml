@@ -1651,6 +1651,27 @@ paths:
           description: Invalid request
         "404":
           description: Purchase not found
+    delete:
+      operationId: deletePurchase
+      tags: [purchases]
+      summary: Cancel a purchase bill (admin/accountant/store) — reverses stock, vendor payable, and ledger entries
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Purchase"
+        "404":
+          description: Purchase not found
+        "409":
+          description: Already cancelled
 
   /manufacturing/assemble:
     post:

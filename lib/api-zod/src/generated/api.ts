@@ -2333,6 +2333,54 @@ export const UpdatePurchaseResponse = zod.object({
 
 
 /**
+ * @summary Cancel a purchase bill (admin/accountant/store) — reverses stock, vendor payable, and ledger entries
+ */
+export const DeletePurchaseParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeletePurchaseResponse = zod.object({
+  "id": zod.number(),
+  "billNo": zod.string(),
+  "vendorBillNo": zod.string().nullish(),
+  "billDate": zod.string(),
+  "dueDate": zod.string().nullish(),
+  "billType": zod.enum(['gst', 'non_gst']),
+  "vendorId": zod.number().nullish(),
+  "vendorName": zod.string().nullish(),
+  "vendorGstin": zod.string().nullish(),
+  "placeOfSupply": zod.string(),
+  "notes": zod.string().nullish(),
+  "subtotal": zod.string(),
+  "totalDiscount": zod.string().optional(),
+  "totalTax": zod.string().optional(),
+  "cgst": zod.string().optional(),
+  "sgst": zod.string().optional(),
+  "igst": zod.string().optional(),
+  "freight": zod.string().optional(),
+  "roundOff": zod.string().optional(),
+  "grandTotal": zod.string(),
+  "amountPaid": zod.string().optional(),
+  "balanceDue": zod.string().optional(),
+  "status": zod.string(),
+  "createdAt": zod.string().optional(),
+  "items": zod.array(zod.object({
+  "id": zod.number().optional(),
+  "productId": zod.number(),
+  "productName": zod.string(),
+  "hsnCode": zod.string().nullish(),
+  "qty": zod.string(),
+  "unit": zod.string(),
+  "rate": zod.string(),
+  "discountPct": zod.string().optional(),
+  "discountAmt": zod.string().optional(),
+  "taxPct": zod.string().optional(),
+  "amount": zod.string()
+})).optional()
+})
+
+
+/**
  * Runs a BOM recipe in a single SERIALIZABLE transaction: creates a completed workload card, debits all required raw materials, credits the finished product stock, and writes stock movements. All-or-nothing — if any step fails (e.g. insufficient raw material) nothing is committed.
  * @summary Atomically assemble a finished product from a BOM
  */

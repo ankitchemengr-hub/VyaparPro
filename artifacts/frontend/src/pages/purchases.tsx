@@ -4,6 +4,7 @@ import {
   useListPurchases,
   useCreatePurchase,
   useUpdatePurchase,
+  useDeletePurchase,
   useGetPurchase,
   useListEntities,
   useCreateEntity,
@@ -32,6 +33,10 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Truck, Plus, Trash2, Loader2, FileText, Save, UserPlus, Pencil, ChevronsUpDown, Check,
   Paperclip, BarChart2, Download, Eye, File as FileIcon, X, FileImage,
@@ -1194,6 +1199,31 @@ function HistoryTab() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [reportOpen, setReportOpen] = useState(false);
   const [attachmentsFor, setAttachmentsFor] = useState<{ id: number; billNo: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: number; billNo: string } | null>(null);
+  const deletePurchase = useDeletePurchase();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const confirmDelete = () => {
+    if (!deleteTarget) return;
+    deletePurchase.mutate(
+      { id: deleteTarget.id },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getListPurchasesQueryKey() });
+          toast({ title: `Cancelled bill ${deleteTarget.billNo}`, description: "Stock and vendor payable were reversed." });
+          setDeleteTarget(null);
+        },
+        onError: (err: any) => {
+          toast({
+            title: "Failed to cancel bill",
+            description: err?.response?.data?.error ?? err?.message ?? "Please try again",
+            variant: "destructive",
+          });
+        },
+      },
+    );
+  };
 
   if (isLoading) {
     return (
@@ -1290,6 +1320,17 @@ function HistoryTab() {
                             <Pencil className="w-4 h-4" />
                           </Button>
                         )}
+                        {isAdmin && p.status !== "cancelled" && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            title="Delete bill"
+                            onClick={() => setDeleteTarget({ id: p.id, billNo: p.billNo })}
+                            data-testid={`button-delete-purchase-${p.id}`}
+                          >
+                            <Trash2 className="w-4 h-4 text-destructive" />
+                          </Button>
+                        )}
                       </span>
                     </TableCell>
                   </TableRow>
@@ -1322,6 +1363,30 @@ function HistoryTab() {
           onOpenChange={(v) => { if (!v) setAttachmentsFor(null); }}
         />
       )}
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel bill {deleteTarget?.billNo}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This reverses the stock this bill added and reduces the vendor's outstanding payable
+              by the bill amount. The bill stays visible with a "cancelled" status for your records.
+              This cannot be undone from here.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep it</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              disabled={deletePurchase.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deletePurchase.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Cancel Bill
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
