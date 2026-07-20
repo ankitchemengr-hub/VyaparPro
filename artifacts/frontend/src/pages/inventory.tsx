@@ -35,9 +35,10 @@ import {
 function BrandCombobox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const { data: brands } = useListBrandMaster();
+  const { data: brands, isError: brandsFailedToLoad } = useListBrandMaster();
   const queryClient = useQueryClient();
   const createBrand = useCreateBrand();
+  const { toast } = useToast();
   const list = brands ?? [];
   const trimmedQuery = query.trim();
   const filtered = trimmedQuery
@@ -55,6 +56,14 @@ function BrandCombobox({ value, onChange }: { value: string; onChange: (v: strin
           onChange(created.name);
           setOpen(false);
           setQuery("");
+        },
+        onError: async (err: any) => {
+          let desc = err?.message ?? "Server error";
+          try {
+            const body = err?.response ? await err.response.json() : null;
+            if (body?.error) desc = String(body.error).slice(0, 300);
+          } catch {}
+          toast({ title: "Failed to add brand", description: desc, variant: "destructive" });
         },
       },
     );
@@ -78,6 +87,11 @@ function BrandCombobox({ value, onChange }: { value: string; onChange: (v: strin
         <Command shouldFilter={false}>
           <CommandInput placeholder="Search or add brand…" value={query} onValueChange={setQuery} />
           <CommandList className="max-h-60">
+            {brandsFailedToLoad && (
+              <p className="py-2 px-3 text-xs text-destructive">
+                Couldn't load the brand list — check your connection and reopen this field.
+              </p>
+            )}
             {filtered.length === 0 && (
               <CommandEmpty className="py-2 px-3 text-sm text-muted-foreground">
                 {trimmedQuery ? "No matching brand." : "No brands yet."}
