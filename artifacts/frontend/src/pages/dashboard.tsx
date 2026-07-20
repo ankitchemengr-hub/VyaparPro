@@ -21,6 +21,7 @@ import {
   ArrowDownRight,
   Factory,
   Droplets,
+  ChevronDown,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -30,6 +31,7 @@ export default function Dashboard() {
 
   const isManagement = hasRole(["admin", "accountant"]);
   const isAdmin = hasRole(["admin"]);
+  const [showCapitalDetails, setShowCapitalDetails] = React.useState(false);
 
   if (!isManagement) {
     // If not management, they shouldn't really be here, they should be redirected to catalog
@@ -66,10 +68,17 @@ export default function Dashboard() {
 
       {isAdmin && (
         <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
-          <Card className="border-amber-200 bg-gradient-to-br from-amber-50 to-white dark:from-amber-950/30 dark:to-transparent">
+          <Card
+            className="border-amber-200 bg-gradient-to-br from-amber-50 to-white dark:from-amber-950/30 dark:to-transparent cursor-pointer select-none"
+            onClick={() => setShowCapitalDetails((v) => !v)}
+            data-testid="card-capital"
+          >
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Capital</CardTitle>
-              <Wallet className="h-4 w-4 text-amber-600" />
+              <div className="flex items-center gap-1">
+                <Wallet className="h-4 w-4 text-amber-600" />
+                <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${showCapitalDetails ? "rotate-180" : ""}`} />
+              </div>
             </CardHeader>
             <CardContent>
               {isLoadingCapital || !capital ? (
@@ -80,26 +89,28 @@ export default function Dashboard() {
                     {capital.capitalK.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                     <span className="text-xs text-muted-foreground font-normal ml-1">k</span>
                   </div>
-                  <div className="mt-2 space-y-0.5 text-[11px]">
-                    {[
-                      { label: "Inventory", value: capital.inventoryValue, sign: "+" as const },
-                      { label: "Receivable", value: capital.receivable, sign: "+" as const },
-                      { label: "Cash", value: capital.cashInAccounts, sign: "+" as const },
-                      { label: "Supplier Balance", value: capital.payable, sign: "-" as const },
-                      { label: "Expenses", value: capital.expenses, sign: "-" as const },
-                    ].map((row) => (
-                      <div
-                        key={row.label}
-                        className={`flex justify-between ${row.sign === "-" ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}
-                        data-testid={`text-capital-${row.label.toLowerCase().replace(/\s+/g, "-")}`}
-                      >
-                        <span>{row.label}</span>
-                        <span className="tabular-nums">
-                          {row.sign}₹{Math.abs(row.value).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
+                  {showCapitalDetails && (
+                    <div className="mt-2 space-y-0.5 text-[11px]">
+                      {[
+                        { label: "Inventory", value: capital.inventoryValue, sign: "+" as const },
+                        { label: "Receivable", value: capital.receivable, sign: "+" as const },
+                        { label: "Cash", value: capital.cashInAccounts, sign: "+" as const },
+                        { label: "Supplier Balance", value: capital.payable, sign: "-" as const },
+                        { label: "Expenses", value: capital.expenses, sign: "-" as const },
+                      ].map((row) => (
+                        <div
+                          key={row.label}
+                          className={`flex justify-between ${row.sign === "-" ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}
+                          data-testid={`text-capital-${row.label.toLowerCase().replace(/\s+/g, "-")}`}
+                        >
+                          <span>{row.label}</span>
+                          <span className="tabular-nums">
+                            {row.sign}₹{Math.abs(row.value).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </>
               )}
             </CardContent>
