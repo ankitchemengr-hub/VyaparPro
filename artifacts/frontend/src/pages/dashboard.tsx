@@ -75,10 +75,32 @@ export default function Dashboard() {
               {isLoadingCapital || !capital ? (
                 <div className="h-8 w-24 bg-muted rounded animate-pulse" />
               ) : (
-                <div className="text-2xl font-bold" data-testid="text-capital-value">
-                  {capital.capitalK.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                  <span className="text-xs text-muted-foreground font-normal ml-1">k</span>
-                </div>
+                <>
+                  <div className="text-2xl font-bold" data-testid="text-capital-value">
+                    {capital.capitalK.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    <span className="text-xs text-muted-foreground font-normal ml-1">k</span>
+                  </div>
+                  <div className="mt-2 space-y-0.5 text-[11px]">
+                    {[
+                      { label: "Inventory", value: capital.inventoryValue, sign: "+" as const },
+                      { label: "Receivable", value: capital.receivable, sign: "+" as const },
+                      { label: "Cash", value: capital.cashInAccounts, sign: "+" as const },
+                      { label: "Supplier Balance", value: capital.payable, sign: "-" as const },
+                      { label: "Expenses", value: capital.expenses, sign: "-" as const },
+                    ].map((row) => (
+                      <div
+                        key={row.label}
+                        className={`flex justify-between ${row.sign === "-" ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}
+                        data-testid={`text-capital-${row.label.toLowerCase().replace(/\s+/g, "-")}`}
+                      >
+                        <span>{row.label}</span>
+                        <span className="tabular-nums">
+                          {row.sign}₹{Math.abs(row.value).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
