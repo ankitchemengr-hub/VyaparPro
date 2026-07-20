@@ -53,12 +53,23 @@ export default function Catalog() {
   // Cart review dialog (shown before customer lookup)
   const [showCartReview, setShowCartReview] = useState(false);
 
+  // Final order-slip summary shown to a counter login after submitting —
+  // captured from cart data at submit time since customer_orders doesn't
+  // round-trip line items back on create.
+  const [placedOrder, setPlacedOrder] = useState<{
+    order: any;
+    customer: any;
+    items: Array<{ name: string; itemCode?: string; qty: number; rate: number; gstAmount: number; lineTotal: number }>;
+    invoiceMode: "gst" | "non_gst";
+  } | null>(null);
+
   // Customer lookup dialog state
   const [showCustomerDialog, setShowCustomerDialog] = useState(false);
   const [mobileInput, setMobileInput] = useState("");
   const [searchMobile, setSearchMobile] = useState("");
   const [step, setStep] = useState<"mobile" | "not_found" | "found">("mobile");
   const [foundCustomer, setFoundCustomer] = useState<any>(null);
+  const [nameSearch, setNameSearch] = useState("");
 
   const { data: products, isLoading } = useListProducts({
     search: search || undefined,
@@ -229,6 +240,19 @@ export default function Catalog() {
     { query: { enabled: searchMobile.length === 10, queryKey: getLookupEntityByMobileQueryKey({ mobile: searchMobile }) } }
   );
 
+  // Name search — alternative to mobile lookup, for when the counter/salesman
+  // knows the customer's name but not their number offhand.
+  const trimmedNameSearch = nameSearch.trim();
+  const { data: nameSearchResults, isFetching: isNameSearching } = useListEntities(
+    { type: "customer", search: trimmedNameSearch },
+    {
+      query: {
+        enabled: trimmedNameSearch.length >= 2,
+        queryKey: getListEntitiesQueryKey({ type: "customer", search: trimmedNameSearch }),
+      },
+    },
+  );
+
   const handleMobileLookup = () => {
     if (mobileInput.length !== 10) return;
     setSearchMobile(mobileInput);
@@ -259,16 +283,35 @@ const proceedToOrderWithCustomer = (customer: any) => {
       { data: { items: cartItems, customerName: customer?.name, customerMobile: customer?.mobile, invoiceType: invoiceMode } },
       {
         onSuccess: (order: any) => {
+          queryClient.invalidateQueries({ queryKey: getListCustomerOrdersQueryKey() });
+          if (isCounter) {
+            // Counter has no order list — show a final printable slip right
+            // here instead of navigating away, using the cart snapshot since
+            // the create response doesn't round-trip line items.
+            setPlacedOrder({
+              order,
+              customer,
+              invoiceMode,
+              items: cartSummaryRows.map((r) => ({
+                name: r.product.name,
+                itemCode: r.product.itemCode,
+                qty: r.qty,
+                rate: r.rate,
+                gstAmount: r.gstAmount,
+                lineTotal: r.lineTotal,
+              })),
+            });
+            setCart({});
+            setShowCustomerDialog(false);
+            return;
+          }
           toast({
             title: "Order placed",
             description: `Order ${order.orderNo ?? ""} submitted for ${customer?.name ?? "customer"}.`,
           });
           setCart({});
           setShowCustomerDialog(false);
-          queryClient.invalidateQueries({ queryKey: getListCustomerOrdersQueryKey() });
-          // Counter logins have no invoice-based "My Orders" — their placed
-          // orders live at /customer-orders instead.
-          setLocation(isCounter ? "/customer-orders" : "/my-orders");
+          setLocation("/my-orders");
         },
         onError: (err: any) => {
           toast({
@@ -300,6 +343,7 @@ const proceedToOrderWithCustomer = (customer: any) => {
     setSearchMobile("");
     setStep("mobile");
     setFoundCustomer(null);
+    setNameSearch("");
     newCustomerForm.reset({ name: "", mobile: "", gstin: "", address: "", city: "", state: "Maharashtra", pricingTier: "retail", assignedSalesmanId: "" });
     setShowCustomerDialog(true);
   };
@@ -349,6 +393,52 @@ const proceedToOrderWithCustomer = (customer: any) => {
   });
 
   const proceedLabel = `Proceed to Order${hasSelection ? ` (${cartCount} Item${cartCount !== 1 ? "s" : ""})` : ""}`;
+
+  const handlePrintOrderSlip = () => {
+    if (!placedOrder) return;
+    const { order, customer, items, invoiceMode: mode } = placedOrder;
+    const total = items.reduce((s, i) => s + i.lineTotal, 0);
+    const rows = items
+      .map(
+        (i) => `<tr>
+          <td>${i.name}${i.itemCode ? ` <span class="muted">(${i.itemCode})</span>` : ""}</td>
+          <td class="num">${i.qty}</td>
+          <td class="num">₹${i.rate.toFixed(2)}</td>
+          <td class="num">₹${i.lineTotal.toFixed(2)}</td>
+        </tr>`
+      )
+      .join("");
+    const html = `<!doctype html><html><head><title>Order ${order.orderNo ?? ""}</title>
+      <style>
+        body { font-family: Arial, sans-serif; padding: 24px; color: #111; }
+        h1 { font-size: 18px; margin: 0 0 4px; }
+        .muted { color: #666; font-size: 11px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+        th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #ddd; font-size: 13px; }
+        .num { text-align: right; }
+        .grand { font-weight: bold; font-size: 15px; }
+        .meta { margin-top: 12px; font-size: 13px; }
+      </style></head>
+      <body>
+        <h1>Order ${order.orderNo ?? ""}</h1>
+        <div class="muted">${mode === "non_gst" ? "Cash Memo" : "E-Invoice"} — Pending</div>
+        <div class="meta">
+          <div><strong>Customer:</strong> ${customer?.name ?? "Customer"}</div>
+          <div><strong>Mobile:</strong> ${customer?.mobile ?? ""}</div>
+        </div>
+        <table>
+          <thead><tr><th>Product</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th></tr></thead>
+          <tbody>${rows}</tbody>
+          <tfoot><tr><td colspan="3" class="grand" style="text-align:right">Total</td><td class="num grand">₹${total.toFixed(2)}</td></tr></tfoot>
+        </table>
+      </body></html>`;
+    const win = window.open("", "_blank", "width=420,height=600");
+    if (!win) return;
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    win.print();
+  };
 
   return (
     <div className="flex flex-col h-[calc(100vh-theme(spacing.20))]">
@@ -766,6 +856,53 @@ const proceedToOrderWithCustomer = (customer: any) => {
                     <p className="text-xs text-muted-foreground">{10 - mobileInput.length} more digits needed</p>
                   )}
                 </div>
+
+                <div className="relative flex items-center gap-2 text-xs text-muted-foreground">
+                  <div className="flex-1 h-px bg-border" />
+                  or search by name
+                  <div className="flex-1 h-px bg-border" />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="name-search-input">Customer Name</Label>
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="name-search-input"
+                      data-testid="input-customer-name-search"
+                      placeholder="Start typing a name..."
+                      value={nameSearch}
+                      onChange={(e) => setNameSearch(e.target.value)}
+                      className="pl-8"
+                    />
+                  </div>
+                  {trimmedNameSearch.length >= 2 && (
+                    <div className="border rounded-md max-h-40 overflow-y-auto divide-y">
+                      {isNameSearching ? (
+                        <div className="flex items-center justify-center py-3 text-muted-foreground">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        </div>
+                      ) : nameSearchResults && nameSearchResults.length > 0 ? (
+                        nameSearchResults.map((entity: any) => (
+                          <button
+                            key={entity.id}
+                            type="button"
+                            data-testid={`option-customer-${entity.id}`}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted transition-colors"
+                            onClick={() => { setFoundCustomer(entity); setStep("found"); }}
+                          >
+                            <User className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                            <span className="font-medium">{entity.name}</span>
+                            {entity.mobile && <span className="text-muted-foreground">({entity.mobile})</span>}
+                          </button>
+                        ))
+                      ) : (
+                        <p className="text-xs text-muted-foreground text-center py-3">No customers match "{trimmedNameSearch}"</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 <Button variant="outline" className="w-full" onClick={() => proceedToOrderWithCustomer(null)}>
                   Skip — Walk-in / Cash Customer
                 </Button>
@@ -1019,6 +1156,61 @@ const proceedToOrderWithCustomer = (customer: any) => {
                 </Form>
               </div>
             </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Order Placed Slip (counter logins only) ── */}
+      <Dialog open={!!placedOrder} onOpenChange={(open) => { if (!open) setPlacedOrder(null); }}>
+        <DialogContent className="w-full max-w-md mx-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle className="w-5 h-5 text-primary" />
+              Order {placedOrder?.order?.orderNo ?? ""} Submitted
+            </DialogTitle>
+          </DialogHeader>
+          {placedOrder && (
+            <div className="space-y-3">
+              <div className="text-sm">
+                <div><span className="text-muted-foreground">Customer:</span> {placedOrder.customer?.name ?? "Customer"}</div>
+                <div><span className="text-muted-foreground">Mobile:</span> {placedOrder.customer?.mobile ?? ""}</div>
+                <div><span className="text-muted-foreground">Type:</span> {placedOrder.invoiceMode === "non_gst" ? "Cash Memo" : "E-Invoice"}</div>
+              </div>
+              <div className="overflow-x-auto -mx-1 max-h-64 overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-muted-foreground text-xs">
+                      <th className="text-left py-1 px-1">Product</th>
+                      <th className="text-right py-1 px-1">Qty</th>
+                      <th className="text-right py-1 px-1">Rate</th>
+                      <th className="text-right py-1 px-1">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {placedOrder.items.map((i, idx) => (
+                      <tr key={idx} className="border-b last:border-0">
+                        <td className="py-1 px-1">{i.name}</td>
+                        <td className="text-right py-1 px-1 tabular-nums">{i.qty}</td>
+                        <td className="text-right py-1 px-1 tabular-nums">₹{i.rate.toFixed(2)}</td>
+                        <td className="text-right py-1 px-1 tabular-nums font-medium">₹{i.lineTotal.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex justify-between font-bold text-sm pt-1 border-t">
+                <span>Total</span>
+                <span>₹{placedOrder.items.reduce((s, i) => s + i.lineTotal, 0).toFixed(2)}</span>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <Button type="button" variant="outline" className="flex-1" onClick={handlePrintOrderSlip}>
+                  Print
+                </Button>
+                <Button type="button" className="flex-1" onClick={() => setPlacedOrder(null)}>
+                  New Order
+                </Button>
+              </div>
+            </div>
           )}
         </DialogContent>
       </Dialog>
