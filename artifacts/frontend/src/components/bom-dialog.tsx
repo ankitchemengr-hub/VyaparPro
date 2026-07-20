@@ -14,10 +14,63 @@ import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import { Loader2, Plus, Trash2, PackagePlus } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { cn } from "@/lib/utils";
+import { Loader2, Plus, Trash2, PackagePlus, Check, ChevronsUpDown } from "lucide-react";
+
+// Searchable material picker — a plain <Select> with 50+ products in a small
+// unbound popover was overflowing the dialog on mobile and had no search box.
+function MaterialCombobox({
+  candidates,
+  value,
+  onChange,
+}: {
+  candidates: any[];
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = candidates.find((p: any) => String(p.id) === value);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          type="button"
+          aria-expanded={open}
+          className="min-w-0 flex-1 justify-between font-normal"
+        >
+          <span className="truncate">
+            {selected ? `${selected.name}${selected.itemCode ? ` · ${selected.itemCode}` : ""}` : "Select material…"}
+          </span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[320px] max-w-[calc(100vw-2rem)] p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Search material…" />
+          <CommandList className="max-h-60">
+            <CommandEmpty>No material found.</CommandEmpty>
+            <CommandGroup>
+              {candidates.map((p: any) => (
+                <CommandItem
+                  key={p.id}
+                  value={`${p.name} ${p.itemCode ?? ""}`}
+                  onSelect={() => { onChange(String(p.id)); setOpen(false); }}
+                >
+                  <Check className={cn("mr-2 h-4 w-4 shrink-0", value === String(p.id) ? "opacity-100" : "opacity-0")} />
+                  <span className="truncate">{p.name}{p.itemCode ? ` · ${p.itemCode}` : ""}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 export interface BomDraftItem {
   materialProductId: string;
@@ -212,28 +265,18 @@ export function BomDialog({
             <div className="divide-y">
               {items.map((row, idx) => (
                 <div key={idx} className="flex flex-col gap-2 px-3 py-3 sm:grid sm:grid-cols-[minmax(0,1fr)_100px_72px_100px_36px] sm:gap-2 sm:py-2 sm:items-center">
-                  <div className="flex gap-1 min-w-0">
-                    <Select
+                  <div className="flex gap-1 min-w-0" data-testid={`select-material-${idx}`}>
+                    <MaterialCombobox
+                      candidates={candidates}
                       value={row.materialProductId}
-                      onValueChange={(v) => {
+                      onChange={(v) => {
                         const prod = candidates.find((p: any) => String(p.id) === v);
                         updateRow(idx, {
                           materialProductId: v,
                           unit: row.unit || prod?.unit || "QTY",
                         });
                       }}
-                    >
-                      <SelectTrigger className="min-w-0" data-testid={`select-material-${idx}`}>
-                        <SelectValue placeholder="Select material…" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {candidates.map((p: any) => (
-                          <SelectItem key={p.id} value={String(p.id)}>
-                            {p.name}{p.itemCode ? ` · ${p.itemCode}` : ""}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    />
                     <Button
                       type="button"
                       variant="outline"
