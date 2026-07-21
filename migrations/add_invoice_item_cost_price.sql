@@ -1,0 +1,1 @@
+ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS cost_price NUMERIC(12,2);
