@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Redirect } from "wouter";
+import { Redirect, useLocation } from "wouter";
 import { useAuth } from "@/contexts/use-auth";
 import { useListKhatabook, useGetEntityLedger, getGetEntityLedgerQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -196,6 +196,7 @@ function KhatabookDetailDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const sign = type === "vendor" ? -1 : 1;
+  const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [waOpen, setWaOpen] = useState(false);
   const [waNumber, setWaNumber] = useState("");
@@ -289,7 +290,18 @@ function KhatabookDetailDialog({
                   <TableRow key={entry.id}>
                     <TableCell className="text-xs whitespace-nowrap">{entry.date?.slice(0, 10)}</TableCell>
                     <TableCell className="text-sm max-w-[160px]">
-                      <div className="truncate">{entry.description}</div>
+                      {entry.type === "invoice" && entry.referenceId ? (
+                        <button
+                          type="button"
+                          className="truncate text-left text-primary hover:underline print:no-underline print:text-inherit"
+                          onClick={() => setLocation(`/invoices/${entry.referenceId}`)}
+                          data-testid={`link-ledger-invoice-${entry.id}`}
+                        >
+                          {entry.description}
+                        </button>
+                      ) : (
+                        <div className="truncate">{entry.description}</div>
+                      )}
                       {entry.referenceNo && <div className="text-[10px] text-muted-foreground font-mono truncate">{entry.referenceNo}</div>}
                     </TableCell>
                     <TableCell className="text-right font-mono text-sm whitespace-nowrap">{entry.debit > 0 ? formatRs(entry.debit) : "—"}</TableCell>
