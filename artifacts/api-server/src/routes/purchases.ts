@@ -868,6 +868,9 @@ router.get("/purchases/:id/attachments", async (req, res): Promise<void> => {
       mimeType: r.mime_type,
       fileSize: r.file_size,
       createdAt: r.created_at,
+      // False only for rows uploaded before file bytes were stored in
+      // Postgres — their disk file was wiped by a later deploy.
+      available: r.file_data != null,
     })));
   } catch (err) {
     logger.error({ err }, "Failed to fetch attachments");

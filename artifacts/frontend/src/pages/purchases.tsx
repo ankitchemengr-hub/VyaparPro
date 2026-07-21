@@ -744,6 +744,7 @@ interface Attachment {
   mimeType: string;
   fileSize: number;
   createdAt: string;
+  available: boolean;
 }
 
 function AttachmentsSection({ purchaseId }: { purchaseId: number }) {
@@ -840,28 +841,40 @@ function AttachmentsSection({ purchaseId }: { purchaseId: number }) {
       )}
       <div className="space-y-2">
         {attachments.map((a) => (
-          <div key={a.id} className="flex items-center gap-2 p-2 border rounded-md bg-muted/30">
+          <div key={a.id} className={`flex items-center gap-2 p-2 border rounded-md ${a.available ? "bg-muted/30" : "bg-destructive/5 border-dashed"}`}>
             {a.mimeType.startsWith("image/") ? (
-              <FileImage className="w-5 h-5 text-blue-500 shrink-0" />
+              <FileImage className={`w-5 h-5 shrink-0 ${a.available ? "text-blue-500" : "text-muted-foreground"}`} />
             ) : (
-              <FileIcon className="w-5 h-5 text-red-500 shrink-0" />
+              <FileIcon className={`w-5 h-5 shrink-0 ${a.available ? "text-red-500" : "text-muted-foreground"}`} />
             )}
-            <span className="text-sm truncate flex-1" title={a.originalName}>{a.originalName}</span>
+            <div className="flex-1 min-w-0">
+              <span className="text-sm truncate block" title={a.originalName}>{a.originalName}</span>
+              {!a.available && (
+                <span className="text-xs text-destructive">Unavailable — delete and re-upload</span>
+              )}
+            </div>
             <span className="text-xs text-muted-foreground shrink-0">{formatSize(a.fileSize)}</span>
             <Button
               size="icon"
               variant="ghost"
               className="h-7 w-7"
               onClick={() => setPreviewAttachment(a)}
-              title="View"
+              title={a.available ? "View" : "Unavailable"}
+              disabled={!a.available}
             >
               <Eye className="w-3.5 h-3.5" />
             </Button>
-            <a href={`/api/purchases/attachments/${a.id}/file`} download={a.originalName} title="Download">
-              <Button size="icon" variant="ghost" className="h-7 w-7">
+            {a.available ? (
+              <a href={`/api/purchases/attachments/${a.id}/file`} download={a.originalName} title="Download">
+                <Button size="icon" variant="ghost" className="h-7 w-7">
+                  <Download className="w-3.5 h-3.5" />
+                </Button>
+              </a>
+            ) : (
+              <Button size="icon" variant="ghost" className="h-7 w-7" disabled title="Unavailable">
                 <Download className="w-3.5 h-3.5" />
               </Button>
-            </a>
+            )}
             <Button
               size="icon"
               variant="ghost"
