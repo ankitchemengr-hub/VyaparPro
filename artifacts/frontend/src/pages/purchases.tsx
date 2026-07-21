@@ -962,6 +962,7 @@ interface ReportRow {
   discountPct: string;
   amount: string;
   grandTotal: string;
+  billType: string;
 }
 
 function PurchaseReportDialog({
@@ -976,6 +977,7 @@ function PurchaseReportDialog({
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [productId, setProductId] = useState<string>("");
+  const [billType, setBillType] = useState<string>("");
   const [rows, setRows] = useState<ReportRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [fetched, setFetched] = useState(false);
@@ -988,6 +990,7 @@ function PurchaseReportDialog({
       if (fromDate) params.set("fromDate", fromDate);
       if (toDate) params.set("toDate", toDate);
       if (productId) params.set("productId", productId);
+      if (billType) params.set("billType", billType);
       const res = await fetch(`/api/purchases/report?${params}`);
       if (!res.ok) throw new Error("Failed to fetch report");
       const data = await res.json();
@@ -1019,7 +1022,7 @@ function PurchaseReportDialog({
       <div class="sub">${fromDate ? `From: ${fromDate}` : ""} ${toDate ? `To: ${toDate}` : ""}</div>
       <table>
         <thead><tr>
-          <th>Date</th><th>Bill #</th><th>Vendor</th>
+          <th>Date</th><th>Bill #</th><th>Vendor</th><th>Type</th>
           <th>Product</th><th>Qty</th><th>Unit</th>
           <th>Rate ₹</th><th>Tax%</th><th>Amount ₹</th>
         </tr></thead>
@@ -1027,6 +1030,7 @@ function PurchaseReportDialog({
           ${rows.map((r) => `<tr>
             <td>${new Date(r.billDate).toLocaleDateString("en-IN")}</td>
             <td>${r.billNo}</td><td>${r.vendorName}</td>
+            <td>${r.billType === "gst" ? "GST" : "Non-GST"}</td>
             <td>${r.productName}</td>
             <td class="num">${Number(r.qty).toFixed(2)}</td>
             <td>${r.unit}</td>
@@ -1036,7 +1040,7 @@ function PurchaseReportDialog({
           </tr>`).join("")}
         </tbody>
         <tfoot><tr>
-          <td colspan="8" style="text-align:right">Total</td>
+          <td colspan="9" style="text-align:right">Total</td>
           <td class="num">₹${totalAmount.toFixed(2)}</td>
         </tr></tfoot>
       </table>
@@ -1058,10 +1062,10 @@ function PurchaseReportDialog({
       doc.setFontSize(10);
       doc.text(`${fromDate ? `From: ${fromDate}` : ""} ${toDate ? `To: ${toDate}` : ""}`.trim(), 40, 58);
     }
-    const headers = [["Date", "Bill #", "Vendor", "Product", "Qty", "Unit", "Rate ₹", "Tax%", "Amount ₹"]];
+    const headers = [["Date", "Bill #", "Vendor", "Type", "Product", "Qty", "Unit", "Rate ₹", "Tax%", "Amount ₹"]];
     const body = rows.map((r) => [
       new Date(r.billDate).toLocaleDateString("en-IN"),
-      r.billNo, r.vendorName, r.productName,
+      r.billNo, r.vendorName, r.billType === "gst" ? "GST" : "Non-GST", r.productName,
       Number(r.qty).toFixed(2), r.unit,
       Number(r.rate).toFixed(2),
       `${Number(r.taxPct).toFixed(1)}%`,
@@ -1071,7 +1075,7 @@ function PurchaseReportDialog({
       head: headers,
       body,
       startY: fromDate || toDate ? 70 : 55,
-      foot: [["", "", "", "", "", "", "", "Total", totalAmount.toFixed(2)]],
+      foot: [["", "", "", "", "", "", "", "", "Total", totalAmount.toFixed(2)]],
       styles: { fontSize: 9 },
       headStyles: { fillColor: [243, 244, 246], textColor: [0, 0, 0] },
     });
@@ -1080,13 +1084,13 @@ function PurchaseReportDialog({
 
   const handleExcel = () => {
     const wsData = [
-      ["Date", "Bill #", "Vendor Bill #", "Vendor", "Product", "Qty", "Unit", "Rate", "Tax%", "Amount"],
+      ["Date", "Bill #", "Vendor Bill #", "Vendor", "Type", "Product", "Qty", "Unit", "Rate", "Tax%", "Amount"],
       ...rows.map((r) => [
         new Date(r.billDate).toLocaleDateString("en-IN"),
-        r.billNo, r.vendorBillNo, r.vendorName, r.productName,
+        r.billNo, r.vendorBillNo, r.vendorName, r.billType === "gst" ? "GST" : "Non-GST", r.productName,
         Number(r.qty), r.unit, Number(r.rate), Number(r.taxPct), Number(r.amount),
       ]),
-      ["", "", "", "", "", "", "", "", "Total", totalAmount],
+      ["", "", "", "", "", "", "", "", "", "Total", totalAmount],
     ];
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     const wb = XLSX.utils.book_new();
@@ -1128,6 +1132,19 @@ function PurchaseReportDialog({
               </SelectContent>
             </Select>
           </div>
+          <div className="space-y-1 flex-1 min-w-[130px] sm:flex-none">
+            <Label className="text-xs">Bill Type</Label>
+            <Select value={billType || "all"} onValueChange={(v) => setBillType(v === "all" ? "" : v)}>
+              <SelectTrigger className="h-8 text-sm w-full sm:w-32">
+                <SelectValue placeholder="All Types" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="gst">GST</SelectItem>
+                <SelectItem value="non_gst">Non-GST</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <Button size="sm" onClick={fetchReport} disabled={loading}>
             {loading ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <BarChart2 className="w-4 h-4 mr-1.5" />}
             Generate
@@ -1165,6 +1182,7 @@ function PurchaseReportDialog({
                   <TableHead>Date</TableHead>
                   <TableHead>Bill #</TableHead>
                   <TableHead>Vendor</TableHead>
+                  <TableHead>Type</TableHead>
                   <TableHead>Product</TableHead>
                   <TableHead className="text-right">Qty</TableHead>
                   <TableHead>Unit</TableHead>
@@ -1179,6 +1197,9 @@ function PurchaseReportDialog({
                     <TableCell className="text-sm">{new Date(r.billDate).toLocaleDateString("en-IN")}</TableCell>
                     <TableCell className="text-sm font-medium">{r.billNo}</TableCell>
                     <TableCell className="text-sm">{r.vendorName}</TableCell>
+                    <TableCell className="text-sm">
+                      <Badge variant="outline">{r.billType === "gst" ? "GST" : "Non-GST"}</Badge>
+                    </TableCell>
                     <TableCell className="text-sm">{r.productName}</TableCell>
                     <TableCell className="text-right tabular-nums text-sm">{Number(r.qty).toFixed(2)}</TableCell>
                     <TableCell className="text-sm">{r.unit}</TableCell>
@@ -1190,7 +1211,7 @@ function PurchaseReportDialog({
               </TableBody>
               <tfoot>
                 <TableRow className="font-bold border-t-2">
-                  <TableCell colSpan={8} className="text-right text-sm">Total</TableCell>
+                  <TableCell colSpan={9} className="text-right text-sm">Total</TableCell>
                   <TableCell className="text-right tabular-nums">₹{totalAmount.toFixed(2)}</TableCell>
                 </TableRow>
               </tfoot>
