@@ -19,9 +19,6 @@ import {
 import { logger } from "../lib/logger";
 import { getCompanyId } from "../lib/tenant";
 import multer from "multer";
-import { mkdirSync, unlinkSync } from "fs";
-import path from "path";
-import { randomBytes } from "crypto";
 
 const router: IRouter = Router();
 
@@ -100,25 +97,12 @@ function formatPurchase(row: any, items: any[]) {
 }
 
 // ---- File upload setup for purchase attachments ----
-const UPLOAD_BASE = path.resolve(process.cwd(), "uploads", "purchase-attachments");
-mkdirSync(UPLOAD_BASE, { recursive: true });
-
-const attachmentStorage = multer.diskStorage({
-  destination: (req: any, _file: any, cb: any) => {
-    const companyId = getCompanyId(req);
-    const purchaseId = req.params.id ?? "tmp";
-    const dir = path.join(UPLOAD_BASE, String(companyId), String(purchaseId));
-    mkdirSync(dir, { recursive: true });
-    cb(null, dir);
-  },
-  filename: (_req: any, file: any, cb: any) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, `${Date.now()}_${randomBytes(6).toString("hex")}${ext}`);
-  },
-});
-
+// Stored as bytes directly in Postgres (not local disk) — Railway's
+// container filesystem is ephemeral and wipes local uploads on every
+// redeploy, which previously made every attachment unviewable/undownloadable
+// after the next deploy even though its DB record survived.
 const attachmentUpload = multer({
-  storage: attachmentStorage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req: any, file: any, cb: any) => {
     const allowed = ["image/jpeg", "image/png", "application/pdf"];
@@ -140,7 +124,8 @@ pool.query(`
     original_name TEXT NOT NULL,
     mime_type TEXT NOT NULL,
     file_size INTEGER NOT NULL,
-    file_path TEXT NOT NULL,
+    file_path TEXT,
+    file_data BYTEA,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
   );
   CREATE INDEX IF NOT EXISTS pa_company_idx ON purchase_attachments(company_id);
@@ -781,8 +766,15 @@ router.get("/purchases/attachments/:attachmentId/file", async (req, res): Promis
     );
     if (!result.rows[0]) { res.status(404).json({ error: "Attachment not found" }); return; }
     const att = result.rows[0];
+    if (!att.file_data) {
+      // Uploaded before file bytes were stored in Postgres — the disk file
+      // it pointed to was wiped by a subsequent deploy and can't be recovered.
+      res.status(404).json({ error: "This file was uploaded before persistent storage was added and is no longer available. Please re-upload it." });
+      return;
+    }
+    res.setHeader("Content-Type", att.mime_type);
     res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(att.original_name)}"`);
-    res.sendFile(att.file_path);
+    res.send(att.file_data);
   } catch (err) {
     logger.error({ err }, "Failed to serve attachment");
     res.status(500).json({ error: "Failed to serve file" });
@@ -802,7 +794,6 @@ router.delete("/purchases/attachments/:attachmentId", async (req, res): Promise<
       [id, companyId],
     );
     if (!result.rows[0]) { res.status(404).json({ error: "Attachment not found" }); return; }
-    try { unlinkSync(result.rows[0].file_path); } catch {}
     res.json({ success: true });
   } catch (err) {
     logger.error({ err }, "Failed to delete attachment");
@@ -835,9 +826,9 @@ router.post(
       for (const f of files) {
         const r = await pool.query(
           `INSERT INTO purchase_attachments
-             (company_id, purchase_id, file_name, original_name, mime_type, file_size, file_path)
+             (company_id, purchase_id, file_name, original_name, mime_type, file_size, file_data)
            VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-          [companyId, purchaseId, f.filename, f.originalname, f.mimetype, f.size, f.path],
+          [companyId, purchaseId, f.originalname, f.originalname, f.mimetype, f.size, f.buffer],
         );
         inserted.push(r.rows[0]);
       }
