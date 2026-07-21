@@ -965,6 +965,61 @@ interface ReportRow {
   billType: string;
 }
 
+// Type-to-search dropdown for report filters — a plain <Select> forces
+// scrolling through the whole vendor/product list to find one by name.
+function FilterCombobox({
+  items, value, onChange, placeholder, allLabel, className,
+}: {
+  items: { id: number; name: string }[];
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  allLabel: string;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = items.find((i) => String(i.id) === value);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className={cn("h-8 text-sm w-full justify-between font-normal", className)}
+        >
+          <span className="truncate">{selected ? selected.name : allLabel}</span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[240px] max-w-[calc(100vw-2rem)] p-0" align="start">
+        <Command>
+          <CommandInput placeholder={placeholder} />
+          <CommandList className="max-h-60">
+            <CommandEmpty>No match found.</CommandEmpty>
+            <CommandGroup>
+              <CommandItem value={allLabel} onSelect={() => { onChange(""); setOpen(false); }}>
+                <Check className={cn("mr-2 h-4 w-4", value === "" ? "opacity-100" : "opacity-0")} />
+                {allLabel}
+              </CommandItem>
+              {items.map((it) => (
+                <CommandItem
+                  key={it.id}
+                  value={it.name}
+                  onSelect={() => { onChange(String(it.id)); setOpen(false); }}
+                >
+                  <Check className={cn("mr-2 h-4 w-4", value === String(it.id) ? "opacity-100" : "opacity-0")} />
+                  {it.name}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function PurchaseReportDialog({
   open,
   onOpenChange,
@@ -1123,31 +1178,23 @@ function PurchaseReportDialog({
           </div>
           <div className="space-y-1 flex-1 min-w-[160px] sm:min-w-[200px] sm:flex-none">
             <Label className="text-xs">Item / Product</Label>
-            <Select value={productId} onValueChange={setProductId}>
-              <SelectTrigger className="h-8 text-sm">
-                <SelectValue placeholder="All Products" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">All Products</SelectItem>
-                {products.map((p: any) => (
-                  <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <FilterCombobox
+              items={products}
+              value={productId}
+              onChange={setProductId}
+              placeholder="Search product…"
+              allLabel="All Products"
+            />
           </div>
           <div className="space-y-1 flex-1 min-w-[160px] sm:min-w-[200px] sm:flex-none">
             <Label className="text-xs">Vendor</Label>
-            <Select value={vendorId || "all"} onValueChange={(v) => setVendorId(v === "all" ? "" : v)}>
-              <SelectTrigger className="h-8 text-sm">
-                <SelectValue placeholder="All Vendors" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Vendors</SelectItem>
-                {(vendors ?? []).map((v: any) => (
-                  <SelectItem key={v.id} value={String(v.id)}>{v.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <FilterCombobox
+              items={vendors ?? []}
+              value={vendorId}
+              onChange={setVendorId}
+              placeholder="Search vendor…"
+              allLabel="All Vendors"
+            />
           </div>
           <div className="space-y-1 flex-1 min-w-[130px] sm:flex-none">
             <Label className="text-xs">Bill Type</Label>
