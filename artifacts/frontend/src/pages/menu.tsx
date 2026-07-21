@@ -8,6 +8,25 @@ import { Search, Package, Users, FileText } from "lucide-react";
 import { useGlobalSearch, getGlobalSearchQueryKey } from "@workspace/api-client-react";
 import { moduleNavItems } from "@/lib/nav-items";
 
+// Cycled per tile so the module grid reads as colorful/scannable at a glance
+// instead of every icon box sharing one flat brand-orange tint. Each entry is
+// a light pastel background + a matching saturated icon/border color, with a
+// dark-mode variant so the page still works if the app theme is ever toggled.
+const TILE_COLORS = [
+  { bg: "bg-blue-50 dark:bg-blue-950/40", icon: "text-blue-600 dark:text-blue-400", ring: "hover:border-blue-300 dark:hover:border-blue-700" },
+  { bg: "bg-emerald-50 dark:bg-emerald-950/40", icon: "text-emerald-600 dark:text-emerald-400", ring: "hover:border-emerald-300 dark:hover:border-emerald-700" },
+  { bg: "bg-violet-50 dark:bg-violet-950/40", icon: "text-violet-600 dark:text-violet-400", ring: "hover:border-violet-300 dark:hover:border-violet-700" },
+  { bg: "bg-rose-50 dark:bg-rose-950/40", icon: "text-rose-600 dark:text-rose-400", ring: "hover:border-rose-300 dark:hover:border-rose-700" },
+  { bg: "bg-amber-50 dark:bg-amber-950/40", icon: "text-amber-600 dark:text-amber-400", ring: "hover:border-amber-300 dark:hover:border-amber-700" },
+  { bg: "bg-teal-50 dark:bg-teal-950/40", icon: "text-teal-600 dark:text-teal-400", ring: "hover:border-teal-300 dark:hover:border-teal-700" },
+  { bg: "bg-fuchsia-50 dark:bg-fuchsia-950/40", icon: "text-fuchsia-600 dark:text-fuchsia-400", ring: "hover:border-fuchsia-300 dark:hover:border-fuchsia-700" },
+  { bg: "bg-cyan-50 dark:bg-cyan-950/40", icon: "text-cyan-600 dark:text-cyan-400", ring: "hover:border-cyan-300 dark:hover:border-cyan-700" },
+  { bg: "bg-orange-50 dark:bg-orange-950/40", icon: "text-orange-600 dark:text-orange-400", ring: "hover:border-orange-300 dark:hover:border-orange-700" },
+  { bg: "bg-lime-50 dark:bg-lime-950/40", icon: "text-lime-600 dark:text-lime-400", ring: "hover:border-lime-300 dark:hover:border-lime-700" },
+  { bg: "bg-indigo-50 dark:bg-indigo-950/40", icon: "text-indigo-600 dark:text-indigo-400", ring: "hover:border-indigo-300 dark:hover:border-indigo-700" },
+  { bg: "bg-pink-50 dark:bg-pink-950/40", icon: "text-pink-600 dark:text-pink-400", ring: "hover:border-pink-300 dark:hover:border-pink-700" },
+];
+
 export default function Menu() {
   const { user, hasRole } = useAuth();
   const [query, setQuery] = React.useState("");
@@ -133,26 +152,29 @@ export default function Menu() {
       <div>
         <h2 className="text-lg font-semibold mb-3">Modules</h2>
         <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
-          {modules.map((item) => (
-            <Link key={item.href} href={item.href}>
-              <Card
-                className="hover:border-primary hover:shadow-sm transition-colors cursor-pointer h-full"
-                data-testid={`menu-tile-${item.href.replace(/\//g, "")}`}
-              >
-                <CardContent className="p-4 flex flex-col gap-2">
-                  <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center text-primary">
-                    <item.icon className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-sm">{item.name}</p>
-                    {item.description && (
-                      <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
+          {modules.map((item, i) => {
+            const color = TILE_COLORS[i % TILE_COLORS.length];
+            return (
+              <Link key={item.href} href={item.href}>
+                <Card
+                  className={`${color.ring} hover:shadow-md transition-all cursor-pointer h-full border-transparent bg-white dark:bg-card shadow-sm`}
+                  data-testid={`menu-tile-${item.href.replace(/\//g, "")}`}
+                >
+                  <CardContent className="p-4 flex flex-col gap-2">
+                    <div className={`w-10 h-10 rounded-md ${color.bg} flex items-center justify-center ${color.icon}`}>
+                      <item.icon className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">{item.name}</p>
+                      {item.description && (
+                        <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
+            );
+          })}
         </div>
       </div>
     </div>
