@@ -27,7 +27,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { getListProductsQueryKey } from "@workspace/api-client-react";
 import {
   PackageSearch, PackagePlus, Upload, X, ImageIcon, Loader2, ChevronRight,
-  Pencil, Trash2, Save, Eye, EyeOff, Check, ChevronsUpDown, Plus,
+  Pencil, Trash2, Save, Eye, EyeOff, Check, ChevronsUpDown, Plus, Wand2,
 } from "lucide-react";
 
 // Brand field for the product form — picks from the Brand Master list, or
@@ -381,10 +381,29 @@ const emptyForm: ProductForm = {
   minStockThreshold: "5", notForSale: false, addForManufacturing: false, imageUrl: "",
 };
 
+// Suggests an item code from the product name's first couple of significant
+// words (spec-like tokens with digits, e.g. "20W-40", are kept whole; plain
+// words are abbreviated to 3 letters) plus the volume, e.g. "Vipro 20W-40
+// Engine Oil" at 1 liter -> "VIP-20W-40-1L". Purely a starting suggestion —
+// the user can always overwrite it, at which point auto-generation stops.
+function suggestItemCode(name: string, litersPerBox: string, volumeUnit: string): string {
+  const cleaned = name.toUpperCase().replace(/[^A-Z0-9\s-]/g, "");
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  const tokens = words.slice(0, 2).map((w) => (/\d/.test(w) ? w : w.slice(0, 3)));
+  const prefix = tokens.join("-");
+  const vol = Number(litersPerBox);
+  const volSuffix = vol > 0 ? `-${vol}${volumeUnit === "kg" ? "KG" : "L"}` : "";
+  return `${prefix}${volSuffix}`;
+}
+
 function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenChange: (v: boolean) => void; product?: any }) {
   const isEdit = !!product;
   const [tab, setTab] = useState("details");
   const [form, setForm] = useState<ProductForm>(emptyForm);
+  // Item Code auto-suggests from Name + Liters-per-unit while adding a new
+  // product; stops the moment the user types into Item Code directly, and
+  // is never active while editing an existing product's own saved code.
+  const [itemCodeAuto, setItemCodeAuto] = useState(true);
   const [productType, setProductType] = useState<"Purchased" | "Manufactured">("Purchased");
   const [imagePreview, setImagePreview] = useState<string>("");
   const [isDragging, setIsDragging] = useState(false);
@@ -428,16 +447,27 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
       setImagePreview(product.imageUrl ?? "");
       setProductType(Number(product.purchasePrice) === 0 ? "Manufactured" : "Purchased");
       setTab("details");
+      setItemCodeAuto(false);
     } else if (open && !product) {
       setForm(emptyForm);
       setImagePreview("");
       setProductType("Purchased");
       setTab("details");
+      setItemCodeAuto(true);
     }
   }, [open, product]);
 
-  const set = (field: keyof ProductForm, value: any) =>
+  // Keep Item Code in sync with Name / Liters-per-unit while adding a new
+  // product, until the user edits Item Code themselves (see `set` below).
+  useEffect(() => {
+    if (!open || product || !itemCodeAuto) return;
+    setForm((prev) => ({ ...prev, itemCode: suggestItemCode(prev.name, prev.litersPerBox, prev.volumeUnit) }));
+  }, [open, product, itemCodeAuto, form.name, form.litersPerBox, form.volumeUnit]);
+
+  const set = (field: keyof ProductForm, value: any) => {
+    if (field === "itemCode") setItemCodeAuto(false);
     setForm((prev) => ({ ...prev, [field]: value }));
+  };
 
   const handleClose = () => {
     setForm(emptyForm);
@@ -587,13 +617,28 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Item Code *</Label>
+                <div className="flex items-center justify-between">
+                  <Label>Item Code *</Label>
+                  {!isEdit && !itemCodeAuto && (
+                    <button
+                      type="button"
+                      className="flex items-center gap-1 text-xs text-primary hover:underline"
+                      onClick={() => setItemCodeAuto(true)}
+                      data-testid="button-auto-item-code"
+                    >
+                      <Wand2 className="w-3 h-3" /> Auto-generate
+                    </button>
+                  )}
+                </div>
                 <Input
                   value={form.itemCode}
                   onChange={(e) => set("itemCode", e.target.value)}
                   placeholder="e.g. VIP-20W40-1L"
                   data-testid="input-item-code"
                 />
+                {!isEdit && itemCodeAuto && (
+                  <p className="text-[11px] text-muted-foreground">Auto-generated from Name + Liters per unit — edit to override.</p>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label>Brand *</Label>
