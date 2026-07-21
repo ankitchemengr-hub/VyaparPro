@@ -3978,6 +3978,9 @@ components:
           type: ["integer", "null"]
         salesmanName:
           type: ["string", "null"]
+        createdByName:
+          type: ["string", "null"]
+          description: Display name of the user account that created this invoice (distinct from salesmanName, which is who gets commission/attribution for the sale).
         poNumber:
           type: ["string", "null"]
         eWayBillNo:

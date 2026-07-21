@@ -11,6 +11,7 @@ import {
   productsTable,
   rewardSchemesTable,
   rewardProgressTable,
+  usersTable,
 } from "@workspace/db";
 import {
   ListInvoicesQueryParams,
@@ -116,7 +117,13 @@ router.get("/invoices", async (req, res): Promise<void> => {
     ? await db.select().from(invoicesTable).where(and(...conditions)).orderBy(sql`${invoicesTable.createdAt} DESC`)
     : await db.select().from(invoicesTable).orderBy(sql`${invoicesTable.createdAt} DESC`);
 
-  res.json(invoices.map((inv) => formatInvoice(inv, [])));
+  const creatorIds = [...new Set(invoices.map((i) => i.createdByUserId).filter((v): v is number => v != null))];
+  const creators = creatorIds.length > 0
+    ? await db.select({ id: usersTable.id, name: usersTable.name }).from(usersTable).where(inArray(usersTable.id, creatorIds))
+    : [];
+  const creatorNameById = new Map(creators.map((c) => [c.id, c.name]));
+
+  res.json(invoices.map((inv) => formatInvoice(inv, [], creatorNameById.get(inv.createdByUserId ?? -1) ?? null)));
 });
 
 // POST /invoices
@@ -450,7 +457,12 @@ router.get("/invoices/:id", async (req, res): Promise<void> => {
   }
 
   const items = await db.select().from(invoiceItemsTable).where(and(eq(invoiceItemsTable.companyId, companyId), eq(invoiceItemsTable.invoiceId, params.data.id)));
-  res.json(formatInvoice(inv, items));
+  let createdByName: string | null = null;
+  if (inv.createdByUserId != null) {
+    const [creator] = await db.select({ name: usersTable.name }).from(usersTable).where(eq(usersTable.id, inv.createdByUserId));
+    createdByName = creator?.name ?? null;
+  }
+  res.json(formatInvoice(inv, items, createdByName));
 });
 
 // PATCH /invoices/:id  — admin only
@@ -929,7 +941,7 @@ router.delete("/invoices/:id/permanent", async (req, res): Promise<void> => {
   }
 });
 
-function formatInvoice(inv: any, items: any[]) {
+function formatInvoice(inv: any, items: any[], createdByName: string | null = null) {
   return {
     id: inv.id,
     invoiceNo: inv.invoiceNo,
@@ -944,6 +956,7 @@ function formatInvoice(inv: any, items: any[]) {
     placeOfSupply: inv.placeOfSupply,
     salesmanId: inv.salesmanId ?? null,
     salesmanName: inv.salesmanName ?? null,
+    createdByName,
     poNumber: inv.poNumber ?? null,
     eWayBillNo: inv.eWayBillNo ?? null,
     subtotal: Number(inv.subtotal),

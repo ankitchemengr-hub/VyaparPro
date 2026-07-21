@@ -31,6 +31,11 @@ export interface Invoice {
   salesmanId?: number | null;
   /** @nullable */
   salesmanName?: string | null;
+  /**
+     * Display name of the user account that created this invoice (distinct from salesmanName, which is who gets commission/attribution for the sale).
+     * @nullable
+     */
+  createdByName?: string | null;
   /** @nullable */
   poNumber?: string | null;
   /** @nullable */

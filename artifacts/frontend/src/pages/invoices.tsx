@@ -263,6 +263,7 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
                 <TableHead>Type</TableHead>
                 <TableHead>Customer</TableHead>
                 {isAdmin && <TableHead>Created By</TableHead>}
+                {isAdmin && <TableHead>Salesman</TableHead>}
                 <TableHead className="text-right">Total</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right w-32">Actions</TableHead>
@@ -271,11 +272,11 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={isAdmin ? 8 : 7} className="text-center py-8">Loading...</TableCell>
+                  <TableCell colSpan={isAdmin ? 9 : 7} className="text-center py-8">Loading...</TableCell>
                 </TableRow>
               ) : displayedInvoices.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={isAdmin ? 8 : 7} className="text-center py-8">No invoices found.</TableCell>
+                  <TableCell colSpan={isAdmin ? 9 : 7} className="text-center py-8">No invoices found.</TableCell>
                 </TableRow>
               ) : (
                 displayedInvoices.map((invoice) => {
@@ -296,13 +297,18 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
                     <TableCell>{invoice.customerName || "Cash Sale"}</TableCell>
                     {isAdmin && (
                       <TableCell data-testid={`cell-created-by-${invoice.id}`}>
+                        {invoice.createdByName ?? <span className="text-xs text-muted-foreground">—</span>}
+                      </TableCell>
+                    )}
+                    {isAdmin && (
+                      <TableCell data-testid={`cell-salesman-${invoice.id}`}>
                         {invoice.salesmanName ? (
                           <span className="inline-flex items-center gap-1.5 font-semibold italic text-amber-700 dark:text-amber-300">
                             <UserCircle2 className="h-3.5 w-3.5" />
                             {invoice.salesmanName}
                           </span>
                         ) : (
-                          <span className="text-xs text-muted-foreground">Admin / Counter</span>
+                          <span className="text-xs text-muted-foreground">—</span>
                         )}
                       </TableCell>
                     )}
