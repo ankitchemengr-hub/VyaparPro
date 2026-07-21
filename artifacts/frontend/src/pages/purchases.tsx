@@ -978,10 +978,12 @@ function PurchaseReportDialog({
   const [toDate, setToDate] = useState("");
   const [productId, setProductId] = useState<string>("");
   const [billType, setBillType] = useState<string>("");
+  const [vendorId, setVendorId] = useState<string>("");
   const [rows, setRows] = useState<ReportRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [fetched, setFetched] = useState(false);
   const { toast } = useToast();
+  const { data: vendors } = useListEntities({ type: "vendor" });
 
   const fetchReport = async () => {
     setLoading(true);
@@ -991,6 +993,7 @@ function PurchaseReportDialog({
       if (toDate) params.set("toDate", toDate);
       if (productId) params.set("productId", productId);
       if (billType) params.set("billType", billType);
+      if (vendorId) params.set("vendorId", vendorId);
       const res = await fetch(`/api/purchases/report?${params}`);
       if (!res.ok) throw new Error("Failed to fetch report");
       const data = await res.json();
@@ -1128,6 +1131,20 @@ function PurchaseReportDialog({
                 <SelectItem value="">All Products</SelectItem>
                 {products.map((p: any) => (
                   <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1 flex-1 min-w-[160px] sm:min-w-[200px] sm:flex-none">
+            <Label className="text-xs">Vendor</Label>
+            <Select value={vendorId || "all"} onValueChange={(v) => setVendorId(v === "all" ? "" : v)}>
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue placeholder="All Vendors" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Vendors</SelectItem>
+                {(vendors ?? []).map((v: any) => (
+                  <SelectItem key={v.id} value={String(v.id)}>{v.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

@@ -153,7 +153,7 @@ router.get("/purchases/report", async (req, res): Promise<void> => {
   const auth = requireSession(req, res, PURCHASE_READ_ROLES);
   if (!auth) return;
   const companyId = getCompanyId(req);
-  const { fromDate, toDate, productId, billType } = req.query as Record<string, string | undefined>;
+  const { fromDate, toDate, productId, billType, vendorId } = req.query as Record<string, string | undefined>;
   const params: any[] = [companyId];
   const conditions = ["p.company_id = $1", "p.status != 'cancelled'"];
   if (fromDate) {
@@ -171,6 +171,10 @@ router.get("/purchases/report", async (req, res): Promise<void> => {
   if (billType === "gst" || billType === "non_gst") {
     params.push(billType);
     conditions.push(`p.bill_type = $${params.length}`);
+  }
+  if (vendorId && !isNaN(Number(vendorId))) {
+    params.push(Number(vendorId));
+    conditions.push(`p.vendor_id = $${params.length}`);
   }
   try {
     const result = await pool.query(
