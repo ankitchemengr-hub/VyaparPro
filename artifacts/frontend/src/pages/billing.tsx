@@ -1072,6 +1072,15 @@ export default function Billing() {
   );
 }
 
+function useDebounced<T>(value: T, ms = 250): T {
+  const [v, setV] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setV(value), ms);
+    return () => clearTimeout(id);
+  }, [value, ms]);
+  return v;
+}
+
 function CustomerSearchDialog({
   open, onOpenChange, onSelect,
 }: {
@@ -1080,8 +1089,10 @@ function CustomerSearchDialog({
   onSelect: (customer: any) => void;
 }) {
   const { toast } = useToast();
+  const [searchMode, setSearchMode] = useState<"mobile" | "name">("mobile");
   const [mobileInput, setMobileInput] = useState("");
   const [searchMobile, setSearchMobile] = useState("");
+  const [nameInput, setNameInput] = useState("");
   const [step, setStep] = useState<"mobile" | "found" | "not_found">("mobile");
   const [foundCustomer, setFoundCustomer] = useState<any>(null);
   const [newCustomer, setNewCustomer] = useState({
@@ -1089,7 +1100,8 @@ function CustomerSearchDialog({
   });
 
   const reset = () => {
-    setMobileInput(""); setSearchMobile(""); setStep("mobile"); setFoundCustomer(null);
+    setSearchMode("mobile");
+    setMobileInput(""); setSearchMobile(""); setNameInput(""); setStep("mobile"); setFoundCustomer(null);
     setNewCustomer({ name: "", gstin: "", address: "", city: "", state: "Maharashtra", pricingTier: "retail" });
   };
 
@@ -1111,6 +1123,15 @@ function CustomerSearchDialog({
     if (mobileInput.length !== 10) return;
     setSearchMobile(mobileInput);
   };
+
+  const debouncedName = useDebounced(nameInput, 250);
+  const nameSearchParams = { type: "customer" as const, search: debouncedName.trim() };
+  const { data: nameMatches = [], isFetching: isNameSearching } = useListEntities(nameSearchParams, {
+    query: {
+      queryKey: getListEntitiesQueryKey(nameSearchParams),
+      enabled: searchMode === "name" && debouncedName.trim().length >= 1,
+    },
+  });
 
   const createEntity = useCreateEntity();
   const queryClient = useQueryClient();
@@ -1135,25 +1156,82 @@ function CustomerSearchDialog({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><Search className="w-4 h-4" /> Change Customer</DialogTitle>
-          <DialogDescription>Search by mobile number, or register a new customer.</DialogDescription>
+          <DialogDescription>Search by name or mobile number, or register a new customer.</DialogDescription>
         </DialogHeader>
 
         {step === "mobile" && (
           <div className="space-y-3">
-            <div className="flex gap-2">
-              <Input
-                placeholder="10-digit mobile number"
-                value={mobileInput}
-                maxLength={10}
-                onChange={(e) => { setMobileInput(e.target.value.replace(/\D/g, "")); setSearchMobile(""); }}
-                onKeyDown={(e) => { if (e.key === "Enter") handleLookup(); }}
-                className="font-mono tracking-wider"
-                data-testid="input-customer-search-mobile"
-              />
-              <Button onClick={handleLookup} disabled={mobileInput.length !== 10 || isLooking} data-testid="button-lookup-customer">
-                {isLooking ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant={searchMode === "mobile" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setSearchMode("mobile")}
+                data-testid="button-search-mode-mobile"
+              >
+                By Mobile
+              </Button>
+              <Button
+                type="button"
+                variant={searchMode === "name" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setSearchMode("name")}
+                data-testid="button-search-mode-name"
+              >
+                By Name
               </Button>
             </div>
+
+            {searchMode === "mobile" ? (
+              <div className="flex gap-2">
+                <Input
+                  placeholder="10-digit mobile number"
+                  value={mobileInput}
+                  maxLength={10}
+                  onChange={(e) => { setMobileInput(e.target.value.replace(/\D/g, "")); setSearchMobile(""); }}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleLookup(); }}
+                  className="font-mono tracking-wider"
+                  data-testid="input-customer-search-mobile"
+                />
+                <Button onClick={handleLookup} disabled={mobileInput.length !== 10 || isLooking} data-testid="button-lookup-customer">
+                  {isLooking ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Input
+                  placeholder="Type customer name..."
+                  value={nameInput}
+                  onChange={(e) => setNameInput(e.target.value)}
+                  autoComplete="off"
+                  data-testid="input-customer-search-name"
+                />
+                <div className="max-h-60 overflow-y-auto space-y-1">
+                  {isNameSearching ? (
+                    <div className="p-3 text-sm text-muted-foreground flex items-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" /> Searching...
+                    </div>
+                  ) : nameInput.trim().length < 1 ? (
+                    <div className="p-3 text-sm text-muted-foreground">Start typing to search customers.</div>
+                  ) : nameMatches.length === 0 ? (
+                    <div className="p-3 text-sm text-muted-foreground">No matching customer.</div>
+                  ) : (
+                    nameMatches.map((c: any) => (
+                      <button
+                        type="button"
+                        key={c.id}
+                        onClick={() => { onSelect(c); reset(); }}
+                        className="w-full text-left px-3 py-2 rounded-md border hover:bg-accent text-sm"
+                        data-testid={`option-customer-${c.id}`}
+                      >
+                        <div className="font-medium">{c.name}</div>
+                        <div className="text-xs text-muted-foreground">{c.mobile}</div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
             <Button variant="outline" className="w-full" onClick={() => onSelect(null)} data-testid="button-select-walkin">
               Walk-in / Cash Customer
             </Button>
