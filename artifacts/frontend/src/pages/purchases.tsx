@@ -115,6 +115,18 @@ function lineAmount(l: Line, isGst: boolean): number {
   return taxable + (taxable * taxPct / 100);
 }
 
+// Back-solves Rate from a directly-typed Amount, holding Qty/Disc%/GST% fixed
+// — Amount itself is never stored, it's always qty*rate net of discount/tax,
+// so "editing" it just means picking the rate that reproduces that total.
+function rateForAmount(l: Line, isGst: boolean, amount: number): number | null {
+  const qty = Number(l.qty) || 0;
+  const disc = Number(l.discountPct) || 0;
+  const taxPct = isGst ? Number(l.taxPct) || 0 : 0;
+  const denom = qty * (1 - disc / 100) * (1 + taxPct / 100);
+  if (!(denom > 0) || Number.isNaN(amount)) return null;
+  return amount / denom;
+}
+
 // Renders purchase line items as a table on tablet/desktop and as stacked
 // cards on mobile, so entry never requires horizontal scrolling on a phone.
 function LineItemsEditor({
@@ -134,6 +146,23 @@ function LineItemsEditor({
   onRemoveLine: (i: number) => void;
   testIdPrefix?: string;
 }) {
+  // Raw text of an in-progress Amount edit, keyed by row — kept separate from
+  // the derived display value so mid-typing digits aren't reformatted out
+  // from under the cursor; cleared on blur once the rate has been solved for.
+  const [amountDrafts, setAmountDrafts] = useState<Record<number, string>>({});
+
+  const handleAmountChange = (i: number, raw: string) => {
+    setAmountDrafts((prev) => ({ ...prev, [i]: raw }));
+    const newRate = rateForAmount(lines[i], isGst, Number(raw));
+    if (newRate != null) onUpdateLine(i, { rate: String(newRate) });
+  };
+  const clearAmountDraft = (i: number) =>
+    setAmountDrafts((prev) => {
+      const next = { ...prev };
+      delete next[i];
+      return next;
+    });
+
   return (
     <>
       {/* Tablet/desktop: table */}
@@ -187,8 +216,15 @@ function LineItemsEditor({
                       className="w-16 text-right ml-auto" />
                   </TableCell>
                 )}
-                <TableCell className="text-right tabular-nums font-semibold pr-4">
-                  ₹{lineAmount(l, isGst).toFixed(2)}
+                <TableCell className="text-right pr-4">
+                  <Input
+                    type="number" min="0" step="0.01"
+                    value={amountDrafts[i] ?? lineAmount(l, isGst).toFixed(2)}
+                    onChange={(e) => handleAmountChange(i, e.target.value)}
+                    onBlur={() => clearAmountDraft(i)}
+                    className="w-28 text-right ml-auto tabular-nums font-semibold"
+                    data-testid={testIdPrefix ? `input-amount-${i}` : undefined}
+                  />
                 </TableCell>
                 <TableCell className="pr-4">
                   <Button size="icon" variant="ghost" onClick={() => onRemoveLine(i)}
@@ -240,9 +276,15 @@ function LineItemsEditor({
                 <Input type="number" min="0" max="100" step="0.5" value={l.taxPct} onChange={(e) => onUpdateLine(i, { taxPct: e.target.value })} />
               </div>
             )}
-            <div className="flex items-center justify-between pt-2 border-t">
-              <span className="text-sm text-muted-foreground">Amount</span>
-              <span className="text-base font-bold tabular-nums">₹{lineAmount(l, isGst).toFixed(2)}</span>
+            <div className="flex items-center justify-between gap-2 pt-2 border-t">
+              <Label className="text-sm text-muted-foreground shrink-0">Amount (₹)</Label>
+              <Input
+                type="number" min="0" step="0.01"
+                value={amountDrafts[i] ?? lineAmount(l, isGst).toFixed(2)}
+                onChange={(e) => handleAmountChange(i, e.target.value)}
+                onBlur={() => clearAmountDraft(i)}
+                className="w-32 text-right font-bold tabular-nums"
+              />
             </div>
           </div>
         ))}
