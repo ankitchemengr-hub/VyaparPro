@@ -30,8 +30,9 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Inbox, Eye, Loader2, FileText, Printer } from "lucide-react";
+import { Inbox, Eye, Loader2, FileText, Printer, X } from "lucide-react";
 import { useAuth } from "@/contexts/use-auth";
 
 const STATUSES = [
@@ -144,9 +145,26 @@ export default function CustomerOrdersAdmin() {
   const isWorker = role === "store" || role === "manufacturing";
 
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const { data: orders, isLoading } = useListCustomerOrders(
     statusFilter !== "all" ? { status: statusFilter as Status } : undefined,
   );
+
+  const pendingParams = { status: "pending" as Status };
+  const { data: pendingOrders } = useListCustomerOrders(pendingParams, {
+    query: { queryKey: getListCustomerOrdersQueryKey(pendingParams) },
+  });
+  const pendingCount = pendingOrders?.length ?? 0;
+
+  const filteredOrders = (orders ?? []).filter((o: any) => {
+    if (!dateFrom && !dateTo) return true;
+    const t = new Date(o.createdAt).getTime();
+    if (dateFrom && t < new Date(dateFrom + "T00:00:00").getTime()) return false;
+    if (dateTo && t > new Date(dateTo + "T23:59:59.999").getTime()) return false;
+    return true;
+  });
+  const hasDateFilter = !!dateFrom || !!dateTo;
   const [openId, setOpenId] = useState<number | null>(null);
   const { data: detail, isLoading: detailLoading } = useGetCustomerOrder(openId ?? 0, {
     query: { enabled: openId != null, queryKey: getGetCustomerOrderQueryKey(openId ?? 0) },
@@ -220,24 +238,63 @@ export default function CustomerOrdersAdmin() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-3">
           <Inbox className="w-6 h-6 text-primary" />
           <h1 className="text-2xl font-bold tracking-tight">Customer Orders</h1>
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-48" data-testid="select-status-filter">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
-            {FILTER_STATUSES.map((s) => (
-              <SelectItem key={s} value={s}>
-                {STATUS_VARIANTS[s].label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-wrap">
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-full sm:w-48" data-testid="select-status-filter">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="pending">{`New${pendingCount > 0 ? ` (${pendingCount})` : ""}`}</SelectItem>
+              {FILTER_STATUSES.filter((s) => s !== "pending").map((s) => (
+                <SelectItem key={s} value={s}>
+                  {STATUS_VARIANTS[s].label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <div className="flex items-center gap-2">
+            <div className="space-y-0.5">
+              <Label className="text-[11px] text-muted-foreground">From</Label>
+              <Input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="h-9 w-full sm:w-36"
+                data-testid="input-order-date-from"
+              />
+            </div>
+            <div className="space-y-0.5">
+              <Label className="text-[11px] text-muted-foreground">To</Label>
+              <Input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="h-9 w-full sm:w-36"
+                data-testid="input-order-date-to"
+              />
+            </div>
+            {hasDateFilter && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 shrink-0 self-end"
+                onClick={() => { setDateFrom(""); setDateTo(""); }}
+                title="Clear date filter"
+                data-testid="button-clear-order-dates"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            )}
+          </div>
+        </div>
       </div>
 
       <Card>
@@ -249,9 +306,9 @@ export default function CustomerOrdersAdmin() {
             <div className="flex items-center justify-center p-12 text-muted-foreground">
               <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading...
             </div>
-          ) : !orders || orders.length === 0 ? (
+          ) : filteredOrders.length === 0 ? (
             <div className="text-center text-muted-foreground py-12">
-              No customer orders yet.
+              {orders && orders.length > 0 ? "No orders in the selected date range." : "No customer orders yet."}
             </div>
           ) : (
             <Table>
@@ -268,7 +325,7 @@ export default function CustomerOrdersAdmin() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {orders.map((o: any) => {
+                {filteredOrders.map((o: any) => {
                   const isNew = o.status === "pending";
                   return (
                   <TableRow
