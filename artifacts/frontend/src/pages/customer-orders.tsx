@@ -147,6 +147,7 @@ export default function CustomerOrdersAdmin() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [customerFilter, setCustomerFilter] = useState("");
   const { data: orders, isLoading } = useListCustomerOrders(
     statusFilter !== "all" ? { status: statusFilter as Status } : undefined,
   );
@@ -157,11 +158,16 @@ export default function CustomerOrdersAdmin() {
   });
   const pendingCount = pendingOrders?.length ?? 0;
 
+  const trimmedCustomerFilter = customerFilter.trim().toLowerCase();
   const filteredOrders = (orders ?? []).filter((o: any) => {
-    if (!dateFrom && !dateTo) return true;
-    const t = new Date(o.createdAt).getTime();
-    if (dateFrom && t < new Date(dateFrom + "T00:00:00").getTime()) return false;
-    if (dateTo && t > new Date(dateTo + "T23:59:59.999").getTime()) return false;
+    if (dateFrom || dateTo) {
+      const t = new Date(o.createdAt).getTime();
+      if (dateFrom && t < new Date(dateFrom + "T00:00:00").getTime()) return false;
+      if (dateTo && t > new Date(dateTo + "T23:59:59.999").getTime()) return false;
+    }
+    if (trimmedCustomerFilter && !(o.customerName ?? "").toLowerCase().includes(trimmedCustomerFilter)) {
+      return false;
+    }
     return true;
   });
   const hasDateFilter = !!dateFrom || !!dateTo;
@@ -244,57 +250,20 @@ export default function CustomerOrdersAdmin() {
           <h1 className="text-2xl font-bold tracking-tight">Customer Orders</h1>
         </div>
 
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-wrap">
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-full sm:w-48" data-testid="select-status-filter">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All statuses</SelectItem>
-              <SelectItem value="pending">{`New${pendingCount > 0 ? ` (${pendingCount})` : ""}`}</SelectItem>
-              {FILTER_STATUSES.filter((s) => s !== "pending").map((s) => (
-                <SelectItem key={s} value={s}>
-                  {STATUS_VARIANTS[s].label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <div className="flex items-center gap-2">
-            <div className="space-y-0.5">
-              <Label className="text-[11px] text-muted-foreground">From</Label>
-              <Input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-                className="h-9 w-full sm:w-36"
-                data-testid="input-order-date-from"
-              />
-            </div>
-            <div className="space-y-0.5">
-              <Label className="text-[11px] text-muted-foreground">To</Label>
-              <Input
-                type="date"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-                className="h-9 w-full sm:w-36"
-                data-testid="input-order-date-to"
-              />
-            </div>
-            {hasDateFilter && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-9 w-9 shrink-0 self-end"
-                onClick={() => { setDateFrom(""); setDateTo(""); }}
-                title="Clear date filter"
-                data-testid="button-clear-order-dates"
-              >
-                <X className="w-4 h-4" />
-              </Button>
-            )}
-          </div>
-        </div>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-full sm:w-48" data-testid="select-status-filter">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All statuses</SelectItem>
+            <SelectItem value="pending">{`New${pendingCount > 0 ? ` (${pendingCount})` : ""}`}</SelectItem>
+            {FILTER_STATUSES.filter((s) => s !== "pending").map((s) => (
+              <SelectItem key={s} value={s}>
+                {STATUS_VARIANTS[s].label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       <Card>
@@ -308,7 +277,7 @@ export default function CustomerOrdersAdmin() {
             </div>
           ) : filteredOrders.length === 0 ? (
             <div className="text-center text-muted-foreground py-12">
-              {orders && orders.length > 0 ? "No orders in the selected date range." : "No customer orders yet."}
+              {orders && orders.length > 0 ? "No orders match the current filters." : "No customer orders yet."}
             </div>
           ) : (
             <Table>
@@ -322,6 +291,67 @@ export default function CustomerOrdersAdmin() {
                   <TableHead className="text-right">Amount</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead></TableHead>
+                </TableRow>
+                <TableRow className="bg-muted/30 hover:bg-muted/30">
+                  <TableHead className="py-1.5"></TableHead>
+                  <TableHead className="py-1.5">
+                    <div className="flex items-center gap-1">
+                      <Input
+                        type="date"
+                        value={dateFrom}
+                        onChange={(e) => setDateFrom(e.target.value)}
+                        className="h-7 text-xs px-1.5 w-[7.5rem]"
+                        title="From date"
+                        data-testid="input-order-date-from"
+                      />
+                      <Input
+                        type="date"
+                        value={dateTo}
+                        onChange={(e) => setDateTo(e.target.value)}
+                        className="h-7 text-xs px-1.5 w-[7.5rem]"
+                        title="To date"
+                        data-testid="input-order-date-to"
+                      />
+                      {hasDateFilter && (
+                        <button
+                          type="button"
+                          onClick={() => { setDateFrom(""); setDateTo(""); }}
+                          className="text-muted-foreground hover:text-foreground shrink-0"
+                          title="Clear date filter"
+                          data-testid="button-clear-order-dates"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </TableHead>
+                  <TableHead className="py-1.5">
+                    <div className="flex items-center gap-1">
+                      <Input
+                        value={customerFilter}
+                        onChange={(e) => setCustomerFilter(e.target.value)}
+                        placeholder="Search customer…"
+                        className="h-7 text-xs px-1.5 w-full"
+                        data-testid="input-order-customer-filter"
+                      />
+                      {customerFilter && (
+                        <button
+                          type="button"
+                          onClick={() => setCustomerFilter("")}
+                          className="text-muted-foreground hover:text-foreground shrink-0"
+                          title="Clear customer filter"
+                          data-testid="button-clear-order-customer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </TableHead>
+                  <TableHead className="py-1.5"></TableHead>
+                  <TableHead className="py-1.5"></TableHead>
+                  <TableHead className="py-1.5"></TableHead>
+                  <TableHead className="py-1.5"></TableHead>
+                  <TableHead className="py-1.5"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
