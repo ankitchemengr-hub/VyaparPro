@@ -37,5 +37,7 @@ export interface Entity {
   isActive?: boolean;
   /** @nullable */
   userId?: number | null;
+  /** True only for a customer created by a salesman and not yet viewed/edited by an admin. */
+  isNewFromSalesman?: boolean;
   createdAt?: string;
 }

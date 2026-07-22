@@ -891,7 +891,8 @@ export const ListEntitiesQueryParams = zod.object({
   "type": zod.enum(['customer', 'vendor', 'worker', 'salesman']).optional(),
   "search": zod.coerce.string().optional(),
   "mobile": zod.coerce.string().optional(),
-  "includeInactive": zod.coerce.boolean().optional().describe('Include deactivated entities (excluded by default).')
+  "includeInactive": zod.coerce.boolean().optional().describe('Include deactivated entities (excluded by default).'),
+  "isNewFromSalesman": zod.coerce.boolean().optional().describe('Filter to only customers created by a salesman and not yet viewed\/edited by an admin.')
 })
 
 export const ListEntitiesResponseItem = zod.object({
@@ -912,6 +913,7 @@ export const ListEntitiesResponseItem = zod.object({
   "creditLimit": zod.number().nullish(),
   "isActive": zod.boolean().optional(),
   "userId": zod.number().nullish(),
+  "isNewFromSalesman": zod.boolean().optional().describe('True only for a customer created by a salesman and not yet viewed\/edited by an admin.'),
   "createdAt": zod.string().optional()
 })
 export const ListEntitiesResponse = zod.array(ListEntitiesResponseItem)
@@ -955,6 +957,7 @@ export const CreateEntityResponse = zod.object({
   "creditLimit": zod.number().nullish(),
   "isActive": zod.boolean().optional(),
   "userId": zod.number().nullish(),
+  "isNewFromSalesman": zod.boolean().optional().describe('True only for a customer created by a salesman and not yet viewed\/edited by an admin.'),
   "createdAt": zod.string().optional()
 })
 
@@ -986,6 +989,7 @@ export const LookupEntityByMobileResponse = zod.object({
   "creditLimit": zod.number().nullish(),
   "isActive": zod.boolean().optional(),
   "userId": zod.number().nullish(),
+  "isNewFromSalesman": zod.boolean().optional().describe('True only for a customer created by a salesman and not yet viewed\/edited by an admin.'),
   "createdAt": zod.string().optional()
 }).optional()
 })
@@ -1016,6 +1020,7 @@ export const GetEntityResponse = zod.object({
   "creditLimit": zod.number().nullish(),
   "isActive": zod.boolean().optional(),
   "userId": zod.number().nullish(),
+  "isNewFromSalesman": zod.boolean().optional().describe('True only for a customer created by a salesman and not yet viewed\/edited by an admin.'),
   "createdAt": zod.string().optional()
 })
 
@@ -1062,6 +1067,7 @@ export const UpdateEntityResponse = zod.object({
   "creditLimit": zod.number().nullish(),
   "isActive": zod.boolean().optional(),
   "userId": zod.number().nullish(),
+  "isNewFromSalesman": zod.boolean().optional().describe('True only for a customer created by a salesman and not yet viewed\/edited by an admin.'),
   "createdAt": zod.string().optional()
 })
 
@@ -1102,6 +1108,7 @@ export const GetEntityLedgerResponse = zod.object({
   "creditLimit": zod.number().nullish(),
   "isActive": zod.boolean().optional(),
   "userId": zod.number().nullish(),
+  "isNewFromSalesman": zod.boolean().optional().describe('True only for a customer created by a salesman and not yet viewed\/edited by an admin.'),
   "createdAt": zod.string().optional()
 }),
   "outstandingBalance": zod.number(),
@@ -3116,6 +3123,7 @@ export const GlobalSearchResponse = zod.object({
   "creditLimit": zod.number().nullish(),
   "isActive": zod.boolean().optional(),
   "userId": zod.number().nullish(),
+  "isNewFromSalesman": zod.boolean().optional().describe('True only for a customer created by a salesman and not yet viewed\/edited by an admin.'),
   "createdAt": zod.string().optional()
 })),
   "invoices": zod.array(zod.object({

@@ -456,13 +456,27 @@ export default function Customers() {
                     return 0;
                   }).map((entity) => {
                     const mapsUrl = getMapsUrl(entity as any);
+                    const isNew = (entity as any).isNewFromSalesman === true;
                     return (
-                      <TableRow key={entity.id} data-testid={`row-entity-${entity.id}`} className={(entity as any).isActive === false ? "opacity-60" : undefined}>
+                      <TableRow
+                        key={entity.id}
+                        data-testid={`row-entity-${entity.id}`}
+                        className={
+                          (entity as any).isActive === false
+                            ? "opacity-60"
+                            : isNew
+                              ? "bg-amber-50/60 dark:bg-amber-950/20 hover:bg-amber-100/60 dark:hover:bg-amber-950/30 border-l-2 border-l-amber-500"
+                              : undefined
+                        }
+                      >
                         <TableCell className="font-medium">
                           <div className="flex items-center gap-2">
-                            <Link href={`/customers/${entity.id}`} className="text-primary hover:underline">
+                            <Link href={`/customers/${entity.id}`} className={isNew ? "text-amber-900 dark:text-amber-200 font-semibold hover:underline" : "text-primary hover:underline"}>
                               {entity.name}
                             </Link>
+                            {isNew && (
+                              <Badge className="text-[10px] bg-amber-500 text-white hover:bg-amber-500">New</Badge>
+                            )}
                             {(entity as any).isActive === false && (
                               <Badge variant="outline" className="text-[10px] text-muted-foreground">Inactive</Badge>
                             )}

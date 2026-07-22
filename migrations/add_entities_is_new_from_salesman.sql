@@ -1,0 +1,1 @@
+ALTER TABLE entities ADD COLUMN IF NOT EXISTS is_new_from_salesman BOOLEAN NOT NULL DEFAULT false;

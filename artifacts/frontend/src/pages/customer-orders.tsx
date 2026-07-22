@@ -268,9 +268,17 @@ export default function CustomerOrdersAdmin() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {orders.map((o: any) => (
-                  <TableRow key={o.id} data-testid={`order-row-${o.id}`}>
-                    <TableCell className="font-mono text-xs">{o.orderNo ?? `#${o.id}`}</TableCell>
+                {orders.map((o: any) => {
+                  const isNew = o.status === "pending";
+                  return (
+                  <TableRow
+                    key={o.id}
+                    data-testid={`order-row-${o.id}`}
+                    className={isNew ? "bg-amber-50/60 dark:bg-amber-950/20 hover:bg-amber-100/60 dark:hover:bg-amber-950/30 border-l-2 border-l-amber-500" : undefined}
+                  >
+                    <TableCell className={isNew ? "font-mono text-xs font-semibold text-amber-900 dark:text-amber-200" : "font-mono text-xs"}>
+                      {o.orderNo ?? `#${o.id}`}
+                    </TableCell>
                     <TableCell>{new Date(o.createdAt).toLocaleDateString("en-IN")}</TableCell>
                     <TableCell>{o.customerName}</TableCell>
                     <TableCell>{o.customerMobile ?? "-"}</TableCell>
@@ -294,7 +302,8 @@ export default function CustomerOrdersAdmin() {
                       </Button>
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           )}

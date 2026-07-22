@@ -54,6 +54,7 @@ router.get("/entities", async (req, res): Promise<void> => {
   if (!params.data.includeInactive) conditions.push(eq(entitiesTable.isActive, true));
   if (params.data.type) conditions.push(eq(entitiesTable.type, params.data.type));
   if (params.data.mobile) conditions.push(eq(entitiesTable.mobile, params.data.mobile));
+  if (params.data.isNewFromSalesman) conditions.push(eq(entitiesTable.isNewFromSalesman, true));
   if (params.data.search) {
     conditions.push(
       or(
@@ -81,6 +82,7 @@ router.post("/entities", async (req, res): Promise<void> => {
     return;
   }
 
+  const session = (req as any).session;
   const companyId = getCompanyId(req);
   const pricingTier = parsed.data.pricingTier ?? "retail";
   let name = parsed.data.name?.trim() ?? "";
@@ -133,6 +135,8 @@ router.post("/entities", async (req, res): Promise<void> => {
     name,
     pricingTier,
     creditLimit: parsed.data.creditLimit != null ? String(parsed.data.creditLimit) : null,
+    customerSource: session?.role === "salesman" ? "salesman" : "admin",
+    isNewFromSalesman: session?.role === "salesman" && parsed.data.type === "customer",
   };
 
   if (assignedSalesmanId && parsed.data.type === "customer") {
@@ -165,6 +169,14 @@ router.get("/entities/:id", async (req, res): Promise<void> => {
   if (!entity) {
     res.status(404).json({ error: "Entity not found" });
     return;
+  }
+
+  // Opening a salesman-added customer's profile is the admin's acknowledgement —
+  // clears the "new" highlight/notification so it doesn't show as new again.
+  const session = (req as any).session;
+  if (session?.role === "admin" && entity.isNewFromSalesman) {
+    await db.update(entitiesTable).set({ isNewFromSalesman: false }).where(eq(entitiesTable.id, entity.id));
+    entity.isNewFromSalesman = false;
   }
 
   res.json(formatEntity(entity));
@@ -244,6 +256,8 @@ router.patch("/entities/:id", async (req, res): Promise<void> => {
     .set({
       ...parsed.data,
       creditLimit: parsed.data.creditLimit != null ? String(parsed.data.creditLimit) : undefined,
+      // Editing is itself an admin action on this customer — clears the "new" flag.
+      isNewFromSalesman: false,
       ...(assignedSalesmanId !== undefined
         ? {
             assignedSalesmanId: clearSalesman ? null : assignedSalesmanId,
@@ -506,6 +520,7 @@ function formatEntity(e: any) {
     creditLimit: e.creditLimit != null ? Number(e.creditLimit) : null,
     isActive: e.isActive ?? true,
     userId: e.userId ?? null,
+    isNewFromSalesman: e.isNewFromSalesman ?? false,
     assignedSalesmanId: e.assignedSalesmanId ?? null,
     assignedSalesmanName: e.assignedSalesmanName ?? null,
     commissionExpiryDate: e.commissionExpiryDate ? new Date(e.commissionExpiryDate).toISOString() : null,

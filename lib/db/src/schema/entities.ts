@@ -24,6 +24,10 @@ export const entitiesTable = pgTable("entities", {
   assignedSalesmanId: integer("assigned_salesman_id"),
   commissionExpiryDate: timestamp("commission_expiry_date", { withTimezone: true }),
   customerSource: text("customer_source").default("admin"),
+  // True only for a customer created by a salesman, until an admin opens
+  // that customer's profile or edits them — a lightweight "new" notification
+  // flag, cleared as a side effect of the admin actually looking at it.
+  isNewFromSalesman: boolean("is_new_from_salesman").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (t) => [

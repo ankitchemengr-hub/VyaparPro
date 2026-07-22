@@ -798,6 +798,11 @@ paths:
           description: Include deactivated entities (excluded by default).
           schema:
             type: boolean
+        - name: isNewFromSalesman
+          in: query
+          description: Filter to only customers created by a salesman and not yet viewed/edited by an admin.
+          schema:
+            type: boolean
       responses:
         "200":
           description: Entities
@@ -3867,6 +3872,9 @@ components:
           type: boolean
         userId:
           type: ["integer", "null"]
+        isNewFromSalesman:
+          type: boolean
+          description: True only for a customer created by a salesman and not yet viewed/edited by an admin.
         createdAt:
           type: string
 

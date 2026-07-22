@@ -993,6 +993,8 @@ export interface Entity {
   isActive?: boolean;
   /** @nullable */
   userId?: number | null;
+  /** True only for a customer created by a salesman and not yet viewed/edited by an admin. */
+  isNewFromSalesman?: boolean;
   createdAt?: string;
 }
 
@@ -2579,6 +2581,10 @@ mobile?: string;
  * Include deactivated entities (excluded by default).
  */
 includeInactive?: boolean;
+/**
+ * Filter to only customers created by a salesman and not yet viewed/edited by an admin.
+ */
+isNewFromSalesman?: boolean;
 };
 
 export type ListEntitiesType = typeof ListEntitiesType[keyof typeof ListEntitiesType];

@@ -4,6 +4,7 @@ import { CompanySwitcher } from "./company-switcher";
 import { useAuth } from "@/contexts/use-auth";
 import { Redirect, useLocation } from "wouter";
 import { Menu, X } from "lucide-react";
+import { NewActivityWatcher } from "../new-activity-watcher";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -36,6 +37,8 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <div className="flex min-h-screen w-full bg-background text-foreground selection:bg-primary/30 relative">
+      <NewActivityWatcher />
+
       {/* Sidebar: drawer on mobile, static on desktop when open */}
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 

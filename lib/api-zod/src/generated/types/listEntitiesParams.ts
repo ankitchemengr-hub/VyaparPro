@@ -15,4 +15,8 @@ mobile?: string;
  * Include deactivated entities (excluded by default).
  */
 includeInactive?: boolean;
+/**
+ * Filter to only customers created by a salesman and not yet viewed/edited by an admin.
+ */
+isNewFromSalesman?: boolean;
 };

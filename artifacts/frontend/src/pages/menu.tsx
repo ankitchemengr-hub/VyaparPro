@@ -5,7 +5,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Search, Package, Users, FileText } from "lucide-react";
-import { useGlobalSearch, getGlobalSearchQueryKey } from "@workspace/api-client-react";
+import {
+  useGlobalSearch, getGlobalSearchQueryKey,
+  useListCustomerOrders, getListCustomerOrdersQueryKey,
+  useListEntities, getListEntitiesQueryKey,
+} from "@workspace/api-client-react";
 import { moduleNavItems } from "@/lib/nav-items";
 
 // Cycled per tile so the module grid reads as colorful/scannable at a glance
@@ -38,6 +42,21 @@ export default function Menu() {
   );
 
   const modules = moduleNavItems.filter((item) => hasRole(item.roles as any));
+
+  const canSeeOrders = hasRole(["admin", "store", "manufacturing"]);
+  const isAdmin = hasRole(["admin"]);
+  const ordersParams = { status: "pending" as const };
+  const { data: pendingOrders } = useListCustomerOrders(ordersParams, {
+    query: { enabled: canSeeOrders, queryKey: getListCustomerOrdersQueryKey(ordersParams) },
+  });
+  const newCustomerParams = { type: "customer" as const, isNewFromSalesman: true };
+  const { data: newCustomers } = useListEntities(newCustomerParams, {
+    query: { enabled: isAdmin, queryKey: getListEntitiesQueryKey(newCustomerParams) },
+  });
+  const badgeCounts: Record<string, number> = {
+    "/customer-orders": pendingOrders?.length ?? 0,
+    "/customers": newCustomers?.length ?? 0,
+  };
 
   const hasResults =
     results &&
@@ -154,6 +173,7 @@ export default function Menu() {
         <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
           {modules.map((item, i) => {
             const color = TILE_COLORS[i % TILE_COLORS.length];
+            const badgeCount = badgeCounts[item.href] ?? 0;
             return (
               <Link key={item.href} href={item.href}>
                 <Card
@@ -161,8 +181,16 @@ export default function Menu() {
                   data-testid={`menu-tile-${item.href.replace(/\//g, "")}`}
                 >
                   <CardContent className="p-4 flex flex-col gap-2">
-                    <div className={`w-10 h-10 rounded-md ${color.bg} flex items-center justify-center ${color.icon}`}>
+                    <div className={`relative w-10 h-10 rounded-md ${color.bg} flex items-center justify-center ${color.icon}`}>
                       <item.icon className="h-5 w-5" />
+                      {badgeCount > 0 && (
+                        <span
+                          className="absolute -top-2 -right-2 min-w-[1.25rem] h-5 px-1 rounded-full bg-red-600 text-white text-[11px] font-bold flex items-center justify-center shadow"
+                          data-testid={`menu-tile-badge-${item.href.replace(/\//g, "")}`}
+                        >
+                          {badgeCount > 99 ? "99+" : badgeCount}
+                        </span>
+                      )}
                     </div>
                     <div>
                       <p className="font-medium text-sm">{item.name}</p>
