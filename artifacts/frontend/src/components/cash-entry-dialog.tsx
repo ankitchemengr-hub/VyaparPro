@@ -38,6 +38,14 @@ async function fetchReceiptPreview(): Promise<string | null> {
   }
 }
 
+function formatEntityBalance(balance: number): { text: string; className: string } {
+  const isOwed = balance > 0;
+  return {
+    text: `₹${Math.abs(balance).toLocaleString("en-IN")} ${isOwed ? "Dr" : "Cr"}`,
+    className: isOwed ? "text-destructive" : "text-green-600",
+  };
+}
+
 function useDebounced<T>(value: T, ms = 250): T {
   const [v, setV] = useState(value);
   useEffect(() => {
@@ -72,6 +80,7 @@ export function CashEntryDialog({
   const [partyName, setPartyName] = useState("");
   const [partyMobile, setPartyMobile] = useState("");
   const [partyEntityId, setPartyEntityId] = useState<number | null>(null);
+  const [partyEntityBalance, setPartyEntityBalance] = useState<number | null>(null);
   const [notes, setNotes] = useState("");
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
   const [negativeConfirmMsg, setNegativeConfirmMsg] = useState<string | null>(null);
@@ -119,6 +128,7 @@ export function CashEntryDialog({
       setPartyName("");
       setPartyMobile("");
       setPartyEntityId(null);
+      setPartyEntityBalance(null);
       setNotes("");
       setNameOpen(false);
       setMobileOpen(false);
@@ -146,12 +156,14 @@ export function CashEntryDialog({
     setPartyEntityId(e.id);
     setPartyName(e.name);
     setPartyMobile(e.mobile);
+    setPartyEntityBalance(Number((e as any).outstandingBalance ?? 0));
     setNameOpen(false);
     setMobileOpen(false);
   };
 
   const clearLinkedEntity = () => {
     setPartyEntityId(null);
+    setPartyEntityBalance(null);
   };
 
   const handleSubmit = (allowNegative = false) => {
@@ -289,6 +301,15 @@ export function CashEntryDialog({
               )}
             </div>
 
+            {partyEntityId && partyEntityBalance != null && (
+              <div className="text-xs flex items-center gap-1.5">
+                <span className="text-muted-foreground">Current balance:</span>
+                <span className={cn("font-semibold", formatEntityBalance(partyEntityBalance).className)}>
+                  {formatEntityBalance(partyEntityBalance).text}
+                </span>
+              </div>
+            )}
+
             {/* Name with autocomplete */}
             <div className="space-y-1.5 relative" ref={nameRef}>
               <Label>Name</Label>
@@ -323,13 +344,18 @@ export function CashEntryDialog({
                         )}
                         data-testid={`option-name-${e.id}`}
                       >
-                        <div>
-                          <div className="font-medium">{e.name}</div>
+                        <div className="min-w-0">
+                          <div className="font-medium truncate">{e.name}</div>
                           <div className="text-xs text-muted-foreground capitalize">{e.type} · {e.mobile}</div>
                         </div>
-                        {e.type === "customer" && (
-                          <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">Cust</span>
-                        )}
+                        <div className="flex flex-col items-end gap-0.5 shrink-0">
+                          {e.type === "customer" && (
+                            <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">Cust</span>
+                          )}
+                          <span className={cn("text-xs font-medium whitespace-nowrap", formatEntityBalance(Number((e as any).outstandingBalance ?? 0)).className)}>
+                            {formatEntityBalance(Number((e as any).outstandingBalance ?? 0)).text}
+                          </span>
+                        </div>
                       </button>
                     ))
                   )}
@@ -368,11 +394,16 @@ export function CashEntryDialog({
                         type="button"
                         key={e.id}
                         onClick={() => pickEntity(e)}
-                        className="w-full text-left px-3 py-2 hover:bg-accent text-sm"
+                        className="w-full text-left px-3 py-2 hover:bg-accent text-sm flex items-center justify-between gap-2"
                         data-testid={`option-mobile-${e.id}`}
                       >
-                        <div className="font-medium font-mono">{e.mobile}</div>
-                        <div className="text-xs text-muted-foreground">{e.name} <span className="capitalize">· {e.type}</span></div>
+                        <div className="min-w-0">
+                          <div className="font-medium font-mono">{e.mobile}</div>
+                          <div className="text-xs text-muted-foreground truncate">{e.name} <span className="capitalize">· {e.type}</span></div>
+                        </div>
+                        <span className={cn("text-xs font-medium whitespace-nowrap shrink-0", formatEntityBalance(Number((e as any).outstandingBalance ?? 0)).className)}>
+                          {formatEntityBalance(Number((e as any).outstandingBalance ?? 0)).text}
+                        </span>
                       </button>
                     ))
                   )}
