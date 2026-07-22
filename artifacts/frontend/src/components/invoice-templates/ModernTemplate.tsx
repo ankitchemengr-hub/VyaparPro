@@ -14,7 +14,7 @@ const theme: TemplateTheme = {
 };
 
 export function ModernTemplate({ invoice, maps, settings, computed }: TemplateProps) {
-  const companyName = settings.companyName || "Company Name";
+  const companyName = (computed.isGst && settings.gstLegalName) || settings.companyName || "Company Name";
   return (
     <div className="invoice-sheet bg-white text-black font-sans">
       <div className="bg-gradient-to-r from-amber-600 to-amber-500 px-6 py-4 text-white">

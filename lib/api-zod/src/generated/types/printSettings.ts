@@ -36,6 +36,8 @@ export interface PrintSettings {
   showTerms: boolean;
   fillerRows: boolean;
   companyName: string;
+  /** GST-registered legal name — shown instead of companyName on GST invoices when set (e.g. company trades as "Shradha Oil Center" but is GST-registered as "Yash Enterprises"). Non-GST documents always show companyName. */
+  gstLegalName?: string;
   addressLine: string;
   contact: string;
   email: string;

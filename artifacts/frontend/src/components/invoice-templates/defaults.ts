@@ -24,6 +24,7 @@ export const FALLBACK_PRINT_SETTINGS: PrintSettings = {
   showTerms: true,
   fillerRows: true,
   companyName: "",
+  gstLegalName: "",
   addressLine: "",
   contact: "",
   email: "",

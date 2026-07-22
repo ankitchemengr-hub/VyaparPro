@@ -14,7 +14,7 @@ const theme: TemplateTheme = {
 };
 
 export function ClassicTemplate({ invoice, maps, settings, computed }: TemplateProps) {
-  const companyName = settings.companyName || "Company Name";
+  const companyName = (computed.isGst && settings.gstLegalName) || settings.companyName || "Company Name";
   return (
     <div className="invoice-sheet bg-white text-black font-sans border-2 border-gray-800 p-5">
       <div className="border-b-2 border-gray-800 pb-2 text-center text-base font-bold tracking-[0.2em]">

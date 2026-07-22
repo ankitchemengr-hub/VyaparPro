@@ -19,7 +19,7 @@ export function A5CompactTemplate({ invoice, maps, settings, computed }: Templat
   const { isGst, isInterstate, placeOfSupply, totalQty, totalLtr, totalBox, hasAnyDisc, roundOff, items } =
     computed;
 
-  const companyName = settings.companyName || "SHRADHA ENTERPRISES";
+  const companyName = (isGst && settings.gstLegalName) || settings.companyName || "SHRADHA ENTERPRISES";
   // Legacy badge rendering: first word on line 1, abbreviated second word on
   // line 2 (e.g. "SHRADHA" / "ENT.") to stay faithful to the original sheet.
   const logoWords = companyName.split(/\s+/).filter(Boolean);

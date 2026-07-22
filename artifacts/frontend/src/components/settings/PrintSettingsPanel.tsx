@@ -320,8 +320,20 @@ export function PrintSettingsPanel() {
             <CardContent className="space-y-4 pt-6">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <Label htmlFor="companyName">Company Name</Label>
+                  <Label htmlFor="companyName">Company / Shop Name</Label>
                   <Input id="companyName" value={form.companyName} onChange={(e) => set("companyName", e.target.value)} data-testid="input-company-name" />
+                  <p className="text-xs text-muted-foreground">Shown on Non-GST bills, and on GST bills if no GST legal name is set below.</p>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="gstLegalName">GST Legal Name <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                  <Input
+                    id="gstLegalName"
+                    value={form.gstLegalName ?? ""}
+                    onChange={(e) => set("gstLegalName", e.target.value)}
+                    placeholder="Leave blank to use Company / Shop Name above"
+                    data-testid="input-gst-legal-name"
+                  />
+                  <p className="text-xs text-muted-foreground">Shown instead of the name above only on GST bills — for when your GST registration is under a different name than your shop.</p>
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="gstin">GSTIN</Label>

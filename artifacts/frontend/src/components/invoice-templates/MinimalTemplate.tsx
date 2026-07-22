@@ -14,7 +14,7 @@ const theme: TemplateTheme = {
 };
 
 export function MinimalTemplate({ invoice, maps, settings, computed }: TemplateProps) {
-  const companyName = settings.companyName || "Company Name";
+  const companyName = (computed.isGst && settings.gstLegalName) || settings.companyName || "Company Name";
   return (
     <div className="invoice-sheet bg-white text-gray-900 font-sans p-8">
       <div className="flex items-end justify-between">

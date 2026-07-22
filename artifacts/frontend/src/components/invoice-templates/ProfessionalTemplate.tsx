@@ -14,7 +14,7 @@ const theme: TemplateTheme = {
 };
 
 export function ProfessionalTemplate({ invoice, maps, settings, computed }: TemplateProps) {
-  const companyName = settings.companyName || "Company Name";
+  const companyName = (computed.isGst && settings.gstLegalName) || settings.companyName || "Company Name";
   return (
     <div className="invoice-sheet bg-white text-black font-sans p-6">
       <div className="flex items-start justify-between border-b-4 border-slate-800 pb-3">

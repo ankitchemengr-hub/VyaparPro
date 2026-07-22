@@ -41,6 +41,7 @@ const DEFAULT_PRINT_SETTINGS = {
   showTerms: true,
   fillerRows: true,
   companyName: "",
+  gstLegalName: "",
   addressLine: "",
   contact: "",
   email: "",
