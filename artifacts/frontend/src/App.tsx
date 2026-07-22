@@ -13,6 +13,7 @@ import Catalog from "@/pages/catalog";
 import Billing from "@/pages/billing";
 import Invoices from "@/pages/invoices";
 import InvoiceDetail from "@/pages/invoice-detail";
+import SalesReturn from "@/pages/sales-return";
 import RecycleBin from "@/pages/recycle-bin";
  import Inventory from "@/pages/inventory";
 import Brands from "@/pages/brands";
@@ -79,6 +80,7 @@ function ProtectedRoutes() {
         <Route path="/billing" component={Billing} />
         <Route path="/invoices">{() => <Invoices />}</Route>
         <Route path="/invoices/:id" component={InvoiceDetail} />
+        <Route path="/sales-return" component={SalesReturn} />
         <Route path="/recycle-bin" component={RecycleBin} />
         <Route path="/quotations" component={Quotations} />
         <Route path="/inventory" component={Inventory} />

@@ -99,6 +99,7 @@ import type {
   ListProductsParams,
   ListPurchasesParams,
   ListRewardProgressParams,
+  ListSalesReturnsParams,
   ListSubscriptionsParams,
   ListWorkerAttendanceParams,
   ListWorkersParams,
@@ -126,6 +127,7 @@ import type {
   ResetResult,
   RestoreBackupInput,
   RestoreResult,
+  ReturnableInvoice,
   RewardProgress,
   RewardScheme,
   RewardSchemeInput,
@@ -133,6 +135,8 @@ import type {
   RolePermission,
   RolePermissionsUpdate,
   SalesReport,
+  SalesReturn,
+  SalesReturnInput,
   SalesTrendPoint,
   SearchResults,
   SetActiveCompanyInput,
@@ -4115,6 +4119,314 @@ export const usePermanentlyDeleteInvoice = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getPermanentlyDeleteInvoiceMutationOptions(options));
     }
+
+export const getGetInvoiceReturnableItemsUrl = (id: number,) => {
+
+
+
+
+  return `/api/invoices/${id}/returnable-items`
+}
+
+/**
+ * @summary Invoice line items with quantity already returned / still returnable, for the Sales Return item picker
+ */
+export const getInvoiceReturnableItems = async (id: number, options?: RequestInit): Promise<ReturnableInvoice> => {
+
+  return customFetch<ReturnableInvoice>(getGetInvoiceReturnableItemsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetInvoiceReturnableItemsQueryKey = (id: number,) => {
+    return [
+    `/api/invoices/${id}/returnable-items`
+    ] as const;
+    }
+
+
+export const getGetInvoiceReturnableItemsQueryOptions = <TData = Awaited<ReturnType<typeof getInvoiceReturnableItems>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getInvoiceReturnableItems>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetInvoiceReturnableItemsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getInvoiceReturnableItems>>> = ({ signal }) => getInvoiceReturnableItems(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getInvoiceReturnableItems>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetInvoiceReturnableItemsQueryResult = NonNullable<Awaited<ReturnType<typeof getInvoiceReturnableItems>>>
+export type GetInvoiceReturnableItemsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Invoice line items with quantity already returned / still returnable, for the Sales Return item picker
+ */
+
+export function useGetInvoiceReturnableItems<TData = Awaited<ReturnType<typeof getInvoiceReturnableItems>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getInvoiceReturnableItems>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetInvoiceReturnableItemsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListSalesReturnsUrl = (params?: ListSalesReturnsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/sales-returns?${stringifiedParams}` : `/api/sales-returns`
+}
+
+/**
+ * @summary List sales returns
+ */
+export const listSalesReturns = async (params?: ListSalesReturnsParams, options?: RequestInit): Promise<SalesReturn[]> => {
+
+  return customFetch<SalesReturn[]>(getListSalesReturnsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListSalesReturnsQueryKey = (params?: ListSalesReturnsParams,) => {
+    return [
+    `/api/sales-returns`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListSalesReturnsQueryOptions = <TData = Awaited<ReturnType<typeof listSalesReturns>>, TError = ErrorType<unknown>>(params?: ListSalesReturnsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSalesReturns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListSalesReturnsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listSalesReturns>>> = ({ signal }) => listSalesReturns(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listSalesReturns>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListSalesReturnsQueryResult = NonNullable<Awaited<ReturnType<typeof listSalesReturns>>>
+export type ListSalesReturnsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List sales returns
+ */
+
+export function useListSalesReturns<TData = Awaited<ReturnType<typeof listSalesReturns>>, TError = ErrorType<unknown>>(
+ params?: ListSalesReturnsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSalesReturns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListSalesReturnsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateSalesReturnUrl = () => {
+
+
+
+
+  return `/api/sales-returns`
+}
+
+/**
+ * @summary Create a sales return against an invoice — credits the customer's ledger and puts stock back
+ */
+export const createSalesReturn = async (salesReturnInput: SalesReturnInput, options?: RequestInit): Promise<SalesReturn> => {
+
+  return customFetch<SalesReturn>(getCreateSalesReturnUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(salesReturnInput)
+  }
+);}
+
+
+
+
+export const getCreateSalesReturnMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSalesReturn>>, TError,{data: BodyType<SalesReturnInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createSalesReturn>>, TError,{data: BodyType<SalesReturnInput>}, TContext> => {
+
+const mutationKey = ['createSalesReturn'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createSalesReturn>>, {data: BodyType<SalesReturnInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createSalesReturn(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateSalesReturnMutationResult = NonNullable<Awaited<ReturnType<typeof createSalesReturn>>>
+    export type CreateSalesReturnMutationBody = BodyType<SalesReturnInput>
+    export type CreateSalesReturnMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create a sales return against an invoice — credits the customer's ledger and puts stock back
+ */
+export const useCreateSalesReturn = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSalesReturn>>, TError,{data: BodyType<SalesReturnInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createSalesReturn>>,
+        TError,
+        {data: BodyType<SalesReturnInput>},
+        TContext
+      > => {
+      return useMutation(getCreateSalesReturnMutationOptions(options));
+    }
+
+export const getGetSalesReturnUrl = (id: number,) => {
+
+
+
+
+  return `/api/sales-returns/${id}`
+}
+
+/**
+ * @summary Get a sales return with its line items
+ */
+export const getSalesReturn = async (id: number, options?: RequestInit): Promise<SalesReturn> => {
+
+  return customFetch<SalesReturn>(getGetSalesReturnUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSalesReturnQueryKey = (id: number,) => {
+    return [
+    `/api/sales-returns/${id}`
+    ] as const;
+    }
+
+
+export const getGetSalesReturnQueryOptions = <TData = Awaited<ReturnType<typeof getSalesReturn>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSalesReturn>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSalesReturnQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSalesReturn>>> = ({ signal }) => getSalesReturn(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSalesReturn>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSalesReturnQueryResult = NonNullable<Awaited<ReturnType<typeof getSalesReturn>>>
+export type GetSalesReturnQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get a sales return with its line items
+ */
+
+export function useGetSalesReturn<TData = Awaited<ReturnType<typeof getSalesReturn>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSalesReturn>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSalesReturnQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getListPaymentsUrl = (params?: ListPaymentsParams,) => {
   const normalizedParams = new URLSearchParams();

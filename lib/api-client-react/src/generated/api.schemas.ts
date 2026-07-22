@@ -1317,6 +1317,82 @@ export interface InvoiceSummary {
   status: string;
 }
 
+export interface ReturnableInvoiceItem {
+  invoiceItemId: number;
+  productId: number;
+  productName: string;
+  unit: string;
+  rate: number;
+  taxPct: number;
+  /** Original quantity sold on the invoice. */
+  qty: number;
+  /** Original line total (tax-inclusive) for the full qty sold — used to prorate the return credit per unit. */
+  originalAmount: number;
+  /** Sum of qty already returned against this invoice item across all non-cancelled sales returns. */
+  alreadyReturnedQty: number;
+  /** qty minus alreadyReturnedQty — the most that can still be returned. */
+  returnableQty: number;
+}
+
+export interface ReturnableInvoice {
+  invoiceId: number;
+  invoiceNo: string;
+  invoiceDate: string;
+  invoiceType: string;
+  /** @nullable */
+  customerId: number | null;
+  /** @nullable */
+  customerName: string | null;
+  items: ReturnableInvoiceItem[];
+}
+
+export interface SalesReturnItemInput {
+  invoiceItemId: number;
+  productId: number;
+  qty: number;
+}
+
+export interface SalesReturnInput {
+  invoiceId: number;
+  reason?: string;
+  /** @minItems 1 */
+  items: SalesReturnItemInput[];
+}
+
+export interface SalesReturnItem {
+  id: number;
+  productId: number;
+  productName: string;
+  qty: number;
+  unit: string;
+  rate: number;
+  taxPct: number;
+  amount: number;
+}
+
+export interface SalesReturn {
+  id: number;
+  returnNo: string;
+  returnDate: string;
+  /** @nullable */
+  invoiceId?: number | null;
+  invoiceNo: string;
+  /** @nullable */
+  customerId?: number | null;
+  /** @nullable */
+  customerName?: string | null;
+  /** @nullable */
+  reason?: string | null;
+  subtotal: number;
+  totalTax: number;
+  grandTotal: number;
+  status: string;
+  /** @nullable */
+  createdByName?: string | null;
+  createdAt: string;
+  items?: SalesReturnItem[];
+}
+
 export type PaymentMode = typeof PaymentMode[keyof typeof PaymentMode];
 
 
@@ -2555,6 +2631,13 @@ export const ListInvoicesStatus = {
   saved: 'saved',
   cancelled: 'cancelled',
 } as const;
+
+export type ListSalesReturnsParams = {
+/**
+ * Matches return no, invoice no, or customer name
+ */
+search?: string;
+};
 
 export type ListPaymentsParams = {
 customerId?: number;

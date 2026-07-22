@@ -1482,6 +1482,150 @@ export const PermanentlyDeleteInvoiceResponse = zod.void()
 
 
 /**
+ * @summary Invoice line items with quantity already returned / still returnable, for the Sales Return item picker
+ */
+export const GetInvoiceReturnableItemsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetInvoiceReturnableItemsResponse = zod.object({
+  "invoiceId": zod.number(),
+  "invoiceNo": zod.string(),
+  "invoiceDate": zod.string(),
+  "invoiceType": zod.string(),
+  "customerId": zod.number().nullable(),
+  "customerName": zod.string().nullable(),
+  "items": zod.array(zod.object({
+  "invoiceItemId": zod.number(),
+  "productId": zod.number(),
+  "productName": zod.string(),
+  "unit": zod.string(),
+  "rate": zod.number(),
+  "taxPct": zod.number(),
+  "qty": zod.number().describe('Original quantity sold on the invoice.'),
+  "originalAmount": zod.number().describe('Original line total (tax-inclusive) for the full qty sold — used to prorate the return credit per unit.'),
+  "alreadyReturnedQty": zod.number().describe('Sum of qty already returned against this invoice item across all non-cancelled sales returns.'),
+  "returnableQty": zod.number().describe('qty minus alreadyReturnedQty — the most that can still be returned.')
+}))
+})
+
+
+/**
+ * @summary List sales returns
+ */
+export const ListSalesReturnsQueryParams = zod.object({
+  "search": zod.coerce.string().optional().describe('Matches return no, invoice no, or customer name')
+})
+
+export const ListSalesReturnsResponseItem = zod.object({
+  "id": zod.number(),
+  "returnNo": zod.string(),
+  "returnDate": zod.string(),
+  "invoiceId": zod.number().nullish(),
+  "invoiceNo": zod.string(),
+  "customerId": zod.number().nullish(),
+  "customerName": zod.string().nullish(),
+  "reason": zod.string().nullish(),
+  "subtotal": zod.number(),
+  "totalTax": zod.number(),
+  "grandTotal": zod.number(),
+  "status": zod.string(),
+  "createdByName": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "productId": zod.number(),
+  "productName": zod.string(),
+  "qty": zod.number(),
+  "unit": zod.string(),
+  "rate": zod.number(),
+  "taxPct": zod.number(),
+  "amount": zod.number()
+})).optional()
+})
+export const ListSalesReturnsResponse = zod.array(ListSalesReturnsResponseItem)
+
+
+/**
+ * @summary Create a sales return against an invoice — credits the customer's ledger and puts stock back
+ */
+
+
+
+export const CreateSalesReturnBody = zod.object({
+  "invoiceId": zod.number(),
+  "reason": zod.string().optional(),
+  "items": zod.array(zod.object({
+  "invoiceItemId": zod.number(),
+  "productId": zod.number(),
+  "qty": zod.number()
+})).min(1)
+})
+
+export const CreateSalesReturnResponse = zod.object({
+  "id": zod.number(),
+  "returnNo": zod.string(),
+  "returnDate": zod.string(),
+  "invoiceId": zod.number().nullish(),
+  "invoiceNo": zod.string(),
+  "customerId": zod.number().nullish(),
+  "customerName": zod.string().nullish(),
+  "reason": zod.string().nullish(),
+  "subtotal": zod.number(),
+  "totalTax": zod.number(),
+  "grandTotal": zod.number(),
+  "status": zod.string(),
+  "createdByName": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "productId": zod.number(),
+  "productName": zod.string(),
+  "qty": zod.number(),
+  "unit": zod.string(),
+  "rate": zod.number(),
+  "taxPct": zod.number(),
+  "amount": zod.number()
+})).optional()
+})
+
+
+/**
+ * @summary Get a sales return with its line items
+ */
+export const GetSalesReturnParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetSalesReturnResponse = zod.object({
+  "id": zod.number(),
+  "returnNo": zod.string(),
+  "returnDate": zod.string(),
+  "invoiceId": zod.number().nullish(),
+  "invoiceNo": zod.string(),
+  "customerId": zod.number().nullish(),
+  "customerName": zod.string().nullish(),
+  "reason": zod.string().nullish(),
+  "subtotal": zod.number(),
+  "totalTax": zod.number(),
+  "grandTotal": zod.number(),
+  "status": zod.string(),
+  "createdByName": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "productId": zod.number(),
+  "productName": zod.string(),
+  "qty": zod.number(),
+  "unit": zod.string(),
+  "rate": zod.number(),
+  "taxPct": zod.number(),
+  "amount": zod.number()
+})).optional()
+})
+
+
+/**
  * @summary List payments
  */
 export const ListPaymentsQueryParams = zod.object({

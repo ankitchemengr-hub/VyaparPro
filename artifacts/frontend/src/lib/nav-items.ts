@@ -25,6 +25,7 @@ import {
   Tag,
   Tags,
   BookOpen,
+  Undo2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -56,6 +57,7 @@ export const moduleNavItems: NavItem[] = [
   { name: "My Dashboard", href: "/salesman-dashboard", icon: LayoutDashboard, roles: ["salesman"], description: "My commission and sales overview" },
   { name: "Billing", href: "/billing", icon: FileText, roles: ["admin", "store"], description: "Create GST / non-GST invoices" },
   { name: "Invoices", href: "/invoices", icon: FileText, roles: ["admin", "salesman", "accountant", "store"], description: "Browse and print invoices" },
+  { name: "Sales Return", href: "/sales-return", icon: Undo2, roles: ["admin", "salesman", "accountant", "store"], description: "Search a bill and process a return" },
   { name: "Quotations", href: "/quotations", icon: ClipboardList, roles: ["admin", "salesman", "accountant"], description: "Browse and manage quotations" },
   { name: "Inventory", href: "/inventory", icon: Package, roles: ["admin", "store"], description: "Products and stock" },
   { name: "Brands", href: "/brands", icon: Tags, roles: ["admin", "store"], description: "Manage the brand list used when adding products" },

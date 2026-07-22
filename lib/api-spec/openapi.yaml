@@ -1093,6 +1093,84 @@ paths:
         "204":
           description: Deleted
 
+  /invoices/{id}/returnable-items:
+    get:
+      operationId: getInvoiceReturnableItems
+      tags: [sales-returns]
+      summary: Invoice line items with quantity already returned / still returnable, for the Sales Return item picker
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Returnable items
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReturnableInvoice"
+
+  # SALES RETURNS
+  /sales-returns:
+    get:
+      operationId: listSalesReturns
+      tags: [sales-returns]
+      summary: List sales returns
+      parameters:
+        - name: search
+          in: query
+          description: Matches return no, invoice no, or customer name
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Sales returns
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SalesReturn"
+
+    post:
+      operationId: createSalesReturn
+      tags: [sales-returns]
+      summary: Create a sales return against an invoice — credits the customer's ledger and puts stock back
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SalesReturnInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SalesReturn"
+
+  /sales-returns/{id}:
+    get:
+      operationId: getSalesReturn
+      tags: [sales-returns]
+      summary: Get a sales return with its line items
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Sales return
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SalesReturn"
+
   # PAYMENTS
   /payments:
     get:
@@ -4188,6 +4266,139 @@ components:
           type: number
         status:
           type: string
+
+    ReturnableInvoiceItem:
+      type: object
+      required: [invoiceItemId, productId, productName, unit, rate, taxPct, qty, originalAmount, alreadyReturnedQty, returnableQty]
+      properties:
+        invoiceItemId:
+          type: integer
+        productId:
+          type: integer
+        productName:
+          type: string
+        unit:
+          type: string
+        rate:
+          type: number
+        taxPct:
+          type: number
+        qty:
+          type: number
+          description: Original quantity sold on the invoice.
+        originalAmount:
+          type: number
+          description: Original line total (tax-inclusive) for the full qty sold — used to prorate the return credit per unit.
+        alreadyReturnedQty:
+          type: number
+          description: Sum of qty already returned against this invoice item across all non-cancelled sales returns.
+        returnableQty:
+          type: number
+          description: qty minus alreadyReturnedQty — the most that can still be returned.
+
+    ReturnableInvoice:
+      type: object
+      required: [invoiceId, invoiceNo, invoiceDate, invoiceType, customerId, customerName, items]
+      properties:
+        invoiceId:
+          type: integer
+        invoiceNo:
+          type: string
+        invoiceDate:
+          type: string
+        invoiceType:
+          type: string
+        customerId:
+          type: ["integer", "null"]
+        customerName:
+          type: ["string", "null"]
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReturnableInvoiceItem"
+
+    SalesReturnItemInput:
+      type: object
+      required: [invoiceItemId, productId, qty]
+      properties:
+        invoiceItemId:
+          type: integer
+        productId:
+          type: integer
+        qty:
+          type: number
+
+    SalesReturnInput:
+      type: object
+      required: [invoiceId, items]
+      properties:
+        invoiceId:
+          type: integer
+        reason:
+          type: string
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/SalesReturnItemInput"
+
+    SalesReturnItem:
+      type: object
+      required: [id, productId, productName, qty, unit, rate, taxPct, amount]
+      properties:
+        id:
+          type: integer
+        productId:
+          type: integer
+        productName:
+          type: string
+        qty:
+          type: number
+        unit:
+          type: string
+        rate:
+          type: number
+        taxPct:
+          type: number
+        amount:
+          type: number
+
+    SalesReturn:
+      type: object
+      required: [id, returnNo, returnDate, invoiceNo, subtotal, totalTax, grandTotal, status, createdAt]
+      properties:
+        id:
+          type: integer
+        returnNo:
+          type: string
+        returnDate:
+          type: string
+        invoiceId:
+          type: ["integer", "null"]
+        invoiceNo:
+          type: string
+        customerId:
+          type: ["integer", "null"]
+        customerName:
+          type: ["string", "null"]
+        reason:
+          type: ["string", "null"]
+        subtotal:
+          type: number
+        totalTax:
+          type: number
+        grandTotal:
+          type: number
+        status:
+          type: string
+        createdByName:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SalesReturnItem"
 
     Payment:
       type: object
