@@ -41,6 +41,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+} from "@/components/ui/command";
+import { cn } from "@/lib/utils";
 import {
   Factory,
   Loader2,
@@ -57,6 +62,8 @@ import {
   Pencil,
   ArrowLeftRight,
   Printer,
+  ChevronsUpDown,
+  Check,
 } from "lucide-react";
 import { BomDialog } from "@/components/bom-dialog";
 
@@ -1553,6 +1560,62 @@ function AssembleTab({
   );
 }
 
+// Type-to-search item picker — the plain <Select> this replaced forced
+// scrolling through the entire product list with no filtering, which was
+// especially unusable on a phone screen.
+function TransferItemCombobox({
+  products, value, onChange, testId,
+}: {
+  products: any[];
+  value: string;
+  onChange: (id: string) => void;
+  testId?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = products.find((p) => String(p.id) === value);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="min-w-0 w-full justify-between font-normal"
+          data-testid={testId}
+        >
+          <span className="truncate">
+            {selected ? `${selected.name}${selected.itemCode ? ` · ${selected.itemCode}` : ""}` : "Select item…"}
+          </span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[280px] max-w-[calc(100vw-2rem)] p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Search item…" />
+          <CommandList className="max-h-60">
+            <CommandEmpty>No item found.</CommandEmpty>
+            <CommandGroup>
+              {products.map((p) => (
+                <CommandItem
+                  key={p.id}
+                  value={`${p.name} ${p.itemCode ?? ""}`}
+                  onSelect={() => {
+                    onChange(String(p.id));
+                    setOpen(false);
+                  }}
+                >
+                  <Check className={cn("mr-2 h-4 w-4 shrink-0", value === String(p.id) ? "opacity-100" : "opacity-0")} />
+                  <span className="truncate">{p.name}{p.itemCode ? ` · ${p.itemCode}` : ""}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 // --------------------------- MATERIAL TRANSFER TAB ---------------------------
 // Printable log of raw material sent between Store and Manufacturing. Does
 // NOT touch product.currentStock — this app tracks one stock number per
@@ -1884,24 +1947,15 @@ function MaterialTransferTab() {
                     key={idx}
                     className="flex flex-col gap-2 px-3 py-3 sm:grid sm:grid-cols-[minmax(0,1fr)_100px_80px_36px] sm:gap-2 sm:py-2 sm:items-center"
                   >
-                    <Select
+                    <TransferItemCombobox
+                      products={products ?? []}
                       value={row.productId}
-                      onValueChange={(v) => {
+                      onChange={(v) => {
                         const prod = productById.get(Number(v));
                         updateRow(idx, { productId: v, unit: row.unit || prod?.unit || "QTY" });
                       }}
-                    >
-                      <SelectTrigger className="min-w-0" data-testid={`select-transfer-item-${idx}`}>
-                        <SelectValue placeholder="Select item…" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(products ?? []).map((p: any) => (
-                          <SelectItem key={p.id} value={String(p.id)}>
-                            {p.name}{p.itemCode ? ` · ${p.itemCode}` : ""}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      testId={`select-transfer-item-${idx}`}
+                    />
                     <div className="grid grid-cols-2 gap-2 sm:contents">
                       <div className="sm:contents">
                         <Label className="mb-1 block text-[11px] text-muted-foreground sm:hidden">Qty</Label>
@@ -1953,10 +2007,10 @@ function MaterialTransferTab() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAdd(false)} disabled={createTransfer.isPending}>
+            <Button variant="outline" className="w-full sm:w-auto" onClick={() => setShowAdd(false)} disabled={createTransfer.isPending}>
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={!canSave} data-testid="button-save-transfer">
+            <Button className="w-full sm:w-auto" onClick={handleSave} disabled={!canSave} data-testid="button-save-transfer">
               {createTransfer.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Save Transfer
             </Button>
