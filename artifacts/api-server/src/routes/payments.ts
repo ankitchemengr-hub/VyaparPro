@@ -11,6 +11,7 @@ import {
   LogPaymentBody,
   ApprovePaymentParams,
   RejectPaymentParams,
+  GetPaymentReceiptParams,
 } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
 import { getCompanyId } from "../lib/tenant";
@@ -39,6 +40,69 @@ router.get("/payments", async (req, res): Promise<void> => {
     .orderBy(sql`${paymentsTable.createdAt} DESC`);
 
   res.json(payments.map(formatPayment));
+});
+
+// GET /payment-receipts/:receiptNo — resolves a receipt number against
+// whichever table actually minted it: the payments table (customer/salesman
+// payment) or account_transactions (Cash Book). Both draw from the same
+// shared payment_receipt number series, so a receipt number is unique across
+// the two regardless of which path created it — join key is receiptNo, not
+// the row id, since payments.id and account_transactions.id are separate
+// auto-increment sequences that can collide.
+router.get("/payment-receipts/:receiptNo", async (req, res): Promise<void> => {
+  const params = GetPaymentReceiptParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const companyId = getCompanyId(req);
+  const { receiptNo } = params.data;
+
+  const paymentRes = await pool.query(
+    `SELECT p.receipt_id, p.created_at, p.customer_name, p.mode, p.amount, p.status, i.invoice_no
+     FROM payments p
+     LEFT JOIN invoices i ON i.id = p.invoice_id AND i.company_id = p.company_id
+     WHERE p.receipt_id = $1 AND p.company_id = $2`,
+    [receiptNo, companyId],
+  );
+  if (paymentRes.rows[0]) {
+    const r = paymentRes.rows[0];
+    res.json({
+      receiptNo: r.receipt_id,
+      date: r.created_at?.toISOString?.() ?? r.created_at,
+      partyName: r.customer_name ?? null,
+      mode: r.mode,
+      amount: Number(r.amount),
+      direction: "in",
+      status: r.status,
+      invoiceNo: r.invoice_no ?? null,
+      source: "payment",
+    });
+    return;
+  }
+
+  const txnRes = await pool.query(
+    `SELECT receipt_no, created_at, party_name, mode, amount, direction
+     FROM account_transactions WHERE receipt_no = $1 AND company_id = $2`,
+    [receiptNo, companyId],
+  );
+  if (txnRes.rows[0]) {
+    const r = txnRes.rows[0];
+    res.json({
+      receiptNo: r.receipt_no,
+      date: r.created_at?.toISOString?.() ?? r.created_at,
+      partyName: r.party_name ?? null,
+      mode: r.mode,
+      amount: Number(r.amount),
+      direction: r.direction,
+      status: "completed",
+      invoiceNo: null,
+      source: "cashbook",
+    });
+    return;
+  }
+
+  res.status(404).json({ error: "Receipt not found" });
 });
 
 // POST /payments

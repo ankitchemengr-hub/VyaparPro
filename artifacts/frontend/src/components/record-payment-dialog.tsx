@@ -198,8 +198,8 @@ export function RecordPaymentDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!logPayment.isPending) onOpenChange(o); }}>
-      <DialogContent className="sm:max-w-md print:hidden">
-        <DialogHeader className={success ? "print:hidden" : ""}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader className="print:hidden">
           <DialogTitle className="flex items-center gap-2">
             <IndianRupee className="w-5 h-5 text-primary" />
             {invoiceNo ? `Record Payment — ${invoiceNo}` : `Record Payment${entityName ? ` — ${entityName}` : ""}`}
@@ -208,7 +208,7 @@ export function RecordPaymentDialog({
 
         {success ? (
           <>
-            <div className="py-6 flex flex-col items-center gap-3 text-center">
+            <div className="py-6 flex flex-col items-center gap-3 text-center print:hidden">
               <CheckCircle2 className="w-12 h-12 text-green-500" />
               <p className="font-semibold text-lg">{success.approved ? "Payment Recorded" : "Payment Logged"}</p>
               {success.receiptId && (
@@ -252,7 +252,7 @@ export function RecordPaymentDialog({
             </div>
           </>
         ) : (
-          <div className="space-y-4 py-2">
+          <div className="space-y-4 py-2 print:hidden">
             <div className="flex items-center gap-2 bg-muted/50 rounded-md px-3 py-2">
               <Hash className="w-4 h-4 text-muted-foreground shrink-0" />
               <div className="min-w-0">

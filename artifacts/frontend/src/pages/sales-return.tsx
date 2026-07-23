@@ -223,8 +223,8 @@ function ReturnItemsDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!createReturn.isPending) onOpenChange(o); }}>
-      <DialogContent className="max-w-lg max-h-[90vh] flex flex-col print:hidden">
-        <DialogHeader className={success ? "print:hidden" : ""}>
+      <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
+        <DialogHeader className="print:hidden">
           <DialogTitle className="flex items-center gap-2">
             <Undo2 className="w-5 h-5 text-primary" />
             {invoice ? `Return — ${invoice.invoiceNo}` : "Sales Return"}
@@ -235,10 +235,10 @@ function ReturnItemsDialog({
         </DialogHeader>
 
         {isLoading ? (
-          <div className="py-10 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" /></div>
+          <div className="py-10 text-center print:hidden"><Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" /></div>
         ) : success ? (
           <>
-            <div className="py-6 flex flex-col items-center gap-3 text-center">
+            <div className="py-6 flex flex-col items-center gap-3 text-center print:hidden">
               <CheckCircle2 className="w-12 h-12 text-green-500" />
               <p className="font-semibold text-lg">Return Recorded</p>
               <div className="flex items-center gap-2 bg-muted rounded-md px-3 py-2">
@@ -275,12 +275,12 @@ function ReturnItemsDialog({
             </div>
           </>
         ) : invoice && invoice.items.length === 0 ? (
-          <div className="py-10 text-center text-muted-foreground">
+          <div className="py-10 text-center text-muted-foreground print:hidden">
             <PackageX className="w-10 h-10 mx-auto mb-2 opacity-40" />
             No line items on this invoice.
           </div>
         ) : invoice ? (
-          <div className="flex-1 overflow-y-auto space-y-3 py-2">
+          <div className="flex-1 overflow-y-auto space-y-3 py-2 print:hidden">
             {invoice.items.map((item) => {
               const { returnQty, lineAmount } = lineFor(item);
               const disabled = item.returnableQty <= 0;
@@ -427,8 +427,8 @@ function ReturnDetailDialog({ id, onOpenChange }: { id: number | null; onOpenCha
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] flex flex-col print:hidden">
-        <DialogHeader>
+      <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
+        <DialogHeader className="print:hidden">
           <DialogTitle className="flex items-center gap-2">
             <Undo2 className="w-5 h-5 text-primary" />
             {ret ? ret.returnNo : "Sales Return"}
@@ -437,10 +437,10 @@ function ReturnDetailDialog({ id, onOpenChange }: { id: number | null; onOpenCha
         </DialogHeader>
 
         {isLoading ? (
-          <div className="py-10 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" /></div>
+          <div className="py-10 text-center print:hidden"><Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" /></div>
         ) : ret ? (
           <>
-            <div className="flex-1 overflow-y-auto space-y-2 py-2">
+            <div className="flex-1 overflow-y-auto space-y-2 py-2 print:hidden">
               {(ret.items ?? []).map((it) => (
                 <div key={it.id} className="flex items-center justify-between gap-2 p-2 border rounded-md text-sm">
                   <span className="truncate">{it.productName} <span className="text-muted-foreground">× {it.qty} {it.unit}</span></span>

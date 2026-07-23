@@ -116,6 +116,7 @@ import type {
   NumberSeriesUpdate,
   Payment,
   PaymentInput,
+  PaymentReceipt,
   PriceRecalculationItem,
   PrintSettings,
   PrintSettingsUpdate,
@@ -4730,6 +4731,83 @@ export const useLogPayment = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getLogPaymentMutationOptions(options));
     }
+
+export const getGetPaymentReceiptUrl = (receiptNo: string,) => {
+
+
+
+
+  return `/api/payment-receipts/${receiptNo}`
+}
+
+/**
+ * @summary Look up a printable receipt by receipt number — resolves against either the payments table (customer/salesman payment) or account_transactions (Cash Book entry), whichever minted that receipt number, for Khatabook's "view receipt" link.
+ */
+export const getPaymentReceipt = async (receiptNo: string, options?: RequestInit): Promise<PaymentReceipt> => {
+
+  return customFetch<PaymentReceipt>(getGetPaymentReceiptUrl(receiptNo),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPaymentReceiptQueryKey = (receiptNo: string,) => {
+    return [
+    `/api/payment-receipts/${receiptNo}`
+    ] as const;
+    }
+
+
+export const getGetPaymentReceiptQueryOptions = <TData = Awaited<ReturnType<typeof getPaymentReceipt>>, TError = ErrorType<unknown>>(receiptNo: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPaymentReceipt>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPaymentReceiptQueryKey(receiptNo);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPaymentReceipt>>> = ({ signal }) => getPaymentReceipt(receiptNo, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: receiptNo !== null && receiptNo !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPaymentReceipt>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPaymentReceiptQueryResult = NonNullable<Awaited<ReturnType<typeof getPaymentReceipt>>>
+export type GetPaymentReceiptQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Look up a printable receipt by receipt number — resolves against either the payments table (customer/salesman payment) or account_transactions (Cash Book entry), whichever minted that receipt number, for Khatabook's "view receipt" link.
+ */
+
+export function useGetPaymentReceipt<TData = Awaited<ReturnType<typeof getPaymentReceipt>>, TError = ErrorType<unknown>>(
+ receiptNo: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPaymentReceipt>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPaymentReceiptQueryOptions(receiptNo,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getApprovePaymentUrl = (id: number,) => {
 

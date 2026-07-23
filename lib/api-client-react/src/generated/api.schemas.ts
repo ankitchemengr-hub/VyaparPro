@@ -1471,6 +1471,37 @@ export interface Payment {
   collectedAt?: string | null;
 }
 
+export type PaymentReceiptDirection = typeof PaymentReceiptDirection[keyof typeof PaymentReceiptDirection];
+
+
+export const PaymentReceiptDirection = {
+  in: 'in',
+  out: 'out',
+} as const;
+
+export type PaymentReceiptSource = typeof PaymentReceiptSource[keyof typeof PaymentReceiptSource];
+
+
+export const PaymentReceiptSource = {
+  payment: 'payment',
+  cashbook: 'cashbook',
+} as const;
+
+export interface PaymentReceipt {
+  receiptNo: string;
+  date: string;
+  /** @nullable */
+  partyName?: string | null;
+  mode: string;
+  amount: number;
+  direction: PaymentReceiptDirection;
+  /** approved/pending/rejected for a customer payment; "completed" for a Cash Book entry (no approval step). */
+  status: string;
+  /** @nullable */
+  invoiceNo?: string | null;
+  source: PaymentReceiptSource;
+}
+
 export type PaymentInputMode = typeof PaymentInputMode[keyof typeof PaymentInputMode];
 
 

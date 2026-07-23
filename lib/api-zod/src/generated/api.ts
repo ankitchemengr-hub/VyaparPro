@@ -1733,6 +1733,26 @@ export const LogPaymentResponse = zod.object({
 
 
 /**
+ * @summary Look up a printable receipt by receipt number — resolves against either the payments table (customer/salesman payment) or account_transactions (Cash Book entry), whichever minted that receipt number, for Khatabook's "view receipt" link.
+ */
+export const GetPaymentReceiptParams = zod.object({
+  "receiptNo": zod.coerce.string()
+})
+
+export const GetPaymentReceiptResponse = zod.object({
+  "receiptNo": zod.string(),
+  "date": zod.string(),
+  "partyName": zod.string().nullish(),
+  "mode": zod.string(),
+  "amount": zod.number(),
+  "direction": zod.enum(['in', 'out']),
+  "status": zod.string().describe('approved\/pending\/rejected for a customer payment; \"completed\" for a Cash Book entry (no approval step).'),
+  "invoiceNo": zod.string().nullish(),
+  "source": zod.enum(['payment', 'cashbook'])
+})
+
+
+/**
  * @summary Approve payment (admin only)
  */
 export const ApprovePaymentParams = zod.object({

@@ -1,15 +1,20 @@
 import { useMemo, useState } from "react";
 import { Redirect, useLocation } from "wouter";
 import { useAuth } from "@/contexts/use-auth";
-import { useListKhatabook, useGetEntityLedger, getGetEntityLedgerQueryKey } from "@workspace/api-client-react";
+import {
+  useListKhatabook, useGetEntityLedger, getGetEntityLedgerQueryKey,
+  useGetPaymentReceipt, getGetPaymentReceiptQueryKey,
+} from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, BookOpen, Printer, MessageCircle, Loader2, Phone } from "lucide-react";
+import { Search, BookOpen, Printer, MessageCircle, Loader2, Phone, Receipt } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const formatRs = (n: number) =>
@@ -201,6 +206,7 @@ function KhatabookDetailDialog({
   const [waOpen, setWaOpen] = useState(false);
   const [waNumber, setWaNumber] = useState("");
   const [waSending, setWaSending] = useState(false);
+  const [viewingReceiptNo, setViewingReceiptNo] = useState<string | null>(null);
 
   const { data: ledger, isLoading } = useGetEntityLedger(party?.id ?? 0, {
     query: { enabled: !!party, queryKey: getGetEntityLedgerQueryKey(party?.id ?? 0) },
@@ -299,6 +305,15 @@ function KhatabookDetailDialog({
                         >
                           {entry.description}
                         </button>
+                      ) : entry.type === "payment" && entry.referenceNo ? (
+                        <button
+                          type="button"
+                          className="truncate text-left text-primary hover:underline print:no-underline print:text-inherit"
+                          onClick={() => setViewingReceiptNo(entry.referenceNo!)}
+                          data-testid={`link-ledger-receipt-${entry.id}`}
+                        >
+                          {entry.description}
+                        </button>
                       ) : (
                         <div className="truncate">{entry.description}</div>
                       )}
@@ -332,6 +347,84 @@ function KhatabookDetailDialog({
         </Button>
       </DialogContent>
     </Dialog>
+
+    <ReceiptViewDialog receiptNo={viewingReceiptNo} onOpenChange={(o) => !o && setViewingReceiptNo(null)} />
     </>
+  );
+}
+
+const MODE_LABELS: Record<string, string> = {
+  cash: "Cash",
+  upi: "UPI",
+  cheque: "Cheque",
+  bank_transfer: "Bank Transfer",
+  other: "Other",
+};
+
+function ReceiptViewDialog({ receiptNo, onOpenChange }: { receiptNo: string | null; onOpenChange: (open: boolean) => void }) {
+  const open = !!receiptNo;
+  const { data: receipt, isLoading } = useGetPaymentReceipt(receiptNo ?? "", {
+    query: { enabled: open, queryKey: getGetPaymentReceiptQueryKey(receiptNo ?? "") },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader className="print:hidden">
+          <DialogTitle className="flex items-center gap-2">
+            <Receipt className="w-4 h-4 text-primary" /> Payment Receipt
+          </DialogTitle>
+          {receipt && <DialogDescription className="font-mono">{receipt.receiptNo}</DialogDescription>}
+        </DialogHeader>
+
+        {isLoading ? (
+          <div className="py-8 text-center print:hidden"><Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" /></div>
+        ) : receipt ? (
+          <>
+            <div className="space-y-2 text-sm print:hidden">
+              <div className="flex justify-between"><span className="text-muted-foreground">Date</span><span>{new Date(receipt.date).toLocaleDateString("en-IN")}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">{receipt.direction === "in" ? "Received From" : "Paid To"}</span><span className="font-medium">{receipt.partyName ?? "—"}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Mode</span><span>{MODE_LABELS[receipt.mode] ?? receipt.mode}</span></div>
+              {receipt.invoiceNo && <div className="flex justify-between"><span className="text-muted-foreground">Against Invoice</span><span>{receipt.invoiceNo}</span></div>}
+              <div className="flex justify-between"><span className="text-muted-foreground">Status</span><span className="capitalize">{receipt.status}</span></div>
+              <div className="flex justify-between border-t pt-2 mt-2 font-bold text-base">
+                <span>Amount</span>
+                <span>₹{receipt.amount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+            </div>
+
+            {/* Printable slip — hidden on screen, shown only for print/PDF */}
+            <div className="hidden print:block p-6 text-sm">
+              <div className="font-bold text-lg mb-4">Payment Receipt</div>
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                <div><span className="text-muted-foreground">Receipt No: </span>{receipt.receiptNo}</div>
+                <div><span className="text-muted-foreground">Date: </span>{new Date(receipt.date).toLocaleDateString("en-IN")}</div>
+                <div><span className="text-muted-foreground">{receipt.direction === "in" ? "Received From" : "Paid To"}: </span>{receipt.partyName ?? "—"}</div>
+                {receipt.invoiceNo && <div><span className="text-muted-foreground">Against Invoice: </span>{receipt.invoiceNo}</div>}
+                <div><span className="text-muted-foreground">Mode: </span>{MODE_LABELS[receipt.mode] ?? receipt.mode}</div>
+                <div><span className="text-muted-foreground">Status: </span>{receipt.status}</div>
+              </div>
+              <div className="border-t border-b py-3 my-3">
+                <div className="flex justify-between font-bold text-base">
+                  <span>Amount</span>
+                  <span>₹{receipt.amount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
+          <p className="py-8 text-center text-sm text-muted-foreground print:hidden">Receipt not found.</p>
+        )}
+
+        <DialogFooter className="print:hidden">
+          {receipt && (
+            <Button variant="outline" onClick={() => window.print()} data-testid="button-print-ledger-receipt">
+              <Printer className="w-4 h-4 mr-2" /> Print / Save as PDF
+            </Button>
+          )}
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

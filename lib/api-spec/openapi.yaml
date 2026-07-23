@@ -1256,6 +1256,25 @@ paths:
               schema:
                 $ref: "#/components/schemas/Payment"
 
+  /payment-receipts/{receiptNo}:
+    get:
+      operationId: getPaymentReceipt
+      tags: [payments]
+      summary: Look up a printable receipt by receipt number — resolves against either the payments table (customer/salesman payment) or account_transactions (Cash Book entry), whichever minted that receipt number, for Khatabook's "view receipt" link.
+      parameters:
+        - name: receiptNo
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Receipt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentReceipt"
+
   /payments/{id}/approve:
     post:
       operationId: approvePayment
@@ -4516,6 +4535,32 @@ components:
           type: ["string", "null"]
         collectedAt:
           type: ["string", "null"]
+
+    PaymentReceipt:
+      type: object
+      required: [receiptNo, date, mode, amount, direction, status, source]
+      properties:
+        receiptNo:
+          type: string
+        date:
+          type: string
+        partyName:
+          type: ["string", "null"]
+        mode:
+          type: string
+        amount:
+          type: number
+        direction:
+          type: string
+          enum: [in, out]
+        status:
+          type: string
+          description: "approved/pending/rejected for a customer payment; \"completed\" for a Cash Book entry (no approval step)."
+        invoiceNo:
+          type: ["string", "null"]
+        source:
+          type: string
+          enum: [payment, cashbook]
 
     PaymentInput:
       type: object
