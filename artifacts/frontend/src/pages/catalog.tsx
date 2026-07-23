@@ -221,7 +221,9 @@ export default function Catalog() {
     const baseAmount = rate * qty;
     const gstAmount = (baseAmount * gstRate) / 100;
     const lineTotal = baseAmount + gstAmount;
-    return { product, qty, rate, gstRate, gstAmount, lineTotal };
+    const unitsPerBox = Number(product.unitsPerBox ?? 0);
+    const boxCount = unitsPerBox > 0 ? qty / unitsPerBox : null;
+    return { product, qty, rate, gstRate, gstAmount, lineTotal, boxCount };
   }).filter(Boolean) as Array<{
     product: NonNullable<typeof products>[number];
     qty: number;
@@ -229,10 +231,12 @@ export default function Catalog() {
     gstRate: number;
     gstAmount: number;
     lineTotal: number;
+    boxCount: number | null;
   }>;
 
   const grandTotal = cartSummaryRows.reduce((sum, r) => sum + r.lineTotal, 0);
   const grandGstAmount = cartSummaryRows.reduce((sum, r) => sum + r.gstAmount, 0);
+  const totalBox = cartSummaryRows.reduce((sum, r) => sum + (r.boxCount ?? 0), 0);
 
   // Lookup hook — only fires when searchMobile is set
   const { data: lookupResult, isFetching: isLooking } = useLookupEntityByMobile(
@@ -727,8 +731,7 @@ const proceedToOrderWithCustomer = (customer: any) => {
                 <tr className="border-b text-muted-foreground text-xs">
                   <th className="text-left py-2 px-1">Product</th>
                   <th className="text-right py-2 px-1">Qty</th>
-                  <th className="text-right py-2 px-1">Rate</th>
-                  <th className="text-right py-2 px-1">GST</th>
+                  <th className="text-right py-2 px-1">Box</th>
                   <th className="text-right py-2 px-1">Total</th>
                 </tr>
               </thead>
@@ -754,9 +757,8 @@ const proceedToOrderWithCustomer = (customer: any) => {
                      className="w-16 text-right border rounded px-1 py-0.5 text-sm tabular-nums"
                    />
                  </td>
-                    <td className="text-right py-2 px-1 tabular-nums">₹{row.rate.toFixed(2)}</td>
                     <td className="text-right py-2 px-1 tabular-nums text-muted-foreground">
-                      {row.gstRate > 0 ? `₹${row.gstAmount.toFixed(2)}` : "—"}
+                      {row.boxCount != null ? row.boxCount.toFixed(2).replace(/\.?0+$/, "") : "—"}
                     </td>
                     <td className="text-right py-2 px-1 tabular-nums font-semibold text-primary">
                       ₹{row.lineTotal.toFixed(2)}
@@ -766,11 +768,15 @@ const proceedToOrderWithCustomer = (customer: any) => {
               </tbody>
               <tfoot>
                 <tr className="border-t-2">
-                  <td colSpan={4} className="pt-3 px-1 text-right text-sm text-muted-foreground">GST Amount</td>
-                  <td className="pt-3 px-1 text-right text-muted-foreground">₹{grandGstAmount.toFixed(2)}</td>
+                  <td colSpan={3} className="pt-3 px-1 text-right text-sm text-muted-foreground">Total Box</td>
+                  <td className="pt-3 px-1 text-right text-muted-foreground">{totalBox.toFixed(2).replace(/\.?0+$/, "")}</td>
                 </tr>
                 <tr>
-                  <td colSpan={4} className="pt-1 px-1 font-bold text-right text-sm">Grand Total</td>
+                  <td colSpan={3} className="pt-1 px-1 text-right text-sm text-muted-foreground">GST Amount</td>
+                  <td className="pt-1 px-1 text-right text-muted-foreground">₹{grandGstAmount.toFixed(2)}</td>
+                </tr>
+                <tr>
+                  <td colSpan={3} className="pt-1 px-1 font-bold text-right text-sm">Grand Total</td>
                   <td className="pt-1 px-1 text-right font-bold text-primary">₹{grandTotal.toFixed(2)}</td>
                 </tr>
               </tfoot>
