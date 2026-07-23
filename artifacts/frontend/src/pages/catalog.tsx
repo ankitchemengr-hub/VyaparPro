@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/use-auth";
 import {
@@ -10,6 +10,7 @@ import {
   useCreateEntity,
   useCreateCustomerOrder,
   useGetEntity,
+  useGetTopProducts,
   getListCustomerOrdersQueryKey,
   getGetEntityQueryKey,
   getListEntitiesQueryKey,
@@ -84,6 +85,25 @@ export default function Catalog() {
   });
   const { data: groups } = useListProductGroups();
   const { data: brands } = useListBrands();
+
+  // Fast-selling products (by revenue, last-known top 10 companywide) get a
+  // much better chance of landing near the front, but this is a weighted
+  // shuffle, not a pin — it's freshly randomized on every load, so browsing
+  // doesn't feel like the same fixed A-Z list every single time, and even a
+  // low-weight product can still surface first on any given visit.
+  const { data: topProducts } = useGetTopProducts();
+  const topProductIds = useMemo(
+    () => new Set((topProducts ?? []).map((p) => p.productId)),
+    [topProducts],
+  );
+  const shuffledProducts = useMemo(() => {
+    if (!products) return [];
+    const weightOf = (id: number) => (topProductIds.has(id) ? 6 : 1);
+    return products
+      .map((p) => ({ p, score: Math.random() ** (1 / weightOf(p.id)) }))
+      .sort((a, b) => b.score - a.score)
+      .map((x) => x.p);
+  }, [products, topProductIds]);
 
   // Cart items must stay resolvable after the user changes the search/filter
   // text — `products` only ever holds the current search results, so a cart
@@ -566,7 +586,7 @@ const proceedToOrderWithCustomer = (customer: any) => {
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {products?.map((product) => {
+            {shuffledProducts.map((product) => {
               const inCart = product.id in cart;
               const qty = cart[product.id] ?? 0;
               const outOfStock = product.currentStock <= 0 && !allowsBackorder;
