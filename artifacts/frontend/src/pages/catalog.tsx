@@ -47,6 +47,11 @@ export default function Catalog() {
   const [brand, setBrand] = useState<string>("");
   // Multi-product cart: productId -> quantity
   const [cart, setCart] = useState<Record<number, number>>({});
+  // Raw text of an in-progress qty edit, keyed by product id — lets the field
+  // actually show empty while backspacing/retyping instead of snapping back
+  // to the last valid qty on every keystroke (the cart itself only updates
+  // once a valid positive number exists; blur cleans up an abandoned edit).
+  const [qtyDrafts, setQtyDrafts] = useState<Record<number, string>>({});
   const [showFilters, setShowFilters] = useState(false);
   const [zoomImage, setZoomImage] = useState<{ url: string; name: string } | null>(null);
 
@@ -639,16 +644,25 @@ const proceedToOrderWithCustomer = (customer: any) => {
                           type="number"
                           min={1}
                           max={product.currentStock}
-                          value={qty > 0 ? qty : ""}
+                          value={qtyDrafts[product.id] ?? (qty > 0 ? qty : "")}
                           placeholder="Qty"
                           className="h-8 w-16 text-sm text-center px-1"
                           disabled={outOfStock}
                           onChange={(e) => {
-                            const val = parseInt(e.target.value, 10);
+                            const raw = e.target.value;
+                            setQtyDrafts((prev) => ({ ...prev, [product.id]: raw }));
+                            const val = parseInt(raw, 10);
                             if (!isNaN(val) && val > 0) {
                               setQty(product.id, val, product.currentStock);
                             }
                           }}
+                          onBlur={() =>
+                            setQtyDrafts((prev) => {
+                              const next = { ...prev };
+                              delete next[product.id];
+                              return next;
+                            })
+                          }
                           data-testid={`input-qty-${product.id}`}
                         />
                         <Button
@@ -747,13 +761,22 @@ const proceedToOrderWithCustomer = (customer: any) => {
                       type="number"
                       min={1}
                       max={row.product.currentStock}
-                      value={row.qty}
+                      value={qtyDrafts[row.product.id] ?? row.qty}
                       onChange={(e) => {
-                      const val = parseInt(e.target.value, 10);
+                      const raw = e.target.value;
+                      setQtyDrafts((prev) => ({ ...prev, [row.product.id]: raw }));
+                      const val = parseInt(raw, 10);
                       if (!isNaN(val) && val > 0) {
                       setQty(row.product.id, val, row.product.currentStock);
                       }
                     }}
+                    onBlur={() =>
+                      setQtyDrafts((prev) => {
+                        const next = { ...prev };
+                        delete next[row.product.id];
+                        return next;
+                      })
+                    }
                      className="w-16 text-right border rounded px-1 py-0.5 text-sm tabular-nums"
                    />
                  </td>
