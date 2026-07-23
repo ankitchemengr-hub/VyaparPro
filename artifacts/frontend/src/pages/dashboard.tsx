@@ -9,6 +9,7 @@ import {
   useGetLitersSold,
   getGetLitersSoldQueryKey,
   useListWorkloadCards,
+  useListProducts,
 } from "@workspace/api-client-react";
 import {
   IndianRupee,
@@ -55,7 +56,36 @@ export default function Dashboard() {
     query: { queryKey: getGetLitersSoldQueryKey(), enabled: isAdmin },
   });
   const { data: workloadCards } = useListWorkloadCards();
-  const assembledItems = (workloadCards ?? []).filter((c: any) => c.status === "pending");
+  const { data: manufacturingProducts } = useListProducts();
+
+  // Mirrors Manufacturing > Workload's own list: every product flagged "Add
+  // for Manufacturing" that's currently below its minimum stock threshold —
+  // not just ones that already happen to have a workload_cards row, since a
+  // low-stock item with no card yet is still production demand the admin
+  // needs to see here.
+  const productById = new Map((manufacturingProducts ?? []).map((p: any) => [p.id, p]));
+  const activeCardByProduct = new Map<number, any>();
+  (workloadCards ?? [])
+    .filter((c: any) => c.status === "pending" || c.status === "processing")
+    .forEach((c: any) => {
+      const prev = activeCardByProduct.get(c.productId);
+      if (!prev || new Date(c.createdAt) > new Date(prev.createdAt)) activeCardByProduct.set(c.productId, c);
+    });
+  const assembledItems = (lowStockAlerts ?? [])
+    .filter((a: any) => productById.get(a.id)?.addForManufacturing)
+    .map((a: any) => {
+      const available = Number(a.currentStock);
+      const card = activeCardByProduct.get(a.id);
+      const required = card ? Number(card.targetQty) : Math.max(0, Number(a.minStockThreshold) - available);
+      return {
+        id: a.id,
+        productName: a.name,
+        unit: a.unit ?? "",
+        required,
+        status: card?.status === "processing" ? "processing" : "pending",
+      };
+    })
+    .sort((a, b) => b.required - a.required);
 
   return (
     <div className="space-y-6">
@@ -268,19 +298,22 @@ export default function Dashboard() {
             <div className="py-8 text-center text-muted-foreground text-sm">No pending items. All production is up to date.</div>
           ) : (
             <div className="divide-y rounded-lg border overflow-hidden">
-              {assembledItems.slice(0, 10).map((c: any) => (
+              {assembledItems.slice(0, 10).map((c) => (
                 <div key={c.id} className="flex items-center justify-between px-3 py-2.5 bg-card hover:bg-muted/40">
                   <div className="flex items-center gap-2">
                     <PackageOpen className="w-4 h-4 text-amber-500 shrink-0" />
-                    <span className="text-sm font-medium">{c.productName ?? `Product #${c.productId}`}</span>
+                    <span className="text-sm font-medium">{c.productName}</span>
                   </div>
                   <div className="flex items-center gap-3 ml-4 shrink-0">
-                    <Badge variant="secondary" className="text-xs font-mono">
-                      {Number(c.targetQty).toLocaleString()} qty
+                    <Badge
+                      variant={c.status === "processing" ? "default" : "secondary"}
+                      className="text-xs capitalize"
+                    >
+                      {c.status}
                     </Badge>
-                    <span className="text-xs text-muted-foreground">
-                      {new Date(c.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
-                    </span>
+                    <Badge variant="outline" className="text-xs font-mono">
+                      {c.required.toLocaleString()} {c.unit}
+                    </Badge>
                   </div>
                 </div>
               ))}
