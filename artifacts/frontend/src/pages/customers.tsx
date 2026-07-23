@@ -83,6 +83,8 @@ export default function Customers() {
   const [sort, setSort] = useState("name_asc");
   const [showAdd, setShowAdd] = useState(false);
   const [showInactive, setShowInactive] = useState(false);
+  const [salesmanFilter, setSalesmanFilter] = useState<string>("");
+  const [newOnly, setNewOnly] = useState(false);
   const [assignedSalesmanId, setAssignedSalesmanId] = useState<string>("");
 
   const [editingEntity, setEditingEntity] = useState<any | null>(null);
@@ -138,6 +140,12 @@ export default function Customers() {
   });
 
   const { data: salesmanEntities } = useListEntities({ type: "salesman" as EntityType });
+
+  const filteredEntities = (entities ?? []).filter((e) => {
+    if (salesmanFilter && String((e as any).assignedSalesmanId ?? "") !== salesmanFilter) return false;
+    if (newOnly && !(e as any).isNewFromSalesman) return false;
+    return true;
+  });
 
   const createEntity = useCreateEntity();
   const updateEntity = useUpdateEntity();
@@ -409,6 +417,17 @@ export default function Customers() {
               <SelectItem value="balance_low">Balance Low → High</SelectItem>
             </SelectContent>
           </Select>
+          <Select value={salesmanFilter || "__all__"} onValueChange={(v) => setSalesmanFilter(v === "__all__" ? "" : v)}>
+            <SelectTrigger className="flex-1 sm:w-[180px]" data-testid="select-filter-salesman">
+              <SelectValue placeholder="Salesman" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">All Salesmen</SelectItem>
+              {(salesmanEntities ?? []).map((s: any) => (
+                <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <label className="flex items-center gap-2 text-sm text-muted-foreground shrink-0">
           <input
@@ -419,6 +438,16 @@ export default function Customers() {
             data-testid="checkbox-show-inactive"
           />
           Show inactive
+        </label>
+        <label className="flex items-center gap-2 text-sm text-muted-foreground shrink-0">
+          <input
+            type="checkbox"
+            checked={newOnly}
+            onChange={(e) => setNewOnly(e.target.checked)}
+            className="h-4 w-4"
+            data-testid="checkbox-new-only"
+          />
+          New added only
         </label>
       </div>
 
@@ -443,12 +472,12 @@ export default function Customers() {
                   <TableRow>
                     <TableCell colSpan={8} className="text-center py-8">Loading...</TableCell>
                   </TableRow>
-                ) : entities?.length === 0 ? (
+                ) : filteredEntities.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No entities found.</TableCell>
                   </TableRow>
                 ) : (
-                  [...(entities ?? [])].sort((a, b) => {
+                  [...filteredEntities].sort((a, b) => {
                     if (sort === "name_asc") return (a.name ?? "").localeCompare(b.name ?? "");
                     if (sort === "name_desc") return (b.name ?? "").localeCompare(a.name ?? "");
                     if (sort === "balance_high") return (b.outstandingBalance ?? 0) - (a.outstandingBalance ?? 0);
