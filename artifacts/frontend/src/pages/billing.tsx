@@ -452,33 +452,35 @@ export default function Billing() {
       <div className="max-w-3xl mx-auto py-8 space-y-6 print:hidden">
         <Card className="border-green-500/30 bg-green-500/5">
           <CardContent className="pt-6 pb-5">
-            <div className="flex items-start gap-4">
-              <CheckCircle className="w-10 h-10 text-green-500 shrink-0 mt-0.5" />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-3 flex-wrap">
-                  <h2 className="text-xl font-bold">{savedInvoice.invoiceType === "quotation" ? "Quotation Saved" : "Invoice Saved"}</h2>
-                  <Badge className="font-mono bg-green-600 text-white border-transparent">{savedInvoice.invoiceNo}</Badge>
-                </div>
-                {customer && (
-                  <p className="text-sm text-muted-foreground mt-0.5">
-                    Customer: <span className="text-foreground font-medium">{customer.name}</span>
-                    {customer.mobile && <span className="ml-2 text-muted-foreground">({customer.mobile})</span>}
-                  </p>
-                )}
-                <div className="mt-2 flex items-center gap-6 text-sm">
-                  <div>
-                    <span className="text-muted-foreground">{savedInvoice.invoiceType === "quotation" ? "Quotation Total" : "Invoice Total"}</span>
-                    <div className="text-2xl font-bold text-primary">₹{finalTotal.toLocaleString()}</div>
+            <div className="flex flex-wrap items-start gap-4">
+              <div className="flex items-start gap-4 flex-1 min-w-0">
+                <CheckCircle className="w-10 h-10 text-green-500 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <h2 className="text-xl font-bold">{savedInvoice.invoiceType === "quotation" ? "Quotation Saved" : "Invoice Saved"}</h2>
+                    <Badge className="font-mono bg-green-600 text-white border-transparent">{savedInvoice.invoiceNo}</Badge>
                   </div>
-                  {savedInvoice.invoiceType !== "quotation" && customer && Number(customer.outstandingBalance) + finalTotal > 0 && (
-                    <div>
-                      <span className="text-muted-foreground">New Outstanding</span>
-                      <div className="text-lg font-bold text-destructive">₹{(Number(customer.outstandingBalance) + finalTotal).toLocaleString()}</div>
-                    </div>
+                  {customer && (
+                    <p className="text-sm text-muted-foreground mt-0.5 break-words">
+                      Customer: <span className="text-foreground font-medium">{customer.name}</span>
+                      {customer.mobile && <span className="ml-2 text-muted-foreground">({customer.mobile})</span>}
+                    </p>
                   )}
+                  <div className="mt-2 flex flex-wrap items-end gap-x-6 gap-y-2 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">{savedInvoice.invoiceType === "quotation" ? "Quotation Total" : "Invoice Total"}</span>
+                      <div className="text-xl sm:text-2xl font-bold text-primary">₹{finalTotal.toLocaleString()}</div>
+                    </div>
+                    {savedInvoice.invoiceType !== "quotation" && customer && Number(customer.outstandingBalance) + finalTotal > 0 && (
+                      <div>
+                        <span className="text-muted-foreground">New Outstanding</span>
+                        <div className="text-base sm:text-lg font-bold text-destructive">₹{(Number(customer.outstandingBalance) + finalTotal).toLocaleString()}</div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-              <Button variant="outline" size="sm" className="shrink-0" onClick={() => window.print()}>
+              <Button variant="outline" size="sm" className="shrink-0 w-full sm:w-auto" onClick={() => window.print()}>
                 <Printer className="w-4 h-4 mr-1.5" /> Print
               </Button>
             </div>
@@ -533,7 +535,7 @@ export default function Billing() {
                 <div className="grid grid-cols-3 gap-2 mt-2">
                   {(["cheque", "bank_transfer", "credit"] as const).map((mode) => (
                     <button key={mode} type="button" onClick={() => setPaymentMode(mode)}
-                      className={`flex flex-col items-center gap-1.5 py-2.5 px-2 rounded-lg border text-xs font-medium transition-all
+                      className={`flex flex-col items-center gap-1.5 py-2.5 px-2 rounded-lg border text-xs font-medium text-center transition-all
                         ${paymentMode === mode ? "border-primary bg-primary/10 text-primary" : "border-border hover:border-primary/40 text-muted-foreground hover:text-foreground"}`}
                       data-testid={`mode-${mode}`}>
                       {modeIcons[mode]}
@@ -552,7 +554,7 @@ export default function Billing() {
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="payment-amount">Amount Received (₹)</Label>
                     <Input id="payment-amount" type="number" min={0} max={finalTotal} value={paymentAmount}
@@ -587,10 +589,10 @@ export default function Billing() {
                       <SelectContent>
                         {matchingAccounts.map((a) => (
                           <SelectItem key={a.id} value={String(a.id)}>
-                            <span className="flex items-center gap-2">
-                              <span className="font-medium">{a.name}</span>
-                              {a.identifier && <span className="text-xs text-muted-foreground">({a.identifier})</span>}
-                              <span className="text-xs text-muted-foreground ml-auto">Bal: ₹{Number(a.currentBalance).toLocaleString()}</span>
+                            <span className="flex items-center gap-2 min-w-0">
+                              <span className="font-medium truncate">{a.name}</span>
+                              {a.identifier && <span className="text-xs text-muted-foreground shrink-0">({a.identifier})</span>}
+                              <span className="text-xs text-muted-foreground ml-auto shrink-0">Bal: ₹{Number(a.currentBalance).toLocaleString()}</span>
                             </span>
                           </SelectItem>
                         ))}
@@ -675,7 +677,7 @@ export default function Billing() {
             {isEditMode ? `Edit Invoice ${existingInvoice?.invoiceNo ?? ""}` : "Create Invoice"}
           </h1>
           {isEditMode && (
-            <Badge variant="outline" className="border-amber-500/40 text-amber-700 dark:text-amber-400">
+            <Badge variant="outline" className="border-amber-500/40 text-amber-700 dark:text-amber-400 whitespace-normal text-left max-w-full">
               Editing — stock &amp; customer balance will be re-adjusted on save
             </Badge>
           )}
@@ -724,7 +726,7 @@ export default function Billing() {
                       {customer.city && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{customer.city}{customer.state ? `, ${customer.state}` : ""}</span>}
                     </div>
                     {customer.gstin && <div className="text-xs font-mono text-muted-foreground">GSTIN: {customer.gstin}</div>}
-                    <div className="flex items-center gap-3 mt-1">
+                    <div className="flex items-center gap-3 mt-1 flex-wrap">
                       <Badge variant="outline" className="capitalize text-[10px]">{customer.pricingTier} pricing</Badge>
                       {Number(customer.outstandingBalance) > 0 && <Badge variant="destructive" className="text-[10px]">Outstanding: ₹{Number(customer.outstandingBalance).toLocaleString()}</Badge>}
                     </div>
