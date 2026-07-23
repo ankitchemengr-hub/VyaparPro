@@ -194,9 +194,6 @@ export default function Menu() {
                     </div>
                     <div>
                       <p className="font-medium text-sm">{item.name}</p>
-                      {item.description && (
-                        <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
-                      )}
                     </div>
                   </CardContent>
                 </Card>
