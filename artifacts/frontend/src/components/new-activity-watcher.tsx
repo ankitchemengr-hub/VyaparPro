@@ -7,6 +7,7 @@ import {
 } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/use-auth";
 import { useToast } from "@/hooks/use-toast";
+import { playNotificationSound } from "@/lib/notification-sound";
 
 const POLL_MS = 30_000;
 
@@ -47,6 +48,7 @@ export function NewActivityWatcher() {
     const count = pendingOrders.length;
     if (prevOrders.current != null && count > prevOrders.current) {
       const diff = count - prevOrders.current;
+      playNotificationSound();
       toast({
         title: diff === 1 ? "New customer order" : `${diff} new customer orders`,
         description: "Open Customer Orders to review.",
@@ -60,6 +62,7 @@ export function NewActivityWatcher() {
     const count = newCustomers.length;
     if (prevCustomers.current != null && count > prevCustomers.current) {
       const diff = count - prevCustomers.current;
+      playNotificationSound();
       toast({
         title: diff === 1 ? "New customer added by a salesman" : `${diff} new customers added by salesmen`,
         description: "Open Customers to review.",
