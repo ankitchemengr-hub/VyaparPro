@@ -575,22 +575,12 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
     }
     await client.query(`DELETE FROM invoice_items WHERE invoice_id = $1 AND company_id = $2`, [invoiceId, companyId]);
 
-    // 2. Reverse old customer outstanding + ledger entry — skip for quotations
+    // 2. Old totals/customer, needed once new totals are computed below — the
+    // actual ledger/balance adjustment happens in step 6, in place on the
+    // invoice's existing ledger row rather than as a reversal+new-entry pair
+    // (see step 6 comment for why).
     const oldGrandTotal = Number(existing.grand_total);
     const oldCustomerId: number | null = existing.customer_id;
-    if (oldCustomerId && !wasQuotation) {
-      await client.query(
-        `UPDATE entities SET outstanding_balance = outstanding_balance - $1 WHERE id = $2 AND company_id = $3`,
-        [oldGrandTotal, oldCustomerId, companyId]
-      );
-      const balRes = await client.query(`SELECT outstanding_balance FROM entities WHERE id = $1 AND company_id = $2`, [oldCustomerId, companyId]);
-      const newBal = balRes.rows[0]?.outstanding_balance ?? 0;
-      await client.query(
-        `INSERT INTO ledger_entries (company_id, entity_id, date, description, debit, credit, balance, type, reference_id, reference_no)
-         VALUES ($1, $2, NOW(), $3, 0, $4, $5, 'invoice_edit_reversal', $6, $7)`,
-        [companyId, oldCustomerId, `Invoice ${existing.invoice_no} edited — reversal`, oldGrandTotal, newBal, invoiceId, existing.invoice_no]
-      );
-    }
 
     // 3. Recalculate new totals from new payload (same logic as POST /invoices)
     const isGst = ["gst", "proforma_invoice"].includes(data.invoiceType ?? existing.invoice_type);
@@ -731,20 +721,78 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
       }
     }
 
-    // 6. Apply new customer outstanding + ledger entry (skip for quotations)
+    // 6. Update customer outstanding + ledger. When the customer hasn't
+    // changed (the common case — editing qty/rate/items on the same bill),
+    // adjust the invoice's ORIGINAL ledger row in place instead of the old
+    // reversal-row + new-row pair, which left two extra lines in the ledger
+    // for every single edit. Every later ledger row's own stored running
+    // balance also shifts by the same delta, since they're all downstream
+    // of this one. Only a genuine customer reassignment (or a quotation
+    // becoming/ceasing to be a real invoice) still needs to move the amount
+    // across two different entities' histories, which really does require
+    // removing it from one ledger and posting fresh on the other.
     const newCustomerId: number | null = data.customerId === undefined ? oldCustomerId : data.customerId;
-    if (newCustomerId && !isQuotationEdit) {
+    const sameCustomerThroughout = !!oldCustomerId && !!newCustomerId && oldCustomerId === newCustomerId && !wasQuotation && !isQuotationEdit;
+
+    if (sameCustomerThroughout) {
+      const delta = newGrandTotal - oldGrandTotal;
       await client.query(
         `UPDATE entities SET outstanding_balance = outstanding_balance + $1 WHERE id = $2 AND company_id = $3`,
-        [newGrandTotal, newCustomerId, companyId]
+        [delta, newCustomerId, companyId]
       );
-      const balRes = await client.query(`SELECT outstanding_balance FROM entities WHERE id = $1 AND company_id = $2`, [newCustomerId, companyId]);
-      const newBal = balRes.rows[0]?.outstanding_balance ?? 0;
-      await client.query(
-        `INSERT INTO ledger_entries (company_id, entity_id, date, description, debit, credit, balance, type, reference_id, reference_no)
-         VALUES ($1, $2, NOW(), $3, $4, 0, $5, 'invoice_edit', $6, $7)`,
-        [companyId, newCustomerId, `Invoice ${existing.invoice_no} (edited)`, newGrandTotal, newBal, invoiceId, existing.invoice_no]
+      const existingLedgerRes = await client.query(
+        `SELECT id FROM ledger_entries WHERE company_id = $1 AND entity_id = $2 AND type = 'invoice' AND reference_id = $3 ORDER BY id ASC LIMIT 1`,
+        [companyId, newCustomerId, invoiceId]
       );
+      const existingLedgerRow = existingLedgerRes.rows[0];
+      if (existingLedgerRow) {
+        await client.query(
+          `UPDATE ledger_entries SET credit = $1, description = $2, balance = balance + $3 WHERE id = $4`,
+          [newGrandTotal, `Invoice ${existing.invoice_no}`, delta, existingLedgerRow.id]
+        );
+        await client.query(
+          `UPDATE ledger_entries SET balance = balance + $1 WHERE company_id = $2 AND entity_id = $3 AND id > $4`,
+          [delta, companyId, newCustomerId, existingLedgerRow.id]
+        );
+      } else {
+        // No prior ledger row for this invoice (e.g. it was a quotation
+        // before and this is the first edit since it became a real invoice
+        // type) — post fresh since there's nothing to update in place.
+        const balRes = await client.query(`SELECT outstanding_balance FROM entities WHERE id = $1 AND company_id = $2`, [newCustomerId, companyId]);
+        const newBal = balRes.rows[0]?.outstanding_balance ?? 0;
+        await client.query(
+          `INSERT INTO ledger_entries (company_id, entity_id, date, description, debit, credit, balance, type, reference_id, reference_no)
+           VALUES ($1, $2, NOW(), $3, $4, 0, $5, 'invoice', $6, $7)`,
+          [companyId, newCustomerId, `Invoice ${existing.invoice_no}`, newGrandTotal, newBal, invoiceId, existing.invoice_no]
+        );
+      }
+    } else {
+      if (oldCustomerId && !wasQuotation) {
+        await client.query(
+          `UPDATE entities SET outstanding_balance = outstanding_balance - $1 WHERE id = $2 AND company_id = $3`,
+          [oldGrandTotal, oldCustomerId, companyId]
+        );
+        const balRes = await client.query(`SELECT outstanding_balance FROM entities WHERE id = $1 AND company_id = $2`, [oldCustomerId, companyId]);
+        const newBal = balRes.rows[0]?.outstanding_balance ?? 0;
+        await client.query(
+          `INSERT INTO ledger_entries (company_id, entity_id, date, description, debit, credit, balance, type, reference_id, reference_no)
+           VALUES ($1, $2, NOW(), $3, 0, $4, $5, 'invoice_edit_reversal', $6, $7)`,
+          [companyId, oldCustomerId, `Invoice ${existing.invoice_no} moved to another customer — reversal`, oldGrandTotal, newBal, invoiceId, existing.invoice_no]
+        );
+      }
+      if (newCustomerId && !isQuotationEdit) {
+        await client.query(
+          `UPDATE entities SET outstanding_balance = outstanding_balance + $1 WHERE id = $2 AND company_id = $3`,
+          [newGrandTotal, newCustomerId, companyId]
+        );
+        const balRes = await client.query(`SELECT outstanding_balance FROM entities WHERE id = $1 AND company_id = $2`, [newCustomerId, companyId]);
+        const newBal = balRes.rows[0]?.outstanding_balance ?? 0;
+        await client.query(
+          `INSERT INTO ledger_entries (company_id, entity_id, date, description, debit, credit, balance, type, reference_id, reference_no)
+           VALUES ($1, $2, NOW(), $3, $4, 0, $5, 'invoice_edit', $6, $7)`,
+          [companyId, newCustomerId, `Invoice ${existing.invoice_no} (edited)`, newGrandTotal, newBal, invoiceId, existing.invoice_no]
+        );
+      }
     }
 
     // 7. Audit log

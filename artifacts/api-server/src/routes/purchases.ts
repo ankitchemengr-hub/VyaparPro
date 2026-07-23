@@ -512,21 +512,15 @@ router.put("/purchases/:id", async (req, res): Promise<void> => {
       );
     }
 
-    // Reverse old vendor payable
+    // Vendor payable + ledger get adjusted further down (step marked "New
+    // vendor payable + ledger entry"), once the new grand total is known —
+    // in place on this purchase's existing ledger row when the vendor hasn't
+    // changed, instead of deleting and reposting a fresh row (which used to
+    // both lose the bill's original ledger date and leave every later row's
+    // stored running balance stale, since only the vendor's own outstanding_
+    // balance was corrected, not the chain of snapshots after this entry).
     const oldVendorId = old.vendor_id;
     const oldGrandTotal = Number(old.grand_total);
-    if (oldVendorId) {
-      await client.query(
-        `UPDATE entities SET outstanding_balance = outstanding_balance - $1 WHERE company_id = $2 AND id = $3`,
-        [oldGrandTotal, companyId, oldVendorId],
-      );
-    }
-
-    // Delete old ledger entries for this purchase
-    await client.query(
-      `DELETE FROM ledger_entries WHERE company_id = $1 AND type = 'purchase' AND reference_id = $2`,
-      [companyId, purchaseId],
-    );
 
     // Delete old purchase items
     await client.query(
@@ -627,21 +621,72 @@ router.put("/purchases/:id", async (req, res): Promise<void> => {
       );
     }
 
-    // New vendor payable + ledger entry
-    await client.query(
-      `UPDATE entities SET outstanding_balance = outstanding_balance + $1 WHERE company_id = $2 AND id = $3`,
-      [grandTotal, companyId, data.vendorId],
-    );
-    const balRes = await client.query(
-      `SELECT outstanding_balance FROM entities WHERE company_id = $1 AND id = $2`,
-      [companyId, data.vendorId],
-    );
-    const newBal = balRes.rows[0].outstanding_balance;
-    await client.query(
-      `INSERT INTO ledger_entries (company_id, entity_id, date, description, debit, credit, balance, type, reference_id, reference_no)
-       VALUES ($1,$2,NOW(),$3,0,$4,$5,'purchase',$6,$7)`,
-      [companyId, data.vendorId, `Purchase ${old.bill_no} (edited)`, grandTotal, newBal, purchaseId, old.bill_no],
-    );
+    // Vendor payable + ledger: adjust the existing ledger row in place when
+    // the vendor hasn't changed, so an edited bill stays the same line at
+    // its original position instead of a fresh row dated "now". Every later
+    // ledger row's own stored running balance shifts by the same delta,
+    // since they're all downstream of this one.
+    if (oldVendorId && Number(oldVendorId) === Number(data.vendorId)) {
+      const delta = grandTotal - oldGrandTotal;
+      await client.query(
+        `UPDATE entities SET outstanding_balance = outstanding_balance + $1 WHERE company_id = $2 AND id = $3`,
+        [delta, companyId, data.vendorId],
+      );
+      const existingLedgerRes = await client.query(
+        `SELECT id FROM ledger_entries WHERE company_id = $1 AND entity_id = $2 AND type = 'purchase' AND reference_id = $3 ORDER BY id ASC LIMIT 1`,
+        [companyId, data.vendorId, purchaseId],
+      );
+      const existingLedgerRow = existingLedgerRes.rows[0];
+      if (existingLedgerRow) {
+        await client.query(
+          `UPDATE ledger_entries SET credit = $1, description = $2, balance = balance + $3 WHERE id = $4`,
+          [grandTotal, `Purchase ${old.bill_no}`, delta, existingLedgerRow.id],
+        );
+        await client.query(
+          `UPDATE ledger_entries SET balance = balance + $1 WHERE company_id = $2 AND entity_id = $3 AND id > $4`,
+          [delta, companyId, data.vendorId, existingLedgerRow.id],
+        );
+      } else {
+        const balRes = await client.query(
+          `SELECT outstanding_balance FROM entities WHERE company_id = $1 AND id = $2`,
+          [companyId, data.vendorId],
+        );
+        const newBal = balRes.rows[0].outstanding_balance;
+        await client.query(
+          `INSERT INTO ledger_entries (company_id, entity_id, date, description, debit, credit, balance, type, reference_id, reference_no)
+           VALUES ($1,$2,NOW(),$3,0,$4,$5,'purchase',$6,$7)`,
+          [companyId, data.vendorId, `Purchase ${old.bill_no}`, grandTotal, newBal, purchaseId, old.bill_no],
+        );
+      }
+    } else {
+      // Vendor changed (or bill had no vendor before) — genuinely spans two
+      // different entities' histories: reverse on the old one, delete its
+      // ledger row, and post fresh on the new one.
+      if (oldVendorId) {
+        await client.query(
+          `UPDATE entities SET outstanding_balance = outstanding_balance - $1 WHERE company_id = $2 AND id = $3`,
+          [oldGrandTotal, companyId, oldVendorId],
+        );
+        await client.query(
+          `DELETE FROM ledger_entries WHERE company_id = $1 AND type = 'purchase' AND reference_id = $2 AND entity_id = $3`,
+          [companyId, purchaseId, oldVendorId],
+        );
+      }
+      await client.query(
+        `UPDATE entities SET outstanding_balance = outstanding_balance + $1 WHERE company_id = $2 AND id = $3`,
+        [grandTotal, companyId, data.vendorId],
+      );
+      const balRes = await client.query(
+        `SELECT outstanding_balance FROM entities WHERE company_id = $1 AND id = $2`,
+        [companyId, data.vendorId],
+      );
+      const newBal = balRes.rows[0].outstanding_balance;
+      await client.query(
+        `INSERT INTO ledger_entries (company_id, entity_id, date, description, debit, credit, balance, type, reference_id, reference_no)
+         VALUES ($1,$2,NOW(),$3,0,$4,$5,'purchase',$6,$7)`,
+        [companyId, data.vendorId, `Purchase ${old.bill_no} (edited)`, grandTotal, newBal, purchaseId, old.bill_no],
+      );
+    }
 
     await client.query("COMMIT");
 
