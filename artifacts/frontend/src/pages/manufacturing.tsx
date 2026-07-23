@@ -2159,7 +2159,7 @@ function ReportTab() {
                   <div className="col-span-5 sm:col-span-4 font-medium line-clamp-1">
                     {c.productName}
                     <div className="text-[11px] text-muted-foreground font-normal sm:hidden">
-                      {c.completedAt ? new Date(c.completedAt).toLocaleDateString() : "—"}
+                      {c.completedAt ? new Date(c.completedAt).toLocaleString() : "—"}
                     </div>
                   </div>
                   <div className="col-span-3 sm:col-span-2 text-right tabular-nums font-medium">{Number(c.targetQty).toLocaleString()}</div>

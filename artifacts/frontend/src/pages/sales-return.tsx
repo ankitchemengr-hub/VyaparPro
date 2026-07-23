@@ -408,7 +408,7 @@ function ReturnHistoryTab() {
                 {r.customerName || "Cash Sale"} · Inv {r.invoiceNo}
               </div>
               <div className="text-xs text-muted-foreground mt-0.5">
-                {format(new Date(r.returnDate), "MMM dd, yyyy")}
+                {format(new Date(r.returnDate), "MMM dd, yyyy")} · {format(new Date(r.returnDate), "hh:mm a")}
               </div>
             </button>
           ))}
@@ -470,7 +470,7 @@ function ReturnDetailDialog({ id, onOpenChange }: { id: number | null; onOpenCha
               </div>
               <div className="grid grid-cols-2 gap-2 mb-4">
                 <div><span className="text-muted-foreground">Return No: </span>{ret.returnNo}</div>
-                <div><span className="text-muted-foreground">Date: </span>{format(new Date(ret.returnDate), "MMM dd, yyyy")}</div>
+                <div><span className="text-muted-foreground">Date: </span>{format(new Date(ret.returnDate), "MMM dd, yyyy")} {format(new Date(ret.returnDate), "hh:mm a")}</div>
                 <div><span className="text-muted-foreground">Customer: </span>{ret.customerName ?? "—"}</div>
                 <div><span className="text-muted-foreground">Against Invoice: </span>{ret.invoiceNo}</div>
               </div>

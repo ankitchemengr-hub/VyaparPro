@@ -294,7 +294,14 @@ function KhatabookDetailDialog({
               <TableBody>
                 {(ledger?.entries ?? []).map((entry) => (
                   <TableRow key={entry.id}>
-                    <TableCell className="text-xs whitespace-nowrap">{entry.date?.slice(0, 10)}</TableCell>
+                    <TableCell className="text-xs whitespace-nowrap">
+                      {entry.date?.slice(0, 10)}
+                      {entry.date && (
+                        <div className="text-[10px] text-muted-foreground">
+                          {new Date(entry.date).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                        </div>
+                      )}
+                    </TableCell>
                     <TableCell className="text-sm max-w-[160px]">
                       {entry.type === "invoice" && entry.referenceId ? (
                         <button
@@ -382,7 +389,7 @@ function ReceiptViewDialog({ receiptNo, onOpenChange }: { receiptNo: string | nu
         ) : receipt ? (
           <>
             <div className="space-y-2 text-sm print:hidden">
-              <div className="flex justify-between"><span className="text-muted-foreground">Date</span><span>{new Date(receipt.date).toLocaleDateString("en-IN")}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Date</span><span>{new Date(receipt.date).toLocaleDateString("en-IN")} <span className="text-xs text-muted-foreground">{new Date(receipt.date).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</span></span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">{receipt.direction === "in" ? "Received From" : "Paid To"}</span><span className="font-medium">{receipt.partyName ?? "—"}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Mode</span><span>{MODE_LABELS[receipt.mode] ?? receipt.mode}</span></div>
               {receipt.invoiceNo && <div className="flex justify-between"><span className="text-muted-foreground">Against Invoice</span><span>{receipt.invoiceNo}</span></div>}
@@ -398,7 +405,7 @@ function ReceiptViewDialog({ receiptNo, onOpenChange }: { receiptNo: string | nu
               <div className="font-bold text-lg mb-4">Payment Receipt</div>
               <div className="grid grid-cols-2 gap-2 mb-4">
                 <div><span className="text-muted-foreground">Receipt No: </span>{receipt.receiptNo}</div>
-                <div><span className="text-muted-foreground">Date: </span>{new Date(receipt.date).toLocaleDateString("en-IN")}</div>
+                <div><span className="text-muted-foreground">Date: </span>{new Date(receipt.date).toLocaleDateString("en-IN")} {new Date(receipt.date).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</div>
                 <div><span className="text-muted-foreground">{receipt.direction === "in" ? "Received From" : "Paid To"}: </span>{receipt.partyName ?? "—"}</div>
                 {receipt.invoiceNo && <div><span className="text-muted-foreground">Against Invoice: </span>{receipt.invoiceNo}</div>}
                 <div><span className="text-muted-foreground">Mode: </span>{MODE_LABELS[receipt.mode] ?? receipt.mode}</div>

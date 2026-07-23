@@ -205,7 +205,10 @@ export default function CustomerProfile() {
               <TableBody>
                 {ledger?.entries?.map((entry) => (
                   <TableRow key={entry.id}>
-                    <TableCell className="whitespace-nowrap">{format(new Date(entry.date), "MMM dd, yyyy")}</TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {format(new Date(entry.date), "MMM dd, yyyy")}
+                      <div className="text-[10px] text-muted-foreground">{format(new Date(entry.date), "hh:mm a")}</div>
+                    </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         {entry.type === 'invoice' ? <FileText className="h-3 w-3 text-muted-foreground" /> :

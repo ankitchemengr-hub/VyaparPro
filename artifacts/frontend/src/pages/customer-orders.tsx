@@ -366,7 +366,12 @@ export default function CustomerOrdersAdmin() {
                     <TableCell className={isNew ? "font-mono text-xs font-semibold text-amber-900 dark:text-amber-200" : "font-mono text-xs"}>
                       {o.orderNo ?? `#${o.id}`}
                     </TableCell>
-                    <TableCell>{new Date(o.createdAt).toLocaleDateString("en-IN")}</TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {new Date(o.createdAt).toLocaleDateString("en-IN")}
+                      <div className="text-[10px] text-muted-foreground">
+                        {new Date(o.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                      </div>
+                    </TableCell>
                     <TableCell>{o.customerName}</TableCell>
                     <TableCell>{o.customerMobile ?? "-"}</TableCell>
                     <TableCell className="text-right">{o.totalItems}</TableCell>

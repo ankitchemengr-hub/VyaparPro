@@ -242,7 +242,10 @@ export default function Payments() {
                   filteredPayments.map(payment => (
                     <TableRow key={payment.id}>
                       <TableCell className="font-mono text-xs whitespace-nowrap">{payment.receiptId || `REC-${payment.id}`}</TableCell>
-                      <TableCell className="whitespace-nowrap">{format(new Date(payment.createdAt), "MMM dd, yyyy")}</TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {format(new Date(payment.createdAt), "MMM dd, yyyy")}
+                        <div className="text-[10px] text-muted-foreground">{format(new Date(payment.createdAt), "hh:mm a")}</div>
+                      </TableCell>
                       <TableCell className="font-medium">{payment.customerName}</TableCell>
                       <TableCell className="hidden md:table-cell">{payment.salesmanName || "Direct"}</TableCell>
                       <TableCell className="hidden sm:table-cell capitalize">{payment.mode.replace('_', ' ')}</TableCell>

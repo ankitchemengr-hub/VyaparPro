@@ -396,7 +396,12 @@ export default function Commission() {
                     ) : txData.transactions.map((tx) => (
                       <TableRow key={tx.id}>
                         <TableCell className="font-mono text-xs">{tx.invoiceNo}</TableCell>
-                        <TableCell className="whitespace-nowrap text-sm">{new Date(tx.createdAt).toLocaleDateString("en-IN")}</TableCell>
+                        <TableCell className="whitespace-nowrap text-sm">
+                          {new Date(tx.createdAt).toLocaleDateString("en-IN")}
+                          <div className="text-[10px] text-muted-foreground">
+                            {new Date(tx.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                          </div>
+                        </TableCell>
                         {isAdmin && <TableCell className="text-sm">{tx.salesmanName}</TableCell>}
                         <TableCell className="text-sm">{tx.customerName ?? "—"}</TableCell>
                         <TableCell className="text-right tabular-nums">{fmtQty(tx.totalLiters)}</TableCell>
@@ -472,7 +477,12 @@ export default function Commission() {
                       ) : paymentHistory.map((p) => (
                         <TableRow key={p.id}>
                           <TableCell className="font-medium">{p.salesmanName}</TableCell>
-                          <TableCell>{new Date(p.paymentDate).toLocaleDateString("en-IN")}</TableCell>
+                          <TableCell>
+                            {new Date(p.paymentDate).toLocaleDateString("en-IN")}
+                            <div className="text-[10px] text-muted-foreground">
+                              {new Date(p.paymentDate).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                            </div>
+                          </TableCell>
                           <TableCell className="text-right font-semibold text-emerald-600">{fmt(p.amount)}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">{p.reference ?? "—"}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">{p.note ?? "—"}</TableCell>
