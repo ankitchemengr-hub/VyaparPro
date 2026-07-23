@@ -42,6 +42,9 @@ export default function Menu() {
   );
 
   const modules = moduleNavItems.filter((item) => hasRole(item.roles as any));
+  const filteredModules = trimmed
+    ? modules.filter((item) => item.name.toLowerCase().includes(trimmed.toLowerCase()))
+    : modules;
 
   const canSeeOrders = hasRole(["admin", "store", "manufacturing"]);
   const isAdmin = hasRole(["admin"]);
@@ -69,7 +72,7 @@ export default function Menu() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Menu</h1>
         <p className="text-muted-foreground mt-2">
-          Quick access to every module, plus global search across products, customers and invoices.
+          Quick access to every module, plus search across modules, products, customers and invoices.
         </p>
       </div>
 
@@ -78,7 +81,7 @@ export default function Menu() {
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search products, customers, invoices..."
+          placeholder="Search modules, products, customers, invoices..."
           className="pl-9"
           data-testid="input-global-search"
         />
@@ -170,8 +173,11 @@ export default function Menu() {
 
       <div>
         <h2 className="text-lg font-semibold mb-3">Modules</h2>
+        {filteredModules.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No modules match "{trimmed}".</p>
+        ) : (
         <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
-          {modules.map((item, i) => {
+          {filteredModules.map((item, i) => {
             const color = TILE_COLORS[i % TILE_COLORS.length];
             const badgeCount = badgeCounts[item.href] ?? 0;
             return (
@@ -201,6 +207,7 @@ export default function Menu() {
             );
           })}
         </div>
+        )}
       </div>
     </div>
   );
