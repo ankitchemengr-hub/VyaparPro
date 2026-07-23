@@ -27,10 +27,17 @@ export interface Product {
   openingStock?: number | null;
   /** @nullable */
   openingStockValue?: number | null;
+  /** manual: wholesalePrice/retailPrice are entered directly. fixed_margin: they're computed as purchasePrice * (1 + margin / 100) whenever purchasePrice changes or Recalculate Prices runs. */
   pricingBasis: ProductPricingBasis;
-  /** @nullable */
+  /**
+     * Percentage markup over purchasePrice, only applied when pricingBasis is fixed_margin.
+     * @nullable
+     */
   wholesaleMargin?: number | null;
-  /** @nullable */
+  /**
+     * Percentage markup over purchasePrice, only applied when pricingBasis is fixed_margin.
+     * @nullable
+     */
   retailMargin?: number | null;
   /** @nullable */
   hsnCode?: string | null;

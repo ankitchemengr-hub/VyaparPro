@@ -27,6 +27,7 @@ import type {
   ActiveCompany,
   AppSettings,
   AppSettingsUpdate,
+  ApplyPriceRecalculation200,
   AssembleItem409,
   AssembleItemInput,
   AuditEntry,
@@ -115,6 +116,7 @@ import type {
   NumberSeriesUpdate,
   Payment,
   PaymentInput,
+  PriceRecalculationItem,
   PrintSettings,
   PrintSettingsUpdate,
   Product,
@@ -2785,6 +2787,153 @@ export function useListBrands<TData = Awaited<ReturnType<typeof listBrands>>, TE
 
 
 
+
+export const getGetRecalculatePricePreviewUrl = () => {
+
+
+
+
+  return `/api/products/recalculate-preview`
+}
+
+/**
+ * @summary Admin-only dry run of "Recalculate Prices" — shows which manufactured products' cost/wholesale/retail price would change, without writing anything.
+ */
+export const getRecalculatePricePreview = async ( options?: RequestInit): Promise<PriceRecalculationItem[]> => {
+
+  return customFetch<PriceRecalculationItem[]>(getGetRecalculatePricePreviewUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetRecalculatePricePreviewQueryKey = () => {
+    return [
+    `/api/products/recalculate-preview`
+    ] as const;
+    }
+
+
+export const getGetRecalculatePricePreviewQueryOptions = <TData = Awaited<ReturnType<typeof getRecalculatePricePreview>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRecalculatePricePreview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetRecalculatePricePreviewQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRecalculatePricePreview>>> = ({ signal }) => getRecalculatePricePreview({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getRecalculatePricePreview>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetRecalculatePricePreviewQueryResult = NonNullable<Awaited<ReturnType<typeof getRecalculatePricePreview>>>
+export type GetRecalculatePricePreviewQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Admin-only dry run of "Recalculate Prices" — shows which manufactured products' cost/wholesale/retail price would change, without writing anything.
+ */
+
+export function useGetRecalculatePricePreview<TData = Awaited<ReturnType<typeof getRecalculatePricePreview>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRecalculatePricePreview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetRecalculatePricePreviewQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getApplyPriceRecalculationUrl = () => {
+
+
+
+
+  return `/api/products/recalculate-apply`
+}
+
+/**
+ * @summary Admin-only — applies the same computation as the preview, cascading raw-material cost changes through every recipe (including recipes-of-recipes) into purchasePrice, and into wholesale/retail price for fixed_margin products.
+ */
+export const applyPriceRecalculation = async ( options?: RequestInit): Promise<ApplyPriceRecalculation200> => {
+
+  return customFetch<ApplyPriceRecalculation200>(getApplyPriceRecalculationUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getApplyPriceRecalculationMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applyPriceRecalculation>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof applyPriceRecalculation>>, TError,void, TContext> => {
+
+const mutationKey = ['applyPriceRecalculation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof applyPriceRecalculation>>, void> = () => {
+
+
+          return  applyPriceRecalculation(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApplyPriceRecalculationMutationResult = NonNullable<Awaited<ReturnType<typeof applyPriceRecalculation>>>
+
+    export type ApplyPriceRecalculationMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Admin-only — applies the same computation as the preview, cascading raw-material cost changes through every recipe (including recipes-of-recipes) into purchasePrice, and into wholesale/retail price for fixed_margin products.
+ */
+export const useApplyPriceRecalculation = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applyPriceRecalculation>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof applyPriceRecalculation>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getApplyPriceRecalculationMutationOptions(options));
+    }
 
 export const getListBrandMasterUrl = () => {
 

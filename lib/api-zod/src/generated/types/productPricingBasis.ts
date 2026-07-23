@@ -6,6 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
+/**
+ * manual: wholesalePrice/retailPrice are entered directly. fixed_margin: they're computed as purchasePrice * (1 + margin / 100) whenever purchasePrice changes or Recalculate Prices runs.
+ */
 export type ProductPricingBasis = typeof ProductPricingBasis[keyof typeof ProductPricingBasis];
 
 

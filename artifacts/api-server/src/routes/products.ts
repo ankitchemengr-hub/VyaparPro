@@ -18,6 +18,7 @@ import {
   BulkStockReconciliationBody,
 } from "@workspace/api-zod";
 import { getCompanyId, handleTenantError } from "../lib/tenant";
+import { computeProductCosts } from "../lib/bom-cost";
 
 const router: IRouter = Router();
 
@@ -91,8 +92,8 @@ router.post("/products", async (req, res): Promise<void> => {
 
   if (data.pricingBasis === "fixed_margin" && data.purchasePrice != null) {
     const purchase = Number(data.purchasePrice);
-    if (data.wholesaleMargin != null) wholesalePrice = purchase + Number(data.wholesaleMargin);
-    if (data.retailMargin != null) retailPrice = purchase + Number(data.retailMargin);
+    if (data.wholesaleMargin != null) wholesalePrice = purchase * (1 + Number(data.wholesaleMargin) / 100);
+    if (data.retailMargin != null) retailPrice = purchase * (1 + Number(data.retailMargin) / 100);
   }
 
   try {
@@ -222,6 +223,121 @@ router.get("/products/stock-adjustments", async (req, res): Promise<void> => {
       createdAt: r.createdAt?.toISOString(),
     })),
   );
+});
+
+// Shared by both recalculate routes: for every fixed_margin product whose
+// recipe (BOM) cost rollup has moved since its stored purchasePrice, work out
+// the new purchasePrice (= recipe cost, so COGS/P&L reporting stays accurate)
+// and the new wholesale/retail price (= new cost * (1 + margin/100)).
+async function computeRecalculation(companyId: number) {
+  const products = await db
+    .select()
+    .from(productsTable)
+    .where(and(eq(productsTable.companyId, companyId), isNull(productsTable.deletedAt)));
+
+  const bomRows = await pool.query(
+    `SELECT b.finished_product_id, b.output_quantity, bi.material_product_id, bi.quantity
+     FROM boms b
+     JOIN bom_items bi ON bi.bom_id = b.id AND bi.company_id = b.company_id
+     WHERE b.company_id = $1`,
+    [companyId],
+  );
+  const bomItems = bomRows.rows.map((r: any) => ({
+    finishedProductId: r.finished_product_id,
+    materialProductId: r.material_product_id,
+    quantity: r.quantity,
+    outputQuantity: r.output_quantity,
+  }));
+  const finishedProductIds = new Set(bomItems.map((b) => b.finishedProductId));
+
+  const costs = computeProductCosts(
+    products.map((p) => ({ id: p.id, purchasePrice: p.purchasePrice })),
+    bomItems,
+  );
+
+  const changes: {
+    id: number; name: string; itemCode: string;
+    oldCost: number; newCost: number;
+    oldWholesalePrice: number; newWholesalePrice: number;
+    oldRetailPrice: number; newRetailPrice: number;
+  }[] = [];
+
+  for (const p of products) {
+    // Only products with their own recipe get their cost/purchasePrice
+    // touched — a raw material like Refine Oil has no BOM of its own; its
+    // purchasePrice is the very rate the admin edits by hand to kick this off.
+    if (!finishedProductIds.has(p.id)) continue;
+    const newCost = Math.round((costs.get(p.id) ?? 0) * 100) / 100;
+    const oldCost = Number(p.purchasePrice);
+
+    const oldWholesalePrice = Number(p.wholesalePrice);
+    const oldRetailPrice = Number(p.retailPrice);
+    let newWholesalePrice = oldWholesalePrice;
+    let newRetailPrice = oldRetailPrice;
+    if (p.pricingBasis === "fixed_margin") {
+      if (p.wholesaleMargin != null) newWholesalePrice = Math.round(newCost * (1 + Number(p.wholesaleMargin) / 100) * 100) / 100;
+      if (p.retailMargin != null) newRetailPrice = Math.round(newCost * (1 + Number(p.retailMargin) / 100) * 100) / 100;
+    }
+
+    const changed =
+      Math.abs(newCost - oldCost) > 0.004 ||
+      Math.abs(newWholesalePrice - oldWholesalePrice) > 0.004 ||
+      Math.abs(newRetailPrice - oldRetailPrice) > 0.004;
+    if (!changed) continue;
+
+    changes.push({
+      id: p.id, name: p.name, itemCode: p.itemCode,
+      oldCost, newCost, oldWholesalePrice, newWholesalePrice, oldRetailPrice, newRetailPrice,
+    });
+  }
+
+  return changes;
+}
+
+// GET /products/recalculate-preview — admin only. Dry-run: shows what
+// "Recalculate Prices" would change without writing anything.
+router.get("/products/recalculate-preview", async (req, res): Promise<void> => {
+  const session = (req as any).session;
+  if (session?.role !== "admin") {
+    res.status(403).json({ error: "Only admin can recalculate prices" });
+    return;
+  }
+  const companyId = getCompanyId(req);
+  const changes = await computeRecalculation(companyId);
+  res.json(changes);
+});
+
+// POST /products/recalculate-apply — admin only. Applies the same
+// computation as the preview and writes purchasePrice/wholesalePrice/
+// retailPrice for every product whose recipe cost has moved.
+router.post("/products/recalculate-apply", async (req, res): Promise<void> => {
+  const session = (req as any).session;
+  if (session?.role !== "admin") {
+    res.status(403).json({ error: "Only admin can recalculate prices" });
+    return;
+  }
+  const companyId = getCompanyId(req);
+  const changes = await computeRecalculation(companyId);
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    for (const c of changes) {
+      await client.query(
+        `UPDATE products SET purchase_price = $1, wholesale_price = $2, retail_price = $3, updated_at = NOW()
+         WHERE id = $4 AND company_id = $5`,
+        [c.newCost, c.newWholesalePrice, c.newRetailPrice, c.id, companyId],
+      );
+    }
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  res.json({ updated: changes.length, items: changes });
 });
 
 // GET /products/:id
@@ -362,8 +478,8 @@ router.patch("/products/:id", async (req, res): Promise<void> => {
       .where(and(eq(productsTable.companyId, companyId), eq(productsTable.id, params.data.id)));
     if (existing) {
       const purchase = Number(data.purchasePrice ?? existing.purchasePrice);
-      if (data.wholesaleMargin != null) data.wholesalePrice = purchase + Number(data.wholesaleMargin);
-      if (data.retailMargin != null) data.retailPrice = purchase + Number(data.retailMargin);
+      if (data.wholesaleMargin != null) data.wholesalePrice = purchase * (1 + Number(data.wholesaleMargin) / 100);
+      if (data.retailMargin != null) data.retailPrice = purchase * (1 + Number(data.retailMargin) / 100);
     }
   }
 

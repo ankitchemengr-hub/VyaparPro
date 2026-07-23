@@ -544,9 +544,9 @@ export const ListProductsResponseItem = zod.object({
   "currentStock": zod.number(),
   "openingStock": zod.number().nullish(),
   "openingStockValue": zod.number().nullish(),
-  "pricingBasis": zod.enum(['manual', 'fixed_margin']),
-  "wholesaleMargin": zod.number().nullish(),
-  "retailMargin": zod.number().nullish(),
+  "pricingBasis": zod.enum(['manual', 'fixed_margin']).describe('manual: wholesalePrice\/retailPrice are entered directly. fixed_margin: they\'re computed as purchasePrice \* (1 + margin \/ 100) whenever purchasePrice changes or Recalculate Prices runs.'),
+  "wholesaleMargin": zod.number().nullish().describe('Percentage markup over purchasePrice, only applied when pricingBasis is fixed_margin.'),
+  "retailMargin": zod.number().nullish().describe('Percentage markup over purchasePrice, only applied when pricingBasis is fixed_margin.'),
   "hsnCode": zod.string().nullish(),
   "taxRate": zod.number().nullish(),
   "commissionPerLiter": zod.number().nullish(),
@@ -610,9 +610,9 @@ export const CreateProductResponse = zod.object({
   "currentStock": zod.number(),
   "openingStock": zod.number().nullish(),
   "openingStockValue": zod.number().nullish(),
-  "pricingBasis": zod.enum(['manual', 'fixed_margin']),
-  "wholesaleMargin": zod.number().nullish(),
-  "retailMargin": zod.number().nullish(),
+  "pricingBasis": zod.enum(['manual', 'fixed_margin']).describe('manual: wholesalePrice\/retailPrice are entered directly. fixed_margin: they\'re computed as purchasePrice \* (1 + margin \/ 100) whenever purchasePrice changes or Recalculate Prices runs.'),
+  "wholesaleMargin": zod.number().nullish().describe('Percentage markup over purchasePrice, only applied when pricingBasis is fixed_margin.'),
+  "retailMargin": zod.number().nullish().describe('Percentage markup over purchasePrice, only applied when pricingBasis is fixed_margin.'),
   "hsnCode": zod.string().nullish(),
   "taxRate": zod.number().nullish(),
   "commissionPerLiter": zod.number().nullish(),
@@ -650,9 +650,9 @@ export const GetProductResponse = zod.object({
   "currentStock": zod.number(),
   "openingStock": zod.number().nullish(),
   "openingStockValue": zod.number().nullish(),
-  "pricingBasis": zod.enum(['manual', 'fixed_margin']),
-  "wholesaleMargin": zod.number().nullish(),
-  "retailMargin": zod.number().nullish(),
+  "pricingBasis": zod.enum(['manual', 'fixed_margin']).describe('manual: wholesalePrice\/retailPrice are entered directly. fixed_margin: they\'re computed as purchasePrice \* (1 + margin \/ 100) whenever purchasePrice changes or Recalculate Prices runs.'),
+  "wholesaleMargin": zod.number().nullish().describe('Percentage markup over purchasePrice, only applied when pricingBasis is fixed_margin.'),
+  "retailMargin": zod.number().nullish().describe('Percentage markup over purchasePrice, only applied when pricingBasis is fixed_margin.'),
   "hsnCode": zod.string().nullish(),
   "taxRate": zod.number().nullish(),
   "commissionPerLiter": zod.number().nullish(),
@@ -717,9 +717,9 @@ export const UpdateProductResponse = zod.object({
   "currentStock": zod.number(),
   "openingStock": zod.number().nullish(),
   "openingStockValue": zod.number().nullish(),
-  "pricingBasis": zod.enum(['manual', 'fixed_margin']),
-  "wholesaleMargin": zod.number().nullish(),
-  "retailMargin": zod.number().nullish(),
+  "pricingBasis": zod.enum(['manual', 'fixed_margin']).describe('manual: wholesalePrice\/retailPrice are entered directly. fixed_margin: they\'re computed as purchasePrice \* (1 + margin \/ 100) whenever purchasePrice changes or Recalculate Prices runs.'),
+  "wholesaleMargin": zod.number().nullish().describe('Percentage markup over purchasePrice, only applied when pricingBasis is fixed_margin.'),
+  "retailMargin": zod.number().nullish().describe('Percentage markup over purchasePrice, only applied when pricingBasis is fixed_margin.'),
   "hsnCode": zod.string().nullish(),
   "taxRate": zod.number().nullish(),
   "commissionPerLiter": zod.number().nullish(),
@@ -832,6 +832,42 @@ export const ListProductGroupsResponse = zod.array(ListProductGroupsResponseItem
  */
 export const ListBrandsResponseItem = zod.string()
 export const ListBrandsResponse = zod.array(ListBrandsResponseItem)
+
+
+/**
+ * @summary Admin-only dry run of "Recalculate Prices" — shows which manufactured products' cost/wholesale/retail price would change, without writing anything.
+ */
+export const GetRecalculatePricePreviewResponseItem = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "itemCode": zod.string(),
+  "oldCost": zod.number().describe('Product\'s current purchasePrice (its previously rolled-up recipe cost).'),
+  "newCost": zod.number().describe('Recipe cost recomputed from current raw-material purchasePrices, cascading through nested recipes.'),
+  "oldWholesalePrice": zod.number(),
+  "newWholesalePrice": zod.number(),
+  "oldRetailPrice": zod.number(),
+  "newRetailPrice": zod.number()
+})
+export const GetRecalculatePricePreviewResponse = zod.array(GetRecalculatePricePreviewResponseItem)
+
+
+/**
+ * @summary Admin-only — applies the same computation as the preview, cascading raw-material cost changes through every recipe (including recipes-of-recipes) into purchasePrice, and into wholesale/retail price for fixed_margin products.
+ */
+export const ApplyPriceRecalculationResponse = zod.object({
+  "updated": zod.number(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "itemCode": zod.string(),
+  "oldCost": zod.number().describe('Product\'s current purchasePrice (its previously rolled-up recipe cost).'),
+  "newCost": zod.number().describe('Recipe cost recomputed from current raw-material purchasePrices, cascading through nested recipes.'),
+  "oldWholesalePrice": zod.number(),
+  "newWholesalePrice": zod.number(),
+  "oldRetailPrice": zod.number(),
+  "newRetailPrice": zod.number()
+}))
+})
 
 
 /**
@@ -3093,9 +3129,9 @@ export const GlobalSearchResponse = zod.object({
   "currentStock": zod.number(),
   "openingStock": zod.number().nullish(),
   "openingStockValue": zod.number().nullish(),
-  "pricingBasis": zod.enum(['manual', 'fixed_margin']),
-  "wholesaleMargin": zod.number().nullish(),
-  "retailMargin": zod.number().nullish(),
+  "pricingBasis": zod.enum(['manual', 'fixed_margin']).describe('manual: wholesalePrice\/retailPrice are entered directly. fixed_margin: they\'re computed as purchasePrice \* (1 + margin \/ 100) whenever purchasePrice changes or Recalculate Prices runs.'),
+  "wholesaleMargin": zod.number().nullish().describe('Percentage markup over purchasePrice, only applied when pricingBasis is fixed_margin.'),
+  "retailMargin": zod.number().nullish().describe('Percentage markup over purchasePrice, only applied when pricingBasis is fixed_margin.'),
   "hsnCode": zod.string().nullish(),
   "taxRate": zod.number().nullish(),
   "commissionPerLiter": zod.number().nullish(),

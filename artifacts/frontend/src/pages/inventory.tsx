@@ -371,6 +371,9 @@ type ProductForm = {
   notForSale: boolean;
   addForManufacturing: boolean;
   imageUrl: string;
+  pricingBasis: "manual" | "fixed_margin";
+  wholesaleMargin: string;
+  retailMargin: string;
 };
 
 const emptyForm: ProductForm = {
@@ -379,6 +382,7 @@ const emptyForm: ProductForm = {
   gstPrice: "", nonGstPrice: "",
   hsnCode: "", taxRate: "18", commissionPerLiter: "0", volumeUnit: "liter", litersPerBox: "", unitsPerBox: "", openingStock: "0",
   minStockThreshold: "5", notForSale: false, addForManufacturing: false, imageUrl: "",
+  pricingBasis: "manual", wholesaleMargin: "", retailMargin: "",
 };
 
 // Suggests an item code from the product name's first couple of significant
@@ -443,6 +447,9 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
         notForSale: !!product.notForSale,
         addForManufacturing: !!product.addForManufacturing,
         imageUrl: product.imageUrl ?? "",
+        pricingBasis: (product as any).pricingBasis === "fixed_margin" ? "fixed_margin" : "manual",
+        wholesaleMargin: (product as any).wholesaleMargin != null ? String((product as any).wholesaleMargin) : "",
+        retailMargin: (product as any).retailMargin != null ? String((product as any).retailMargin) : "",
       });
       setImagePreview(product.imageUrl ?? "");
       setProductType(Number(product.purchasePrice) === 0 ? "Manufactured" : "Purchased");
@@ -501,6 +508,16 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
     if (file) handleImageFile(file);
   };
 
+  // Single source of truth for Wholesale/Retail Price under Cost + Margin %
+  // pricing — read by both the (read-only) price inputs and handleSave, so
+  // what's displayed is always exactly what gets submitted.
+  const computedWholesalePrice = form.pricingBasis === "fixed_margin" && form.wholesaleMargin
+    ? Number(form.purchasePrice || 0) * (1 + Number(form.wholesaleMargin) / 100)
+    : Number(form.wholesalePrice || 0);
+  const computedRetailPrice = form.pricingBasis === "fixed_margin" && form.retailMargin
+    ? Number(form.purchasePrice || 0) * (1 + Number(form.retailMargin) / 100)
+    : Number(form.retailPrice || 0);
+
   const handleSave = () => {
     if (!form.name.trim() || !form.itemCode.trim() || !form.group.trim() || !form.brand.trim() || !form.unit.trim()) {
       toast({ title: "Required fields missing", description: "Name, Item Code, Group, Brand and Unit are required.", variant: "destructive" });
@@ -508,8 +525,14 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
       return;
     }
     const isManufactured = productType === "Manufactured";
-    if (!form.retailPrice || !form.wholesalePrice || !form.mrp || (!isManufactured && !form.purchasePrice)) {
+    const usingMargin = form.pricingBasis === "fixed_margin";
+    if ((!usingMargin && (!form.retailPrice || !form.wholesalePrice)) || !form.mrp || (!isManufactured && !form.purchasePrice)) {
       toast({ title: "Pricing required", description: "Fill in all price fields.", variant: "destructive" });
+      setTab("pricing");
+      return;
+    }
+    if (usingMargin && (!form.wholesaleMargin || !form.retailMargin)) {
+      toast({ title: "Margins required", description: "Set both Wholesale and Retail Margin % for Cost + Margin pricing.", variant: "destructive" });
       setTab("pricing");
       return;
     }
@@ -528,8 +551,8 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
       unit: form.unit.trim(),
       purchasePrice: isManufactured ? 0 : Number(form.purchasePrice),
       mrp: Number(form.mrp),
-      wholesalePrice: Number(form.wholesalePrice),
-      retailPrice: Number(form.retailPrice),
+      wholesalePrice: computedWholesalePrice,
+      retailPrice: computedRetailPrice,
       nonGstPrice: form.nonGstPrice ? Number(form.nonGstPrice) : undefined,
       hsnCode: form.hsnCode.trim() || undefined,
       taxRate: form.taxRate ? Number(form.taxRate) : undefined,
@@ -541,6 +564,9 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
       notForSale: form.notForSale,
       addForManufacturing: form.addForManufacturing,
       imageUrl: form.imageUrl || undefined,
+      pricingBasis: form.pricingBasis,
+      wholesaleMargin: form.pricingBasis === "fixed_margin" && form.wholesaleMargin ? Number(form.wholesaleMargin) : undefined,
+      retailMargin: form.pricingBasis === "fixed_margin" && form.retailMargin ? Number(form.retailMargin) : undefined,
     };
 
     const handleError = async (err: any, fallback: string) => {
@@ -748,8 +774,57 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
               </div>
             </div>
             <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
-              <p className="text-sm font-medium">Selling Prices</p>
-              {/* GST Price calculator */}
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <p className="text-sm font-medium">Selling Prices</p>
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground">Pricing Basis</Label>
+                  <Select
+                    value={form.pricingBasis}
+                    onValueChange={(v) => set("pricingBasis", v as "manual" | "fixed_margin")}
+                  >
+                    <SelectTrigger className="h-8 w-44 text-xs" data-testid="select-pricing-basis">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="manual">Manual</SelectItem>
+                      <SelectItem value="fixed_margin">Cost + Margin %</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {form.pricingBasis === "fixed_margin" ? (
+                <div className="rounded-md bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 p-3 space-y-2">
+                  <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                    Wholesale/Retail Price = Cost × (1 + Margin ÷ 100) — recomputed automatically whenever this product's
+                    cost changes (its own Purchase Price, or via "Recalculate Prices" on the Bill of Materials page if
+                    it's a manufactured product with a recipe).
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Wholesale Margin (%)</Label>
+                      <Input
+                        type="number" min={0} step="0.01"
+                        value={form.wholesaleMargin}
+                        onChange={(e) => set("wholesaleMargin", e.target.value)}
+                        placeholder="e.g. 15"
+                        data-testid="input-wholesale-margin"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Retail Margin (%)</Label>
+                      <Input
+                        type="number" min={0} step="0.01"
+                        value={form.retailMargin}
+                        onChange={(e) => set("retailMargin", e.target.value)}
+                        placeholder="e.g. 25"
+                        data-testid="input-retail-margin"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+              /* GST Price calculator */
               <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-3 space-y-2">
                 <p className="text-xs font-medium text-blue-700 dark:text-blue-400">
                   GST Price → Auto-calculate Wholesale Price
@@ -788,17 +863,20 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
                 </div>
                 {form.gstPrice && form.wholesalePrice && (
                   <p className="text-xs text-blue-600 dark:text-blue-400">
-                    GST ({form.taxRate}%) = ₹{(Number(form.gstPrice) - Number(form.wholesalePrice)).toFixed(2)} | 
+                    GST ({form.taxRate}%) = ₹{(Number(form.gstPrice) - Number(form.wholesalePrice)).toFixed(2)} |
                     Total bill = ₹{Number(form.gstPrice).toFixed(2)}
                   </p>
                 )}
               </div>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label>Wholesale Price (₹) *</Label>
                   <Input
                     type="number" min={0}
-                    value={form.wholesalePrice}
+                    value={form.pricingBasis === "fixed_margin" ? computedWholesalePrice.toFixed(2) : form.wholesalePrice}
+                    readOnly={form.pricingBasis === "fixed_margin"}
+                    className={form.pricingBasis === "fixed_margin" ? "bg-muted" : undefined}
                     onChange={(e) => {
                       set("wholesalePrice", e.target.value);
                       set("gstPrice", ""); // clear gst price if manually edited
@@ -811,7 +889,9 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
                   <Label>Retail Price (₹) *</Label>
                   <Input
                     type="number" min={0}
-                    value={form.retailPrice}
+                    value={form.pricingBasis === "fixed_margin" ? computedRetailPrice.toFixed(2) : form.retailPrice}
+                    readOnly={form.pricingBasis === "fixed_margin"}
+                    className={form.pricingBasis === "fixed_margin" ? "bg-muted" : undefined}
                     onChange={(e) => set("retailPrice", e.target.value)}
                     placeholder="0.00"
                     data-testid="input-retail-price"

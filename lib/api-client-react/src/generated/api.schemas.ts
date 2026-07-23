@@ -769,6 +769,9 @@ export interface BrandInput {
   name: string;
 }
 
+/**
+ * manual: wholesalePrice/retailPrice are entered directly. fixed_margin: they're computed as purchasePrice * (1 + margin / 100) whenever purchasePrice changes or Recalculate Prices runs.
+ */
 export type ProductPricingBasis = typeof ProductPricingBasis[keyof typeof ProductPricingBasis];
 
 
@@ -797,10 +800,17 @@ export interface Product {
   openingStock?: number | null;
   /** @nullable */
   openingStockValue?: number | null;
+  /** manual: wholesalePrice/retailPrice are entered directly. fixed_margin: they're computed as purchasePrice * (1 + margin / 100) whenever purchasePrice changes or Recalculate Prices runs. */
   pricingBasis: ProductPricingBasis;
-  /** @nullable */
+  /**
+     * Percentage markup over purchasePrice, only applied when pricingBasis is fixed_margin.
+     * @nullable
+     */
   wholesaleMargin?: number | null;
-  /** @nullable */
+  /**
+     * Percentage markup over purchasePrice, only applied when pricingBasis is fixed_margin.
+     * @nullable
+     */
   retailMargin?: number | null;
   /** @nullable */
   hsnCode?: string | null;
@@ -885,6 +895,20 @@ export interface ProductUpdate {
   imageUrl?: string;
   commissionPerLiter?: number;
   nonGstPrice?: number;
+}
+
+export interface PriceRecalculationItem {
+  id: number;
+  name: string;
+  itemCode: string;
+  /** Product's current purchasePrice (its previously rolled-up recipe cost). */
+  oldCost: number;
+  /** Recipe cost recomputed from current raw-material purchasePrices, cascading through nested recipes. */
+  newCost: number;
+  oldWholesalePrice: number;
+  newWholesalePrice: number;
+  oldRetailPrice: number;
+  newRetailPrice: number;
 }
 
 export type StockMovementType = typeof StockMovementType[keyof typeof StockMovementType];
@@ -2575,6 +2599,11 @@ forManufacturing?: boolean;
 
 export type BulkStockReconciliation201 = {
   adjustments: StockMovement[];
+};
+
+export type ApplyPriceRecalculation200 = {
+  updated: number;
+  items: PriceRecalculationItem[];
 };
 
 export type ListEntitiesParams = {

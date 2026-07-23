@@ -691,6 +691,42 @@ paths:
                 items:
                   type: string
 
+  /products/recalculate-preview:
+    get:
+      operationId: getRecalculatePricePreview
+      tags: [products]
+      summary: Admin-only dry run of "Recalculate Prices" — shows which manufactured products' cost/wholesale/retail price would change, without writing anything.
+      responses:
+        "200":
+          description: Products whose price would change
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PriceRecalculationItem"
+
+  /products/recalculate-apply:
+    post:
+      operationId: applyPriceRecalculation
+      tags: [products]
+      summary: Admin-only — applies the same computation as the preview, cascading raw-material cost changes through every recipe (including recipes-of-recipes) into purchasePrice, and into wholesale/retail price for fixed_margin products.
+      responses:
+        "200":
+          description: Applied changes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [updated, items]
+                properties:
+                  updated:
+                    type: integer
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PriceRecalculationItem"
+
   # BRAND MASTER — a managed list of brand names, separate from the distinct
   # values above (which are just whatever strings existing products happen to
   # use). Products still store brand as a plain string; picking from this list
@@ -3643,10 +3679,13 @@ components:
         pricingBasis:
           type: string
           enum: [manual, fixed_margin]
+          description: "manual: wholesalePrice/retailPrice are entered directly. fixed_margin: they're computed as purchasePrice * (1 + margin / 100) whenever purchasePrice changes or Recalculate Prices runs."
         wholesaleMargin:
           type: ["number", "null"]
+          description: Percentage markup over purchasePrice, only applied when pricingBasis is fixed_margin.
         retailMargin:
           type: ["number", "null"]
+          description: Percentage markup over purchasePrice, only applied when pricingBasis is fixed_margin.
         hsnCode:
           type: ["string", "null"]
         taxRate:
@@ -3778,6 +3817,31 @@ components:
         commissionPerLiter:
           type: number
         nonGstPrice:
+          type: number
+
+    PriceRecalculationItem:
+      type: object
+      required: [id, name, itemCode, oldCost, newCost, oldWholesalePrice, newWholesalePrice, oldRetailPrice, newRetailPrice]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        itemCode:
+          type: string
+        oldCost:
+          type: number
+          description: Product's current purchasePrice (its previously rolled-up recipe cost).
+        newCost:
+          type: number
+          description: Recipe cost recomputed from current raw-material purchasePrices, cascading through nested recipes.
+        oldWholesalePrice:
+          type: number
+        newWholesalePrice:
+          type: number
+        oldRetailPrice:
+          type: number
+        newRetailPrice:
           type: number
 
     StockMovement:

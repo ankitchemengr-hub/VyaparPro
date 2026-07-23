@@ -16,8 +16,9 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { BomDialog, type BomDialogState } from "@/components/bom-dialog";
+import { RecalculatePricesDialog } from "@/components/recalculate-prices-dialog";
 import {
-  FileText, Loader2, Plus, Pencil, Search, AlertTriangle, ShieldOff, Package,
+  FileText, Loader2, Plus, Pencil, Search, AlertTriangle, ShieldOff, Package, Calculator,
 } from "lucide-react";
 
 export default function BomPage() {
@@ -46,6 +47,7 @@ export default function BomPage() {
   const { data: products } = useListProducts({});
   const [search, setSearch] = useState("");
   const [dialogState, setDialogState] = useState<BomDialogState | null>(null);
+  const [recalcOpen, setRecalcOpen] = useState(false);
 
   // Index products by id for material name lookups
   const productById = useMemo(() => {
@@ -87,7 +89,7 @@ export default function BomPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
             <FileText className="w-7 h-7 text-primary" /> Bill of Materials
@@ -97,6 +99,9 @@ export default function BomPage() {
             Admin-only access; manufacturing team uses these recipes to produce batches.
           </p>
         </div>
+        <Button variant="outline" onClick={() => setRecalcOpen(true)} className="shrink-0" data-testid="button-recalculate-prices">
+          <Calculator className="w-4 h-4 mr-2" /> Recalculate Prices
+        </Button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
@@ -229,6 +234,7 @@ export default function BomPage() {
         allBoms={boms ?? []}
         onClose={() => setDialogState(null)}
       />
+      <RecalculatePricesDialog open={recalcOpen} onOpenChange={setRecalcOpen} />
     </div>
   );
 }
