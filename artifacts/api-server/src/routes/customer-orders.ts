@@ -123,6 +123,7 @@ router.post("/customer-orders", async (req, res): Promise<void> => {
   let totalItems = 0;
   const resolvedItems: Array<{
     productId: number; productName: string; unit: string | null; qty: number; unitPrice: number; lineTotal: number;
+    addForManufacturing: boolean;
   }> = [];
 
   for (const it of items) {
@@ -155,6 +156,7 @@ router.post("/customer-orders", async (req, res): Promise<void> => {
       qty,
       unitPrice: price,
       lineTotal,
+      addForManufacturing: !!p.addForManufacturing,
     });
     totalAmount += lineTotal;
     totalItems += qty;
@@ -201,8 +203,11 @@ router.post("/customer-orders", async (req, res): Promise<void> => {
         [companyId, order.id, it.productId, it.productName, it.unit, it.qty, it.unitPrice, it.lineTotal]
       );
       // Auto-create workload card for customer orders so manufacturing
-      // sees the demand right away. Drafts never generate demand.
-      if (!isDraft && PRODUCTION_STATUSES.has(initialStatus)) {
+      // sees the demand right away. Drafts never generate demand. Only for
+      // products actually flagged "Add for Manufacturing" — a purchased/
+      // stocked item ordered by a customer isn't something Manufacturing
+      // produces, so it must never show up on their workload.
+      if (!isDraft && PRODUCTION_STATUSES.has(initialStatus) && it.addForManufacturing) {
         const wlIns = await client.query(
           `INSERT INTO workload_cards (company_id, product_id, target_qty, status, order_type, reference_order_id)
            VALUES ($1, $2, $3, 'pending', 'customer_backorder', $4)
@@ -475,11 +480,14 @@ router.patch("/customer-orders/:id/status", async (req, res): Promise<void> => {
     const NON_PRODUCIBLE = new Set(["cancelled", "dispatched", "delivered", "done"]);
     if (PRODUCTION_STATUSES.has(newStatus) && !PRODUCTION_STATUSES.has(existing.status) && !NON_PRODUCIBLE.has(fromStatus)) {
       const itemsRes = await client.query(
-        `SELECT * FROM customer_order_items WHERE order_id = $1 AND company_id = $2`,
+        `SELECT coi.*, p.add_for_manufacturing
+         FROM customer_order_items coi
+         JOIN products p ON p.id = coi.product_id AND p.company_id = coi.company_id
+         WHERE coi.order_id = $1 AND coi.company_id = $2`,
         [id, companyId]
       );
       for (const it of itemsRes.rows) {
-        if (it.workload_card_id) continue;
+        if (it.workload_card_id || !it.add_for_manufacturing) continue;
         const ins = await client.query(
           `INSERT INTO workload_cards (company_id, product_id, target_qty, status, order_type, reference_order_id)
            VALUES ($1, $2, $3, 'pending', 'customer_backorder', $4)
