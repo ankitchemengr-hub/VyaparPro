@@ -438,6 +438,11 @@ function QuickAddMaterialDialog({
           notForSale: true,
           addForManufacturing: true,
           openingStock: Number(openingStock) || 0,
+          // Without this, a raw material added here would never appear in Low
+          // Stock Alerts (that query requires a non-null threshold) no matter
+          // how low it ran — 5 is just a starting point; adjust per-material
+          // in Inventory once its real reorder point is known.
+          minStockThreshold: 5,
         } as any,
       });
       await queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() });
