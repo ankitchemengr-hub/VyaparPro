@@ -169,12 +169,14 @@ router.post("/customer-orders", async (req, res): Promise<void> => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    // Customer-placed orders go directly to "processing" so the manufacturing
-    // team sees them on the workload board immediately.
+    // Customer- and counter-placed orders go directly to "processing" so the
+    // manufacturing team sees them on the workload board immediately, even
+    // when the ordered product is out of stock right now — it's accepted as
+    // a backorder rather than rejected (see catalog.tsx's allowsBackorder).
     // Drafts (salesman work-in-progress) stay pending with no manufacturing demand.
     const initialStatus = isDraft
       ? "pending"
-      : session.role === "customer"
+      : session.role === "customer" || session.role === "counter"
         ? "processing"
         : "pending";
     const ins = await client.query(

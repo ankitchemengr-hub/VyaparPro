@@ -132,6 +132,14 @@ export default function Catalog() {
   // through to billing.tsx (for salesman/store, who redirect there) via the
   // invoiceType param.
   const showInvoiceTypeChoice = isWholesaleCustomer || isSalesman || isStore || isCounter;
+  // Customer/counter/salesman checkout only ever places a customer_orders
+  // record (no real stock deduction — see handlePlaceOrder/proceedToOrderWithCustomer
+  // below) so it's fine, and expected, for them to order something that's out
+  // of stock: Manufacturing/Store see it as a backorder and produce/restock
+  // it. Only admin/store redirect straight to billing.tsx, which creates a
+  // real invoice and does deduct real stock immediately, so that path alone
+  // still needs the stock cap.
+  const allowsBackorder = isB2B || isCounter || isSalesman;
   const [invoiceMode, setInvoiceMode] = useState<"gst" | "non_gst">("gst");
   const { toast } = useToast();
   const placeOrder = useCreateCustomerOrder();
@@ -561,7 +569,10 @@ const proceedToOrderWithCustomer = (customer: any) => {
             {products?.map((product) => {
               const inCart = product.id in cart;
               const qty = cart[product.id] ?? 0;
-              const outOfStock = product.currentStock <= 0;
+              const outOfStock = product.currentStock <= 0 && !allowsBackorder;
+              // Backorder-eligible roles can order past actual stock (see
+              // allowsBackorder above) — cap stays real for everyone else.
+              const effectiveMaxStock = allowsBackorder ? Number.MAX_SAFE_INTEGER : product.currentStock;
               return (
                 <Card
                   key={product.id}
@@ -643,7 +654,7 @@ const proceedToOrderWithCustomer = (customer: any) => {
                         <Input
                           type="number"
                           min={1}
-                          max={product.currentStock}
+                          max={effectiveMaxStock}
                           value={qtyDrafts[product.id] ?? (qty > 0 ? qty : "")}
                           placeholder="Qty"
                           className="h-8 w-16 text-sm text-center px-1"
@@ -653,7 +664,7 @@ const proceedToOrderWithCustomer = (customer: any) => {
                             setQtyDrafts((prev) => ({ ...prev, [product.id]: raw }));
                             const val = parseInt(raw, 10);
                             if (!isNaN(val) && val > 0) {
-                              setQty(product.id, val, product.currentStock);
+                              setQty(product.id, val, effectiveMaxStock);
                             }
                           }}
                           onBlur={() =>
@@ -679,8 +690,8 @@ const proceedToOrderWithCustomer = (customer: any) => {
                           size="icon"
                           variant="outline"
                           className="h-8 w-8 shrink-0"
-                          onClick={() => increaseQty(product.id, product.currentStock)}
-                          disabled={outOfStock || qty >= product.currentStock}
+                          onClick={() => increaseQty(product.id, effectiveMaxStock)}
+                          disabled={outOfStock || qty >= effectiveMaxStock}
                           data-testid={`button-qty-plus-${product.id}`}
                         >
                           <Plus className="h-3 w-3" />
@@ -760,14 +771,14 @@ const proceedToOrderWithCustomer = (customer: any) => {
                      <input
                       type="number"
                       min={1}
-                      max={row.product.currentStock}
+                      max={allowsBackorder ? Number.MAX_SAFE_INTEGER : row.product.currentStock}
                       value={qtyDrafts[row.product.id] ?? row.qty}
                       onChange={(e) => {
                       const raw = e.target.value;
                       setQtyDrafts((prev) => ({ ...prev, [row.product.id]: raw }));
                       const val = parseInt(raw, 10);
                       if (!isNaN(val) && val > 0) {
-                      setQty(row.product.id, val, row.product.currentStock);
+                      setQty(row.product.id, val, allowsBackorder ? Number.MAX_SAFE_INTEGER : row.product.currentStock);
                       }
                     }}
                     onBlur={() =>
