@@ -71,6 +71,13 @@ export default function Dashboard() {
       const prev = activeCardByProduct.get(c.productId);
       if (!prev || new Date(c.createdAt) > new Date(prev.createdAt)) activeCardByProduct.set(c.productId, c);
     });
+  // Raw materials (packaging, base oils, etc.) are never sold directly —
+  // notForSale is what actually distinguishes them from a finished product
+  // that also happens to be manufactured in-house (addForManufacturing is
+  // true for both, so it can't be used to split this list).
+  const productLowStockAlerts = (lowStockAlerts ?? []).filter((a: any) => !productById.get(a.id)?.notForSale);
+  const rawMaterialLowStockAlerts = (lowStockAlerts ?? []).filter((a: any) => productById.get(a.id)?.notForSale);
+
   const assembledItems = (lowStockAlerts ?? [])
     .filter((a: any) => productById.get(a.id)?.addForManufacturing)
     .map((a: any) => {
@@ -333,32 +340,57 @@ export default function Dashboard() {
           <CardDescription>Products requiring immediate attention.</CardDescription>
         </CardHeader>
         <CardContent>
-          {lowStockAlerts && lowStockAlerts.length > 0 ? (
-            <div className="space-y-4">
-              {lowStockAlerts.slice(0, 8).map(alert => (
-                <div key={alert.id} className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium leading-none">{alert.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Min: {alert.minStockThreshold} {alert.unit}
-                    </p>
-                  </div>
-                  <Badge variant="destructive">
-                    {alert.currentStock} {alert.unit} left
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="h-[200px] flex items-center justify-center text-muted-foreground">
-              <div className="flex flex-col items-center">
-                <PackageOpen className="h-8 w-8 mb-2 opacity-20" />
-                <p>Inventory levels are healthy.</p>
-              </div>
-            </div>
-          )}
+          <Tabs defaultValue="products">
+            <TabsList>
+              <TabsTrigger value="products">
+                Products{productLowStockAlerts.length > 0 ? ` (${productLowStockAlerts.length})` : ""}
+              </TabsTrigger>
+              <TabsTrigger value="raw-material">
+                Raw Material{rawMaterialLowStockAlerts.length > 0 ? ` (${rawMaterialLowStockAlerts.length})` : ""}
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="products">
+              <LowStockAlertList alerts={productLowStockAlerts} />
+            </TabsContent>
+            <TabsContent value="raw-material">
+              <LowStockAlertList alerts={rawMaterialLowStockAlerts} />
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function LowStockAlertList({ alerts }: { alerts: { id: number; name: string; currentStock: number; minStockThreshold: number; unit?: string }[] }) {
+  if (alerts.length === 0) {
+    return (
+      <div className="h-[200px] flex items-center justify-center text-muted-foreground">
+        <div className="flex flex-col items-center">
+          <PackageOpen className="h-8 w-8 mb-2 opacity-20" />
+          <p>Inventory levels are healthy.</p>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-4 pt-4">
+      {alerts.slice(0, 8).map((alert) => (
+        <div key={alert.id} className="flex items-center justify-between">
+          <div className="space-y-1">
+            <p className="text-sm font-medium leading-none">{alert.name}</p>
+            <p className="text-xs text-muted-foreground">
+              Min: {alert.minStockThreshold} {alert.unit}
+            </p>
+          </div>
+          <Badge variant="destructive">
+            {alert.currentStock} {alert.unit} left
+          </Badge>
+        </div>
+      ))}
+      {alerts.length > 8 && (
+        <p className="text-xs text-muted-foreground">+ {alerts.length - 8} more</p>
+      )}
     </div>
   );
 }
