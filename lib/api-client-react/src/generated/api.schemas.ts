@@ -2010,6 +2010,57 @@ export interface WorkloadCardUpdate {
   targetQty?: number;
 }
 
+export interface SmartOrderSettings {
+  /** % of profit margin earned in the lookback window that gets converted into extra reorder qty for that product, on top of the plain velocity-based suggestion. */
+  reinvestPct: number;
+  /** Target days of stock to maintain — drives the velocity-based reorder qty. */
+  coverageDays: number;
+  /** Sales/consumption history window used to compute how fast each item moves. */
+  lookbackDays: number;
+}
+
+export interface SmartOrderSettingsInput {
+  reinvestPct?: number;
+  coverageDays?: number;
+  lookbackDays?: number;
+}
+
+/**
+ * 'product': sold directly, velocity from invoice sales. 'raw_material': not sold, velocity from Manufacturing consumption.
+ */
+export type SmartOrderSuggestionCategory = typeof SmartOrderSuggestionCategory[keyof typeof SmartOrderSuggestionCategory];
+
+
+export const SmartOrderSuggestionCategory = {
+  product: 'product',
+  raw_material: 'raw_material',
+} as const;
+
+export interface SmartOrderSuggestion {
+  productId: number;
+  productName: string;
+  /** @nullable */
+  itemCode?: string | null;
+  /** @nullable */
+  imageUrl?: string | null;
+  unit: string;
+  /** 'product': sold directly, velocity from invoice sales. 'raw_material': not sold, velocity from Manufacturing consumption. */
+  category: SmartOrderSuggestionCategory;
+  currentStock: number;
+  /** Total qty sold (product) or consumed in Manufacturing (raw_material) within the lookback window. */
+  unitsMoved: number;
+  avgDailyRate: number;
+  purchasePrice: number;
+  /** Profit earned on units sold in the window, from each invoice line's snapshot cost price. Always 0 for raw_material. */
+  totalMargin: number;
+  /** Reorder qty to reach the coverage-days target based on sale/consumption pace. */
+  velocityQty: number;
+  /** Extra qty affordable from the reinvestment budget (totalMargin × reinvestPct). Always 0 for raw_material. */
+  reinvestQty: number;
+  /** velocityQty + reinvestQty, rounded — what Smart Order recommends ordering. */
+  suggestedQty: number;
+}
+
 export interface MaterialTransferSummary {
   id: number;
   transferNo: string;

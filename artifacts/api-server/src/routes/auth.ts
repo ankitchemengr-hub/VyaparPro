@@ -13,6 +13,7 @@ import {
 import { getCompanyId, handleTenantError } from "../lib/tenant";
 import { isAccountAllowedHere, getDefaultCompanyId } from "../lib/system-config";
 import { getCurrentCompany } from "../lib/company";
+import { verifyPassword } from "../lib/password";
 
 const router: IRouter = Router();
 
@@ -27,11 +28,6 @@ router.use("/auth", (_req, res, next) => {
   res.set("Expires", "0");
   next();
 });
-
-// Simple password check (in prod use bcrypt - spec says admin123, pass123)
-function checkPassword(plain: string, hash: string): boolean {
-  return plain === hash;
-}
 
 // ---------------------------------------------------------------------------
 // Login audit helpers
@@ -123,7 +119,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     user = found;
   }
 
-  if (!user || !checkPassword(password, user.passwordHash)) {
+  if (!user || !verifyPassword(password, user.passwordHash)) {
     res.status(401).json({ error: "Invalid credentials" });
     await writeLoginAudit({ username, companyId: auditCompanyId, ipAddress: ip, success: false, reason: "wrong_password" });
     return;

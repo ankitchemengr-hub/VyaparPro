@@ -147,6 +147,9 @@ import type {
   SalesTrendPoint,
   SearchResults,
   SetActiveCompanyInput,
+  SmartOrderSettings,
+  SmartOrderSettingsInput,
+  SmartOrderSuggestion,
   StockMovement,
   StockMovementInput,
   SubscriptionAlert,
@@ -7172,6 +7175,231 @@ export const useUpdateWorkloadCard = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getUpdateWorkloadCardMutationOptions(options));
     }
+
+export const getGetSmartOrderSettingsUrl = () => {
+
+
+
+
+  return `/api/smart-order/settings`
+}
+
+/**
+ * @summary Get Smart Order tuning settings (reinvest %, coverage/lookback days)
+ */
+export const getSmartOrderSettings = async ( options?: RequestInit): Promise<SmartOrderSettings> => {
+
+  return customFetch<SmartOrderSettings>(getGetSmartOrderSettingsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSmartOrderSettingsQueryKey = () => {
+    return [
+    `/api/smart-order/settings`
+    ] as const;
+    }
+
+
+export const getGetSmartOrderSettingsQueryOptions = <TData = Awaited<ReturnType<typeof getSmartOrderSettings>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSmartOrderSettings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSmartOrderSettingsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSmartOrderSettings>>> = ({ signal }) => getSmartOrderSettings({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSmartOrderSettings>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSmartOrderSettingsQueryResult = NonNullable<Awaited<ReturnType<typeof getSmartOrderSettings>>>
+export type GetSmartOrderSettingsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get Smart Order tuning settings (reinvest %, coverage/lookback days)
+ */
+
+export function useGetSmartOrderSettings<TData = Awaited<ReturnType<typeof getSmartOrderSettings>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSmartOrderSettings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSmartOrderSettingsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateSmartOrderSettingsUrl = () => {
+
+
+
+
+  return `/api/smart-order/settings`
+}
+
+/**
+ * @summary Update Smart Order tuning settings (admin only)
+ */
+export const updateSmartOrderSettings = async (smartOrderSettingsInput: SmartOrderSettingsInput, options?: RequestInit): Promise<SmartOrderSettings> => {
+
+  return customFetch<SmartOrderSettings>(getUpdateSmartOrderSettingsUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(smartOrderSettingsInput)
+  }
+);}
+
+
+
+
+export const getUpdateSmartOrderSettingsMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSmartOrderSettings>>, TError,{data: BodyType<SmartOrderSettingsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateSmartOrderSettings>>, TError,{data: BodyType<SmartOrderSettingsInput>}, TContext> => {
+
+const mutationKey = ['updateSmartOrderSettings'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateSmartOrderSettings>>, {data: BodyType<SmartOrderSettingsInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateSmartOrderSettings(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateSmartOrderSettingsMutationResult = NonNullable<Awaited<ReturnType<typeof updateSmartOrderSettings>>>
+    export type UpdateSmartOrderSettingsMutationBody = BodyType<SmartOrderSettingsInput>
+    export type UpdateSmartOrderSettingsMutationError = ErrorType<void>
+
+    /**
+ * @summary Update Smart Order tuning settings (admin only)
+ */
+export const useUpdateSmartOrderSettings = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSmartOrderSettings>>, TError,{data: BodyType<SmartOrderSettingsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateSmartOrderSettings>>,
+        TError,
+        {data: BodyType<SmartOrderSettingsInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateSmartOrderSettingsMutationOptions(options));
+    }
+
+export const getListSmartOrderSuggestionsUrl = () => {
+
+
+
+
+  return `/api/smart-order/suggestions`
+}
+
+/**
+ * Ranks products by sales velocity (finished goods, from invoice history) or consumption velocity (raw materials, from Manufacturing stock movements), and suggests how much to reorder — a velocity-based coverage quantity plus an optional reinvestment boost computed from the profit margin actually earned on units sold.
+ * @summary Fast-moving finished products and raw materials, with a suggested reorder qty
+ */
+export const listSmartOrderSuggestions = async ( options?: RequestInit): Promise<SmartOrderSuggestion[]> => {
+
+  return customFetch<SmartOrderSuggestion[]>(getListSmartOrderSuggestionsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListSmartOrderSuggestionsQueryKey = () => {
+    return [
+    `/api/smart-order/suggestions`
+    ] as const;
+    }
+
+
+export const getListSmartOrderSuggestionsQueryOptions = <TData = Awaited<ReturnType<typeof listSmartOrderSuggestions>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSmartOrderSuggestions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListSmartOrderSuggestionsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listSmartOrderSuggestions>>> = ({ signal }) => listSmartOrderSuggestions({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listSmartOrderSuggestions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListSmartOrderSuggestionsQueryResult = NonNullable<Awaited<ReturnType<typeof listSmartOrderSuggestions>>>
+export type ListSmartOrderSuggestionsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Fast-moving finished products and raw materials, with a suggested reorder qty
+ */
+
+export function useListSmartOrderSuggestions<TData = Awaited<ReturnType<typeof listSmartOrderSuggestions>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSmartOrderSuggestions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListSmartOrderSuggestionsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getListMaterialTransfersUrl = () => {
 

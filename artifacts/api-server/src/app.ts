@@ -8,7 +8,15 @@ import router from "./routes";
 import { logger } from "./lib/logger";
 import { handleTenantError } from "./lib/tenant";
 
-const SESSION_SECRET = process.env.SESSION_SECRET ?? "shradha-oil-dev-secret";
+// No fallback: a hardcoded default would be visible in this source file, so
+// anyone reading it could forge a validly-signed session cookie for any user
+// (including super_admin) against a deployment that forgot to set this.
+const SESSION_SECRET = process.env.SESSION_SECRET;
+if (!SESSION_SECRET) {
+  throw new Error(
+    "SESSION_SECRET environment variable is required but was not provided.",
+  );
+}
 
 const app: Express = express();
 

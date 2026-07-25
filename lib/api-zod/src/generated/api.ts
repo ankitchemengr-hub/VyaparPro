@@ -2755,6 +2755,55 @@ export const UpdateWorkloadCardResponse = zod.object({
 
 
 /**
+ * @summary Get Smart Order tuning settings (reinvest %, coverage/lookback days)
+ */
+export const GetSmartOrderSettingsResponse = zod.object({
+  "reinvestPct": zod.number().describe('% of profit margin earned in the lookback window that gets converted into extra reorder qty for that product, on top of the plain velocity-based suggestion.'),
+  "coverageDays": zod.number().describe('Target days of stock to maintain — drives the velocity-based reorder qty.'),
+  "lookbackDays": zod.number().describe('Sales\/consumption history window used to compute how fast each item moves.')
+})
+
+
+/**
+ * @summary Update Smart Order tuning settings (admin only)
+ */
+export const UpdateSmartOrderSettingsBody = zod.object({
+  "reinvestPct": zod.number().optional(),
+  "coverageDays": zod.number().optional(),
+  "lookbackDays": zod.number().optional()
+})
+
+export const UpdateSmartOrderSettingsResponse = zod.object({
+  "reinvestPct": zod.number().describe('% of profit margin earned in the lookback window that gets converted into extra reorder qty for that product, on top of the plain velocity-based suggestion.'),
+  "coverageDays": zod.number().describe('Target days of stock to maintain — drives the velocity-based reorder qty.'),
+  "lookbackDays": zod.number().describe('Sales\/consumption history window used to compute how fast each item moves.')
+})
+
+
+/**
+ * Ranks products by sales velocity (finished goods, from invoice history) or consumption velocity (raw materials, from Manufacturing stock movements), and suggests how much to reorder — a velocity-based coverage quantity plus an optional reinvestment boost computed from the profit margin actually earned on units sold.
+ * @summary Fast-moving finished products and raw materials, with a suggested reorder qty
+ */
+export const ListSmartOrderSuggestionsResponseItem = zod.object({
+  "productId": zod.number(),
+  "productName": zod.string(),
+  "itemCode": zod.string().nullish(),
+  "imageUrl": zod.string().nullish(),
+  "unit": zod.string(),
+  "category": zod.enum(['product', 'raw_material']).describe('\'product\': sold directly, velocity from invoice sales. \'raw_material\': not sold, velocity from Manufacturing consumption.'),
+  "currentStock": zod.number(),
+  "unitsMoved": zod.number().describe('Total qty sold (product) or consumed in Manufacturing (raw_material) within the lookback window.'),
+  "avgDailyRate": zod.number(),
+  "purchasePrice": zod.number(),
+  "totalMargin": zod.number().describe('Profit earned on units sold in the window, from each invoice line\'s snapshot cost price. Always 0 for raw_material.'),
+  "velocityQty": zod.number().describe('Reorder qty to reach the coverage-days target based on sale\/consumption pace.'),
+  "reinvestQty": zod.number().describe('Extra qty affordable from the reinvestment budget (totalMargin × reinvestPct). Always 0 for raw_material.'),
+  "suggestedQty": zod.number().describe('velocityQty + reinvestQty, rounded — what Smart Order recommends ordering.')
+})
+export const ListSmartOrderSuggestionsResponse = zod.array(ListSmartOrderSuggestionsResponseItem)
+
+
+/**
  * @summary List material transfer slips (Store <-> Manufacturing), most recent first
  */
 export const ListMaterialTransfersResponseItem = zod.object({

@@ -7,6 +7,7 @@ import {
   UpdateSubscriptionBody,
 } from "@workspace/api-zod";
 import { COMPANY_TABLES } from "../lib/company-data";
+import { hashPassword } from "../lib/password";
 
 const router: IRouter = Router();
 
@@ -295,7 +296,7 @@ router.post("/subscriptions/create", async (req, res): Promise<void> => {
       await client.query(
         `INSERT INTO users (username, password_hash, role, name, is_active, company_id)
          VALUES ($1, $2, 'admin', $3, true, $4)`,
-        [adminUsername, adminPassword, body.ownerName?.trim() || `${body.companyName} Admin`, companyId]
+        [adminUsername, hashPassword(adminPassword), body.ownerName?.trim() || `${body.companyName} Admin`, companyId]
       );
     }
 

@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import pg from "pg";
 import { logger } from "./logger";
+import { hashPassword, isHashed } from "./password";
 
 const SCHEMA_FILE_NAME = "production-schema.sql";
 const SEED_FILE_NAME = "production-seed-data.sql";
@@ -291,6 +292,13 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
     )`,
     `CREATE INDEX IF NOT EXISTS ready_material_batches_company_idx ON ready_material_batches(company_id)`,
     `CREATE INDEX IF NOT EXISTS ready_material_batches_status_idx ON ready_material_batches(status)`,
+
+    // ── Number series: display format template (e.g. "INV/YYYY/MM/SEQ") ───
+    // Missing on installs older than this column — without it, the very
+    // first use of any brand-new series type (a new company's first
+    // invoice, or first use of a document type like purchase orders) fails
+    // with "column format_string does not exist".
+    `ALTER TABLE number_series ADD COLUMN IF NOT EXISTS format_string TEXT`,
   ];
 
   for (const sql of patches) {
@@ -329,7 +337,7 @@ async function ensureDefaultAdmin(client: pg.Client): Promise<void> {
      RETURNING id, role;`,
     [
       DEFAULT_ADMIN.username,
-      DEFAULT_ADMIN.passwordHash,
+      hashPassword(DEFAULT_ADMIN.passwordHash),
       DEFAULT_ADMIN.role,
       DEFAULT_ADMIN.name,
     ],
@@ -341,6 +349,30 @@ async function ensureDefaultAdmin(client: pg.Client): Promise<void> {
       { username: DEFAULT_ADMIN.username, role: row.role },
       "Default super_admin user ensured",
     );
+  }
+}
+
+/**
+ * One-time (but safe to re-run) migration: any user row still holding a raw
+ * plaintext password — from before hashing was added, or from the seed data
+ * — gets rewritten to a scrypt hash. isHashed() makes this a no-op for rows
+ * already migrated, so it's cheap to run on every restart.
+ */
+async function hashPlaintextPasswords(client: pg.Client): Promise<void> {
+  const { rows } = await client.query<{ id: number; password_hash: string }>(
+    `SELECT id, password_hash FROM users`,
+  );
+  let migrated = 0;
+  for (const row of rows) {
+    if (isHashed(row.password_hash)) continue;
+    await client.query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [
+      hashPassword(row.password_hash),
+      row.id,
+    ]);
+    migrated++;
+  }
+  if (migrated > 0) {
+    logger.info({ migrated }, "Migrated plaintext passwords to scrypt hashes");
   }
 }
 
@@ -373,6 +405,7 @@ export async function ensureDatabaseReady(): Promise<void> {
     await seedBusinessDataIfEmpty(client);
     await applySchemaPatches(client);
     await ensureDefaultAdmin(client);
+    await hashPlaintextPasswords(client);
   } catch (err) {
     logger.error({ err }, "Database bootstrap failed");
   } finally {

@@ -6,6 +6,7 @@ import {
   UpdateUserBody,
 } from "@workspace/api-zod";
 import { getCompanyId } from "../lib/tenant";
+import { hashPassword } from "../lib/password";
 
 const router: IRouter = Router();
 
@@ -151,7 +152,7 @@ router.post("/users", requireAdmin, async (req, res): Promise<void> => {
       .values({
         companyId,
         username,
-        passwordHash: password, // dev mode — plaintext per replit.md
+        passwordHash: hashPassword(password),
         name: resolvedName,
         role,
         entityId: entityId ?? null,
@@ -236,7 +237,7 @@ router.patch("/users/:id", requireAdmin, async (req, res): Promise<void> => {
   if (parsed.data.entityId !== undefined) patch.entityId = parsed.data.entityId;
   if (parsed.data.pricingTier !== undefined) patch.pricingTier = parsed.data.pricingTier;
   if (parsed.data.password !== undefined && parsed.data.password.length > 0) {
-    patch.passwordHash = parsed.data.password;
+    patch.passwordHash = hashPassword(parsed.data.password);
   }
 
   const [updated] = await db

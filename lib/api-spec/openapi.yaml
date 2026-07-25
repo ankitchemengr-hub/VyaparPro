@@ -1960,6 +1960,59 @@ paths:
               schema:
                 $ref: "#/components/schemas/WorkloadCard"
 
+  /smart-order/settings:
+    get:
+      operationId: getSmartOrderSettings
+      tags: [smart-order]
+      summary: Get Smart Order tuning settings (reinvest %, coverage/lookback days)
+      responses:
+        "200":
+          description: Settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SmartOrderSettings"
+    put:
+      operationId: updateSmartOrderSettings
+      tags: [smart-order]
+      summary: Update Smart Order tuning settings (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SmartOrderSettingsInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SmartOrderSettings"
+        "403":
+          description: Admin only
+
+  /smart-order/suggestions:
+    get:
+      operationId: listSmartOrderSuggestions
+      tags: [smart-order]
+      summary: Fast-moving finished products and raw materials, with a suggested reorder qty
+      description: >
+        Ranks products by sales velocity (finished goods, from invoice history)
+        or consumption velocity (raw materials, from Manufacturing stock
+        movements), and suggests how much to reorder — a velocity-based
+        coverage quantity plus an optional reinvestment boost computed from
+        the profit margin actually earned on units sold.
+      responses:
+        "200":
+          description: Suggestions, sorted by suggested qty descending
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SmartOrderSuggestion"
+
   /material-transfers:
     get:
       operationId: listMaterialTransfers
@@ -5202,6 +5255,70 @@ components:
             'done' — overrides the card's original targetQty so the worker can
             confirm what actually came off the line. Must be > 0.
           minimum: 0.001
+
+    SmartOrderSettings:
+      type: object
+      required: [reinvestPct, coverageDays, lookbackDays]
+      properties:
+        reinvestPct:
+          type: number
+          description: "% of profit margin earned in the lookback window that gets converted into extra reorder qty for that product, on top of the plain velocity-based suggestion."
+        coverageDays:
+          type: number
+          description: Target days of stock to maintain — drives the velocity-based reorder qty.
+        lookbackDays:
+          type: number
+          description: Sales/consumption history window used to compute how fast each item moves.
+
+    SmartOrderSettingsInput:
+      type: object
+      properties:
+        reinvestPct:
+          type: number
+        coverageDays:
+          type: number
+        lookbackDays:
+          type: number
+
+    SmartOrderSuggestion:
+      type: object
+      required: [productId, productName, unit, category, currentStock, unitsMoved, avgDailyRate, purchasePrice, totalMargin, velocityQty, reinvestQty, suggestedQty]
+      properties:
+        productId:
+          type: integer
+        productName:
+          type: string
+        itemCode:
+          type: ["string", "null"]
+        imageUrl:
+          type: ["string", "null"]
+        unit:
+          type: string
+        category:
+          type: string
+          enum: [product, raw_material]
+          description: "'product': sold directly, velocity from invoice sales. 'raw_material': not sold, velocity from Manufacturing consumption."
+        currentStock:
+          type: number
+        unitsMoved:
+          type: number
+          description: Total qty sold (product) or consumed in Manufacturing (raw_material) within the lookback window.
+        avgDailyRate:
+          type: number
+        purchasePrice:
+          type: number
+        totalMargin:
+          type: number
+          description: Profit earned on units sold in the window, from each invoice line's snapshot cost price. Always 0 for raw_material.
+        velocityQty:
+          type: number
+          description: Reorder qty to reach the coverage-days target based on sale/consumption pace.
+        reinvestQty:
+          type: number
+          description: Extra qty affordable from the reinvestment budget (totalMargin × reinvestPct). Always 0 for raw_material.
+        suggestedQty:
+          type: integer
+          description: velocityQty + reinvestQty, rounded — what Smart Order recommends ordering.
 
     MaterialTransferSummary:
       type: object
