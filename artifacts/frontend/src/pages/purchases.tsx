@@ -387,7 +387,8 @@ function NewPurchaseTab() {
     });
     const fr = Number(freight) || 0;
     const grand = subtotal + totalTax + fr;
-    return { subtotal, totalTax, totalDiscount, freight: fr, grand };
+    const roundOff = Math.round(grand) - grand;
+    return { subtotal, totalTax, totalDiscount, freight: fr, grand, roundOff, finalTotal: Math.round(grand) };
   }, [lines, freight, isGst]);
 
   const updateLine = (i: number, patch: Partial<Line>) => {
@@ -431,6 +432,7 @@ function NewPurchaseTab() {
           placeOfSupply,
           notes: notes || undefined,
           freight: Number(freight) || 0,
+          roundOff: totals.roundOff,
           items: lines.map((l) => ({
             productId: l.productId!,
             qty: Number(l.qty),
@@ -594,10 +596,16 @@ function NewPurchaseTab() {
                 <span className="tabular-nums">₹{totals.freight.toFixed(2)}</span>
               </div>
             )}
+            {Math.abs(totals.roundOff) > 0.001 && (
+              <div className="flex gap-1.5">
+                <span className="text-muted-foreground">Round Off:</span>
+                <span className="tabular-nums">{totals.roundOff > 0 ? "+" : ""}₹{totals.roundOff.toFixed(2)}</span>
+              </div>
+            )}
             <div className="w-full sm:w-auto sm:ml-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4">
               <div className="text-center sm:text-left">
                 <span className="text-muted-foreground mr-1.5">Grand Total:</span>
-                <span className="text-xl font-bold tabular-nums" data-testid="text-grand-total">₹{totals.grand.toFixed(2)}</span>
+                <span className="text-xl font-bold tabular-nums" data-testid="text-grand-total">₹{totals.finalTotal.toFixed(2)}</span>
               </div>
               <Button
                 disabled={!valid || submitting}
@@ -1603,7 +1611,9 @@ function EditPurchaseDialog({
       totalTax += tax;
     }
     const fr = Number(freight) || 0;
-    return { subtotal, totalDiscount, totalTax, freight: fr, grand: subtotal + totalTax + fr };
+    const grand = subtotal + totalTax + fr;
+    const roundOff = Math.round(grand) - grand;
+    return { subtotal, totalDiscount, totalTax, freight: fr, grand, roundOff, finalTotal: Math.round(grand) };
   }, [lines, isGst, freight]);
 
   const updateLine = (i: number, patch: Partial<Line>) =>
@@ -1638,6 +1648,7 @@ function EditPurchaseDialog({
           placeOfSupply,
           notes: notes || undefined,
           freight: Number(freight) || 0,
+          roundOff: totals.roundOff,
           items: lines.map((l) => ({
             productId: l.productId!,
             qty: Number(l.qty),
@@ -1757,9 +1768,10 @@ function EditPurchaseDialog({
                   : <><div className="flex gap-1.5"><span className="text-muted-foreground">CGST:</span><span className="tabular-nums">₹{(totals.totalTax/2).toFixed(2)}</span></div><div className="flex gap-1.5"><span className="text-muted-foreground">SGST:</span><span className="tabular-nums">₹{(totals.totalTax/2).toFixed(2)}</span></div></>
               )}
               {totals.freight > 0 && <div className="flex gap-1.5"><span className="text-muted-foreground">Freight:</span><span className="tabular-nums">₹{totals.freight.toFixed(2)}</span></div>}
+              {Math.abs(totals.roundOff) > 0.001 && <div className="flex gap-1.5"><span className="text-muted-foreground">Round Off:</span><span className="tabular-nums">{totals.roundOff > 0 ? "+" : ""}₹{totals.roundOff.toFixed(2)}</span></div>}
               <div className="ml-auto flex items-center gap-2">
                 <span className="text-muted-foreground">Grand Total:</span>
-                <span className="text-xl font-bold tabular-nums">₹{totals.grand.toFixed(2)}</span>
+                <span className="text-xl font-bold tabular-nums">₹{totals.finalTotal.toFixed(2)}</span>
               </div>
             </div>
           </div>

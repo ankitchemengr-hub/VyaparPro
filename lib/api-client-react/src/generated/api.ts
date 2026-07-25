@@ -25,6 +25,7 @@ import type {
   AccountTransaction,
   AccountTransactionInput,
   ActiveCompany,
+  AdjustReadyMaterialBatchInput,
   AppSettings,
   AppSettingsUpdate,
   ApplyPriceRecalculation200,
@@ -60,6 +61,7 @@ import type {
   CustomerWiseSalesReport,
   DashboardSummary,
   DeleteSubscriptionResult,
+  DispatchReadyMaterialBatchInput,
   Entity,
   EntityInput,
   EntityLedger,
@@ -99,6 +101,7 @@ import type {
   ListPaymentsParams,
   ListProductsParams,
   ListPurchasesParams,
+  ListReadyMaterialBatchesParams,
   ListRewardProgressParams,
   ListSalesReturnsParams,
   ListSubscriptionsParams,
@@ -126,6 +129,7 @@ import type {
   ProductionReport,
   ProfitLossReport,
   Purchase,
+  ReadyMaterialBatch,
   ResetDataInput,
   ResetResult,
   RestoreBackupInput,
@@ -6870,6 +6874,232 @@ export const useAssembleItem = <TError = ErrorType<void | AssembleItem409>,
         TContext
       > => {
       return useMutation(getAssembleItemMutationOptions(options));
+    }
+
+export const getListReadyMaterialBatchesUrl = (params?: ListReadyMaterialBatchesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/manufacturing/ready-batches?${stringifiedParams}` : `/api/manufacturing/ready-batches`
+}
+
+/**
+ * @summary List assembled batches staged for dispatch to Store
+ */
+export const listReadyMaterialBatches = async (params?: ListReadyMaterialBatchesParams, options?: RequestInit): Promise<ReadyMaterialBatch[]> => {
+
+  return customFetch<ReadyMaterialBatch[]>(getListReadyMaterialBatchesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListReadyMaterialBatchesQueryKey = (params?: ListReadyMaterialBatchesParams,) => {
+    return [
+    `/api/manufacturing/ready-batches`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListReadyMaterialBatchesQueryOptions = <TData = Awaited<ReturnType<typeof listReadyMaterialBatches>>, TError = ErrorType<unknown>>(params?: ListReadyMaterialBatchesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listReadyMaterialBatches>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListReadyMaterialBatchesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listReadyMaterialBatches>>> = ({ signal }) => listReadyMaterialBatches(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listReadyMaterialBatches>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListReadyMaterialBatchesQueryResult = NonNullable<Awaited<ReturnType<typeof listReadyMaterialBatches>>>
+export type ListReadyMaterialBatchesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List assembled batches staged for dispatch to Store
+ */
+
+export function useListReadyMaterialBatches<TData = Awaited<ReturnType<typeof listReadyMaterialBatches>>, TError = ErrorType<unknown>>(
+ params?: ListReadyMaterialBatchesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listReadyMaterialBatches>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListReadyMaterialBatchesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAdjustReadyMaterialBatchUrl = (id: number,) => {
+
+
+
+
+  return `/api/manufacturing/ready-batches/${id}`
+}
+
+/**
+ * @summary Admin-only correction of a mis-entered ready batch qty (before dispatch)
+ */
+export const adjustReadyMaterialBatch = async (id: number,
+    adjustReadyMaterialBatchInput: AdjustReadyMaterialBatchInput, options?: RequestInit): Promise<ReadyMaterialBatch> => {
+
+  return customFetch<ReadyMaterialBatch>(getAdjustReadyMaterialBatchUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(adjustReadyMaterialBatchInput)
+  }
+);}
+
+
+
+
+export const getAdjustReadyMaterialBatchMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adjustReadyMaterialBatch>>, TError,{id: number;data: BodyType<AdjustReadyMaterialBatchInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adjustReadyMaterialBatch>>, TError,{id: number;data: BodyType<AdjustReadyMaterialBatchInput>}, TContext> => {
+
+const mutationKey = ['adjustReadyMaterialBatch'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adjustReadyMaterialBatch>>, {id: number;data: BodyType<AdjustReadyMaterialBatchInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  adjustReadyMaterialBatch(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdjustReadyMaterialBatchMutationResult = NonNullable<Awaited<ReturnType<typeof adjustReadyMaterialBatch>>>
+    export type AdjustReadyMaterialBatchMutationBody = BodyType<AdjustReadyMaterialBatchInput>
+    export type AdjustReadyMaterialBatchMutationError = ErrorType<void>
+
+    /**
+ * @summary Admin-only correction of a mis-entered ready batch qty (before dispatch)
+ */
+export const useAdjustReadyMaterialBatch = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adjustReadyMaterialBatch>>, TError,{id: number;data: BodyType<AdjustReadyMaterialBatchInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof adjustReadyMaterialBatch>>,
+        TError,
+        {id: number;data: BodyType<AdjustReadyMaterialBatchInput>},
+        TContext
+      > => {
+      return useMutation(getAdjustReadyMaterialBatchMutationOptions(options));
+    }
+
+export const getDispatchReadyMaterialBatchUrl = (id: number,) => {
+
+
+
+
+  return `/api/manufacturing/ready-batches/${id}/dispatch`
+}
+
+/**
+ * @summary Send a ready batch to Store — credits finished-good stock and logs a Material Transfer slip
+ */
+export const dispatchReadyMaterialBatch = async (id: number,
+    dispatchReadyMaterialBatchInput?: DispatchReadyMaterialBatchInput, options?: RequestInit): Promise<ReadyMaterialBatch> => {
+
+  return customFetch<ReadyMaterialBatch>(getDispatchReadyMaterialBatchUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(dispatchReadyMaterialBatchInput)
+  }
+);}
+
+
+
+
+export const getDispatchReadyMaterialBatchMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof dispatchReadyMaterialBatch>>, TError,{id: number;data?: BodyType<DispatchReadyMaterialBatchInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof dispatchReadyMaterialBatch>>, TError,{id: number;data?: BodyType<DispatchReadyMaterialBatchInput>}, TContext> => {
+
+const mutationKey = ['dispatchReadyMaterialBatch'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof dispatchReadyMaterialBatch>>, {id: number;data?: BodyType<DispatchReadyMaterialBatchInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  dispatchReadyMaterialBatch(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DispatchReadyMaterialBatchMutationResult = NonNullable<Awaited<ReturnType<typeof dispatchReadyMaterialBatch>>>
+    export type DispatchReadyMaterialBatchMutationBody = BodyType<DispatchReadyMaterialBatchInput> | undefined
+    export type DispatchReadyMaterialBatchMutationError = ErrorType<void>
+
+    /**
+ * @summary Send a ready batch to Store — credits finished-good stock and logs a Material Transfer slip
+ */
+export const useDispatchReadyMaterialBatch = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof dispatchReadyMaterialBatch>>, TError,{id: number;data?: BodyType<DispatchReadyMaterialBatchInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof dispatchReadyMaterialBatch>>,
+        TError,
+        {id: number;data?: BodyType<DispatchReadyMaterialBatchInput>},
+        TContext
+      > => {
+      return useMutation(getDispatchReadyMaterialBatchMutationOptions(options));
     }
 
 export const getUpdateWorkloadCardUrl = (id: number,) => {

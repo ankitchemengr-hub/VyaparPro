@@ -30,6 +30,7 @@ export interface ProductInput {
   nonGstPrice?: number;
   litersPerBox?: number;
   unitsPerBox?: number;
+  packagingUnit?: string;
   notForSale?: boolean;
   addForManufacturing?: boolean;
   minStockThreshold?: number;

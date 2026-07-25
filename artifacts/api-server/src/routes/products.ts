@@ -794,6 +794,7 @@ function formatProduct(p: any) {
     volumeUnit: (p as any).volumeUnit ?? "liter",
     litersPerBox: p.litersPerBox != null ? Number(p.litersPerBox) : null,
     unitsPerBox: p.unitsPerBox != null ? Number(p.unitsPerBox) : null,
+    packagingUnit: p.packagingUnit ?? "Box",
     notForSale: p.notForSale,
     addForManufacturing: p.addForManufacturing,
     minStockThreshold: p.minStockThreshold != null ? Number(p.minStockThreshold) : null,

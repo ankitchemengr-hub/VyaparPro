@@ -25,6 +25,7 @@ export interface ProductUpdate {
   taxRate?: number;
   litersPerBox?: number;
   unitsPerBox?: number;
+  packagingUnit?: string;
   notForSale?: boolean;
   addForManufacturing?: boolean;
   minStockThreshold?: number;

@@ -306,12 +306,15 @@ export default function Dashboard() {
           ) : (
             <div className="divide-y rounded-lg border overflow-hidden">
               {assembledItems.slice(0, 10).map((c) => (
-                <div key={c.id} className="flex items-center justify-between px-3 py-2.5 bg-card hover:bg-muted/40">
-                  <div className="flex items-center gap-2">
+                <div
+                  key={c.id}
+                  className="flex flex-col gap-1.5 px-3 py-2.5 bg-card hover:bg-muted/40 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
                     <PackageOpen className="w-4 h-4 text-amber-500 shrink-0" />
-                    <span className="text-sm font-medium">{c.productName}</span>
+                    <span className="text-sm font-medium truncate">{c.productName}</span>
                   </div>
-                  <div className="flex items-center gap-3 ml-4 shrink-0">
+                  <div className="flex items-center gap-2 pl-6 shrink-0 sm:pl-0">
                     <Badge
                       variant={c.status === "processing" ? "default" : "secondary"}
                       className="text-xs capitalize"

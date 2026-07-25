@@ -553,6 +553,7 @@ export const ListProductsResponseItem = zod.object({
   "nonGstPrice": zod.number().nullish(),
   "litersPerBox": zod.number().nullish(),
   "unitsPerBox": zod.number().nullish(),
+  "packagingUnit": zod.string().optional().describe('Name of the outer packaging this product ships in (e.g. Box, Barrel, Drum, Carton) — shown as \"1 <packagingUnit> = N <unit>\" and on invoice qty-in-packaging displays.'),
   "notForSale": zod.boolean(),
   "addForManufacturing": zod.boolean(),
   "minStockThreshold": zod.number().nullish(),
@@ -588,6 +589,7 @@ export const CreateProductBody = zod.object({
   "nonGstPrice": zod.number().optional(),
   "litersPerBox": zod.number().optional(),
   "unitsPerBox": zod.number().optional(),
+  "packagingUnit": zod.string().optional(),
   "notForSale": zod.boolean().optional(),
   "addForManufacturing": zod.boolean().optional(),
   "minStockThreshold": zod.number().optional(),
@@ -619,6 +621,7 @@ export const CreateProductResponse = zod.object({
   "nonGstPrice": zod.number().nullish(),
   "litersPerBox": zod.number().nullish(),
   "unitsPerBox": zod.number().nullish(),
+  "packagingUnit": zod.string().optional().describe('Name of the outer packaging this product ships in (e.g. Box, Barrel, Drum, Carton) — shown as \"1 <packagingUnit> = N <unit>\" and on invoice qty-in-packaging displays.'),
   "notForSale": zod.boolean(),
   "addForManufacturing": zod.boolean(),
   "minStockThreshold": zod.number().nullish(),
@@ -659,6 +662,7 @@ export const GetProductResponse = zod.object({
   "nonGstPrice": zod.number().nullish(),
   "litersPerBox": zod.number().nullish(),
   "unitsPerBox": zod.number().nullish(),
+  "packagingUnit": zod.string().optional().describe('Name of the outer packaging this product ships in (e.g. Box, Barrel, Drum, Carton) — shown as \"1 <packagingUnit> = N <unit>\" and on invoice qty-in-packaging displays.'),
   "notForSale": zod.boolean(),
   "addForManufacturing": zod.boolean(),
   "minStockThreshold": zod.number().nullish(),
@@ -693,6 +697,7 @@ export const UpdateProductBody = zod.object({
   "taxRate": zod.number().optional(),
   "litersPerBox": zod.number().optional(),
   "unitsPerBox": zod.number().optional(),
+  "packagingUnit": zod.string().optional(),
   "notForSale": zod.boolean().optional(),
   "addForManufacturing": zod.boolean().optional(),
   "minStockThreshold": zod.number().optional(),
@@ -726,6 +731,7 @@ export const UpdateProductResponse = zod.object({
   "nonGstPrice": zod.number().nullish(),
   "litersPerBox": zod.number().nullish(),
   "unitsPerBox": zod.number().nullish(),
+  "packagingUnit": zod.string().optional().describe('Name of the outer packaging this product ships in (e.g. Box, Barrel, Drum, Carton) — shown as \"1 <packagingUnit> = N <unit>\" and on invoice qty-in-packaging displays.'),
   "notForSale": zod.boolean(),
   "addForManufacturing": zod.boolean(),
   "minStockThreshold": zod.number().nullish(),
@@ -2608,7 +2614,8 @@ export const assembleItemBodyBatchesMin = 0.001;
 
 export const AssembleItemBody = zod.object({
   "bomId": zod.number().describe('BOM (recipe) to execute'),
-  "batches": zod.number().min(assembleItemBodyBatchesMin).describe('Number of recipe batches to assemble (must be > 0)')
+  "batches": zod.number().min(assembleItemBodyBatchesMin).describe('Number of recipe batches to assemble (must be > 0)'),
+  "workerId": zod.number().describe('Worker (from Workers master) who assembled this batch — tagged on the resulting Ready Material batch.')
 })
 
 export const AssembleItemResponse = zod.object({
@@ -2624,6 +2631,91 @@ export const AssembleItemResponse = zod.object({
   "referenceOrderId": zod.number().nullish(),
   "startedAt": zod.string().nullish(),
   "completedAt": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary List assembled batches staged for dispatch to Store
+ */
+export const ListReadyMaterialBatchesQueryParams = zod.object({
+  "status": zod.enum(['ready', 'dispatched']).optional()
+})
+
+export const ListReadyMaterialBatchesResponseItem = zod.object({
+  "id": zod.number(),
+  "bomId": zod.number().nullish(),
+  "productId": zod.number(),
+  "productName": zod.string(),
+  "unit": zod.string(),
+  "qty": zod.number(),
+  "batches": zod.number(),
+  "workerId": zod.number().nullish(),
+  "workerName": zod.string(),
+  "status": zod.enum(['ready', 'dispatched']),
+  "adjustmentReason": zod.string().nullish(),
+  "materialTransferId": zod.number().nullish(),
+  "dispatchedAt": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+export const ListReadyMaterialBatchesResponse = zod.array(ListReadyMaterialBatchesResponseItem)
+
+
+/**
+ * @summary Admin-only correction of a mis-entered ready batch qty (before dispatch)
+ */
+export const AdjustReadyMaterialBatchParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const AdjustReadyMaterialBatchBody = zod.object({
+  "qty": zod.number().describe('Corrected ready quantity (must be > 0)'),
+  "reason": zod.string().describe('Why the entry is being corrected')
+})
+
+export const AdjustReadyMaterialBatchResponse = zod.object({
+  "id": zod.number(),
+  "bomId": zod.number().nullish(),
+  "productId": zod.number(),
+  "productName": zod.string(),
+  "unit": zod.string(),
+  "qty": zod.number(),
+  "batches": zod.number(),
+  "workerId": zod.number().nullish(),
+  "workerName": zod.string(),
+  "status": zod.enum(['ready', 'dispatched']),
+  "adjustmentReason": zod.string().nullish(),
+  "materialTransferId": zod.number().nullish(),
+  "dispatchedAt": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Send a ready batch to Store — credits finished-good stock and logs a Material Transfer slip
+ */
+export const DispatchReadyMaterialBatchParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DispatchReadyMaterialBatchBody = zod.object({
+  "notes": zod.string().optional()
+})
+
+export const DispatchReadyMaterialBatchResponse = zod.object({
+  "id": zod.number(),
+  "bomId": zod.number().nullish(),
+  "productId": zod.number(),
+  "productName": zod.string(),
+  "unit": zod.string(),
+  "qty": zod.number(),
+  "batches": zod.number(),
+  "workerId": zod.number().nullish(),
+  "workerName": zod.string(),
+  "status": zod.enum(['ready', 'dispatched']),
+  "adjustmentReason": zod.string().nullish(),
+  "materialTransferId": zod.number().nullish(),
+  "dispatchedAt": zod.string().nullish(),
   "createdAt": zod.string()
 })
 
@@ -3158,6 +3250,7 @@ export const GlobalSearchResponse = zod.object({
   "nonGstPrice": zod.number().nullish(),
   "litersPerBox": zod.number().nullish(),
   "unitsPerBox": zod.number().nullish(),
+  "packagingUnit": zod.string().optional().describe('Name of the outer packaging this product ships in (e.g. Box, Barrel, Drum, Carton) — shown as \"1 <packagingUnit> = N <unit>\" and on invoice qty-in-packaging displays.'),
   "notForSale": zod.boolean(),
   "addForManufacturing": zod.boolean(),
   "minStockThreshold": zod.number().nullish(),

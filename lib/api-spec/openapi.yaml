@@ -1855,6 +1855,86 @@ paths:
                         available: { type: number }
                         unit: { type: string }
 
+  /manufacturing/ready-batches:
+    get:
+      operationId: listReadyMaterialBatches
+      tags: [manufacturing]
+      summary: List assembled batches staged for dispatch to Store
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [ready, dispatched]
+      responses:
+        "200":
+          description: Ready material batches
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReadyMaterialBatch"
+
+  /manufacturing/ready-batches/{id}:
+    patch:
+      operationId: adjustReadyMaterialBatch
+      tags: [manufacturing]
+      summary: Admin-only correction of a mis-entered ready batch qty (before dispatch)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdjustReadyMaterialBatchInput"
+      responses:
+        "200":
+          description: Adjusted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadyMaterialBatch"
+        "403":
+          description: Admin only
+        "404":
+          description: Batch not found
+        "409":
+          description: Batch already dispatched
+
+  /manufacturing/ready-batches/{id}/dispatch:
+    post:
+      operationId: dispatchReadyMaterialBatch
+      tags: [manufacturing]
+      summary: Send a ready batch to Store — credits finished-good stock and logs a Material Transfer slip
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DispatchReadyMaterialBatchInput"
+      responses:
+        "200":
+          description: Dispatched
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadyMaterialBatch"
+        "404":
+          description: Batch not found
+        "409":
+          description: Batch already dispatched
+
   /workload/{id}:
     patch:
       operationId: updateWorkloadCard
@@ -3717,6 +3797,9 @@ components:
           type: ["number", "null"]
         unitsPerBox:
           type: ["number", "null"]
+        packagingUnit:
+          type: string
+          description: Name of the outer packaging this product ships in (e.g. Box, Barrel, Drum, Carton) — shown as "1 <packagingUnit> = N <unit>" and on invoice qty-in-packaging displays.
         notForSale:
           type: boolean
         addForManufacturing:
@@ -3777,6 +3860,8 @@ components:
           type: number
         unitsPerBox:
           type: number
+        packagingUnit:
+          type: string
         notForSale:
           type: boolean
         addForManufacturing:
@@ -3825,6 +3910,8 @@ components:
           type: number
         unitsPerBox:
           type: number
+        packagingUnit:
+          type: string
         notForSale:
           type: boolean
         addForManufacturing:
@@ -5020,7 +5107,7 @@ components:
 
     AssembleItemInput:
       type: object
-      required: [bomId, batches]
+      required: [bomId, batches, workerId]
       properties:
         bomId:
           type: integer
@@ -5029,6 +5116,60 @@ components:
           type: number
           description: Number of recipe batches to assemble (must be > 0)
           minimum: 0.001
+        workerId:
+          type: integer
+          description: Worker (from Workers master) who assembled this batch — tagged on the resulting Ready Material batch.
+
+    ReadyMaterialBatch:
+      type: object
+      required: [id, productId, productName, unit, qty, batches, workerName, status, createdAt]
+      properties:
+        id:
+          type: integer
+        bomId:
+          type: ["integer", "null"]
+        productId:
+          type: integer
+        productName:
+          type: string
+        unit:
+          type: string
+        qty:
+          type: number
+        batches:
+          type: number
+        workerId:
+          type: ["integer", "null"]
+        workerName:
+          type: string
+        status:
+          type: string
+          enum: [ready, dispatched]
+        adjustmentReason:
+          type: ["string", "null"]
+        materialTransferId:
+          type: ["integer", "null"]
+        dispatchedAt:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    AdjustReadyMaterialBatchInput:
+      type: object
+      required: [qty, reason]
+      properties:
+        qty:
+          type: number
+          description: Corrected ready quantity (must be > 0)
+        reason:
+          type: string
+          description: Why the entry is being corrected
+
+    DispatchReadyMaterialBatchInput:
+      type: object
+      properties:
+        notes:
+          type: string
 
     WorkloadCardInput:
       type: object

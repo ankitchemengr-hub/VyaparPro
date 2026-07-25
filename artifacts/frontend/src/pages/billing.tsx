@@ -76,6 +76,7 @@ type BillingItem = {
   discountAmt: number;
   amount: number;
   litersPerBox: number;
+  packagingUnit: string;
 };
 
 function resolvePack(p: any): number {
@@ -214,6 +215,7 @@ export default function Billing() {
         rate: Number(it.rate), mrp: Number(it.mrp), taxPct: Number(it.taxPct),
         discountPct: Number(it.discountPct), discountAmt: Number(it.discountAmt),
         amount: Number(it.amount), litersPerBox: Number(prod?.litersPerBox ?? 0) || 0,
+        packagingUnit: prod?.packagingUnit?.trim() || "Box",
       };
     }));
     setPrefilled(true);
@@ -239,6 +241,7 @@ export default function Billing() {
           discountPct: 0, discountAmt: 0,
           amount: Math.round(amount * 100) / 100,
           litersPerBox: Number((p as any).litersPerBox ?? 0) || 0,
+          packagingUnit: (p as any).packagingUnit?.trim() || "Box",
         } as BillingItem;
       }).filter(Boolean) as BillingItem[];
       setItems(billing);
@@ -317,6 +320,7 @@ export default function Billing() {
         discountPct: 0, discountAmt: 0,
         amount: Math.round(amount * 100) / 100,
         litersPerBox: Number((p as any).litersPerBox ?? 0) || 0,
+        packagingUnit: (p as any).packagingUnit?.trim() || "Box",
       }]);
     }
     setProductSearch("");
@@ -853,7 +857,7 @@ export default function Billing() {
                                 <SelectTrigger className="h-7 w-[58px] px-2 text-xs" data-testid={`select-qty-mode-${idx}`}><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="unit">QTY</SelectItem>
-                                  <SelectItem value="box" disabled={item.unitsPerBox <= 0}>BOX</SelectItem>
+                                  <SelectItem value="box" disabled={item.unitsPerBox <= 0}>{item.packagingUnit.toUpperCase()}</SelectItem>
                                 </SelectContent>
                               </Select>
                             </div>
@@ -926,7 +930,7 @@ export default function Billing() {
                             <SelectTrigger className="h-8 w-[62px] px-2 text-xs shrink-0" data-testid={`select-qty-mode-mobile-${idx}`}><SelectValue /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="unit">QTY</SelectItem>
-                              <SelectItem value="box" disabled={item.unitsPerBox <= 0}>BOX</SelectItem>
+                              <SelectItem value="box" disabled={item.unitsPerBox <= 0}>{item.packagingUnit.toUpperCase()}</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>

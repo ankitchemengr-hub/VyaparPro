@@ -51,6 +51,8 @@ export interface Product {
   litersPerBox?: number | null;
   /** @nullable */
   unitsPerBox?: number | null;
+  /** Name of the outer packaging this product ships in (e.g. Box, Barrel, Drum, Carton) — shown as "1 <packagingUnit> = N <unit>" and on invoice qty-in-packaging displays. */
+  packagingUnit?: string;
   notForSale: boolean;
   addForManufacturing: boolean;
   /** @nullable */

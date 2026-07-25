@@ -175,7 +175,7 @@ router.post("/sales-returns", async (req, res): Promise<void> => {
     await client.query("BEGIN");
 
     const invRes = await client.query(
-      `SELECT id, invoice_no, invoice_type, customer_id, customer_name, status
+      `SELECT id, invoice_no, invoice_type, customer_id, customer_name, status, salesman_id, salesman_name
        FROM invoices WHERE id = $1 AND company_id = $2 FOR UPDATE`,
       [data.invoiceId, companyId],
     );
@@ -199,8 +199,10 @@ router.post("/sales-returns", async (req, res): Promise<void> => {
     const itemIds = data.items.map((i) => i.invoiceItemId);
     const itemsRes = await client.query(
       `SELECT ii.id, ii.product_id, ii.product_name, ii.unit, ii.rate, ii.tax_pct, ii.qty, ii.amount,
+              ii.total_liters, COALESCE(p.commission_per_liter, 0) AS commission_per_liter,
               COALESCE(ret.returned_qty, 0) AS already_returned_qty
        FROM invoice_items ii
+       JOIN products p ON p.id = ii.product_id
        LEFT JOIN (
          SELECT sri.invoice_item_id, SUM(sri.qty) AS returned_qty
          FROM sales_return_items sri
@@ -216,6 +218,8 @@ router.post("/sales-returns", async (req, res): Promise<void> => {
     let subtotal = 0;
     let totalTax = 0;
     let grandTotal = 0;
+    let returnedLiters = 0;
+    let returnedCommission = 0;
     const lines: { invoiceItemId: number; productId: number; productName: string; unit: string; rate: number; taxPct: number; qty: number; amount: number }[] = [];
 
     for (const reqItem of data.items) {
@@ -250,6 +254,16 @@ router.post("/sales-returns", async (req, res): Promise<void> => {
       subtotal += lineTaxable;
       totalTax += lineTax;
       grandTotal += lineAmount;
+
+      // Claw back the commission earned on the returned portion of this line —
+      // total_liters on the invoice item is for the *original* qty, so scale it
+      // down by the fraction actually being returned.
+      if (row.total_liters != null && originalQty > 0) {
+        const lineReturnedLiters = (Number(row.total_liters) / originalQty) * returnQty;
+        returnedLiters += lineReturnedLiters;
+        returnedCommission += lineReturnedLiters * Number(row.commission_per_liter);
+      }
+
       lines.push({
         invoiceItemId: reqItem.invoiceItemId,
         productId: row.product_id,
@@ -316,6 +330,33 @@ router.post("/sales-returns", async (req, res): Promise<void> => {
         `INSERT INTO ledger_entries (company_id, entity_id, date, description, debit, credit, balance, type, reference_id, reference_no)
          VALUES ($1, $2, NOW(), $3, 0, $4, $5, 'sales_return', $6, $7)`,
         [companyId, inv.customer_id, `Sales return ${returnNo} (Inv ${inv.invoice_no})`, grandTotal, newBalance, returnRow.id, returnNo],
+      );
+    }
+
+    // ── Commission clawback ────────────────────────────────────────────────
+    // Reverse the commission earned on the returned qty by logging a negative
+    // commission_transactions row against the same salesman/invoice. This nets
+    // out a still-pending commission automatically, and if it was already paid,
+    // it shows up as a negative pending balance to recover on the next payout —
+    // either way, the original invoice's commission row is left untouched for
+    // audit purposes.
+    if (inv.salesman_id && (returnedLiters > 0 || returnedCommission > 0)) {
+      await client.query(
+        `INSERT INTO commission_transactions
+           (company_id, invoice_id, invoice_no, salesman_id, salesman_name,
+            customer_id, customer_name, total_liters, commission_amount, status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending')`,
+        [
+          companyId,
+          inv.id,
+          `${inv.invoice_no} (Return ${returnNo})`,
+          inv.salesman_id,
+          inv.salesman_name ?? "",
+          inv.customer_id ?? null,
+          inv.customer_name ?? null,
+          String(-returnedLiters),
+          String(-returnedCommission),
+        ],
       );
     }
 

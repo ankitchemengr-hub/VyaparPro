@@ -824,6 +824,8 @@ export interface Product {
   litersPerBox?: number | null;
   /** @nullable */
   unitsPerBox?: number | null;
+  /** Name of the outer packaging this product ships in (e.g. Box, Barrel, Drum, Carton) — shown as "1 <packagingUnit> = N <unit>" and on invoice qty-in-packaging displays. */
+  packagingUnit?: string;
   notForSale: boolean;
   addForManufacturing: boolean;
   /** @nullable */
@@ -864,6 +866,7 @@ export interface ProductInput {
   nonGstPrice?: number;
   litersPerBox?: number;
   unitsPerBox?: number;
+  packagingUnit?: string;
   notForSale?: boolean;
   addForManufacturing?: boolean;
   minStockThreshold?: number;
@@ -889,6 +892,7 @@ export interface ProductUpdate {
   taxRate?: number;
   litersPerBox?: number;
   unitsPerBox?: number;
+  packagingUnit?: string;
   notForSale?: boolean;
   addForManufacturing?: boolean;
   minStockThreshold?: number;
@@ -1922,6 +1926,49 @@ export interface AssembleItemInput {
      * @minimum 0.001
      */
   batches: number;
+  /** Worker (from Workers master) who assembled this batch — tagged on the resulting Ready Material batch. */
+  workerId: number;
+}
+
+export type ReadyMaterialBatchStatus = typeof ReadyMaterialBatchStatus[keyof typeof ReadyMaterialBatchStatus];
+
+
+export const ReadyMaterialBatchStatus = {
+  ready: 'ready',
+  dispatched: 'dispatched',
+} as const;
+
+export interface ReadyMaterialBatch {
+  id: number;
+  /** @nullable */
+  bomId?: number | null;
+  productId: number;
+  productName: string;
+  unit: string;
+  qty: number;
+  batches: number;
+  /** @nullable */
+  workerId?: number | null;
+  workerName: string;
+  status: ReadyMaterialBatchStatus;
+  /** @nullable */
+  adjustmentReason?: string | null;
+  /** @nullable */
+  materialTransferId?: number | null;
+  /** @nullable */
+  dispatchedAt?: string | null;
+  createdAt: string;
+}
+
+export interface AdjustReadyMaterialBatchInput {
+  /** Corrected ready quantity (must be > 0) */
+  qty: number;
+  /** Why the entry is being corrected */
+  reason: string;
+}
+
+export interface DispatchReadyMaterialBatchInput {
+  notes?: string;
 }
 
 export type WorkloadCardInputOrderType = typeof WorkloadCardInputOrderType[keyof typeof WorkloadCardInputOrderType];
@@ -2778,6 +2825,18 @@ export type AssembleItem409 = {
   error?: string;
   shortages?: AssembleItem409ShortagesItem[];
 };
+
+export type ListReadyMaterialBatchesParams = {
+status?: ListReadyMaterialBatchesStatus;
+};
+
+export type ListReadyMaterialBatchesStatus = typeof ListReadyMaterialBatchesStatus[keyof typeof ListReadyMaterialBatchesStatus];
+
+
+export const ListReadyMaterialBatchesStatus = {
+  ready: 'ready',
+  dispatched: 'dispatched',
+} as const;
 
 export type GetLedgerReportParams = {
 entityId?: number;

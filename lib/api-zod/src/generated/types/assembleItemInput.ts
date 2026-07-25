@@ -14,4 +14,6 @@ export interface AssembleItemInput {
      * @minimum 0.001
      */
   batches: number;
+  /** Worker (from Workers master) who assembled this batch — tagged on the resulting Ready Material batch. */
+  workerId: number;
 }

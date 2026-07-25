@@ -12,11 +12,16 @@ import {
   useListMaterialTransfers,
   useCreateMaterialTransfer,
   useDeleteMaterialTransfer,
+  useListWorkers,
+  useListReadyMaterialBatches,
+  useAdjustReadyMaterialBatch,
+  useDispatchReadyMaterialBatch,
   getListWorkloadCardsQueryKey,
   getListProductsQueryKey,
   getGetLowStockAlertsQueryKey,
   getListBomsQueryKey,
   getListMaterialTransfersQueryKey,
+  getListReadyMaterialBatchesQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -64,6 +69,10 @@ import {
   Printer,
   ChevronsUpDown,
   Check,
+  Boxes,
+  Send,
+  Wrench,
+  User,
 } from "lucide-react";
 import { BomDialog } from "@/components/bom-dialog";
 
@@ -96,6 +105,9 @@ export default function Manufacturing() {
           <TabsTrigger value="assemble" data-testid="tab-assemble">
             Assemble Item
           </TabsTrigger>
+          <TabsTrigger value="ready" data-testid="tab-ready">
+            Ready Material
+          </TabsTrigger>
           <TabsTrigger value="transfer" data-testid="tab-transfer">
             Material Transfer
           </TabsTrigger>
@@ -113,6 +125,10 @@ export default function Manufacturing() {
             initialBomId={pendingAssembleBomId}
             onConsumeInitialBomId={() => setPendingAssembleBomId("")}
           />
+        </TabsContent>
+
+        <TabsContent value="ready" className="mt-6">
+          <ReadyMaterialTab />
         </TabsContent>
 
         <TabsContent value="transfer" className="mt-6">
@@ -1142,12 +1158,14 @@ function AssembleTab({
   const { data: boms, isLoading: bomsLoading } = useListBoms();
   const { data: products } = useListProducts({});
   const { data: workloads } = useListWorkloadCards();
+  const { data: workers } = useListWorkers({});
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const assembleItem = useAssembleItem();
 
   const [bomId, setBomId] = useState<string>("");
   const [batches, setBatches] = useState<string>("1");
+  const [workerId, setWorkerId] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const [search, setSearch] = useState("");
   const [showAssembleDialog, setShowAssembleDialog] = useState(false);
@@ -1159,6 +1177,7 @@ function AssembleTab({
     if (initialBomId) {
       setBomId(initialBomId);
       setBatches("1");
+      setWorkerId("");
       setSearch("");
       setShowAssembleDialog(true);
       onConsumeInitialBomId?.();
@@ -1228,18 +1247,19 @@ function AssembleTab({
 
   const anyShortage = requirements.some((r) => !r.sufficient);
   const canAssemble =
-    !!selectedBom && batchCount > 0 && !anyShortage && !submitting;
+    !!selectedBom && batchCount > 0 && !!workerId && !anyShortage && !submitting;
 
 
   const handleAssemble = async () => {
-    if (!selectedBom || batchCount <= 0) return;
+    if (!selectedBom || batchCount <= 0 || !workerId) return;
     setSubmitting(true);
     try {
-      // Single atomic call — server runs the entire recipe (debit raw,
-      // credit finished, write movements, create the done workload card) in
-      // one SERIALIZABLE transaction. No orphan state possible on failure.
+      // Single atomic call — server runs the entire recipe (debit raw, write
+      // movements, create the done workload card) in one SERIALIZABLE
+      // transaction, staging the finished output as a Ready Material batch
+      // instead of crediting stock directly — that happens on dispatch.
       await assembleItem.mutateAsync({
-        data: { bomId: selectedBom.id, batches: batchCount },
+        data: { bomId: selectedBom.id, batches: batchCount, workerId: Number(workerId) },
       });
 
       await Promise.all([
@@ -1247,13 +1267,15 @@ function AssembleTab({
           queryKey: getListWorkloadCardsQueryKey(),
         }),
         queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() }),
+        queryClient.invalidateQueries({ queryKey: getListReadyMaterialBatchesQueryKey() }),
       ]);
 
       toast({
         title: "Assembly complete",
-        description: `Produced ${outputUnits} of ${selectedBom.finishedProductName}. Raw materials were debited.`,
+        description: `${outputUnits} ${selectedBom.finishedProductName} staged in Ready Material. Raw materials were debited.`,
       });
       setBatches("1");
+      setWorkerId("");
       setShowAssembleDialog(false);
     } catch (err: any) {
       let title = "Assembly failed";
@@ -1346,6 +1368,7 @@ function AssembleTab({
                   onClick={() => {
                     setBomId(String(b.id));
                     setBatches("1");
+                    setWorkerId("");
                     setShowAssembleDialog(true);
                   }}
                   data-testid={`card-bom-${b.id}`}
@@ -1478,6 +1501,30 @@ function AssembleTab({
                         {batchCount} × {selectedBom.outputQuantity}
                       </Badge>
                     </div>
+                  </div>
+
+                  {/* Worker attribution — required so the resulting Ready
+                      Material batch shows who actually assembled it. */}
+                  <div className="space-y-1.5">
+                    <Label>Assembled By *</Label>
+                    <Select value={workerId} onValueChange={setWorkerId}>
+                      <SelectTrigger data-testid="select-assemble-worker">
+                        <SelectValue placeholder="Select worker…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(workers ?? []).length === 0 ? (
+                          <div className="px-2 py-3 text-sm text-muted-foreground">
+                            No workers found — add one in the Workers page.
+                          </div>
+                        ) : (
+                          (workers ?? []).map((w: any) => (
+                            <SelectItem key={w.id} value={String(w.id)}>
+                              {w.name}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   {/* Material consumption check */}
@@ -1613,6 +1660,345 @@ function TransferItemCombobox({
         </Command>
       </PopoverContent>
     </Popover>
+  );
+}
+
+// --------------------------- READY MATERIAL TAB ---------------------------
+// Output from Assemble Item lands here first — it's real production but not
+// yet sellable stock. Dispatching a batch is what finally credits
+// product.currentStock and logs a Material Transfer slip; admins can Adjust
+// a batch's qty here beforehand if the worker mis-entered how much came off
+// the line.
+
+function ReadyMaterialTab() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+  const [statusFilter, setStatusFilter] = useState<"ready" | "dispatched">("ready");
+  const { data: batches, isLoading } = useListReadyMaterialBatches({ status: statusFilter });
+  const { data: products } = useListProducts({});
+  const { data: transfers } = useListMaterialTransfers();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const adjustBatch = useAdjustReadyMaterialBatch();
+  const dispatchBatch = useDispatchReadyMaterialBatch();
+
+  const [adjustTarget, setAdjustTarget] = useState<any | null>(null);
+  const [dispatchTarget, setDispatchTarget] = useState<any | null>(null);
+
+  const productById = useMemo(() => {
+    const m = new Map<number, any>();
+    (products ?? []).forEach((p: any) => m.set(p.id, p));
+    return m;
+  }, [products]);
+
+  const transferNoById = useMemo(() => {
+    const m = new Map<number, string>();
+    (transfers ?? []).forEach((t: any) => m.set(t.id, t.transferNo));
+    return m;
+  }, [transfers]);
+
+  const refresh = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: getListReadyMaterialBatchesQueryKey() }),
+      queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() }),
+      queryClient.invalidateQueries({ queryKey: getListMaterialTransfersQueryKey() }),
+    ]);
+
+  const handleAdjustSave = async (qty: number, reason: string) => {
+    if (!adjustTarget) return;
+    try {
+      await adjustBatch.mutateAsync({ id: adjustTarget.id, data: { qty, reason } });
+      await refresh();
+      toast({ title: "Batch adjusted", description: `${adjustTarget.productName} corrected to ${qty} ${adjustTarget.unit}.` });
+      setAdjustTarget(null);
+    } catch (err: any) {
+      let desc = err?.message ?? "Server error";
+      try {
+        const body = err?.response ? await err.response.json() : null;
+        if (body?.error) desc = String(body.error).slice(0, 300);
+      } catch {}
+      toast({ title: "Failed to adjust batch", description: desc, variant: "destructive" });
+    }
+  };
+
+  const handleDispatchConfirm = async (notes: string) => {
+    if (!dispatchTarget) return;
+    try {
+      await dispatchBatch.mutateAsync({ id: dispatchTarget.id, data: { notes: notes || undefined } });
+      await refresh();
+      toast({
+        title: "Dispatched to Store",
+        description: `${dispatchTarget.qty} ${dispatchTarget.unit} of ${dispatchTarget.productName} added to stock.`,
+      });
+      setDispatchTarget(null);
+    } catch (err: any) {
+      let desc = err?.message ?? "Server error";
+      try {
+        const body = err?.response ? await err.response.json() : null;
+        if (body?.error) desc = String(body.error).slice(0, 300);
+      } catch {}
+      toast({ title: "Failed to dispatch", description: desc, variant: "destructive" });
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <Boxes className="w-5 h-5 text-primary" />
+            Ready Material
+          </h2>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Assembled output waiting to be dispatched to Store. Dispatching is what credits stock.
+          </p>
+        </div>
+        <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as "ready" | "dispatched")}>
+          <SelectTrigger className="w-full sm:w-[160px]" data-testid="select-ready-status-filter">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ready">Ready to Dispatch</SelectItem>
+            <SelectItem value="dispatched">Dispatched</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {isLoading ? (
+        <div className="text-center py-12 text-muted-foreground">
+          <Loader2 className="w-6 h-6 animate-spin mx-auto" />
+        </div>
+      ) : !batches || batches.length === 0 ? (
+        <div className="text-center py-16 border border-dashed rounded-lg">
+          <Boxes className="mx-auto h-10 w-10 text-muted-foreground opacity-20 mb-3" />
+          <p className="text-sm text-muted-foreground">
+            {statusFilter === "ready" ? "Nothing ready to dispatch yet." : "No dispatched batches yet."}
+          </p>
+        </div>
+      ) : (
+        <div className="rounded-lg border divide-y overflow-hidden">
+          {batches.map((b: any) => {
+            const prod = productById.get(b.productId);
+            const transferNo = b.materialTransferId ? transferNoById.get(b.materialTransferId) : null;
+            return (
+              <div
+                key={b.id}
+                className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-3"
+                data-testid={`ready-batch-row-${b.id}`}
+              >
+                <div className="w-10 h-10 rounded-md border bg-muted/30 shrink-0 overflow-hidden flex items-center justify-center">
+                  {prod?.imageUrl ? (
+                    <img src={prod.imageUrl} alt={b.productName} className="w-full h-full object-cover" />
+                  ) : (
+                    <Package className="w-4 h-4 text-muted-foreground/40" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium line-clamp-1">{b.productName}</div>
+                  <div className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
+                    <User className="w-3 h-3" /> {b.workerName}
+                    <span className="mx-1">·</span>
+                    {new Date(b.createdAt).toLocaleString("en-IN")}
+                    {transferNo && (
+                      <>
+                        <span className="mx-1">·</span>
+                        <span className="font-mono">{transferNo}</span>
+                      </>
+                    )}
+                  </div>
+                  {b.adjustmentReason && (
+                    <div className="text-[11px] text-amber-600 dark:text-amber-500 mt-0.5">
+                      Adjusted: {b.adjustmentReason}
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <Badge variant="outline" className="font-mono text-sm">
+                    {Number(b.qty).toLocaleString()} {b.unit}
+                  </Badge>
+                  {b.status === "ready" ? (
+                    <div className="flex items-center gap-1.5">
+                      {isAdmin && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setAdjustTarget(b)}
+                          data-testid={`button-adjust-ready-${b.id}`}
+                        >
+                          <Wrench className="w-3.5 h-3.5 mr-1.5" /> Adjust
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        className="bg-green-600 hover:bg-green-700 text-white"
+                        onClick={() => setDispatchTarget(b)}
+                        data-testid={`button-dispatch-ready-${b.id}`}
+                      >
+                        <Send className="w-3.5 h-3.5 mr-1.5" /> Dispatch
+                      </Button>
+                    </div>
+                  ) : (
+                    <Badge className="bg-green-600 text-white border-transparent">Dispatched</Badge>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <AdjustReadyBatchDialog
+        target={adjustTarget}
+        submitting={adjustBatch.isPending}
+        onCancel={() => setAdjustTarget(null)}
+        onConfirm={handleAdjustSave}
+      />
+      <DispatchReadyBatchDialog
+        target={dispatchTarget}
+        submitting={dispatchBatch.isPending}
+        onCancel={() => setDispatchTarget(null)}
+        onConfirm={handleDispatchConfirm}
+      />
+    </div>
+  );
+}
+
+function AdjustReadyBatchDialog({
+  target, submitting, onCancel, onConfirm,
+}: {
+  target: any | null;
+  submitting: boolean;
+  onCancel: () => void;
+  onConfirm: (qty: number, reason: string) => void;
+}) {
+  const [qty, setQty] = useState("");
+  const [reason, setReason] = useState("");
+
+  React.useEffect(() => {
+    if (target) {
+      setQty(String(target.qty ?? ""));
+      setReason("");
+    }
+  }, [target]);
+
+  const numQty = Number(qty);
+  const valid = isFinite(numQty) && numQty > 0 && reason.trim().length > 0;
+
+  return (
+    <Dialog open={target != null} onOpenChange={(v) => { if (!v && !submitting) onCancel(); }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Wrench className="w-5 h-5 text-primary" /> Adjust Ready Batch
+          </DialogTitle>
+          <DialogDescription>
+            {target && (
+              <>Correct the produced qty of <span className="font-medium text-foreground">{target.productName}</span> before it's dispatched to Store.</>
+            )}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="adjust-qty">Corrected Qty *</Label>
+            <div className="relative">
+              <Input
+                id="adjust-qty"
+                type="number"
+                min="0"
+                step="0.001"
+                autoFocus
+                value={qty}
+                onChange={(e) => setQty(e.target.value)}
+                className="pr-16"
+                data-testid="input-adjust-qty"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground uppercase">
+                {target?.unit}
+              </span>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="adjust-reason">Reason *</Label>
+            <Input
+              id="adjust-reason"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="e.g. Miscounted at assembly — actual was less"
+              data-testid="input-adjust-reason"
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel} disabled={submitting}>Cancel</Button>
+          <Button
+            onClick={() => valid && onConfirm(numQty, reason.trim())}
+            disabled={!valid || submitting}
+            data-testid="button-confirm-adjust"
+          >
+            {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+            Save Correction
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DispatchReadyBatchDialog({
+  target, submitting, onCancel, onConfirm,
+}: {
+  target: any | null;
+  submitting: boolean;
+  onCancel: () => void;
+  onConfirm: (notes: string) => void;
+}) {
+  const [notes, setNotes] = useState("");
+
+  React.useEffect(() => {
+    if (target) setNotes("");
+  }, [target]);
+
+  return (
+    <Dialog open={target != null} onOpenChange={(v) => { if (!v && !submitting) onCancel(); }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Send className="w-5 h-5 text-primary" /> Dispatch to Store
+          </DialogTitle>
+          <DialogDescription>
+            {target && (
+              <>
+                This adds <span className="font-medium text-foreground">{Number(target.qty).toLocaleString()} {target.unit}</span> of{" "}
+                <span className="font-medium text-foreground">{target.productName}</span> to sellable stock and logs a Material Transfer slip.
+              </>
+            )}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-1.5 py-2">
+          <Label htmlFor="dispatch-notes">Notes <span className="text-muted-foreground text-xs">(optional)</span></Label>
+          <Input
+            id="dispatch-notes"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="e.g. handed to store keeper"
+            data-testid="input-dispatch-notes"
+          />
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel} disabled={submitting}>Cancel</Button>
+          <Button
+            onClick={() => onConfirm(notes.trim())}
+            disabled={submitting}
+            className="bg-green-600 hover:bg-green-700 text-white"
+            data-testid="button-confirm-dispatch"
+          >
+            {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+            <Send className="w-4 h-4 mr-2" />
+            Confirm & Dispatch
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

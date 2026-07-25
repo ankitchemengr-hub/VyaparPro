@@ -415,6 +415,8 @@ export default function Customers() {
               <SelectItem value="name_desc">Name Z → A</SelectItem>
               <SelectItem value="balance_high">Balance High → Low</SelectItem>
               <SelectItem value="balance_low">Balance Low → High</SelectItem>
+              <SelectItem value="newest">Last Added</SelectItem>
+              <SelectItem value="oldest">First Added</SelectItem>
             </SelectContent>
           </Select>
           <Select value={salesmanFilter || "__all__"} onValueChange={(v) => setSalesmanFilter(v === "__all__" ? "" : v)}>
@@ -482,6 +484,8 @@ export default function Customers() {
                     if (sort === "name_desc") return (b.name ?? "").localeCompare(a.name ?? "");
                     if (sort === "balance_high") return (b.outstandingBalance ?? 0) - (a.outstandingBalance ?? 0);
                     if (sort === "balance_low") return (a.outstandingBalance ?? 0) - (b.outstandingBalance ?? 0);
+                    if (sort === "newest") return (b.id ?? 0) - (a.id ?? 0);
+                    if (sort === "oldest") return (a.id ?? 0) - (b.id ?? 0);
                     return 0;
                   }).map((entity) => {
                     const mapsUrl = getMapsUrl(entity as any);

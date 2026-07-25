@@ -61,12 +61,15 @@ export function CashEntryDialog({
   accounts,
   onClose,
   onCreated,
+  presetEntity,
 }: {
   open: boolean;
   direction: "in" | "out";
   accounts: Account[];
   onClose: () => void;
   onCreated: (txn: AccountTransaction) => void;
+  /** Pre-lock the party to a known entity (e.g. opened from that party's Khatabook ledger) instead of the free-text search. */
+  presetEntity?: { id: number; name: string; mobile: string; balance: number } | null;
 }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -125,10 +128,10 @@ export function CashEntryDialog({
       setAccountId(accounts[0] ? String(accounts[0].id) : "");
       setAmount("");
       setMode("cash");
-      setPartyName("");
-      setPartyMobile("");
-      setPartyEntityId(null);
-      setPartyEntityBalance(null);
+      setPartyName(presetEntity?.name ?? "");
+      setPartyMobile(presetEntity?.mobile ?? "");
+      setPartyEntityId(presetEntity?.id ?? null);
+      setPartyEntityBalance(presetEntity?.balance ?? null);
       setNotes("");
       setNameOpen(false);
       setMobileOpen(false);
@@ -138,7 +141,7 @@ export function CashEntryDialog({
         fetchReceiptPreview().then(setReceiptPreview);
       }
     }
-  }, [open, direction, accounts]);
+  }, [open, direction, accounts, presetEntity]);
 
   // close dropdowns on outside click
   useEffect(() => {

@@ -2,9 +2,11 @@ import { useMemo, useState } from "react";
 import { Redirect, useLocation } from "wouter";
 import { useAuth } from "@/contexts/use-auth";
 import {
-  useListKhatabook, useGetEntityLedger, getGetEntityLedgerQueryKey,
-  useGetPaymentReceipt, getGetPaymentReceiptQueryKey,
+  useListKhatabook, useGetEntityLedger, getGetEntityLedgerQueryKey, getListKhatabookQueryKey,
+  useGetPaymentReceipt, getGetPaymentReceiptQueryKey, useListAccounts,
+  type AccountTransaction,
 } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -14,8 +16,13 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, BookOpen, Printer, MessageCircle, Loader2, Phone, Receipt } from "lucide-react";
+import {
+  Search, BookOpen, Printer, MessageCircle, Loader2, Phone, Receipt,
+  ArrowDownCircle, ArrowUpCircle,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { CashEntryDialog } from "@/components/cash-entry-dialog";
+import { CashReceiptDialog } from "@/components/cash-receipt-dialog";
 
 const formatRs = (n: number) =>
   `₹${Math.abs(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -203,14 +210,25 @@ function KhatabookDetailDialog({
   const sign = type === "vendor" ? -1 : 1;
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [waOpen, setWaOpen] = useState(false);
   const [waNumber, setWaNumber] = useState("");
   const [waSending, setWaSending] = useState(false);
   const [viewingReceiptNo, setViewingReceiptNo] = useState<string | null>(null);
+  const [entryDirection, setEntryDirection] = useState<"in" | "out" | null>(null);
+  const [receiptTxn, setReceiptTxn] = useState<AccountTransaction | null>(null);
 
   const { data: ledger, isLoading } = useGetEntityLedger(party?.id ?? 0, {
     query: { enabled: !!party, queryKey: getGetEntityLedgerQueryKey(party?.id ?? 0) },
   });
+  const { data: accounts } = useListAccounts();
+  const activeAccounts = (accounts ?? []).filter((a) => a.isActive);
+
+  const handleEntryCreated = (txn: AccountTransaction) => {
+    if (party) queryClient.invalidateQueries({ queryKey: getGetEntityLedgerQueryKey(party.id) });
+    queryClient.invalidateQueries({ queryKey: getListKhatabookQueryKey({ type }) });
+    setReceiptTxn(txn);
+  };
 
   const openWaDialog = () => {
     if (!party) return;
@@ -265,7 +283,19 @@ function KhatabookDetailDialog({
               {formatRs(balance)} {balance > 0 ? "(You Will Get)" : balance < 0 ? "(You Will Give)" : "(Settled)"}
             </div>
           </div>
-          <div className="flex gap-2 print:hidden">
+          <div className="flex flex-wrap gap-2 print:hidden">
+            <Button
+              size="sm" className="flex-1 sm:flex-none bg-green-600 hover:bg-green-700"
+              onClick={() => setEntryDirection("in")} data-testid="button-khatabook-payment-in"
+            >
+              <ArrowDownCircle className="w-4 h-4 mr-1.5" /> Payment In
+            </Button>
+            <Button
+              size="sm" className="flex-1 sm:flex-none bg-rose-600 hover:bg-rose-700"
+              onClick={() => setEntryDirection("out")} data-testid="button-khatabook-payment-out"
+            >
+              <ArrowUpCircle className="w-4 h-4 mr-1.5" /> Payment Out
+            </Button>
             <Button variant="outline" size="sm" className="flex-1 sm:flex-none" onClick={openWaDialog} data-testid="button-whatsapp-reminder">
               <MessageCircle className="w-4 h-4 mr-1.5" /> Remind
             </Button>
@@ -356,6 +386,16 @@ function KhatabookDetailDialog({
     </Dialog>
 
     <ReceiptViewDialog receiptNo={viewingReceiptNo} onOpenChange={(o) => !o && setViewingReceiptNo(null)} />
+
+    <CashEntryDialog
+      open={entryDirection !== null}
+      direction={entryDirection ?? "in"}
+      accounts={activeAccounts}
+      presetEntity={party ? { id: party.id, name: party.name, mobile: party.mobile, balance: ledger?.outstandingBalance ?? 0 } : null}
+      onClose={() => setEntryDirection(null)}
+      onCreated={handleEntryCreated}
+    />
+    <CashReceiptDialog txn={receiptTxn} onClose={() => setReceiptTxn(null)} />
     </>
   );
 }

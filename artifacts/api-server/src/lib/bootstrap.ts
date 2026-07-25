@@ -263,6 +263,34 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
       created_by_user_id  INTEGER,
       created_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
     )`,
+
+    // ── Products: name of the outer packaging (Box, Barrel, Drum, etc.) ────
+    `ALTER TABLE products ADD COLUMN IF NOT EXISTS packaging_unit VARCHAR(20) NOT NULL DEFAULT 'Box'`,
+
+    // ── Manufacturing: assembled output staged here until dispatched to
+    // Store — assembling no longer credits finished-good stock directly.
+    `CREATE TABLE IF NOT EXISTS ready_material_batches (
+      id                    SERIAL PRIMARY KEY,
+      company_id            INTEGER NOT NULL,
+      bom_id                INTEGER,
+      product_id            INTEGER NOT NULL,
+      product_name          TEXT NOT NULL,
+      unit                  TEXT NOT NULL,
+      qty                   NUMERIC(12, 3) NOT NULL,
+      batches               NUMERIC(12, 3) NOT NULL DEFAULT 1,
+      worker_id             INTEGER,
+      worker_name           TEXT NOT NULL,
+      status                TEXT NOT NULL DEFAULT 'ready',
+      adjustment_reason     TEXT,
+      material_transfer_id  INTEGER,
+      dispatched_at         TIMESTAMP WITH TIME ZONE,
+      workload_card_id      INTEGER,
+      created_by_user_id    INTEGER,
+      created_at            TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+      updated_at            TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    )`,
+    `CREATE INDEX IF NOT EXISTS ready_material_batches_company_idx ON ready_material_batches(company_id)`,
+    `CREATE INDEX IF NOT EXISTS ready_material_batches_status_idx ON ready_material_batches(status)`,
   ];
 
   for (const sql of patches) {

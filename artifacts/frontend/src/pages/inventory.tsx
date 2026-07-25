@@ -3,6 +3,7 @@ import { useAuth } from "@/contexts/use-auth";
 import {
   useListProducts, useCreateProduct, useUpdateProduct, useDeleteProduct,
   useListBrandMaster, useCreateBrand, getListBrandMasterQueryKey,
+  useCreateStockMovement, getGetProductStockMovementsQueryKey,
 } from "@workspace/api-client-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent } from "@/components/ui/card";
@@ -128,11 +129,13 @@ export default function Inventory() {
   const { hasRole } = useAuth();
   const isAdmin = hasRole(["admin"]);
   const [search, setSearch] = useState("");
+  const [brandFilter, setBrandFilter] = useState<string>("");
   const [addOpen, setAddOpen] = useState(false);
   const [editProduct, setEditProduct] = useState<any | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
   const [showValue, setShowValue] = useState(false);
-  const { data: products, isLoading } = useListProducts({ search: search || undefined });
+  const { data: products, isLoading } = useListProducts({ search: search || undefined, brand: brandFilter || undefined });
+  const { data: brandOptions } = useListBrandMaster();
   // Unfiltered product list, used only to total the whole inventory's value —
   // independent of whatever search text is narrowing the table below.
   const { data: allProducts } = useListProducts(
@@ -215,6 +218,17 @@ export default function Inventory() {
             data-testid="input-search-inventory"
           />
         </div>
+        <Select value={brandFilter || "all"} onValueChange={(v) => setBrandFilter(v === "all" ? "" : v)}>
+          <SelectTrigger className="w-[180px]" data-testid="select-filter-brand">
+            <SelectValue placeholder="All Brands" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Brands</SelectItem>
+            {(brandOptions ?? []).map((b) => (
+              <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       <Card>
@@ -313,11 +327,12 @@ export default function Inventory() {
         </CardContent>
       </Card>
 
-      <ProductDialog open={addOpen} onOpenChange={setAddOpen} />
+      <ProductDialog open={addOpen} onOpenChange={setAddOpen} isAdmin={isAdmin} />
       <ProductDialog
         open={!!editProduct}
         onOpenChange={(v) => { if (!v) setEditProduct(null); }}
         product={editProduct}
+        isAdmin={isAdmin}
       />
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(v) => { if (!v) setDeleteTarget(null); }}>
@@ -366,6 +381,7 @@ type ProductForm = {
   volumeUnit: string;
   litersPerBox: string;
   unitsPerBox: string;
+  packagingUnit: string;
   openingStock: string;
   minStockThreshold: string;
   notForSale: boolean;
@@ -380,7 +396,7 @@ const emptyForm: ProductForm = {
   name: "", printName: "", group: "", brand: "", itemCode: "",
   unit: "", purchasePrice: "", mrp: "", wholesalePrice: "", retailPrice: "",
   gstPrice: "", nonGstPrice: "",
-  hsnCode: "", taxRate: "18", commissionPerLiter: "0", volumeUnit: "liter", litersPerBox: "", unitsPerBox: "", openingStock: "0",
+  hsnCode: "", taxRate: "18", commissionPerLiter: "0", volumeUnit: "liter", litersPerBox: "", unitsPerBox: "", packagingUnit: "Box", openingStock: "0",
   minStockThreshold: "5", notForSale: false, addForManufacturing: false, imageUrl: "",
   pricingBasis: "manual", wholesaleMargin: "", retailMargin: "",
 };
@@ -400,10 +416,16 @@ function suggestItemCode(name: string, litersPerBox: string, volumeUnit: string)
   return `${prefix}${volSuffix}`;
 }
 
-function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenChange: (v: boolean) => void; product?: any }) {
+function ProductDialog({ open, onOpenChange, product, isAdmin }: { open: boolean; onOpenChange: (v: boolean) => void; product?: any; isAdmin?: boolean }) {
   const isEdit = !!product;
   const [tab, setTab] = useState("details");
   const [form, setForm] = useState<ProductForm>(emptyForm);
+  // Physical stock count entered by an admin on the Stock & Image tab —
+  // separate from `form` since it doesn't submit with the rest of the
+  // product edit; it fires its own stock-movement adjustment immediately.
+  const [stockCount, setStockCount] = useState("");
+  const [stockDisplay, setStockDisplay] = useState<number | null>(null);
+  const createStockMovement = useCreateStockMovement();
   // Item Code auto-suggests from Name + Liters-per-unit while adding a new
   // product; stops the moment the user types into Item Code directly, and
   // is never active while editing an existing product's own saved code.
@@ -442,6 +464,7 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
         volumeUnit: product.volumeUnit ?? "liter",
         litersPerBox: product.litersPerBox != null ? String(product.litersPerBox) : "",
         unitsPerBox: product.unitsPerBox != null ? String(product.unitsPerBox) : "",
+        packagingUnit: product.packagingUnit?.trim() || "Box",
         openingStock: product.openingStock != null ? String(product.openingStock) : "0",
         minStockThreshold: product.minStockThreshold != null ? String(product.minStockThreshold) : "5",
         notForSale: !!product.notForSale,
@@ -455,6 +478,8 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
       setProductType(Number(product.purchasePrice) === 0 ? "Manufactured" : "Purchased");
       setTab("details");
       setItemCodeAuto(false);
+      setStockCount("");
+      setStockDisplay(null);
     } else if (open && !product) {
       setForm(emptyForm);
       setImagePreview("");
@@ -560,6 +585,7 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
       volumeUnit: form.volumeUnit || "liter",
       litersPerBox: form.litersPerBox ? Number(form.litersPerBox) : undefined,
       unitsPerBox: form.unitsPerBox ? Number(form.unitsPerBox) : undefined,
+      packagingUnit: form.packagingUnit.trim() || "Box",
       minStockThreshold: form.minStockThreshold ? Number(form.minStockThreshold) : undefined,
       notForSale: form.notForSale,
       addForManufacturing: form.addForManufacturing,
@@ -603,6 +629,42 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
         },
       );
     }
+  };
+
+  const handleStockUpdate = () => {
+    if (!product) return;
+    const counted = Number(stockCount);
+    if (stockCount.trim() === "" || Number.isNaN(counted) || counted < 0) {
+      toast({ title: "Enter a valid count", variant: "destructive" });
+      return;
+    }
+    const current = stockDisplay ?? Number(product.currentStock ?? 0);
+    const delta = counted - current;
+    if (delta === 0) {
+      toast({ title: "No change", description: "Counted quantity matches current stock." });
+      setStockCount("");
+      return;
+    }
+    createStockMovement.mutate(
+      { id: product.id, data: { type: "adjustment", quantity: delta, reason: "Physical stock check" } },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getGetProductStockMovementsQueryKey(product.id) });
+          setStockDisplay(counted);
+          setStockCount("");
+          toast({ title: "Stock updated", description: `${current} → ${counted} (${delta > 0 ? "+" : ""}${delta})` });
+        },
+        onError: async (err: any) => {
+          let desc = err?.message ?? "Server error";
+          try {
+            const body = err?.response ? await err.response.json() : null;
+            if (body?.error) desc = String(body.error).slice(0, 300);
+          } catch {}
+          toast({ title: "Failed to update stock", description: desc, variant: "destructive" });
+        },
+      },
+    );
   };
 
   return (
@@ -710,18 +772,39 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>1 Box = ___ {form.unit?.trim() || "Units"}</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  step="0.001"
-                  value={form.unitsPerBox}
-                  onChange={(e) => set("unitsPerBox", e.target.value)}
-                  placeholder="e.g. 12"
-                  data-testid="input-units-per-box"
-                />
+                <Label>1 {form.packagingUnit?.trim() || "Box"} = ___ {form.unit?.trim() || "Units"}</Label>
+                <div className="flex gap-2">
+                  <Input
+                    list="packaging-unit-options"
+                    className="w-28 shrink-0"
+                    value={form.packagingUnit}
+                    onChange={(e) => set("packagingUnit", e.target.value)}
+                    placeholder="Box"
+                    data-testid="input-packaging-unit"
+                  />
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.001"
+                    className="flex-1"
+                    value={form.unitsPerBox}
+                    onChange={(e) => set("unitsPerBox", e.target.value)}
+                    placeholder="e.g. 12"
+                    data-testid="input-units-per-box"
+                  />
+                </div>
+                <datalist id="packaging-unit-options">
+                  <option value="Box" />
+                  <option value="Barrel" />
+                  <option value="Drum" />
+                  <option value="Carton" />
+                  <option value="Case" />
+                  <option value="Tin" />
+                  <option value="Can" />
+                  <option value="Sack" />
+                </datalist>
                 <p className="text-[11px] text-muted-foreground">
-                  Used on invoice to show BOX = Qty / this value.
+                  Used on invoice to show {(form.packagingUnit?.trim() || "Box").toUpperCase()} = Qty / this value.
                 </p>
               </div>
             </div>
@@ -959,16 +1042,39 @@ function ProductDialog({ open, onOpenChange, product }: { open: boolean; onOpenC
               <div className="space-y-1.5">
                 <Label>
                   {isEdit ? "Current Stock" : "Opening Stock"}
-                  {isEdit && <span className="ml-2 text-xs text-muted-foreground">(read-only — use stock movements)</span>}
+                  {isEdit && !isAdmin && <span className="ml-2 text-xs text-muted-foreground">(read-only — use stock movements)</span>}
                 </Label>
                 <Input
                   type="number" min={0}
-                  value={isEdit ? String(product?.currentStock ?? 0) : form.openingStock}
+                  value={isEdit ? String(stockDisplay ?? product?.currentStock ?? 0) : form.openingStock}
                   onChange={(e) => set("openingStock", e.target.value)}
                   placeholder="0"
                   disabled={isEdit}
                   data-testid="input-opening-stock"
                 />
+                {isEdit && isAdmin && (
+                  <div className="flex items-center gap-2 pt-1">
+                    <Input
+                      type="number" min={0}
+                      className="w-32"
+                      placeholder="Physical count"
+                      value={stockCount}
+                      onChange={(e) => setStockCount(e.target.value)}
+                      data-testid="input-stock-physical-count"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={handleStockUpdate}
+                      disabled={createStockMovement.isPending || stockCount.trim() === ""}
+                      data-testid="button-update-stock-count"
+                    >
+                      {createStockMovement.isPending && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
+                      Update Stock
+                    </Button>
+                  </div>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label>Low Stock Alert Level</Label>

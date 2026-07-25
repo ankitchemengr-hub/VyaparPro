@@ -28,6 +28,7 @@ export const productsTable = pgTable("products", {
   volumeUnit: text("volume_unit").notNull().default("liter"),
   litersPerBox: numeric("liters_per_box", { precision: 10, scale: 3 }),
   unitsPerBox: numeric("units_per_box", { precision: 10, scale: 3 }),
+  packagingUnit: text("packaging_unit").notNull().default("Box"),
   notForSale: boolean("not_for_sale").notNull().default(false),
   addForManufacturing: boolean("add_for_manufacturing").notNull().default(false),
   minStockThreshold: numeric("min_stock_threshold", { precision: 12, scale: 3 }),

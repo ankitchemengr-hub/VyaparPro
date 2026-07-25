@@ -5,6 +5,8 @@ import {
   bomsTable,
   bomItemsTable,
   workloadCardsTable,
+  readyMaterialBatchesTable,
+  workersTable,
   productsTable,
 } from "@workspace/db";
 import {
@@ -16,6 +18,9 @@ import {
   CreateWorkloadCardBody,
   UpdateWorkloadCardBody,
   AssembleItemBody,
+  ListReadyMaterialBatchesQueryParams,
+  AdjustReadyMaterialBatchBody,
+  DispatchReadyMaterialBatchBody,
 } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
 import { getCompanyId } from "../lib/tenant";
@@ -447,7 +452,7 @@ router.post("/manufacturing/assemble", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const { bomId, batches } = parsed.data;
+  const { bomId, batches, workerId } = parsed.data;
   if (Number(batches) <= 0) {
     res.status(400).json({ error: "batches must be greater than 0" });
     return;
@@ -458,6 +463,15 @@ router.post("/manufacturing/assemble", async (req, res): Promise<void> => {
     res.status(404).json({ error: "BOM not found" });
     return;
   }
+  const [worker] = await db.select().from(workersTable).where(and(eq(workersTable.companyId, companyId), eq(workersTable.id, workerId)));
+  if (!worker) {
+    res.status(400).json({ error: "Worker not found" });
+    return;
+  }
+  const [finishedProduct] = await db
+    .select({ name: productsTable.name, unit: productsTable.unit })
+    .from(productsTable)
+    .where(and(eq(productsTable.companyId, companyId), eq(productsTable.id, bom.finishedProductId)));
   const bomItems = await db
     .select({
       item: bomItemsTable,
@@ -531,15 +545,19 @@ router.post("/manufacturing/assemble", async (req, res): Promise<void> => {
       );
     }
 
-    // Credit finished good
+    // Stage the finished output as a Ready Material batch instead of
+    // crediting stock directly — it only becomes real stock once dispatched
+    // via POST /manufacturing/ready-batches/:id/dispatch. Raw materials above
+    // are still consumed immediately since they're physically used up now.
     await client.query(
-      `INSERT INTO stock_movements (company_id, product_id, type, quantity, reason, reference_id, reference_type, user_id)
-       VALUES ($1, $2, 'manufacturing_produce', $3, 'Manufacturing complete', $4, 'workload', $5)`,
-      [companyId, bom.finishedProductId, outputUnits, cardId, userId],
-    );
-    await client.query(
-      `UPDATE products SET current_stock = current_stock + $1 WHERE id = $2 AND company_id = $3`,
-      [outputUnits, bom.finishedProductId, companyId],
+      `INSERT INTO ready_material_batches
+         (company_id, bom_id, product_id, product_name, unit, qty, batches, worker_id, worker_name, workload_card_id, created_by_user_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      [
+        companyId, bom.id, bom.finishedProductId,
+        finishedProduct?.name ?? "", finishedProduct?.unit ?? "QTY",
+        outputUnits, batches, worker.id, worker.name, cardId, userId,
+      ],
     );
 
     await client.query("COMMIT");
@@ -559,6 +577,191 @@ router.post("/manufacturing/assemble", async (req, res): Promise<void> => {
     .where(and(eq(productsTable.companyId, companyId), eq(productsTable.id, card.productId)));
   res.status(201).json(formatWorkloadCard(card, product?.name ?? null, product?.imageUrl ?? null));
 });
+
+// GET /manufacturing/ready-batches
+router.get("/manufacturing/ready-batches", async (req, res): Promise<void> => {
+  const companyId = getCompanyId(req);
+  const params = ListReadyMaterialBatchesQueryParams.safeParse(req.query);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const conditions: any[] = [eq(readyMaterialBatchesTable.companyId, companyId)];
+  if (params.data.status) conditions.push(eq(readyMaterialBatchesTable.status, params.data.status));
+
+  const rows = await db
+    .select()
+    .from(readyMaterialBatchesTable)
+    .where(and(...conditions))
+    .orderBy(sql`${readyMaterialBatchesTable.createdAt} DESC`);
+
+  res.json(rows.map(formatReadyBatch));
+});
+
+// PATCH /manufacturing/ready-batches/:id — admin-only correction of a
+// mis-entered qty. Only allowed while the batch is still 'ready': once
+// dispatched, the qty has already become real stock and correcting it here
+// would silently diverge from the stock/ledger trail.
+router.patch("/manufacturing/ready-batches/:id", async (req, res): Promise<void> => {
+  const session = (req as any).session;
+  if (session?.role !== "admin") {
+    res.status(403).json({ error: "Only administrators can adjust a ready batch" });
+    return;
+  }
+  const companyId = getCompanyId(req);
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  const parsed = AdjustReadyMaterialBatchBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  if (Number(parsed.data.qty) <= 0) {
+    res.status(400).json({ error: "qty must be greater than 0" });
+    return;
+  }
+
+  const [existing] = await db
+    .select()
+    .from(readyMaterialBatchesTable)
+    .where(and(eq(readyMaterialBatchesTable.companyId, companyId), eq(readyMaterialBatchesTable.id, id)));
+  if (!existing) {
+    res.status(404).json({ error: "Ready batch not found" });
+    return;
+  }
+  if (existing.status !== "ready") {
+    res.status(409).json({ error: "This batch has already been dispatched and can no longer be adjusted" });
+    return;
+  }
+
+  const [updated] = await db
+    .update(readyMaterialBatchesTable)
+    .set({ qty: String(parsed.data.qty), adjustmentReason: parsed.data.reason })
+    .where(and(eq(readyMaterialBatchesTable.companyId, companyId), eq(readyMaterialBatchesTable.id, id)))
+    .returning();
+
+  res.json(formatReadyBatch(updated));
+});
+
+// POST /manufacturing/ready-batches/:id/dispatch — the point a staged batch
+// actually becomes sellable stock. Credits products.current_stock, writes a
+// 'manufacturing_produce' stock movement, and logs a Material Transfer slip
+// (sentBy = the worker who assembled it) so it shows up in that log too.
+router.post("/manufacturing/ready-batches/:id/dispatch", async (req, res): Promise<void> => {
+  const companyId = getCompanyId(req);
+  const session = (req as any).session;
+  const userId = session?.userId ?? 1;
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  const parsed = DispatchReadyMaterialBatchBody.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
+
+    const batchRes = await client.query(
+      `SELECT * FROM ready_material_batches WHERE id = $1 AND company_id = $2 FOR UPDATE`,
+      [id, companyId],
+    );
+    const batch = batchRes.rows[0];
+    if (!batch) {
+      await client.query("ROLLBACK");
+      res.status(404).json({ error: "Ready batch not found" });
+      return;
+    }
+    if (batch.status !== "ready") {
+      await client.query("ROLLBACK");
+      res.status(409).json({ error: "This batch has already been dispatched" });
+      return;
+    }
+
+    await client.query(
+      `INSERT INTO material_transfer_sequence (company_id, last_number) VALUES ($1, 0) ON CONFLICT (company_id) DO NOTHING`,
+      [companyId],
+    );
+    const seqRes = await client.query(
+      `UPDATE material_transfer_sequence SET last_number = last_number + 1 WHERE company_id = $1 RETURNING last_number`,
+      [companyId],
+    );
+    const transferNo = `MT-${String(seqRes.rows[0].last_number).padStart(3, "0")}`;
+
+    const transferRes = await client.query(
+      `INSERT INTO material_transfers (company_id, transfer_no, transfer_date, sent_by, notes, created_by_user_id)
+       VALUES ($1, $2, NOW(), $3, $4, $5) RETURNING id`,
+      [
+        companyId, transferNo, batch.worker_name,
+        parsed.data.notes?.trim() || `Dispatched from Ready Material (batch #${batch.id})`,
+        userId,
+      ],
+    );
+    const transferId = transferRes.rows[0].id;
+
+    await client.query(
+      `INSERT INTO material_transfer_items (company_id, transfer_id, product_id, product_name, qty, unit)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [companyId, transferId, batch.product_id, batch.product_name, batch.qty, batch.unit],
+    );
+
+    await client.query(
+      `INSERT INTO stock_movements (company_id, product_id, type, quantity, reason, reference_id, reference_type, user_id)
+       VALUES ($1, $2, 'manufacturing_produce', $3, 'Dispatched from Ready Material', $4, 'ready_material_batch', $5)`,
+      [companyId, batch.product_id, batch.qty, batch.id, userId],
+    );
+    await client.query(
+      `UPDATE products SET current_stock = current_stock + $1 WHERE id = $2 AND company_id = $3`,
+      [batch.qty, batch.product_id, companyId],
+    );
+
+    const updatedRes = await client.query(
+      `UPDATE ready_material_batches
+       SET status = 'dispatched', dispatched_at = NOW(), material_transfer_id = $1
+       WHERE id = $2 AND company_id = $3
+       RETURNING *`,
+      [transferId, id, companyId],
+    );
+
+    await client.query("COMMIT");
+    res.json(formatReadyBatch(updatedRes.rows[0]));
+  } catch (err) {
+    await client.query("ROLLBACK");
+    logger.error({ err }, "Failed to dispatch ready material batch");
+    res.status(500).json({ error: "Failed to dispatch batch" });
+  } finally {
+    client.release();
+  }
+});
+
+function formatReadyBatch(r: any) {
+  const dispatchedAt = r.dispatchedAt ?? r.dispatched_at;
+  const createdAt = r.createdAt ?? r.created_at;
+  return {
+    id: r.id,
+    bomId: r.bomId ?? r.bom_id ?? null,
+    productId: r.productId ?? r.product_id,
+    productName: r.productName ?? r.product_name,
+    unit: r.unit,
+    qty: Number(r.qty),
+    batches: Number(r.batches),
+    workerId: r.workerId ?? r.worker_id ?? null,
+    workerName: r.workerName ?? r.worker_name,
+    status: r.status,
+    adjustmentReason: r.adjustmentReason ?? r.adjustment_reason ?? null,
+    materialTransferId: r.materialTransferId ?? r.material_transfer_id ?? null,
+    dispatchedAt: dispatchedAt ? new Date(dispatchedAt).toISOString() : null,
+    createdAt: createdAt?.toISOString?.() ?? createdAt,
+  };
+}
 
 function formatBom(bom: any, productName: string | null, items: any[]) {
   return {
