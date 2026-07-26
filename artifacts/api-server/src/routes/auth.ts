@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, isNull } from "drizzle-orm";
+import { eq, and, isNull, isNotNull } from "drizzle-orm";
 import { db, pool } from "@workspace/db";
 import {
   usersTable,
@@ -129,6 +129,23 @@ router.post("/auth/login", async (req, res): Promise<void> => {
           .from(usersTable)
           .where(and(eq(usersTable.username, username), eq(usersTable.companyId, defaultCompanyId)));
         user = found;
+      }
+
+      // Shared multi-tenant mode: the login screen's only company picker is
+      // the hidden super-admin switcher, whose selection is remembered in the
+      // browser's localStorage — regular staff never see a picker at all and
+      // rely entirely on that leftover value. If it's missing (cleared cache,
+      // new device, PWA reinstall) every staff login fails here with no way
+      // to recover. Since usernames are scoped per company, a username that
+      // exists in exactly one company is an unambiguous match — use it.
+      if (!user) {
+        const candidates = await db
+          .select()
+          .from(usersTable)
+          .where(and(eq(usersTable.username, username), isNotNull(usersTable.companyId)));
+        if (candidates.length === 1) {
+          user = candidates[0];
+        }
       }
     }
   }
