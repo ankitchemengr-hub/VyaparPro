@@ -25,6 +25,7 @@ import Payments from "@/pages/payments";
 import Rewards from "@/pages/rewards";
 import Manufacturing from "@/pages/manufacturing";
 import Purchases from "@/pages/purchases";
+import SmartOrder from "@/pages/smart-order";
 import Reports from "@/pages/reports";
 import Settings from "@/pages/settings";
 import Users from "@/pages/users";
@@ -95,6 +96,7 @@ function ProtectedRoutes() {
         <Route path="/manufacturing" component={Manufacturing} />
         <Route path="/bom" component={Bom} />
         <Route path="/purchases" component={Purchases} />
+        <Route path="/smart-order" component={SmartOrder} />
         <Route path="/reports" component={Reports} />
         <Route path="/accounts" component={Accounts} />
         <Route path="/cashbook" component={CashBook} />

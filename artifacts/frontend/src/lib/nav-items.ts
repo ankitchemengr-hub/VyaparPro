@@ -26,6 +26,7 @@ import {
   Tags,
   BookOpen,
   Undo2,
+  Sparkles,
   type LucideIcon,
 } from "lucide-react";
 
@@ -72,6 +73,7 @@ export const moduleNavItems: NavItem[] = [
   { name: "Manufacturing", href: "/manufacturing", icon: Factory, roles: ["admin", "manufacturing"], description: "Production workload" },
   { name: "Bill of Materials", href: "/bom", icon: FileText, roles: ["admin"], description: "BOM master" },
   { name: "Purchases", href: "/purchases", icon: Truck, roles: ["admin", "accountant", "store"], description: "Purchase bills" },
+  { name: "Smart Order", href: "/smart-order", icon: Sparkles, roles: ["admin", "accountant", "store"], description: "Low-stock items ranked by sales pace, with a suggested reorder qty" },
   { name: "Workers", href: "/workers", icon: HardHat, roles: ["admin", "accountant"], description: "Worker attendance" },
   { name: "Expenses", href: "/expenses", icon: Receipt, roles: ["admin", "accountant"], description: "Business expenses" },
   { name: "Reports", href: "/reports", icon: BarChart3, roles: ["admin", "accountant"], description: "Sales, tax, P&L reports" },

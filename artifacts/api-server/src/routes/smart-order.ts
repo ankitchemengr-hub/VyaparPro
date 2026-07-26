@@ -127,7 +127,14 @@ router.get("/smart-order/suggestions", async (req, res): Promise<void> => {
   const suggestions = [
     ...productRows.rows.map((r) => buildSuggestion(r, "product" as const)),
     ...rawMaterialRows.rows.map((r) => buildSuggestion(r, "raw_material" as const)),
-  ].sort((a, b) => b.suggestedQty - a.suggestedQty);
+  ]
+    // Only actually-low stock belongs here — velocityQty > 0 means current
+    // stock has already fallen below what coverageDays needs at the current
+    // pace. Without this, a fast mover with healthy stock but some margin
+    // still shows up (reinvestQty alone can be > 0), which isn't something
+    // that needs ordering yet.
+    .filter((s) => s.velocityQty > 0)
+    .sort((a, b) => b.suggestedQty - a.suggestedQty);
 
   res.json(suggestions);
 });
