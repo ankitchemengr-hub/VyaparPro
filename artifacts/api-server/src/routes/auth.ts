@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, isNull, isNotNull } from "drizzle-orm";
+import { eq, and, isNull, isNotNull, sql } from "drizzle-orm";
 import { db, pool } from "@workspace/db";
 import {
   usersTable,
@@ -103,19 +103,23 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   // This means a regular user MUST select their company on the login screen.
   // The login form's company picker already sends companyId for all non-super_admin
   // accounts, so this is transparent to the user.
+  // Case-insensitive username match — a phone/PC with caps-lock or
+  // autocapitalize on ("ADMIN" vs stored "admin") must not fail login.
+  const usernameMatch = eq(sql`lower(${usersTable.username})`, username.toLowerCase());
+
   let user: typeof usersTable.$inferSelect | undefined;
   if (requestedCompanyId != null) {
     const [found] = await db
       .select()
       .from(usersTable)
-      .where(and(eq(usersTable.username, username), eq(usersTable.companyId, requestedCompanyId)));
+      .where(and(usernameMatch, eq(usersTable.companyId, requestedCompanyId)));
     user = found;
   } else {
     // No company selected — try super_admin (company_id IS NULL) first.
     const [superAdminMatch] = await db
       .select()
       .from(usersTable)
-      .where(and(eq(usersTable.username, username), isNull(usersTable.companyId)));
+      .where(and(usernameMatch, isNull(usersTable.companyId)));
     if (superAdminMatch) {
       user = superAdminMatch;
     } else {
@@ -127,7 +131,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
         const [found] = await db
           .select()
           .from(usersTable)
-          .where(and(eq(usersTable.username, username), eq(usersTable.companyId, defaultCompanyId)));
+          .where(and(usernameMatch, eq(usersTable.companyId, defaultCompanyId)));
         user = found;
       }
 
@@ -142,7 +146,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
         const candidates = await db
           .select()
           .from(usersTable)
-          .where(and(eq(usersTable.username, username), isNotNull(usersTable.companyId)));
+          .where(and(usernameMatch, isNotNull(usersTable.companyId)));
         if (candidates.length === 1) {
           user = candidates[0];
         }
