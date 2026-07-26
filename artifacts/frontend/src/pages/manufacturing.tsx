@@ -2003,9 +2003,11 @@ function DispatchReadyBatchDialog({
 }
 
 // --------------------------- MATERIAL TRANSFER TAB ---------------------------
-// Printable log of raw material sent between Store and Manufacturing. Does
-// NOT touch product.currentStock — this app tracks one stock number per
-// product, not separate location-wise stock, so this is a paper trail only.
+// A worker can log a transfer directly, without waiting for a Ready Material
+// batch to be dispatched — e.g. goods were physically sent before the
+// assembly paperwork caught up. This deducts the product's current_stock and
+// deliberately allows it to go negative, which flags the shortfall on the
+// Inventory page until the matching assembly/dispatch is recorded.
 
 interface TransferDraftItem {
   productId: string;
@@ -2161,8 +2163,9 @@ function MaterialTransferTab() {
             Material Transfer
           </h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Log raw material sent to/from Store. A printable slip only — stock
-            quantities are not affected.
+            Log material sent to/from Store. Deducts stock immediately — goes
+            negative if it hasn't all been assembled yet, and self-corrects
+            once it is.
           </p>
         </div>
         <Button
@@ -2293,8 +2296,9 @@ function MaterialTransferTab() {
           <DialogHeader>
             <DialogTitle>New Material Transfer</DialogTitle>
             <DialogDescription>
-              Log items sent between Store and Manufacturing. This is a
-              printable record only — it does not change stock quantities.
+              Log items sent between Store and Manufacturing. Stock is deducted
+              immediately — it can go negative if the item isn't fully
+              assembled yet; that's expected and will correct itself once it is.
             </DialogDescription>
           </DialogHeader>
 

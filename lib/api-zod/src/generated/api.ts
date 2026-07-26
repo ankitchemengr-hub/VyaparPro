@@ -841,6 +841,13 @@ export const ListBrandsResponse = zod.array(ListBrandsResponseItem)
 
 
 /**
+ * @summary Distinct packaging unit names already in use (Box, Barrel, Drum, etc.), for the Add/Edit Product combobox
+ */
+export const ListPackagingUnitsResponseItem = zod.string()
+export const ListPackagingUnitsResponse = zod.array(ListPackagingUnitsResponseItem)
+
+
+/**
  * @summary Admin-only dry run of "Recalculate Prices" — shows which manufactured products' cost/wholesale/retail price would change, without writing anything.
  */
 export const GetRecalculatePricePreviewResponseItem = zod.object({
@@ -2819,7 +2826,7 @@ export const ListMaterialTransfersResponse = zod.array(ListMaterialTransfersResp
 
 
 /**
- * @summary Log a material transfer slip (printable log only; does not adjust stock)
+ * @summary Manually log a material transfer without a Ready Material batch. Deducts the product's stock, allowed to go negative if the goods weren't fully assembled yet.
  */
 
 

@@ -691,6 +691,21 @@ paths:
                 items:
                   type: string
 
+  /products/packaging-units:
+    get:
+      operationId: listPackagingUnits
+      tags: [products]
+      summary: Distinct packaging unit names already in use (Box, Barrel, Drum, etc.), for the Add/Edit Product combobox
+      responses:
+        "200":
+          description: Packaging units
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
   /products/recalculate-preview:
     get:
       operationId: getRecalculatePricePreview
@@ -2030,7 +2045,7 @@ paths:
     post:
       operationId: createMaterialTransfer
       tags: [manufacturing]
-      summary: Log a material transfer slip (printable log only; does not adjust stock)
+      summary: Manually log a material transfer without a Ready Material batch. Deducts the product's stock, allowed to go negative if the goods weren't fully assembled yet.
       requestBody:
         required: true
         content:

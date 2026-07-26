@@ -2796,6 +2796,83 @@ export function useListBrands<TData = Awaited<ReturnType<typeof listBrands>>, TE
 
 
 
+export const getListPackagingUnitsUrl = () => {
+
+
+
+
+  return `/api/products/packaging-units`
+}
+
+/**
+ * @summary Distinct packaging unit names already in use (Box, Barrel, Drum, etc.), for the Add/Edit Product combobox
+ */
+export const listPackagingUnits = async ( options?: RequestInit): Promise<string[]> => {
+
+  return customFetch<string[]>(getListPackagingUnitsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPackagingUnitsQueryKey = () => {
+    return [
+    `/api/products/packaging-units`
+    ] as const;
+    }
+
+
+export const getListPackagingUnitsQueryOptions = <TData = Awaited<ReturnType<typeof listPackagingUnits>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPackagingUnits>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPackagingUnitsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPackagingUnits>>> = ({ signal }) => listPackagingUnits({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPackagingUnits>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPackagingUnitsQueryResult = NonNullable<Awaited<ReturnType<typeof listPackagingUnits>>>
+export type ListPackagingUnitsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Distinct packaging unit names already in use (Box, Barrel, Drum, etc.), for the Add/Edit Product combobox
+ */
+
+export function useListPackagingUnits<TData = Awaited<ReturnType<typeof listPackagingUnits>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPackagingUnits>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPackagingUnitsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getGetRecalculatePricePreviewUrl = () => {
 
 
@@ -7487,7 +7564,7 @@ export const getCreateMaterialTransferUrl = () => {
 }
 
 /**
- * @summary Log a material transfer slip (printable log only; does not adjust stock)
+ * @summary Manually log a material transfer without a Ready Material batch. Deducts the product's stock, allowed to go negative if the goods weren't fully assembled yet.
  */
 export const createMaterialTransfer = async (createMaterialTransferInput: CreateMaterialTransferInput, options?: RequestInit): Promise<MaterialTransfer> => {
 
@@ -7535,7 +7612,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type CreateMaterialTransferMutationError = ErrorType<void>
 
     /**
- * @summary Log a material transfer slip (printable log only; does not adjust stock)
+ * @summary Manually log a material transfer without a Ready Material batch. Deducts the product's stock, allowed to go negative if the goods weren't fully assembled yet.
  */
 export const useCreateMaterialTransfer = <TError = ErrorType<void>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createMaterialTransfer>>, TError,{data: BodyType<CreateMaterialTransferInput>}, TContext>, request?: SecondParameter<typeof customFetch>}

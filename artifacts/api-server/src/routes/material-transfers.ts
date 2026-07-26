@@ -4,6 +4,12 @@ import { getCompanyId } from "../lib/tenant";
 
 const router: IRouter = Router();
 
+interface MaterialTransferItemInput {
+  productId: number;
+  qty: number;
+  unit: string;
+}
+
 async function queryOne(text: string, params: any[] = []): Promise<any> {
   const result = await pool.query(text, params);
   return result.rows[0] ?? {};
@@ -12,12 +18,6 @@ async function queryOne(text: string, params: any[] = []): Promise<any> {
 async function queryMany(text: string, params: any[] = []): Promise<any[]> {
   const result = await pool.query(text, params);
   return result.rows;
-}
-
-interface MaterialTransferItemInput {
-  productId: number;
-  qty: number;
-  unit: string;
 }
 
 // GET /material-transfers — list, most recent first, with item count.
@@ -89,14 +89,18 @@ router.get("/material-transfers/:id", async (req, res): Promise<void> => {
   });
 });
 
-// POST /material-transfers — atomic create: allocate the next transfer_no
-// (SELECT ... FOR UPDATE guards against concurrent duplicates) and insert the
-// header + line items in one transaction. Purely a printable log — does NOT
-// touch product.currentStock (this app tracks one stock number per product,
-// not separate Store vs Manufacturing counts).
+// POST /material-transfers — manual slip a worker creates directly, without
+// going through a Ready Material batch (e.g. material was physically sent
+// before the assembly/dispatch paperwork caught up). Unlike a ready-batch
+// dispatch (which credits stock), a manual transfer here DEDUCTS the product's
+// current_stock — it represents stock leaving. Deliberately NOT blocked on
+// insufficient stock: if the worker sends more than what's actually assembled
+// yet, current_stock is allowed to go negative as a visible flag. It self-
+// corrects once the shortfall is assembled and dispatched normally.
 router.post("/material-transfers", async (req, res): Promise<void> => {
   const companyId = getCompanyId(req);
   const auth = (req as any).session;
+  const userId = auth?.userId ?? 1;
   const body = req.body as {
     transferDate?: string;
     sentBy?: string;
@@ -146,7 +150,7 @@ router.post("/material-transfers", async (req, res): Promise<void> => {
         body.transferDate ? new Date(body.transferDate) : new Date(),
         body.sentBy?.trim() || null,
         body.notes?.trim() || null,
-        auth?.userId ?? null,
+        userId,
       ],
     );
     const header = headerRes.rows[0];
@@ -166,6 +170,18 @@ router.post("/material-transfers", async (req, res): Promise<void> => {
          VALUES ($1, $2, $3, $4, $5, $6)`,
         [companyId, header.id, item.productId, productName, item.qty, item.unit || "QTY"],
       );
+
+      // Deduct stock — allowed to go negative on purpose (see comment above).
+      await client.query(
+        `UPDATE products SET current_stock = current_stock - $1 WHERE id = $2 AND company_id = $3`,
+        [item.qty, item.productId, companyId],
+      );
+      await client.query(
+        `INSERT INTO stock_movements (company_id, product_id, type, quantity, reason, reference_id, reference_type, user_id)
+         VALUES ($1, $2, 'manufacturing_transfer', $3, 'Manual material transfer', $4, 'material_transfer', $5)`,
+        [companyId, item.productId, -Number(item.qty), header.id, userId],
+      );
+
       savedItems.push({ productId: item.productId, productName, qty: Number(item.qty), unit: item.unit || "QTY" });
     }
 
@@ -188,8 +204,7 @@ router.post("/material-transfers", async (req, res): Promise<void> => {
   }
 });
 
-// DELETE /material-transfers/:id — admin only, so line workers can log
-// transfers but only an admin can erase one from the record.
+// DELETE /material-transfers/:id — admin only.
 router.delete("/material-transfers/:id", async (req, res): Promise<void> => {
   const role = (req as any).session?.role;
   if (role !== "admin") {
