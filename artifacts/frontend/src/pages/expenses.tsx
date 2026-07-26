@@ -21,7 +21,68 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Loader2, Trash2, Receipt, Tag, FolderPlus, CalendarDays, FileBarChart, Printer } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { cn } from "@/lib/utils";
+import { Plus, Loader2, Trash2, Receipt, Tag, FolderPlus, CalendarDays, FileBarChart, Printer, ChevronsUpDown, Check } from "lucide-react";
+
+// Type-to-search picker for Category — a plain <Select> forced scrolling
+// through the whole list with no way to filter, which was especially
+// unusable on a phone screen once there were more than a handful of them.
+function CategoryCombobox({
+  categories, value, onChange, placeholder = "Choose category", testId,
+}: {
+  categories: { id: number; name: string }[];
+  value: string;
+  onChange: (id: string) => void;
+  placeholder?: string;
+  testId?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = categories.find((c) => String(c.id) === value);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          type="button"
+          aria-expanded={open}
+          className="w-full justify-between font-normal"
+          data-testid={testId}
+        >
+          <span className={cn("truncate", !selected && "text-muted-foreground")}>
+            {selected ? selected.name : placeholder}
+          </span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[280px] max-w-[calc(100vw-2rem)] p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Search category…" />
+          <CommandList className="max-h-60">
+            <CommandEmpty>No category found.</CommandEmpty>
+            <CommandGroup>
+              {categories.map((c) => (
+                <CommandItem
+                  key={c.id}
+                  value={c.name}
+                  onSelect={() => {
+                    onChange(String(c.id));
+                    setOpen(false);
+                  }}
+                >
+                  <Check className={cn("mr-2 h-4 w-4 shrink-0", value === String(c.id) ? "opacity-100" : "opacity-0")} />
+                  <span className="truncate">{c.name}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 const formatRs = (n: number) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(n);
@@ -139,14 +200,12 @@ function ExpenseDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b
                 <FolderPlus className="w-3 h-3" /> Manage
               </button>
             </div>
-            <Select value={form.categoryId ? String(form.categoryId) : ""} onValueChange={(v) => setForm({ ...form, categoryId: Number(v) })}>
-              <SelectTrigger data-testid="select-expense-category"><SelectValue placeholder="Choose category" /></SelectTrigger>
-              <SelectContent>
-                {activeCats.map((c) => (
-                  <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <CategoryCombobox
+              categories={activeCats}
+              value={form.categoryId ? String(form.categoryId) : ""}
+              onChange={(v) => setForm({ ...form, categoryId: Number(v) })}
+              testId="select-expense-category"
+            />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -228,7 +287,7 @@ function ExpenseReportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[92dvh] overflow-y-auto">
         <DialogHeader className="print:hidden">
           <DialogTitle className="flex items-center gap-2"><FileBarChart className="w-5 h-5" /> Expense Report</DialogTitle>
           <DialogDescription>Filter by date range and category, then print if needed.</DialogDescription>
