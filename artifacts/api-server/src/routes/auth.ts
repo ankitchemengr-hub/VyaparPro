@@ -111,12 +111,26 @@ router.post("/auth/login", async (req, res): Promise<void> => {
       .where(and(eq(usersTable.username, username), eq(usersTable.companyId, requestedCompanyId)));
     user = found;
   } else {
-    // No company selected → super_admin only (company_id IS NULL).
-    const [found] = await db
+    // No company selected — try super_admin (company_id IS NULL) first.
+    const [superAdminMatch] = await db
       .select()
       .from(usersTable)
       .where(and(eq(usersTable.username, username), isNull(usersTable.companyId)));
-    user = found;
+    if (superAdminMatch) {
+      user = superAdminMatch;
+    } else {
+      // Dedicated single-company installs have no company picker on the login
+      // screen at all, so regular staff never send a companyId — fall back to
+      // the deployment's locked-in company instead of failing the lookup.
+      const defaultCompanyId = getDefaultCompanyId();
+      if (defaultCompanyId != null) {
+        const [found] = await db
+          .select()
+          .from(usersTable)
+          .where(and(eq(usersTable.username, username), eq(usersTable.companyId, defaultCompanyId)));
+        user = found;
+      }
+    }
   }
 
   if (!user || !verifyPassword(password, user.passwordHash)) {
