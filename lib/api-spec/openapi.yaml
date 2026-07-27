@@ -3318,7 +3318,7 @@ components:
           maxLength: 32
         password:
           type: string
-          minLength: 4
+          minLength: 8
         name:
           type: string
         role:
@@ -3348,7 +3348,7 @@ components:
           type: ["integer", "null"]
         password:
           type: string
-          minLength: 4
+          minLength: 8
 
     RolePermission:
       type: object

@@ -14,6 +14,7 @@ import { getCompanyId, handleTenantError } from "../lib/tenant";
 import { isAccountAllowedHere, getDefaultCompanyId } from "../lib/system-config";
 import { getCurrentCompany } from "../lib/company";
 import { verifyPassword } from "../lib/password";
+import { loginRateLimitKey, checkLoginRateLimit, recordLoginFailure, clearLoginAttempts } from "../lib/login-rate-limit";
 
 const router: IRouter = Router();
 
@@ -94,6 +95,19 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   // Sentinel company_id for audit rows where the company cannot be determined.
   const auditCompanyId = requestedCompanyId ?? 0;
 
+  // Brute-force guard — keyed by ip+username so unlimited password guesses
+  // against one account are blocked without penalizing other users on the
+  // same shared IP (e.g. a shop's wifi).
+  const rateLimitKey = loginRateLimitKey(ip, username);
+  const rateLimit = checkLoginRateLimit(rateLimitKey);
+  if (rateLimit.blocked) {
+    res.status(429).json({
+      error: `Too many failed login attempts. Try again in ${Math.ceil(rateLimit.retryAfterMs / 60000)} minute(s).`,
+    });
+    await writeLoginAudit({ username, companyId: auditCompanyId, ipAddress: ip, success: false, reason: "rate_limited" });
+    return;
+  }
+
   // Since usernames are unique per company (not globally), the lookup MUST be
   // scoped to a specific company. Two strategies:
   //
@@ -155,10 +169,12 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   }
 
   if (!user || !verifyPassword(password, user.passwordHash)) {
+    recordLoginFailure(rateLimitKey);
     res.status(401).json({ error: "Invalid credentials" });
     await writeLoginAudit({ username, companyId: auditCompanyId, ipAddress: ip, success: false, reason: "wrong_password" });
     return;
   }
+  clearLoginAttempts(rateLimitKey);
 
   // Inactive accounts are rejected immediately, regardless of role or company.
   if (!user.isActive) {

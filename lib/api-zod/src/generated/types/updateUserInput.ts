@@ -19,6 +19,6 @@ export interface UpdateUserInput {
   isActive?: boolean;
   /** @nullable */
   entityId?: number | null;
-  /** @minLength 4 */
+  /** @minLength 8 */
   password?: string;
 }

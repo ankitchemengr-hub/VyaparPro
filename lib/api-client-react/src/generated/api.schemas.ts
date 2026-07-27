@@ -358,7 +358,7 @@ export interface CreateUserInput {
      * @maxLength 32
      */
   username: string;
-  /** @minLength 4 */
+  /** @minLength 8 */
   password: string;
   name?: string;
   role: CreateUserInputRole;
@@ -403,7 +403,7 @@ export interface UpdateUserInput {
   isActive?: boolean;
   /** @nullable */
   entityId?: number | null;
-  /** @minLength 4 */
+  /** @minLength 8 */
   password?: string;
 }
 
