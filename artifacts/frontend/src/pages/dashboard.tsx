@@ -10,6 +10,8 @@ import {
   getGetLitersSoldQueryKey,
   useListWorkloadCards,
   useListProducts,
+  useGetProfitLossReport,
+  getGetProfitLossReportQueryKey,
 } from "@workspace/api-client-react";
 import {
   IndianRupee,
@@ -55,6 +57,22 @@ export default function Dashboard() {
   const { data: litersSold, isLoading: isLoadingLiters } = useGetLitersSold({
     query: { queryKey: getGetLitersSoldQueryKey(), enabled: isAdmin },
   });
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const weekStartStr = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const monthStartStr = (() => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
+  })();
+  const weekProfitParams = { from: weekStartStr, to: todayStr };
+  const monthProfitParams = { from: monthStartStr, to: todayStr };
+  const { data: weekProfit, isLoading: isLoadingWeekProfit } = useGetProfitLossReport(weekProfitParams, {
+    query: { queryKey: getGetProfitLossReportQueryKey(weekProfitParams), enabled: isAdmin },
+  });
+  const { data: monthProfit, isLoading: isLoadingMonthProfit } = useGetProfitLossReport(monthProfitParams, {
+    query: { queryKey: getGetProfitLossReportQueryKey(monthProfitParams), enabled: isAdmin },
+  });
+
   const { data: workloadCards } = useListWorkloadCards();
   const { data: manufacturingProducts } = useListProducts();
 
@@ -219,6 +237,44 @@ export default function Dashboard() {
                   </TabsContent>
                 </Tabs>
               )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Profit</CardTitle>
+              <IndianRupee className="h-4 w-4 text-emerald-600" />
+            </CardHeader>
+            <CardContent>
+              <Tabs defaultValue="week">
+                <TabsList className="h-7">
+                  <TabsTrigger value="week" className="text-xs px-2 py-0.5">Week</TabsTrigger>
+                  <TabsTrigger value="month" className="text-xs px-2 py-0.5">Month</TabsTrigger>
+                </TabsList>
+                <TabsContent value="week">
+                  {isLoadingWeekProfit || !weekProfit ? (
+                    <div className="h-8 w-24 bg-muted rounded animate-pulse" />
+                  ) : (
+                    <div
+                      className={`text-2xl font-bold ${weekProfit.netProfit >= 0 ? "text-green-600" : "text-red-600"}`}
+                      data-testid="text-profit-week-value"
+                    >
+                      ₹{weekProfit.netProfit.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                    </div>
+                  )}
+                </TabsContent>
+                <TabsContent value="month">
+                  {isLoadingMonthProfit || !monthProfit ? (
+                    <div className="h-8 w-24 bg-muted rounded animate-pulse" />
+                  ) : (
+                    <div
+                      className={`text-2xl font-bold ${monthProfit.netProfit >= 0 ? "text-green-600" : "text-red-600"}`}
+                      data-testid="text-profit-month-value"
+                    >
+                      ₹{monthProfit.netProfit.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                    </div>
+                  )}
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
         </div>
