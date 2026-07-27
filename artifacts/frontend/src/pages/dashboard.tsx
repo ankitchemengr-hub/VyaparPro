@@ -35,6 +35,7 @@ export default function Dashboard() {
   const isManagement = hasRole(["admin", "accountant"]);
   const isAdmin = hasRole(["admin"]);
   const [showCapitalDetails, setShowCapitalDetails] = React.useState(false);
+  const [showGrowthDetails, setShowGrowthDetails] = React.useState(false);
 
   if (!isManagement) {
     // If not management, they shouldn't really be here, they should be redirected to catalog
@@ -170,16 +171,25 @@ export default function Dashboard() {
               )}
             </CardContent>
           </Card>
-          <Card>
+          <Card
+            className={capital?.growthBreakdown ? "cursor-pointer select-none" : ""}
+            onClick={() => capital?.growthBreakdown && setShowGrowthDetails((v) => !v)}
+            data-testid="card-growth"
+          >
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Growth</CardTitle>
-              {capital?.growthK == null ? (
-                <TrendingUp className="h-4 w-4 text-muted-foreground" />
-              ) : capital.growthK >= 0 ? (
-                <ArrowUpRight className="h-4 w-4 text-green-600" />
-              ) : (
-                <ArrowDownRight className="h-4 w-4 text-red-600" />
-              )}
+              <div className="flex items-center gap-1">
+                {capital?.growthK == null ? (
+                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                ) : capital.growthK >= 0 ? (
+                  <ArrowUpRight className="h-4 w-4 text-green-600" />
+                ) : (
+                  <ArrowDownRight className="h-4 w-4 text-red-600" />
+                )}
+                {capital?.growthBreakdown && (
+                  <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${showGrowthDetails ? "rotate-180" : ""}`} />
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               {isLoadingCapital || !capital ? (
@@ -187,11 +197,32 @@ export default function Dashboard() {
               ) : capital.growthK == null ? (
                 <div className="text-2xl font-bold text-muted-foreground">—</div>
               ) : (
+                <>
                 <div className={`text-2xl font-bold ${capital.growthK >= 0 ? "text-green-600" : "text-red-600"}`} data-testid="text-growth-value">
                   {capital.growthK >= 0 ? "+" : ""}
                   {capital.growthK.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                   <span className="text-xs text-muted-foreground font-normal ml-1">k</span>
                 </div>
+                {showGrowthDetails && capital.growthBreakdown && (
+                  <div className="mt-2 space-y-0.5 text-[11px]">
+                    <div className="text-muted-foreground/70 mb-1">
+                      vs {capital.previousDate ?? "previous snapshot"} — why it moved:
+                    </div>
+                    {capital.growthBreakdown.map((row) => (
+                      <div
+                        key={row.label}
+                        className={`flex justify-between ${row.change < 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}
+                        data-testid={`text-growth-${row.label.toLowerCase().replace(/\s+/g, "-")}`}
+                      >
+                        <span>{row.label}</span>
+                        <span className="tabular-nums">
+                          {row.change >= 0 ? "+" : "-"}₹{Math.abs(row.change).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                </>
               )}
             </CardContent>
           </Card>

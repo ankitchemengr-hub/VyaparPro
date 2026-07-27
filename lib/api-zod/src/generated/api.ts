@@ -2961,7 +2961,11 @@ export const GetCapitalSnapshotResponse = zod.object({
   "previousCapitalK": zod.number().nullish(),
   "previousDate": zod.string().nullish(),
   "growth": zod.number().nullish().describe('today capital - yesterday capital (raw rupees)'),
-  "growthK": zod.number().nullish().describe('today capitalK - yesterday capitalK (the value to display)')
+  "growthK": zod.number().nullish().describe('today capitalK - yesterday capitalK (the value to display)'),
+  "growthBreakdown": zod.array(zod.object({
+  "label": zod.string(),
+  "change": zod.number()
+})).nullish().describe('Per-component change since the previous snapshot, explaining what drove growth up\/down. Null until a prior snapshot exists.')
 })
 
 

@@ -46,6 +46,7 @@ export * from './bulkStockReconciliation201';
 export * from './bulkStockReconciliationInput';
 export * from './bulkStockReconciliationInputItemsItem';
 export * from './capitalSnapshot';
+export * from './capitalSnapshotGrowthBreakdownItem';
 export * from './cashbookSummary';
 export * from './changePlanInput';
 export * from './changePlanInputPlanName';

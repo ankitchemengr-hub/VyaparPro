@@ -5,6 +5,7 @@
  * Shradha Oil Center ERP API
  * OpenAPI spec version: 0.1.0
  */
+import type { CapitalSnapshotGrowthBreakdownItem } from './capitalSnapshotGrowthBreakdownItem';
 
 export interface CapitalSnapshot {
   snapshotDate: string;
@@ -33,4 +34,9 @@ export interface CapitalSnapshot {
      * @nullable
      */
   growthK?: number | null;
+  /**
+     * Per-component change since the previous snapshot, explaining what drove growth up/down. Null until a prior snapshot exists.
+     * @nullable
+     */
+  growthBreakdown?: CapitalSnapshotGrowthBreakdownItem[] | null;
 }

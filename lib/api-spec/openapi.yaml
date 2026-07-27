@@ -5661,6 +5661,17 @@ components:
         growthK:
           type: ["number", "null"]
           description: today capitalK - yesterday capitalK (the value to display)
+        growthBreakdown:
+          type: ["array", "null"]
+          description: Per-component change since the previous snapshot, explaining what drove growth up/down. Null until a prior snapshot exists.
+          items:
+            type: object
+            required: [label, change]
+            properties:
+              label:
+                type: string
+              change:
+                type: number
 
     LitersSold:
       type: object

@@ -127,7 +127,7 @@ router.get("/dashboard/capital", async (req, res): Promise<void> => {
 
   // Look up most recent prior snapshot (yesterday preferred, else latest before today)
   const prevRow = await queryOne(
-    `SELECT snapshot_date, capital
+    `SELECT snapshot_date, capital, inventory_value, receivable, cash_in_accounts, payable, expenses
      FROM capital_snapshots
      WHERE company_id = $1 AND snapshot_date < $2
      ORDER BY snapshot_date DESC
@@ -145,6 +145,20 @@ router.get("/dashboard/capital", async (req, res): Promise<void> => {
   const growth = previousCapital != null ? capital - previousCapital : null;
   const growthK = previousCapitalK != null ? capitalK - previousCapitalK : null;
 
+  // Per-component change since the previous snapshot, so "Growth" can explain
+  // itself instead of just showing one number — same sign convention as the
+  // Capital card's own breakdown (inventory/receivable/cash grow capital,
+  // payable/expenses shrink it).
+  const growthBreakdown = prevRow
+    ? [
+        { label: "Inventory", change: inventoryValue - Number(prevRow.inventory_value ?? 0) },
+        { label: "Receivable", change: receivable - Number(prevRow.receivable ?? 0) },
+        { label: "Cash", change: cashInAccounts - Number(prevRow.cash_in_accounts ?? 0) },
+        { label: "Supplier Balance", change: -(payable - Number(prevRow.payable ?? 0)) },
+        { label: "Expenses", change: -(expenses - Number(prevRow.expenses ?? 0)) },
+      ]
+    : null;
+
   res.json({
     snapshotDate: todayStr,
     inventoryValue,
@@ -159,6 +173,7 @@ router.get("/dashboard/capital", async (req, res): Promise<void> => {
     previousDate,
     growth,
     growthK,
+    growthBreakdown,
   });
 });
 

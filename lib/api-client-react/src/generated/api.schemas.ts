@@ -2275,6 +2275,11 @@ export interface CommissionReport {
   rows: CommissionReportRowsItem[];
 }
 
+export type CapitalSnapshotGrowthBreakdownItem = {
+  label: string;
+  change: number;
+};
+
 export interface CapitalSnapshot {
   snapshotDate: string;
   inventoryValue: number;
@@ -2302,6 +2307,11 @@ export interface CapitalSnapshot {
      * @nullable
      */
   growthK?: number | null;
+  /**
+     * Per-component change since the previous snapshot, explaining what drove growth up/down. Null until a prior snapshot exists.
+     * @nullable
+     */
+  growthBreakdown?: CapitalSnapshotGrowthBreakdownItem[] | null;
 }
 
 export interface LitersSold {
