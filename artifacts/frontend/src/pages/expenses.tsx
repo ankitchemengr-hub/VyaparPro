@@ -6,6 +6,7 @@ import {
   useListExpenseCategories,
   useCreateExpenseCategory,
   useDeleteExpenseCategory,
+  useListAccounts,
   getListExpensesQueryKey,
   getListExpenseCategoriesQueryKey,
   type ExpenseInput,
@@ -136,20 +137,27 @@ function ExpenseDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b
   const [catOpen, setCatOpen] = useState(false);
   const { data: categories } = useListExpenseCategories();
   const activeCats = useMemo(() => (categories ?? []).filter((c) => c.isActive), [categories]);
+  const { data: accounts } = useListAccounts();
+  const activeAccounts = useMemo(() => (accounts ?? []).filter((a) => a.isActive), [accounts]);
   const [form, setForm] = useState<ExpenseInput>({
     date: todayISO(),
     categoryId: 0,
     amount: 0,
     paymentMode: "cash",
+    accountId: 0,
     paidTo: "",
     notes: "",
   });
 
-  const reset = () => setForm({ date: todayISO(), categoryId: 0, amount: 0, paymentMode: "cash", paidTo: "", notes: "" });
+  const reset = () => setForm({ date: todayISO(), categoryId: 0, amount: 0, paymentMode: "cash", accountId: 0, paidTo: "", notes: "" });
 
   const handleSave = () => {
     if (!form.categoryId) {
       toast({ title: "Select category", variant: "destructive" });
+      return;
+    }
+    if (!form.accountId) {
+      toast({ title: "Select which account this was paid from", variant: "destructive" });
       return;
     }
     if (!form.amount || form.amount <= 0) {
@@ -164,6 +172,14 @@ function ExpenseDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b
           toast({ title: "Expense recorded" });
           reset();
           onOpenChange(false);
+        },
+        onError: async (e: any) => {
+          let desc = e?.message ?? "Server error";
+          try {
+            const body = e?.response ? await e.response.json() : null;
+            if (body?.error) desc = String(body.error);
+          } catch {}
+          toast({ title: "Could not save expense", description: desc, variant: "destructive" });
         },
       },
     );
@@ -206,6 +222,18 @@ function ExpenseDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b
               onChange={(v) => setForm({ ...form, categoryId: Number(v) })}
               testId="select-expense-category"
             />
+          </div>
+          <div>
+            <Label>Paid From Account *</Label>
+            <Select value={form.accountId ? String(form.accountId) : ""} onValueChange={(v) => setForm({ ...form, accountId: Number(v) })}>
+              <SelectTrigger data-testid="select-expense-account"><SelectValue placeholder="Choose account" /></SelectTrigger>
+              <SelectContent>
+                {activeAccounts.map((a) => (
+                  <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-muted-foreground mt-1">Deducted from this account's balance and shows up in Cash Book.</p>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>

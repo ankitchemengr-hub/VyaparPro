@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, gte, lte, sql, desc } from "drizzle-orm";
-import { db } from "@workspace/db";
+import { db, pool } from "@workspace/db";
 import { expensesTable, expenseCategoriesTable, usersTable } from "@workspace/db";
 import {
   CreateExpenseCategoryBody,
@@ -10,6 +10,15 @@ import {
   ListExpensesQueryParams,
 } from "@workspace/api-zod";
 import { getCompanyId } from "../lib/tenant";
+import { generateSeriesNumber } from "../lib/number-series";
+import { logger } from "../lib/logger";
+
+// expenses.payment_mode (cash | upi | bank) -> account_transactions.mode enum.
+const PAYMENT_MODE_TO_TXN_MODE: Record<string, string> = {
+  cash: "cash",
+  upi: "upi",
+  bank: "bank_transfer",
+};
 
 const router: IRouter = Router();
 
@@ -52,6 +61,7 @@ function formatExpense(e: any, userName?: string | null) {
     categoryName: e.categoryName ?? e.category_name,
     amount: Number(e.amount),
     paymentMode: e.paymentMode ?? e.payment_mode,
+    accountId: e.accountId ?? e.account_id ?? null,
     paidTo: e.paidTo ?? e.paid_to ?? null,
     notes: e.notes ?? null,
     createdByUserId: e.createdByUserId ?? e.created_by_user_id ?? null,
@@ -147,6 +157,7 @@ router.get("/expenses", async (req, res): Promise<void> => {
       categoryName: expensesTable.categoryName,
       amount: expensesTable.amount,
       paymentMode: expensesTable.paymentMode,
+      accountId: expensesTable.accountId,
       paidTo: expensesTable.paidTo,
       notes: expensesTable.notes,
       createdByUserId: expensesTable.createdByUserId,
@@ -173,7 +184,9 @@ router.get("/expenses", async (req, res): Promise<void> => {
   res.json({ items, total, byCategory });
 });
 
-// POST /expenses
+// POST /expenses — also records a matching "out" entry in Cash Book
+// (account_transactions) against the chosen account, atomically, so an
+// expense's cash/bank impact is never silently missing from the ledger.
 router.post("/expenses", async (req, res): Promise<void> => {
   if (!requireWrite(req, res)) return;
   const parsed = CreateExpenseBody.safeParse(req.body);
@@ -188,24 +201,85 @@ router.post("/expenses", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Category not found" });
     return;
   }
-  const [created] = await db
-    .insert(expensesTable)
-    .values({
-      companyId,
-      date: parsed.data.date,
-      categoryId: parsed.data.categoryId,
-      categoryName: cat.name,
-      amount: String(parsed.data.amount),
-      paymentMode: parsed.data.paymentMode,
-      paidTo: parsed.data.paidTo ?? null,
-      notes: parsed.data.notes ?? null,
-      createdByUserId: session?.userId ?? null,
-    })
-    .returning();
-  res.status(201).json(formatExpense(created));
+
+  const amount = Number(parsed.data.amount);
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
+
+    const acctRes = await client.query(
+      `SELECT id, name, current_balance FROM accounts WHERE company_id = $1 AND id = $2 AND is_active = true FOR UPDATE`,
+      [companyId, parsed.data.accountId],
+    );
+    if (acctRes.rows.length === 0) {
+      await client.query("ROLLBACK");
+      res.status(404).json({ error: "Account not found or inactive" });
+      return;
+    }
+    const acct = acctRes.rows[0];
+    const current = Number(acct.current_balance);
+    const canOverride = session?.role === "admin" && parsed.data.allowNegative === true;
+    if (current < amount - 0.001 && !canOverride) {
+      await client.query("ROLLBACK");
+      res.status(400).json({ error: `Insufficient balance in ${acct.name} (₹${current.toFixed(2)})` });
+      return;
+    }
+
+    const expenseRes = await client.query(
+      `INSERT INTO expenses (company_id, date, category_id, category_name, amount, payment_mode, account_id, paid_to, notes, created_by_user_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       RETURNING *`,
+      [
+        companyId,
+        parsed.data.date,
+        parsed.data.categoryId,
+        cat.name,
+        String(amount),
+        parsed.data.paymentMode,
+        parsed.data.accountId,
+        parsed.data.paidTo ?? null,
+        parsed.data.notes ?? null,
+        session?.userId ?? null,
+      ],
+    );
+    const created = expenseRes.rows[0];
+
+    const receiptNo = await generateSeriesNumber(client, "payment_receipt", companyId);
+    await client.query(
+      `INSERT INTO account_transactions
+        (company_id, account_id, direction, amount, mode, party_name, notes, receipt_no, created_by_id, created_by_name, created_by_role)
+       VALUES ($1,$2,'out',$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [
+        companyId,
+        parsed.data.accountId,
+        amount,
+        PAYMENT_MODE_TO_TXN_MODE[parsed.data.paymentMode] ?? "other",
+        parsed.data.paidTo ?? null,
+        `Expense: ${cat.name}`,
+        receiptNo,
+        session?.userId ?? null,
+        session?.name ?? session?.username ?? null,
+        session?.role ?? null,
+      ],
+    );
+    await client.query(
+      `UPDATE accounts SET current_balance = current_balance - $1 WHERE company_id = $2 AND id = $3`,
+      [amount, companyId, parsed.data.accountId],
+    );
+
+    await client.query("COMMIT");
+    res.status(201).json(formatExpense(created));
+  } catch (err) {
+    await client.query("ROLLBACK");
+    logger.error({ err }, "Failed to record expense");
+    res.status(500).json({ error: "Failed to record expense" });
+  } finally {
+    client.release();
+  }
 });
 
-// DELETE /expenses/:id
+// DELETE /expenses/:id — also reverses the linked Cash Book entry (if any)
+// so deleting an expense doesn't leave a stale ledger entry / wrong balance.
 router.delete("/expenses/:id", async (req, res): Promise<void> => {
   if (!requireWrite(req, res)) return;
   const params = DeleteExpenseParams.safeParse(req.params);
@@ -214,8 +288,51 @@ router.delete("/expenses/:id", async (req, res): Promise<void> => {
     return;
   }
   const companyId = getCompanyId(req);
-  await db.delete(expensesTable).where(and(eq(expensesTable.companyId, companyId), eq(expensesTable.id, params.data.id)));
-  res.sendStatus(204);
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const expRes = await client.query(
+      `SELECT * FROM expenses WHERE company_id = $1 AND id = $2 FOR UPDATE`,
+      [companyId, params.data.id],
+    );
+    const expense = expRes.rows[0];
+    if (!expense) {
+      await client.query("ROLLBACK");
+      res.status(404).json({ error: "Expense not found" });
+      return;
+    }
+
+    if (expense.account_id) {
+      // Match the linked ledger entry precisely (same account, "out",
+      // matching amount, tagged with this expense's category) rather than
+      // deleting anything: a stray failed lookup must never delete an
+      // unrelated Cash Book row.
+      const txnRes = await client.query(
+        `SELECT id FROM account_transactions
+         WHERE company_id = $1 AND account_id = $2 AND direction = 'out' AND amount = $3 AND notes = $4
+         ORDER BY created_at DESC LIMIT 1`,
+        [companyId, expense.account_id, expense.amount, `Expense: ${expense.category_name}`],
+      );
+      const txn = txnRes.rows[0];
+      if (txn) {
+        await client.query(`DELETE FROM account_transactions WHERE id = $1 AND company_id = $2`, [txn.id, companyId]);
+        await client.query(
+          `UPDATE accounts SET current_balance = current_balance + $1 WHERE company_id = $2 AND id = $3`,
+          [Number(expense.amount), companyId, expense.account_id],
+        );
+      }
+    }
+
+    await client.query(`DELETE FROM expenses WHERE company_id = $1 AND id = $2`, [companyId, params.data.id]);
+    await client.query("COMMIT");
+    res.sendStatus(204);
+  } catch (err) {
+    await client.query("ROLLBACK");
+    logger.error({ err }, "Failed to delete expense");
+    res.status(500).json({ error: "Failed to delete expense" });
+  } finally {
+    client.release();
+  }
 });
 
 export default router;

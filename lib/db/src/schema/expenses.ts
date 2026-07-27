@@ -18,6 +18,10 @@ export const expensesTable = pgTable("expenses", {
   categoryName: text("category_name").notNull(),
   amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
   paymentMode: text("payment_mode").notNull(), // cash | upi | bank
+  // Which Cash Book account this expense was paid from. Nullable only for
+  // rows created before this column existed; every new expense requires one
+  // so it shows up as a real "out" entry in Cash Book (account_transactions).
+  accountId: integer("account_id"),
   paidTo: text("paid_to"),
   notes: text("notes"),
   createdByUserId: integer("created_by_user_id"),

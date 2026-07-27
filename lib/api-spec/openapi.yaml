@@ -5919,6 +5919,8 @@ components:
         paymentMode:
           type: string
           enum: [cash, upi, bank]
+        accountId:
+          type: ["integer", "null"]
         paidTo:
           type: ["string", "null"]
         notes:
@@ -5932,7 +5934,7 @@ components:
 
     ExpenseInput:
       type: object
-      required: [date, categoryId, amount, paymentMode]
+      required: [date, categoryId, amount, paymentMode, accountId]
       properties:
         date:
           type: string
@@ -5943,10 +5945,15 @@ components:
         paymentMode:
           type: string
           enum: [cash, upi, bank]
+        accountId:
+          type: integer
         paidTo:
           type: string
         notes:
           type: string
+        allowNegative:
+          type: boolean
+          description: Admin-only override to let this expense push the account balance negative instead of being blocked.
 
     ExpenseSummaryRow:
       type: object

@@ -3593,6 +3593,7 @@ export const ListExpensesResponse = zod.object({
   "categoryName": zod.string(),
   "amount": zod.number(),
   "paymentMode": zod.enum(['cash', 'upi', 'bank']),
+  "accountId": zod.number().nullish(),
   "paidTo": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "createdByUserId": zod.number().nullish(),
@@ -3616,8 +3617,10 @@ export const CreateExpenseBody = zod.object({
   "categoryId": zod.number(),
   "amount": zod.number(),
   "paymentMode": zod.enum(['cash', 'upi', 'bank']),
+  "accountId": zod.number(),
   "paidTo": zod.string().optional(),
-  "notes": zod.string().optional()
+  "notes": zod.string().optional(),
+  "allowNegative": zod.boolean().optional().describe('Admin-only override to let this expense push the account balance negative instead of being blocked.')
 })
 
 export const CreateExpenseResponse = zod.object({
@@ -3627,6 +3630,7 @@ export const CreateExpenseResponse = zod.object({
   "categoryName": zod.string(),
   "amount": zod.number(),
   "paymentMode": zod.enum(['cash', 'upi', 'bank']),
+  "accountId": zod.number().nullish(),
   "paidTo": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "createdByUserId": zod.number().nullish(),

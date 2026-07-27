@@ -3,6 +3,7 @@ import path from "node:path";
 import pg from "pg";
 import { logger } from "./logger";
 import { hashPassword, isHashed } from "./password";
+import { generateSeriesNumber } from "./number-series";
 
 const SCHEMA_FILE_NAME = "production-schema.sql";
 const SEED_FILE_NAME = "production-seed-data.sql";
@@ -299,6 +300,11 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
     // invoice, or first use of a document type like purchase orders) fails
     // with "column format_string does not exist".
     `ALTER TABLE number_series ADD COLUMN IF NOT EXISTS format_string TEXT`,
+
+    // ── Expenses: which Cash Book account the expense was paid from ────────
+    // Nullable so older rows (created before this column existed) don't
+    // break — backfillExpenseAccounts() below fills them in once.
+    `ALTER TABLE expenses ADD COLUMN IF NOT EXISTS account_id INTEGER`,
   ];
 
   for (const sql of patches) {
@@ -376,6 +382,69 @@ async function hashPlaintextPasswords(client: pg.Client): Promise<void> {
   }
 }
 
+// expenses.payment_mode (cash | upi | bank) -> account_transactions.mode enum.
+const PAYMENT_MODE_TO_TXN_MODE: Record<string, string> = {
+  cash: "cash",
+  upi: "upi",
+  bank: "bank_transfer",
+};
+
+/**
+ * One-time (but safe to re-run) migration: expenses created before the
+ * account_id column existed never showed up in Cash Book, because nothing
+ * ever recorded their cash/bank impact as an account_transactions row. For
+ * each such expense, pick the company's active account whose type matches
+ * the expense's payment_mode (the two use the same cash/upi/bank values) and
+ * post the missing "out" entry, exactly like a fresh expense would today.
+ * Only ever touches rows still missing account_id, so it's cheap to re-run.
+ */
+async function backfillExpenseAccounts(client: pg.Client): Promise<void> {
+  const { rows } = await client.query<{
+    id: number; company_id: number; amount: string; payment_mode: string; paid_to: string | null; category_name: string;
+  }>(
+    `SELECT id, company_id, amount, payment_mode, paid_to, category_name FROM expenses WHERE account_id IS NULL`,
+  );
+  if (rows.length === 0) return;
+
+  const acctCache = new Map<string, { id: number } | null>();
+  let migrated = 0;
+  for (const row of rows) {
+    const cacheKey = `${row.company_id}:${row.payment_mode}`;
+    if (!acctCache.has(cacheKey)) {
+      const { rows: acctRows } = await client.query<{ id: number }>(
+        `SELECT id FROM accounts WHERE company_id = $1 AND type = $2 AND is_active = true ORDER BY id LIMIT 1`,
+        [row.company_id, row.payment_mode],
+      );
+      acctCache.set(cacheKey, acctRows[0] ?? null);
+    }
+    const acct = acctCache.get(cacheKey) ?? null;
+    if (!acct) continue; // No matching account for this company/mode — leave it, nothing sane to link to.
+
+    const amount = Number(row.amount);
+    const receiptNo = await generateSeriesNumber(client, "payment_receipt", row.company_id);
+    await client.query(
+      `INSERT INTO account_transactions
+        (company_id, account_id, direction, amount, mode, party_name, notes, receipt_no)
+       VALUES ($1,$2,'out',$3,$4,$5,$6,$7)`,
+      [
+        row.company_id,
+        acct.id,
+        amount,
+        PAYMENT_MODE_TO_TXN_MODE[row.payment_mode] ?? "other",
+        row.paid_to,
+        `Expense: ${row.category_name} (backfilled)`,
+        receiptNo,
+      ],
+    );
+    await client.query(`UPDATE accounts SET current_balance = current_balance - $1 WHERE id = $2`, [amount, acct.id]);
+    await client.query(`UPDATE expenses SET account_id = $1 WHERE id = $2`, [acct.id, row.id]);
+    migrated++;
+  }
+  if (migrated > 0) {
+    logger.info({ migrated, skipped: rows.length - migrated }, "Backfilled expenses into Cash Book");
+  }
+}
+
 /**
  * Idempotent startup bootstrap. Connects with a dedicated client (so the schema
  * dump's session-level SET statements never leak into the shared pool), creates
@@ -406,6 +475,7 @@ export async function ensureDatabaseReady(): Promise<void> {
     await applySchemaPatches(client);
     await ensureDefaultAdmin(client);
     await hashPlaintextPasswords(client);
+    await backfillExpenseAccounts(client);
   } catch (err) {
     logger.error({ err }, "Database bootstrap failed");
   } finally {

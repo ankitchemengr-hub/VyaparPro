@@ -16,6 +16,8 @@ export interface Expense {
   amount: number;
   paymentMode: ExpensePaymentMode;
   /** @nullable */
+  accountId?: number | null;
+  /** @nullable */
   paidTo?: string | null;
   /** @nullable */
   notes?: string | null;
