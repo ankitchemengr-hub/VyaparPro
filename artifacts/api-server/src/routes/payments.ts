@@ -193,6 +193,29 @@ router.post("/payments", async (req, res): Promise<void> => {
         if (upd.rowCount === 0) {
           throw new Error(`Account ${parsed.data.accountId} not found or inactive`);
         }
+        // Mirrors the balance update above into Cash Book's own transaction
+        // log — without this, the account's total is right but the payment
+        // never shows up in Cash Book's Recent Entries list. Shares the same
+        // receipt number as the payments row (see the comment on
+        // GET /payment-receipts/:receiptNo for why that's safe).
+        await client.query(
+          `INSERT INTO account_transactions
+            (company_id, account_id, direction, amount, mode, party_name, party_entity_id, notes, receipt_no, created_by_id, created_by_name, created_by_role)
+           VALUES ($1,$2,'in',$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+          [
+            companyId,
+            parsed.data.accountId,
+            parsed.data.amount,
+            parsed.data.mode,
+            customer.name,
+            customerId,
+            "Payment received",
+            receiptId,
+            session.userId,
+            session.name ?? session.username ?? null,
+            session.role ?? null,
+          ],
+        );
       }
 
       // If payment is tied to a specific invoice, validate it before applying —
@@ -301,6 +324,26 @@ router.post("/payments/:id/approve", async (req, res): Promise<void> => {
         [payment.amount, body.accountId, companyId]
       );
       if (upd.rowCount === 0) throw new Error(`Account ${body.accountId} not found or inactive`);
+      // Same as the direct-admin POST /payments path — mirror into Cash
+      // Book's transaction log, sharing the payment's own receipt number.
+      await client.query(
+        `INSERT INTO account_transactions
+          (company_id, account_id, direction, amount, mode, party_name, party_entity_id, notes, receipt_no, created_by_id, created_by_name, created_by_role)
+         VALUES ($1,$2,'in',$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        [
+          companyId,
+          body.accountId,
+          payment.amount,
+          payment.mode,
+          payment.customerName,
+          payment.customerId,
+          "Payment received (approved)",
+          payment.receiptId,
+          session?.userId ?? null,
+          session?.name ?? session?.username ?? null,
+          session?.role ?? null,
+        ],
+      );
     }
 
     await applyEntityPayment(client, {
