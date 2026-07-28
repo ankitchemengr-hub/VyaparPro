@@ -15,6 +15,4 @@ export interface ExpenseInput {
   accountId: number;
   paidTo?: string;
   notes?: string;
-  /** Admin-only override to let this expense push the account balance negative instead of being blocked. */
-  allowNegative?: boolean;
 }

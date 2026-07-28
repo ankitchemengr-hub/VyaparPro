@@ -217,13 +217,10 @@ router.post("/expenses", async (req, res): Promise<void> => {
       return;
     }
     const acct = acctRes.rows[0];
-    const current = Number(acct.current_balance);
-    const canOverride = session?.role === "admin" && parsed.data.allowNegative === true;
-    if (current < amount - 0.001 && !canOverride) {
-      await client.query("ROLLBACK");
-      res.status(400).json({ error: `Insufficient balance in ${acct.name} (₹${current.toFixed(2)})` });
-      return;
-    }
+    // Not blocked on insufficient balance — a real expense still happened
+    // even if the account's recorded balance hasn't caught up (a common gap
+    // in small-business petty cash tracking). It's allowed to go negative,
+    // same as a manual Material Transfer.
 
     const expenseRes = await client.query(
       `INSERT INTO expenses (company_id, date, category_id, category_name, amount, payment_mode, account_id, paid_to, notes, created_by_user_id)

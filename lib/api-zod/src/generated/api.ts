@@ -3633,8 +3633,7 @@ export const CreateExpenseBody = zod.object({
   "paymentMode": zod.enum(['cash', 'upi', 'bank']),
   "accountId": zod.number(),
   "paidTo": zod.string().optional(),
-  "notes": zod.string().optional(),
-  "allowNegative": zod.boolean().optional().describe('Admin-only override to let this expense push the account balance negative instead of being blocked.')
+  "notes": zod.string().optional()
 })
 
 export const CreateExpenseResponse = zod.object({
