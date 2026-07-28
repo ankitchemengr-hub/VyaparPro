@@ -685,6 +685,13 @@ router.post("/manufacturing/ready-batches/:id/dispatch", async (req, res): Promi
       res.status(409).json({ error: "This batch has already been dispatched" });
       return;
     }
+    if (Number(batch.qty) <= 0) {
+      await client.query("ROLLBACK");
+      res.status(409).json({
+        error: "This is a negative balance from a manual transfer, not a real batch — it can't be dispatched. Record the missing Assemble entry, or ask an admin to correct it.",
+      });
+      return;
+    }
 
     await client.query(
       `INSERT INTO material_transfer_sequence (company_id, last_number) VALUES ($1, 0) ON CONFLICT (company_id) DO NOTHING`,

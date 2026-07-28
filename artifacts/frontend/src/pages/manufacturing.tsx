@@ -1807,16 +1807,23 @@ function ReadyMaterialTab() {
                     )}
                   </div>
                   {b.adjustmentReason && (
-                    <div className="text-[11px] text-amber-600 dark:text-amber-500 mt-0.5">
-                      Adjusted: {b.adjustmentReason}
+                    <div className={`text-[11px] mt-0.5 ${Number(b.qty) < 0 ? "text-destructive" : "text-amber-600 dark:text-amber-500"}`}>
+                      {Number(b.qty) < 0 ? b.adjustmentReason : `Adjusted: ${b.adjustmentReason}`}
                     </div>
                   )}
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
-                  <Badge variant="outline" className="font-mono text-sm">
+                  <Badge
+                    variant="outline"
+                    className={`font-mono text-sm ${Number(b.qty) < 0 ? "border-destructive text-destructive" : ""}`}
+                  >
                     {Number(b.qty).toLocaleString()} {b.unit}
                   </Badge>
-                  {b.status === "ready" ? (
+                  {Number(b.qty) < 0 ? (
+                    <Badge variant="outline" className="border-destructive text-destructive whitespace-nowrap">
+                      Needs assembly entry
+                    </Badge>
+                  ) : b.status === "ready" ? (
                     <div className="flex items-center gap-1.5">
                       {isAdmin && (
                         <Button

@@ -90,13 +90,16 @@ router.get("/material-transfers/:id", async (req, res): Promise<void> => {
 });
 
 // POST /material-transfers — manual slip a worker creates directly, without
-// going through a Ready Material batch (e.g. material was physically sent
-// before the assembly/dispatch paperwork caught up). Unlike a ready-batch
-// dispatch (which credits stock), a manual transfer here DEDUCTS the product's
-// current_stock — it represents stock leaving. Deliberately NOT blocked on
-// insufficient stock: if the worker sends more than what's actually assembled
-// yet, current_stock is allowed to go negative as a visible flag. It self-
-// corrects once the shortfall is assembled and dispatched normally.
+// going through the normal Assemble-then-dispatch flow (e.g. goods were
+// physically moved from godown to store before the assembly paperwork caught
+// up). Godown -> Store is real, so this ALWAYS credits the product's
+// current_stock — Store/Catalog must stay accurate, never negative, because
+// customers order against it. The gap this shortcuts (no Ready Material batch
+// ever recorded) instead shows up on the Manufacturing side: existing 'ready'
+// batches for the product are consumed first (oldest first, same as a normal
+// dispatch); anything left over becomes a NEGATIVE ready batch, flagging that
+// this much was sent out without ever being logged as assembled. It only goes
+// away once someone assembles the item for real and/or an admin corrects it.
 router.post("/material-transfers", async (req, res): Promise<void> => {
   const companyId = getCompanyId(req);
   const auth = (req as any).session;
@@ -158,31 +161,85 @@ router.post("/material-transfers", async (req, res): Promise<void> => {
     const savedItems: { productId: number; productName: string; qty: number; unit: string }[] = [];
     for (const item of items) {
       const prodRes = await client.query(
-        `SELECT name FROM products WHERE company_id = $1 AND id = $2`,
+        `SELECT name, unit FROM products WHERE company_id = $1 AND id = $2`,
         [companyId, item.productId],
       );
       if (prodRes.rows.length === 0) {
         throw new Error(`Product ${item.productId} not found`);
       }
       const productName = prodRes.rows[0].name;
+      const itemQty = Number(item.qty);
       await client.query(
         `INSERT INTO material_transfer_items (company_id, transfer_id, product_id, product_name, qty, unit)
          VALUES ($1, $2, $3, $4, $5, $6)`,
-        [companyId, header.id, item.productId, productName, item.qty, item.unit || "QTY"],
+        [companyId, header.id, item.productId, productName, itemQty, item.unit || "QTY"],
       );
 
-      // Deduct stock — allowed to go negative on purpose (see comment above).
+      // Godown -> Store really happened, so Store/Catalog stock always gets
+      // credited in full, regardless of what Manufacturing ever logged.
       await client.query(
-        `UPDATE products SET current_stock = current_stock - $1 WHERE id = $2 AND company_id = $3`,
-        [item.qty, item.productId, companyId],
+        `UPDATE products SET current_stock = current_stock + $1 WHERE id = $2 AND company_id = $3`,
+        [itemQty, item.productId, companyId],
       );
       await client.query(
         `INSERT INTO stock_movements (company_id, product_id, type, quantity, reason, reference_id, reference_type, user_id)
          VALUES ($1, $2, 'manufacturing_transfer', $3, 'Manual material transfer', $4, 'material_transfer', $5)`,
-        [companyId, item.productId, -Number(item.qty), header.id, userId],
+        [companyId, item.productId, itemQty, header.id, userId],
       );
 
-      savedItems.push({ productId: item.productId, productName, qty: Number(item.qty), unit: item.unit || "QTY" });
+      // Consume existing 'ready' batches for this product (oldest first) to
+      // cover the transfer — same accounting a normal dispatch would do.
+      let remaining = itemQty;
+      const readyBatches = await client.query(
+        `SELECT id, qty FROM ready_material_batches
+         WHERE company_id = $1 AND product_id = $2 AND status = 'ready'
+         ORDER BY created_at ASC FOR UPDATE`,
+        [companyId, item.productId],
+      );
+      for (const batch of readyBatches.rows) {
+        if (remaining <= 0) break;
+        const batchQty = Number(batch.qty);
+        if (batchQty <= remaining) {
+          await client.query(
+            `UPDATE ready_material_batches
+             SET status = 'dispatched', dispatched_at = NOW(), material_transfer_id = $1
+             WHERE id = $2`,
+            [header.id, batch.id],
+          );
+          remaining -= batchQty;
+        } else {
+          await client.query(`UPDATE ready_material_batches SET qty = qty - $1 WHERE id = $2`, [remaining, batch.id]);
+          remaining = 0;
+        }
+      }
+
+      // Anything left over was never assembled/logged at all — surface it as
+      // a negative 'ready' batch (stays status='ready', same as anything
+      // still awaiting dispatch) so it shows up right in the default Ready
+      // Material view, not buried under the Dispatched filter. The dispatch
+      // endpoint refuses non-positive batches, so this can't be "dispatched"
+      // again — it only nets back toward zero once a real Assemble entry is
+      // recorded for this product (a new positive ready batch alongside it).
+      if (remaining > 0) {
+        await client.query(
+          `INSERT INTO ready_material_batches
+             (company_id, product_id, product_name, unit, qty, batches, worker_name, status, adjustment_reason, material_transfer_id, created_by_user_id)
+           VALUES ($1,$2,$3,$4,$5,1,$6,'ready',$7,$8,$9)`,
+          [
+            companyId,
+            item.productId,
+            productName,
+            item.unit || prodRes.rows[0].unit || "QTY",
+            -remaining,
+            body.sentBy?.trim() || "Manual Transfer",
+            "Transferred before being assembled — record the missing Assemble entry to correct this.",
+            header.id,
+            userId,
+          ],
+        );
+      }
+
+      savedItems.push({ productId: item.productId, productName, qty: itemQty, unit: item.unit || "QTY" });
     }
 
     await client.query("COMMIT");
