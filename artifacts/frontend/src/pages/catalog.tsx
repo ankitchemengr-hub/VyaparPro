@@ -186,7 +186,7 @@ export default function Catalog() {
   };
 
   const setQty = (productId: number, qty: number, maxStock: number) => {
-    const clamped = Math.max(1, Math.min(maxStock, qty));
+    const clamped = Math.max(0.1, Math.min(maxStock, qty));
     setCart((c) => ({ ...c, [productId]: clamped }));
   };
 
@@ -673,7 +673,8 @@ const proceedToOrderWithCustomer = (customer: any) => {
                       <div className="flex items-center gap-1">
                         <Input
                           type="number"
-                          min={1}
+                          min={0.1}
+                          step={0.1}
                           max={effectiveMaxStock}
                           value={qtyDrafts[product.id] ?? (qty > 0 ? qty : "")}
                           placeholder="Qty"
@@ -682,9 +683,10 @@ const proceedToOrderWithCustomer = (customer: any) => {
                           onChange={(e) => {
                             const raw = e.target.value;
                             setQtyDrafts((prev) => ({ ...prev, [product.id]: raw }));
-                            const val = parseInt(raw, 10);
+                            const val = parseFloat(raw);
                             if (!isNaN(val) && val > 0) {
-                              setQty(product.id, val, effectiveMaxStock);
+                              // One decimal place — e.g. 0.5 for half a liter.
+                              setQty(product.id, Math.round(val * 10) / 10, effectiveMaxStock);
                             }
                           }}
                           onBlur={() =>
@@ -790,15 +792,17 @@ const proceedToOrderWithCustomer = (customer: any) => {
                     <td className="text-right py-2 px-1">
                      <input
                       type="number"
-                      min={1}
+                      min={0.1}
+                      step={0.1}
                       max={allowsBackorder ? Number.MAX_SAFE_INTEGER : row.product.currentStock}
                       value={qtyDrafts[row.product.id] ?? row.qty}
                       onChange={(e) => {
                       const raw = e.target.value;
                       setQtyDrafts((prev) => ({ ...prev, [row.product.id]: raw }));
-                      const val = parseInt(raw, 10);
+                      const val = parseFloat(raw);
                       if (!isNaN(val) && val > 0) {
-                      setQty(row.product.id, val, allowsBackorder ? Number.MAX_SAFE_INTEGER : row.product.currentStock);
+                      // One decimal place — e.g. 0.5 for half a liter.
+                      setQty(row.product.id, Math.round(val * 10) / 10, allowsBackorder ? Number.MAX_SAFE_INTEGER : row.product.currentStock);
                       }
                     }}
                     onBlur={() =>
