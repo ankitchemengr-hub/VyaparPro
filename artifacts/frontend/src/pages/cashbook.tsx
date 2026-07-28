@@ -207,10 +207,35 @@ export default function CashBookPage() {
         </Card>
       </div>
 
-      <Card>
+      {/* Landscape + full-contrast print, isolated to just this table — a
+          browser's default page print has no @page override at all (portrait,
+          and this app's muted-foreground gray text prints faint), and this
+          table is wide enough (9 columns) that portrait cuts it off. */}
+      <style>{`
+        @media print {
+          @page { size: 297mm 210mm; margin: 10mm; }
+          body * { visibility: hidden !important; }
+          .cashbook-print-area, .cashbook-print-area * { visibility: visible !important; color: #000 !important; }
+          .cashbook-print-area {
+            position: absolute !important; left: 0 !important; top: 0 !important; width: 100% !important;
+            box-shadow: none !important; border: none !important;
+          }
+          .cashbook-print-area .no-print { display: none !important; }
+        }
+      `}</style>
+      <Card className="cashbook-print-area">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <BookOpen className="w-4 h-4" /> Recent Cash Book Entries
+          <CardTitle className="flex items-center justify-between gap-2 text-base">
+            <span className="flex items-center gap-2"><BookOpen className="w-4 h-4" /> Recent Cash Book Entries</span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="no-print"
+              onClick={() => window.print()}
+              data-testid="button-print-cashbook"
+            >
+              <Printer className="w-3.5 h-3.5 mr-1.5" /> Print
+            </Button>
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -233,7 +258,7 @@ export default function CashBookPage() {
                   <TableHead>Party</TableHead>
                   <TableHead>Recorded By</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
-                  <TableHead className="w-24"></TableHead>
+                  <TableHead className="w-24 no-print"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -266,7 +291,7 @@ export default function CashBookPage() {
                     <TableCell className={`text-right font-semibold tabular-nums ${t.direction === "in" ? "text-green-700" : "text-rose-700"}`}>
                       {t.direction === "in" ? "+" : "−"} {formatRs(Number(t.amount))}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="no-print">
                       <Button
                         size="sm"
                         variant="ghost"
