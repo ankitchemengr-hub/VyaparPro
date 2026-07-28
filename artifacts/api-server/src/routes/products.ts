@@ -169,6 +169,17 @@ router.get("/products/brands", async (req, res): Promise<void> => {
   res.json(result.map((r) => r.brand));
 });
 
+// GET /products/packaging-units
+router.get("/products/packaging-units", async (req, res): Promise<void> => {
+  const companyId = getCompanyId(req);
+  const result = await db
+    .selectDistinct({ packagingUnit: productsTable.packagingUnit })
+    .from(productsTable)
+    .where(and(eq(productsTable.companyId, companyId), isNull(productsTable.deletedAt)))
+    .orderBy(productsTable.packagingUnit);
+  res.json(result.map((r) => r.packagingUnit));
+});
+
 // GET /products/stock-adjustments — report of all "adjustment" type stock
 // movements across the company's products, filterable by product and date
 // range. Registered before GET /products/:id so Express does not swallow

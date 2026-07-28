@@ -4,6 +4,7 @@ import {
   useListProducts, useCreateProduct, useUpdateProduct, useDeleteProduct,
   useListBrandMaster, useCreateBrand, getListBrandMasterQueryKey,
   useCreateStockMovement, getGetProductStockMovementsQueryKey,
+  useListPackagingUnits,
 } from "@workspace/api-client-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent } from "@/components/ui/card";
@@ -115,6 +116,85 @@ function BrandCombobox({ value, onChange }: { value: string; onChange: (v: strin
                 <CommandItem onSelect={handleCreate} disabled={createBrand.isPending}>
                   <Plus className="mr-2 h-4 w-4" />
                   Add "{trimmedQuery}" as new brand
+                </CommandItem>
+              </CommandGroup>
+            )}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// Packaging-unit field for the product form — picks from packaging names
+// already used across products (Box, Barrel, Drum, ...), or accepts any
+// newly-typed name. There's no separate master table for this (unlike
+// Brand): typing a new one just sets it directly on the product, and it
+// becomes a selectable option here for future products the moment this one
+// is saved.
+const DEFAULT_PACKAGING_SUGGESTIONS = ["Box", "Barrel", "Drum", "Carton", "Case", "Tin", "Can", "Sack"];
+
+function PackagingUnitCombobox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const { data: usedUnits, isError: unitsFailedToLoad } = useListPackagingUnits();
+  const list = Array.from(new Set([...(usedUnits ?? []), ...DEFAULT_PACKAGING_SUGGESTIONS])).sort();
+  const trimmedQuery = query.trim();
+  const filtered = trimmedQuery
+    ? list.filter((u) => u.toLowerCase().includes(trimmedQuery.toLowerCase()))
+    : list;
+  const exactMatch = list.some((u) => u.toLowerCase() === trimmedQuery.toLowerCase());
+
+  const handleCreate = () => {
+    if (!trimmedQuery) return;
+    onChange(trimmedQuery);
+    setOpen(false);
+    setQuery("");
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          type="button"
+          className="w-28 shrink-0 justify-between font-normal"
+          data-testid="input-packaging-unit"
+        >
+          <span className={cn("truncate", !value && "text-muted-foreground")}>{value || "Box"}</span>
+          <ChevronsUpDown className="ml-1 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[240px] max-w-[calc(100vw-2rem)] p-0" align="start">
+        <Command shouldFilter={false}>
+          <CommandInput placeholder="Search or add packaging…" value={query} onValueChange={setQuery} />
+          <CommandList className="max-h-60">
+            {unitsFailedToLoad && (
+              <p className="py-2 px-3 text-xs text-destructive">
+                Couldn't load saved packaging names — you can still type a new one below.
+              </p>
+            )}
+            {filtered.length === 0 && (
+              <CommandEmpty className="py-2 px-3 text-sm text-muted-foreground">No matching packaging type.</CommandEmpty>
+            )}
+            <CommandGroup>
+              {filtered.map((u) => (
+                <CommandItem
+                  key={u}
+                  value={u}
+                  onSelect={() => { onChange(u); setOpen(false); setQuery(""); }}
+                >
+                  <Check className={cn("mr-2 h-4 w-4", value === u ? "opacity-100" : "opacity-0")} />
+                  {u}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+            {trimmedQuery && !exactMatch && (
+              <CommandGroup>
+                <CommandItem onSelect={handleCreate}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add "{trimmedQuery}" as new packaging type
                 </CommandItem>
               </CommandGroup>
             )}
@@ -774,14 +854,7 @@ function ProductDialog({ open, onOpenChange, product, isAdmin }: { open: boolean
               <div className="space-y-1.5">
                 <Label>1 {form.packagingUnit?.trim() || "Box"} = ___ {form.unit?.trim() || "Units"}</Label>
                 <div className="flex gap-2">
-                  <Input
-                    list="packaging-unit-options"
-                    className="w-28 shrink-0"
-                    value={form.packagingUnit}
-                    onChange={(e) => set("packagingUnit", e.target.value)}
-                    placeholder="Box"
-                    data-testid="input-packaging-unit"
-                  />
+                  <PackagingUnitCombobox value={form.packagingUnit} onChange={(v) => set("packagingUnit", v)} />
                   <Input
                     type="number"
                     min={0}
@@ -793,16 +866,6 @@ function ProductDialog({ open, onOpenChange, product, isAdmin }: { open: boolean
                     data-testid="input-units-per-box"
                   />
                 </div>
-                <datalist id="packaging-unit-options">
-                  <option value="Box" />
-                  <option value="Barrel" />
-                  <option value="Drum" />
-                  <option value="Carton" />
-                  <option value="Case" />
-                  <option value="Tin" />
-                  <option value="Can" />
-                  <option value="Sack" />
-                </datalist>
                 <p className="text-[11px] text-muted-foreground">
                   Used on invoice to show {(form.packagingUnit?.trim() || "Box").toUpperCase()} = Qty / this value.
                 </p>
