@@ -600,9 +600,10 @@ router.get("/manufacturing/ready-batches", async (req, res): Promise<void> => {
 });
 
 // PATCH /manufacturing/ready-batches/:id — admin-only correction of a
-// mis-entered qty. Only allowed while the batch is still 'ready': once
-// dispatched, the qty has already become real stock and correcting it here
-// would silently diverge from the stock/ledger trail.
+// mis-entered qty. Works on any status: a 'ready' batch hasn't touched stock
+// yet (just update the row), but a 'dispatched' one already credited
+// products.current_stock at dispatch time — editing it here adjusts stock by
+// the same delta so the two never diverge.
 router.patch("/manufacturing/ready-batches/:id", async (req, res): Promise<void> => {
   const session = (req as any).session;
   if (session?.role !== "admin") {
@@ -620,31 +621,103 @@ router.patch("/manufacturing/ready-batches/:id", async (req, res): Promise<void>
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  if (Number(parsed.data.qty) <= 0) {
-    res.status(400).json({ error: "qty must be greater than 0" });
+  const newQty = Number(parsed.data.qty);
+  if (!Number.isFinite(newQty)) {
+    res.status(400).json({ error: "qty must be a number" });
     return;
   }
 
-  const [existing] = await db
-    .select()
-    .from(readyMaterialBatchesTable)
-    .where(and(eq(readyMaterialBatchesTable.companyId, companyId), eq(readyMaterialBatchesTable.id, id)));
-  if (!existing) {
-    res.status(404).json({ error: "Ready batch not found" });
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
+
+    const existingRes = await client.query(
+      `SELECT * FROM ready_material_batches WHERE company_id = $1 AND id = $2 FOR UPDATE`,
+      [companyId, id],
+    );
+    const existing = existingRes.rows[0];
+    if (!existing) {
+      await client.query("ROLLBACK");
+      res.status(404).json({ error: "Ready batch not found" });
+      return;
+    }
+
+    const oldQty = Number(existing.qty);
+    const updatedRes = await client.query(
+      `UPDATE ready_material_batches SET qty = $1, adjustment_reason = $2, updated_at = NOW()
+       WHERE company_id = $3 AND id = $4 RETURNING *`,
+      [newQty, parsed.data.reason ?? null, companyId, id],
+    );
+
+    if (existing.status === "dispatched") {
+      const delta = newQty - oldQty;
+      await client.query(
+        `UPDATE products SET current_stock = current_stock + $1 WHERE id = $2 AND company_id = $3`,
+        [delta, existing.product_id, companyId],
+      );
+    }
+
+    await client.query("COMMIT");
+    res.json(formatReadyBatch(updatedRes.rows[0]));
+  } catch (err) {
+    await client.query("ROLLBACK");
+    logger.error({ err }, "Failed to adjust ready batch");
+    res.status(500).json({ error: "Failed to adjust ready batch" });
+  } finally {
+    client.release();
+  }
+});
+
+// DELETE /manufacturing/ready-batches/:id — admin-only. Removing a 'ready'
+// batch has no stock effect (never dispatched). Removing a 'dispatched' one
+// reverses the stock it credited at dispatch time, keeping current_stock
+// consistent with what Ready Material still says happened.
+router.delete("/manufacturing/ready-batches/:id", async (req, res): Promise<void> => {
+  const session = (req as any).session;
+  if (session?.role !== "admin") {
+    res.status(403).json({ error: "Only administrators can delete a ready batch" });
     return;
   }
-  if (existing.status !== "ready") {
-    res.status(409).json({ error: "This batch has already been dispatched and can no longer be adjusted" });
+  const companyId = getCompanyId(req);
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) {
+    res.status(400).json({ error: "Invalid id" });
     return;
   }
 
-  const [updated] = await db
-    .update(readyMaterialBatchesTable)
-    .set({ qty: String(parsed.data.qty), adjustmentReason: parsed.data.reason })
-    .where(and(eq(readyMaterialBatchesTable.companyId, companyId), eq(readyMaterialBatchesTable.id, id)))
-    .returning();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
 
-  res.json(formatReadyBatch(updated));
+    const existingRes = await client.query(
+      `SELECT * FROM ready_material_batches WHERE company_id = $1 AND id = $2 FOR UPDATE`,
+      [companyId, id],
+    );
+    const existing = existingRes.rows[0];
+    if (!existing) {
+      await client.query("ROLLBACK");
+      res.status(404).json({ error: "Ready batch not found" });
+      return;
+    }
+
+    await client.query(`DELETE FROM ready_material_batches WHERE company_id = $1 AND id = $2`, [companyId, id]);
+
+    if (existing.status === "dispatched") {
+      await client.query(
+        `UPDATE products SET current_stock = current_stock - $1 WHERE id = $2 AND company_id = $3`,
+        [Number(existing.qty), existing.product_id, companyId],
+      );
+    }
+
+    await client.query("COMMIT");
+    res.sendStatus(204);
+  } catch (err) {
+    await client.query("ROLLBACK");
+    logger.error({ err }, "Failed to delete ready batch");
+    res.status(500).json({ error: "Failed to delete ready batch" });
+  } finally {
+    client.release();
+  }
 });
 
 // POST /manufacturing/ready-batches/:id/dispatch — the point a staged batch

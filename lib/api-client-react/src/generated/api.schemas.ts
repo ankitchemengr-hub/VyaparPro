@@ -1961,7 +1961,7 @@ export interface ReadyMaterialBatch {
 }
 
 export interface AdjustReadyMaterialBatchInput {
-  /** Corrected ready quantity (must be > 0) */
+  /** Corrected quantity. Negative is valid — a Ready Material deficit batch (from an unlogged manual transfer) is corrected the same way. */
   qty: number;
   /** Why the entry is being corrected */
   reason: string;

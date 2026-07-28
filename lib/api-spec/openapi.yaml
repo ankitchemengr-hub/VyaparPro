@@ -1895,7 +1895,7 @@ paths:
     patch:
       operationId: adjustReadyMaterialBatch
       tags: [manufacturing]
-      summary: Admin-only correction of a mis-entered ready batch qty (before dispatch)
+      summary: Admin-only correction of a ready batch's qty. Works on dispatched batches too, adjusting product stock by the delta.
       parameters:
         - name: id
           in: path
@@ -1919,8 +1919,23 @@ paths:
           description: Admin only
         "404":
           description: Batch not found
-        "409":
-          description: Batch already dispatched
+    delete:
+      operationId: deleteReadyMaterialBatch
+      tags: [manufacturing]
+      summary: Admin-only. Deletes a ready batch; if it was already dispatched, reverses the stock it credited.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "403":
+          description: Admin only
+        "404":
+          description: Batch not found
 
   /manufacturing/ready-batches/{id}/dispatch:
     post:
@@ -5228,7 +5243,7 @@ components:
       properties:
         qty:
           type: number
-          description: Corrected ready quantity (must be > 0)
+          description: Corrected quantity. Negative is valid — a Ready Material deficit batch (from an unlogged manual transfer) is corrected the same way.
         reason:
           type: string
           description: Why the entry is being corrected

@@ -2669,14 +2669,14 @@ export const ListReadyMaterialBatchesResponse = zod.array(ListReadyMaterialBatch
 
 
 /**
- * @summary Admin-only correction of a mis-entered ready batch qty (before dispatch)
+ * @summary Admin-only correction of a ready batch's qty. Works on dispatched batches too, adjusting product stock by the delta.
  */
 export const AdjustReadyMaterialBatchParams = zod.object({
   "id": zod.coerce.number()
 })
 
 export const AdjustReadyMaterialBatchBody = zod.object({
-  "qty": zod.number().describe('Corrected ready quantity (must be > 0)'),
+  "qty": zod.number().describe('Corrected quantity. Negative is valid — a Ready Material deficit batch (from an unlogged manual transfer) is corrected the same way.'),
   "reason": zod.string().describe('Why the entry is being corrected')
 })
 
@@ -2696,6 +2696,16 @@ export const AdjustReadyMaterialBatchResponse = zod.object({
   "dispatchedAt": zod.string().nullish(),
   "createdAt": zod.string()
 })
+
+
+/**
+ * @summary Admin-only. Deletes a ready batch; if it was already dispatched, reverses the stock it credited.
+ */
+export const DeleteReadyMaterialBatchParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteReadyMaterialBatchResponse = zod.void()
 
 
 /**

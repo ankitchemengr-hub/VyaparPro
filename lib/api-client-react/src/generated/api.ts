@@ -7049,7 +7049,7 @@ export const getAdjustReadyMaterialBatchUrl = (id: number,) => {
 }
 
 /**
- * @summary Admin-only correction of a mis-entered ready batch qty (before dispatch)
+ * @summary Admin-only correction of a ready batch's qty. Works on dispatched batches too, adjusting product stock by the delta.
  */
 export const adjustReadyMaterialBatch = async (id: number,
     adjustReadyMaterialBatchInput: AdjustReadyMaterialBatchInput, options?: RequestInit): Promise<ReadyMaterialBatch> => {
@@ -7098,7 +7098,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type AdjustReadyMaterialBatchMutationError = ErrorType<void>
 
     /**
- * @summary Admin-only correction of a mis-entered ready batch qty (before dispatch)
+ * @summary Admin-only correction of a ready batch's qty. Works on dispatched batches too, adjusting product stock by the delta.
  */
 export const useAdjustReadyMaterialBatch = <TError = ErrorType<void>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adjustReadyMaterialBatch>>, TError,{id: number;data: BodyType<AdjustReadyMaterialBatchInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -7109,6 +7109,76 @@ export const useAdjustReadyMaterialBatch = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getAdjustReadyMaterialBatchMutationOptions(options));
+    }
+
+export const getDeleteReadyMaterialBatchUrl = (id: number,) => {
+
+
+
+
+  return `/api/manufacturing/ready-batches/${id}`
+}
+
+/**
+ * @summary Admin-only. Deletes a ready batch; if it was already dispatched, reverses the stock it credited.
+ */
+export const deleteReadyMaterialBatch = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteReadyMaterialBatchUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteReadyMaterialBatchMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteReadyMaterialBatch>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteReadyMaterialBatch>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteReadyMaterialBatch'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteReadyMaterialBatch>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteReadyMaterialBatch(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteReadyMaterialBatchMutationResult = NonNullable<Awaited<ReturnType<typeof deleteReadyMaterialBatch>>>
+
+    export type DeleteReadyMaterialBatchMutationError = ErrorType<void>
+
+    /**
+ * @summary Admin-only. Deletes a ready batch; if it was already dispatched, reverses the stock it credited.
+ */
+export const useDeleteReadyMaterialBatch = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteReadyMaterialBatch>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteReadyMaterialBatch>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteReadyMaterialBatchMutationOptions(options));
     }
 
 export const getDispatchReadyMaterialBatchUrl = (id: number,) => {

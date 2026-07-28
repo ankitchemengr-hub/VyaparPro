@@ -15,6 +15,7 @@ import {
   useListWorkers,
   useListReadyMaterialBatches,
   useAdjustReadyMaterialBatch,
+  useDeleteReadyMaterialBatch,
   useDispatchReadyMaterialBatch,
   getListWorkloadCardsQueryKey,
   getListProductsQueryKey,
@@ -1680,6 +1681,7 @@ function ReadyMaterialTab() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const adjustBatch = useAdjustReadyMaterialBatch();
+  const deleteBatch = useDeleteReadyMaterialBatch();
   const dispatchBatch = useDispatchReadyMaterialBatch();
 
   const [adjustTarget, setAdjustTarget] = useState<any | null>(null);
@@ -1718,6 +1720,25 @@ function ReadyMaterialTab() {
         if (body?.error) desc = String(body.error).slice(0, 300);
       } catch {}
       toast({ title: "Failed to adjust batch", description: desc, variant: "destructive" });
+    }
+  };
+
+  const handleDelete = async (b: any) => {
+    const stockNote = b.status === "dispatched"
+      ? ` This will also remove ${b.qty} ${b.unit} from ${b.productName}'s stock (it was credited when this batch was dispatched).`
+      : "";
+    if (!confirm(`Delete this ${b.status === "ready" ? "ready" : "dispatched"} batch of ${b.productName}?${stockNote}`)) return;
+    try {
+      await deleteBatch.mutateAsync({ id: b.id });
+      await refresh();
+      toast({ title: "Batch deleted" });
+    } catch (err: any) {
+      let desc = err?.message ?? "Server error";
+      try {
+        const body = err?.response ? await err.response.json() : null;
+        if (body?.error) desc = String(body.error).slice(0, 300);
+      } catch {}
+      toast({ title: "Failed to delete batch", description: desc, variant: "destructive" });
     }
   };
 
@@ -1819,33 +1840,47 @@ function ReadyMaterialTab() {
                   >
                     {Number(b.qty).toLocaleString()} {b.unit}
                   </Badge>
-                  {Number(b.qty) < 0 ? (
+                  {Number(b.qty) < 0 && (
                     <Badge variant="outline" className="border-destructive text-destructive whitespace-nowrap">
                       Needs assembly entry
                     </Badge>
-                  ) : b.status === "ready" ? (
+                  )}
+                  {b.status === "ready" && Number(b.qty) > 0 && (
+                    <Button
+                      size="sm"
+                      className="bg-green-600 hover:bg-green-700 text-white"
+                      onClick={() => setDispatchTarget(b)}
+                      data-testid={`button-dispatch-ready-${b.id}`}
+                    >
+                      <Send className="w-3.5 h-3.5 mr-1.5" /> Dispatch
+                    </Button>
+                  )}
+                  {b.status === "dispatched" && (
+                    <Badge className="bg-green-600 text-white border-transparent">Dispatched</Badge>
+                  )}
+                  {isAdmin && (
                     <div className="flex items-center gap-1.5">
-                      {isAdmin && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setAdjustTarget(b)}
-                          data-testid={`button-adjust-ready-${b.id}`}
-                        >
-                          <Wrench className="w-3.5 h-3.5 mr-1.5" /> Adjust
-                        </Button>
-                      )}
                       <Button
-                        size="sm"
-                        className="bg-green-600 hover:bg-green-700 text-white"
-                        onClick={() => setDispatchTarget(b)}
-                        data-testid={`button-dispatch-ready-${b.id}`}
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => setAdjustTarget(b)}
+                        title="Edit qty"
+                        data-testid={`button-adjust-ready-${b.id}`}
                       >
-                        <Send className="w-3.5 h-3.5 mr-1.5" /> Dispatch
+                        <Wrench className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => handleDelete(b)}
+                        title="Delete"
+                        data-testid={`button-delete-ready-${b.id}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
                       </Button>
                     </div>
-                  ) : (
-                    <Badge className="bg-green-600 text-white border-transparent">Dispatched</Badge>
                   )}
                 </div>
               </div>
@@ -1889,7 +1924,8 @@ function AdjustReadyBatchDialog({
   }, [target]);
 
   const numQty = Number(qty);
-  const valid = isFinite(numQty) && numQty > 0 && reason.trim().length > 0;
+  const valid = isFinite(numQty) && reason.trim().length > 0;
+  const isDispatched = target?.status === "dispatched";
 
   return (
     <Dialog open={target != null} onOpenChange={(v) => { if (!v && !submitting) onCancel(); }}>
@@ -1899,8 +1935,11 @@ function AdjustReadyBatchDialog({
             <Wrench className="w-5 h-5 text-primary" /> Adjust Ready Batch
           </DialogTitle>
           <DialogDescription>
-            {target && (
-              <>Correct the produced qty of <span className="font-medium text-foreground">{target.productName}</span> before it's dispatched to Store.</>
+            {target && isDispatched && (
+              <>Correct the qty of <span className="font-medium text-foreground">{target.productName}</span> — since this batch was already dispatched, {target.productName}'s Store stock is adjusted by the same amount.</>
+            )}
+            {target && !isDispatched && (
+              <>Correct the produced qty of <span className="font-medium text-foreground">{target.productName}</span> before it's dispatched to Store. A negative value is fine — it's how a Ready Material deficit (from an unlogged manual transfer) is corrected.</>
             )}
           </DialogDescription>
         </DialogHeader>
@@ -1911,7 +1950,6 @@ function AdjustReadyBatchDialog({
               <Input
                 id="adjust-qty"
                 type="number"
-                min="0"
                 step="0.001"
                 autoFocus
                 value={qty}
