@@ -5,6 +5,9 @@ import {
   getListBomsQueryKey,
   useCreateProduct,
   getListProductsQueryKey,
+  useListBrandMaster,
+  useCreateBrand,
+  getListBrandMasterQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -65,6 +68,88 @@ function MaterialCombobox({
                 </CommandItem>
               ))}
             </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// Searchable brand picker with inline "add new" — same pattern as Inventory
+// and Purchases, so a raw material added here isn't stuck re-typing a brand
+// name that already exists (or silently creating a near-duplicate of one).
+function BrandCombobox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const { data: brands, isError: brandsFailedToLoad } = useListBrandMaster();
+  const queryClient = useQueryClient();
+  const createBrand = useCreateBrand();
+  const { toast } = useToast();
+  const list = brands ?? [];
+  const trimmedQuery = query.trim();
+  const filtered = trimmedQuery
+    ? list.filter((b) => b.name.toLowerCase().includes(trimmedQuery.toLowerCase()))
+    : list;
+  const exactMatch = list.some((b) => b.name.toLowerCase() === trimmedQuery.toLowerCase());
+
+  const handleCreate = () => {
+    if (!trimmedQuery) return;
+    createBrand.mutate(
+      { data: { name: trimmedQuery } },
+      {
+        onSuccess: (created) => {
+          queryClient.invalidateQueries({ queryKey: getListBrandMasterQueryKey() });
+          onChange(created.name);
+          setOpen(false);
+          setQuery("");
+        },
+        onError: (err: any) => {
+          toast({ title: "Failed to add brand", description: err?.message ?? "Server error", variant: "destructive" });
+        },
+      },
+    );
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          type="button"
+          className="w-full justify-between font-normal mt-1.5"
+          data-testid="input-quick-material-brand"
+        >
+          <span className={cn("truncate", !value && "text-muted-foreground")}>{value || "Select brand"}</span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[280px] max-w-[calc(100vw-2rem)] p-0" align="start">
+        <Command shouldFilter={false}>
+          <CommandInput placeholder="Search or add brand…" value={query} onValueChange={setQuery} />
+          <CommandList className="max-h-60">
+            {brandsFailedToLoad && (
+              <p className="py-2 px-3 text-xs text-destructive">Couldn't load brands — you can still type a new one below.</p>
+            )}
+            {filtered.length === 0 && (
+              <CommandEmpty className="py-2 px-3 text-sm text-muted-foreground">No brand found.</CommandEmpty>
+            )}
+            <CommandGroup>
+              {filtered.map((b) => (
+                <CommandItem key={b.id} value={b.name} onSelect={() => { onChange(b.name); setOpen(false); setQuery(""); }}>
+                  <Check className={cn("mr-2 h-4 w-4", value === b.name ? "opacity-100" : "opacity-0")} />
+                  {b.name}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+            {trimmedQuery && !exactMatch && (
+              <CommandGroup>
+                <CommandItem onSelect={handleCreate}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add "{trimmedQuery}" as new brand
+                </CommandItem>
+              </CommandGroup>
+            )}
           </CommandList>
         </Command>
       </PopoverContent>
@@ -510,11 +595,7 @@ function QuickAddMaterialDialog({
             </div>
             <div>
               <Label>Brand</Label>
-              <Input
-                value={brand}
-                onChange={(e) => setBrand(e.target.value)}
-                className="mt-1.5"
-              />
+              <BrandCombobox value={brand} onChange={setBrand} />
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
