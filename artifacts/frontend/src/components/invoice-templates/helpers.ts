@@ -120,7 +120,18 @@ export function getPrintCss(
 ): string {
   const paper = paperOverride && paperOverride !== "auto" ? paperOverride : meta.paper;
   const orientation = orientationOverride && orientationOverride !== "auto" ? orientationOverride : meta.orientation;
-  const sizeRule = `${paper} ${orientation}`;
+  // `size: A4 landscape` is valid CSS, but several browser/print-driver
+  // combinations only honor the paper-size keyword and silently ignore the
+  // portrait/landscape keyword next to it — the page prints in the same
+  // orientation regardless of what's selected. Explicit width×height (with
+  // the two swapped for landscape) is universally respected since it isn't
+  // relying on the browser to interpret the orientation keyword at all.
+  const PAGE_DIMENSIONS_MM: Record<"A4" | "A5", [number, number]> = {
+    A4: [210, 297],
+    A5: [148, 210],
+  };
+  const [w, h] = PAGE_DIMENSIONS_MM[paper as "A4" | "A5"] ?? PAGE_DIMENSIONS_MM.A4;
+  const sizeRule = orientation === "landscape" ? `${h}mm ${w}mm` : `${w}mm ${h}mm`;
   // The legacy a5-compact bill must print byte-identically to the original
   // hardcoded sheet, so reproduce its exact width/font/padding overrides.
   const legacy =
