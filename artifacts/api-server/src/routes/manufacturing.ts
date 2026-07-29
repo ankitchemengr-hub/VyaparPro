@@ -567,10 +567,10 @@ router.post("/manufacturing/assemble", async (req, res): Promise<void> => {
       await client.query(
         `UPDATE ready_material_batches
          SET qty = $1, batches = $2, bom_id = $3, worker_id = $4, worker_name = $5,
-             workload_card_id = $6, adjustment_reason = CASE WHEN $1 >= 0 THEN NULL ELSE adjustment_reason END,
+             workload_card_id = $6, adjustment_reason = CASE WHEN $8 >= 0 THEN NULL ELSE adjustment_reason END,
              updated_at = NOW()
          WHERE id = $7`,
-        [mergedQty, Number(existingReady.batches) + Number(batches), bom.id, worker.id, worker.name, cardId, existingReady.id],
+        [mergedQty, Number(existingReady.batches) + Number(batches), bom.id, worker.id, worker.name, cardId, existingReady.id, mergedQty],
       );
     } else {
       await client.query(
