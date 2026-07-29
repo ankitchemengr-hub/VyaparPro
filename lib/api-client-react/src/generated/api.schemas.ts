@@ -1967,10 +1967,6 @@ export interface AdjustReadyMaterialBatchInput {
   reason: string;
 }
 
-export interface DispatchReadyMaterialBatchInput {
-  notes?: string;
-}
-
 export type WorkloadCardInputOrderType = typeof WorkloadCardInputOrderType[keyof typeof WorkloadCardInputOrderType];
 
 

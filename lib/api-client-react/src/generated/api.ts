@@ -61,7 +61,6 @@ import type {
   CustomerWiseSalesReport,
   DashboardSummary,
   DeleteSubscriptionResult,
-  DispatchReadyMaterialBatchInput,
   Entity,
   EntityInput,
   EntityLedger,
@@ -7179,77 +7178,6 @@ export const useDeleteReadyMaterialBatch = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getDeleteReadyMaterialBatchMutationOptions(options));
-    }
-
-export const getDispatchReadyMaterialBatchUrl = (id: number,) => {
-
-
-
-
-  return `/api/manufacturing/ready-batches/${id}/dispatch`
-}
-
-/**
- * @summary Send a ready batch to Store — credits finished-good stock and logs a Material Transfer slip
- */
-export const dispatchReadyMaterialBatch = async (id: number,
-    dispatchReadyMaterialBatchInput?: DispatchReadyMaterialBatchInput, options?: RequestInit): Promise<ReadyMaterialBatch> => {
-
-  return customFetch<ReadyMaterialBatch>(getDispatchReadyMaterialBatchUrl(id),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(dispatchReadyMaterialBatchInput)
-  }
-);}
-
-
-
-
-export const getDispatchReadyMaterialBatchMutationOptions = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof dispatchReadyMaterialBatch>>, TError,{id: number;data?: BodyType<DispatchReadyMaterialBatchInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof dispatchReadyMaterialBatch>>, TError,{id: number;data?: BodyType<DispatchReadyMaterialBatchInput>}, TContext> => {
-
-const mutationKey = ['dispatchReadyMaterialBatch'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof dispatchReadyMaterialBatch>>, {id: number;data?: BodyType<DispatchReadyMaterialBatchInput>}> = (props) => {
-          const {id,data} = props ?? {};
-
-          return  dispatchReadyMaterialBatch(id,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type DispatchReadyMaterialBatchMutationResult = NonNullable<Awaited<ReturnType<typeof dispatchReadyMaterialBatch>>>
-    export type DispatchReadyMaterialBatchMutationBody = BodyType<DispatchReadyMaterialBatchInput> | undefined
-    export type DispatchReadyMaterialBatchMutationError = ErrorType<void>
-
-    /**
- * @summary Send a ready batch to Store — credits finished-good stock and logs a Material Transfer slip
- */
-export const useDispatchReadyMaterialBatch = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof dispatchReadyMaterialBatch>>, TError,{id: number;data?: BodyType<DispatchReadyMaterialBatchInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof dispatchReadyMaterialBatch>>,
-        TError,
-        {id: number;data?: BodyType<DispatchReadyMaterialBatchInput>},
-        TContext
-      > => {
-      return useMutation(getDispatchReadyMaterialBatchMutationOptions(options));
     }
 
 export const getUpdateWorkloadCardUrl = (id: number,) => {

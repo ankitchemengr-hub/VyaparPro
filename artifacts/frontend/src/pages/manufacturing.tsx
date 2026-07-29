@@ -16,7 +16,6 @@ import {
   useListReadyMaterialBatches,
   useAdjustReadyMaterialBatch,
   useDeleteReadyMaterialBatch,
-  useDispatchReadyMaterialBatch,
   getListWorkloadCardsQueryKey,
   getListProductsQueryKey,
   getGetLowStockAlertsQueryKey,
@@ -71,7 +70,6 @@ import {
   ChevronsUpDown,
   Check,
   Boxes,
-  Send,
   Wrench,
   User,
 } from "lucide-react";
@@ -1682,10 +1680,8 @@ function ReadyMaterialTab() {
   const { toast } = useToast();
   const adjustBatch = useAdjustReadyMaterialBatch();
   const deleteBatch = useDeleteReadyMaterialBatch();
-  const dispatchBatch = useDispatchReadyMaterialBatch();
 
   const [adjustTarget, setAdjustTarget] = useState<any | null>(null);
-  const [dispatchTarget, setDispatchTarget] = useState<any | null>(null);
 
   const productById = useMemo(() => {
     const m = new Map<number, any>();
@@ -1742,26 +1738,6 @@ function ReadyMaterialTab() {
     }
   };
 
-  const handleDispatchConfirm = async (notes: string) => {
-    if (!dispatchTarget) return;
-    try {
-      await dispatchBatch.mutateAsync({ id: dispatchTarget.id, data: { notes: notes || undefined } });
-      await refresh();
-      toast({
-        title: "Dispatched to Store",
-        description: `${dispatchTarget.qty} ${dispatchTarget.unit} of ${dispatchTarget.productName} added to stock.`,
-      });
-      setDispatchTarget(null);
-    } catch (err: any) {
-      let desc = err?.message ?? "Server error";
-      try {
-        const body = err?.response ? await err.response.json() : null;
-        if (body?.error) desc = String(body.error).slice(0, 300);
-      } catch {}
-      toast({ title: "Failed to dispatch", description: desc, variant: "destructive" });
-    }
-  };
-
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -1771,7 +1747,7 @@ function ReadyMaterialTab() {
             Ready Material
           </h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Assembled output waiting to be dispatched to Store. Dispatching is what credits stock.
+            Assembled output not yet moved to Store. It becomes real stock via a Material Transfer, not from here.
           </p>
         </div>
         <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as "ready" | "dispatched")}>
@@ -1779,7 +1755,7 @@ function ReadyMaterialTab() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="ready">Ready to Dispatch</SelectItem>
+            <SelectItem value="ready">Ready</SelectItem>
             <SelectItem value="dispatched">Dispatched</SelectItem>
           </SelectContent>
         </Select>
@@ -1793,7 +1769,7 @@ function ReadyMaterialTab() {
         <div className="text-center py-16 border border-dashed rounded-lg">
           <Boxes className="mx-auto h-10 w-10 text-muted-foreground opacity-20 mb-3" />
           <p className="text-sm text-muted-foreground">
-            {statusFilter === "ready" ? "Nothing ready to dispatch yet." : "No dispatched batches yet."}
+            {statusFilter === "ready" ? "Nothing assembled and waiting yet." : "No dispatched batches yet."}
           </p>
         </div>
       ) : (
@@ -1846,14 +1822,7 @@ function ReadyMaterialTab() {
                     </Badge>
                   )}
                   {b.status === "ready" && Number(b.qty) > 0 && (
-                    <Button
-                      size="sm"
-                      className="bg-green-600 hover:bg-green-700 text-white"
-                      onClick={() => setDispatchTarget(b)}
-                      data-testid={`button-dispatch-ready-${b.id}`}
-                    >
-                      <Send className="w-3.5 h-3.5 mr-1.5" /> Dispatch
-                    </Button>
+                    <Badge variant="outline" className="whitespace-nowrap">Awaiting Transfer</Badge>
                   )}
                   {b.status === "dispatched" && (
                     <Badge className="bg-green-600 text-white border-transparent">Dispatched</Badge>
@@ -1894,12 +1863,6 @@ function ReadyMaterialTab() {
         submitting={adjustBatch.isPending}
         onCancel={() => setAdjustTarget(null)}
         onConfirm={handleAdjustSave}
-      />
-      <DispatchReadyBatchDialog
-        target={dispatchTarget}
-        submitting={dispatchBatch.isPending}
-        onCancel={() => setDispatchTarget(null)}
-        onConfirm={handleDispatchConfirm}
       />
     </div>
   );
@@ -1982,64 +1945,6 @@ function AdjustReadyBatchDialog({
           >
             {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
             Save Correction
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function DispatchReadyBatchDialog({
-  target, submitting, onCancel, onConfirm,
-}: {
-  target: any | null;
-  submitting: boolean;
-  onCancel: () => void;
-  onConfirm: (notes: string) => void;
-}) {
-  const [notes, setNotes] = useState("");
-
-  React.useEffect(() => {
-    if (target) setNotes("");
-  }, [target]);
-
-  return (
-    <Dialog open={target != null} onOpenChange={(v) => { if (!v && !submitting) onCancel(); }}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Send className="w-5 h-5 text-primary" /> Dispatch to Store
-          </DialogTitle>
-          <DialogDescription>
-            {target && (
-              <>
-                This adds <span className="font-medium text-foreground">{Number(target.qty).toLocaleString()} {target.unit}</span> of{" "}
-                <span className="font-medium text-foreground">{target.productName}</span> to sellable stock and logs a Material Transfer slip.
-              </>
-            )}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-1.5 py-2">
-          <Label htmlFor="dispatch-notes">Notes <span className="text-muted-foreground text-xs">(optional)</span></Label>
-          <Input
-            id="dispatch-notes"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="e.g. handed to store keeper"
-            data-testid="input-dispatch-notes"
-          />
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onCancel} disabled={submitting}>Cancel</Button>
-          <Button
-            onClick={() => onConfirm(notes.trim())}
-            disabled={submitting}
-            className="bg-green-600 hover:bg-green-700 text-white"
-            data-testid="button-confirm-dispatch"
-          >
-            {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-            <Send className="w-4 h-4 mr-2" />
-            Confirm & Dispatch
           </Button>
         </DialogFooter>
       </DialogContent>

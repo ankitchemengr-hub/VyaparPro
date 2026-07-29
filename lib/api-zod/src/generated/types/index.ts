@@ -82,7 +82,6 @@ export * from './customerWiseSalesReportTotals';
 export * from './customerWiseSalesRow';
 export * from './dashboardSummary';
 export * from './deleteSubscriptionResult';
-export * from './dispatchReadyMaterialBatchInput';
 export * from './entity';
 export * from './entityInput';
 export * from './entityInputPricingTier';

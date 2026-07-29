@@ -2709,35 +2709,6 @@ export const DeleteReadyMaterialBatchResponse = zod.void()
 
 
 /**
- * @summary Send a ready batch to Store — credits finished-good stock and logs a Material Transfer slip
- */
-export const DispatchReadyMaterialBatchParams = zod.object({
-  "id": zod.coerce.number()
-})
-
-export const DispatchReadyMaterialBatchBody = zod.object({
-  "notes": zod.string().optional()
-})
-
-export const DispatchReadyMaterialBatchResponse = zod.object({
-  "id": zod.number(),
-  "bomId": zod.number().nullish(),
-  "productId": zod.number(),
-  "productName": zod.string(),
-  "unit": zod.string(),
-  "qty": zod.number(),
-  "batches": zod.number(),
-  "workerId": zod.number().nullish(),
-  "workerName": zod.string(),
-  "status": zod.enum(['ready', 'dispatched']),
-  "adjustmentReason": zod.string().nullish(),
-  "materialTransferId": zod.number().nullish(),
-  "dispatchedAt": zod.string().nullish(),
-  "createdAt": zod.string()
-})
-
-
-/**
  * @summary Update workload card status/assignment
  */
 export const UpdateWorkloadCardParams = zod.object({

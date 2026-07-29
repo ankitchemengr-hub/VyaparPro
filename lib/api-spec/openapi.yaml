@@ -1937,34 +1937,6 @@ paths:
         "404":
           description: Batch not found
 
-  /manufacturing/ready-batches/{id}/dispatch:
-    post:
-      operationId: dispatchReadyMaterialBatch
-      tags: [manufacturing]
-      summary: Send a ready batch to Store — credits finished-good stock and logs a Material Transfer slip
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/DispatchReadyMaterialBatchInput"
-      responses:
-        "200":
-          description: Dispatched
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ReadyMaterialBatch"
-        "404":
-          description: Batch not found
-        "409":
-          description: Batch already dispatched
-
   /workload/{id}:
     patch:
       operationId: updateWorkloadCard
@@ -5247,12 +5219,6 @@ components:
         reason:
           type: string
           description: Why the entry is being corrected
-
-    DispatchReadyMaterialBatchInput:
-      type: object
-      properties:
-        notes:
-          type: string
 
     WorkloadCardInput:
       type: object

@@ -20,7 +20,6 @@ import {
   AssembleItemBody,
   ListReadyMaterialBatchesQueryParams,
   AdjustReadyMaterialBatchBody,
-  DispatchReadyMaterialBatchBody,
 } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
 import { getCompanyId } from "../lib/tenant";
@@ -740,108 +739,6 @@ router.delete("/manufacturing/ready-batches/:id", async (req, res): Promise<void
     await client.query("ROLLBACK");
     logger.error({ err }, "Failed to delete ready batch");
     res.status(500).json({ error: "Failed to delete ready batch" });
-  } finally {
-    client.release();
-  }
-});
-
-// POST /manufacturing/ready-batches/:id/dispatch — the point a staged batch
-// actually becomes sellable stock. Credits products.current_stock, writes a
-// 'manufacturing_produce' stock movement, and logs a Material Transfer slip
-// (sentBy = the worker who assembled it) so it shows up in that log too.
-router.post("/manufacturing/ready-batches/:id/dispatch", async (req, res): Promise<void> => {
-  const companyId = getCompanyId(req);
-  const session = (req as any).session;
-  const userId = session?.userId ?? 1;
-  const id = Number(req.params.id);
-  if (!Number.isFinite(id)) {
-    res.status(400).json({ error: "Invalid id" });
-    return;
-  }
-  const parsed = DispatchReadyMaterialBatchBody.safeParse(req.body ?? {});
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
-
-    const batchRes = await client.query(
-      `SELECT * FROM ready_material_batches WHERE id = $1 AND company_id = $2 FOR UPDATE`,
-      [id, companyId],
-    );
-    const batch = batchRes.rows[0];
-    if (!batch) {
-      await client.query("ROLLBACK");
-      res.status(404).json({ error: "Ready batch not found" });
-      return;
-    }
-    if (batch.status !== "ready") {
-      await client.query("ROLLBACK");
-      res.status(409).json({ error: "This batch has already been dispatched" });
-      return;
-    }
-    if (Number(batch.qty) <= 0) {
-      await client.query("ROLLBACK");
-      res.status(409).json({
-        error: "This is a negative balance from a manual transfer, not a real batch — it can't be dispatched. Record the missing Assemble entry, or ask an admin to correct it.",
-      });
-      return;
-    }
-
-    await client.query(
-      `INSERT INTO material_transfer_sequence (company_id, last_number) VALUES ($1, 0) ON CONFLICT (company_id) DO NOTHING`,
-      [companyId],
-    );
-    const seqRes = await client.query(
-      `UPDATE material_transfer_sequence SET last_number = last_number + 1 WHERE company_id = $1 RETURNING last_number`,
-      [companyId],
-    );
-    const transferNo = `MT-${String(seqRes.rows[0].last_number).padStart(3, "0")}`;
-
-    const transferRes = await client.query(
-      `INSERT INTO material_transfers (company_id, transfer_no, transfer_date, sent_by, notes, created_by_user_id)
-       VALUES ($1, $2, NOW(), $3, $4, $5) RETURNING id`,
-      [
-        companyId, transferNo, batch.worker_name,
-        parsed.data.notes?.trim() || `Dispatched from Ready Material (batch #${batch.id})`,
-        userId,
-      ],
-    );
-    const transferId = transferRes.rows[0].id;
-
-    await client.query(
-      `INSERT INTO material_transfer_items (company_id, transfer_id, product_id, product_name, qty, unit)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [companyId, transferId, batch.product_id, batch.product_name, batch.qty, batch.unit],
-    );
-
-    await client.query(
-      `INSERT INTO stock_movements (company_id, product_id, type, quantity, reason, reference_id, reference_type, user_id)
-       VALUES ($1, $2, 'manufacturing_produce', $3, 'Dispatched from Ready Material', $4, 'ready_material_batch', $5)`,
-      [companyId, batch.product_id, batch.qty, batch.id, userId],
-    );
-    await client.query(
-      `UPDATE products SET current_stock = current_stock + $1 WHERE id = $2 AND company_id = $3`,
-      [batch.qty, batch.product_id, companyId],
-    );
-
-    const updatedRes = await client.query(
-      `UPDATE ready_material_batches
-       SET status = 'dispatched', dispatched_at = NOW(), material_transfer_id = $1
-       WHERE id = $2 AND company_id = $3
-       RETURNING *`,
-      [transferId, id, companyId],
-    );
-
-    await client.query("COMMIT");
-    res.json(formatReadyBatch(updatedRes.rows[0]));
-  } catch (err) {
-    await client.query("ROLLBACK");
-    logger.error({ err }, "Failed to dispatch ready material batch");
-    res.status(500).json({ error: "Failed to dispatch batch" });
   } finally {
     client.release();
   }
