@@ -611,16 +611,27 @@ router.get("/manufacturing/ready-batches", async (req, res): Promise<void> => {
     return;
   }
 
-  const conditions: any[] = [eq(readyMaterialBatchesTable.companyId, companyId)];
+  const conditions: any[] = [
+    eq(readyMaterialBatchesTable.companyId, companyId),
+    // Ready Material is for manufactured output only — a manual Material
+    // Transfer's deficit row can be created against any product (including
+    // a purchased/resale item with no BOM at all), which doesn't belong
+    // here even though it uses the same table.
+    eq(productsTable.addForManufacturing, true),
+  ];
   if (params.data.status) conditions.push(eq(readyMaterialBatchesTable.status, params.data.status));
 
   const rows = await db
-    .select()
+    .select({ batch: readyMaterialBatchesTable })
     .from(readyMaterialBatchesTable)
+    .innerJoin(productsTable, and(
+      eq(productsTable.id, readyMaterialBatchesTable.productId),
+      eq(productsTable.companyId, readyMaterialBatchesTable.companyId),
+    ))
     .where(and(...conditions))
     .orderBy(sql`${readyMaterialBatchesTable.createdAt} DESC`);
 
-  res.json(rows.map(formatReadyBatch));
+  res.json(rows.map((r) => formatReadyBatch(r.batch)));
 });
 
 // PATCH /manufacturing/ready-batches/:id — admin-only correction of a

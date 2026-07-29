@@ -161,13 +161,14 @@ router.post("/material-transfers", async (req, res): Promise<void> => {
     const savedItems: { productId: number; productName: string; qty: number; unit: string }[] = [];
     for (const item of items) {
       const prodRes = await client.query(
-        `SELECT name, unit FROM products WHERE company_id = $1 AND id = $2`,
+        `SELECT name, unit, add_for_manufacturing FROM products WHERE company_id = $1 AND id = $2`,
         [companyId, item.productId],
       );
       if (prodRes.rows.length === 0) {
         throw new Error(`Product ${item.productId} not found`);
       }
       const productName = prodRes.rows[0].name;
+      const isManufacturedItem = prodRes.rows[0].add_for_manufacturing === true;
       const itemQty = Number(item.qty);
       await client.query(
         `INSERT INTO material_transfer_items (company_id, transfer_id, product_id, product_name, qty, unit)
@@ -187,75 +188,80 @@ router.post("/material-transfers", async (req, res): Promise<void> => {
         [companyId, item.productId, itemQty, header.id, userId],
       );
 
-      // Consume existing 'ready' batches for this product (oldest first, real
-      // assembled qty only — a negative deficit row from an earlier unlogged
-      // transfer must never be treated as stock to "consume") to cover the
-      // transfer — same accounting a normal dispatch would do.
-      let remaining = itemQty;
-      const readyBatches = await client.query(
-        `SELECT id, qty FROM ready_material_batches
-         WHERE company_id = $1 AND product_id = $2 AND status = 'ready' AND qty > 0
-         ORDER BY created_at ASC FOR UPDATE`,
-        [companyId, item.productId],
-      );
-      for (const batch of readyBatches.rows) {
-        if (remaining <= 0) break;
-        const batchQty = Number(batch.qty);
-        if (batchQty <= remaining) {
-          await client.query(
-            `UPDATE ready_material_batches
-             SET status = 'dispatched', dispatched_at = NOW(), material_transfer_id = $1
-             WHERE id = $2`,
-            [header.id, batch.id],
-          );
-          remaining -= batchQty;
-        } else {
-          await client.query(`UPDATE ready_material_batches SET qty = qty - $1 WHERE id = $2`, [remaining, batch.id]);
-          remaining = 0;
-        }
-      }
-
-      // Anything left over was never assembled/logged at all. A product keeps
-      // exactly one 'ready' line, so if a deficit row already exists here
-      // (from an earlier unlogged transfer), add to it instead of creating a
-      // second one — same "one line per product" rule Assemble follows. The
-      // dispatch endpoint refuses non-positive batches, so this can't be
-      // "dispatched" again — it only nets back toward zero once a real
-      // Assemble entry is recorded for this product.
-      if (remaining > 0) {
-        const existingDeficitRes = await client.query(
+      // Ready Material bookkeeping only applies to items actually flagged for
+      // manufacturing — a purchased/resale product has no BOM or Assemble
+      // step, so there's nothing for a deficit row to ever be corrected by.
+      if (isManufacturedItem) {
+        // Consume existing 'ready' batches for this product (oldest first, real
+        // assembled qty only — a negative deficit row from an earlier unlogged
+        // transfer must never be treated as stock to "consume") to cover the
+        // transfer — same accounting a normal dispatch would do.
+        let remaining = itemQty;
+        const readyBatches = await client.query(
           `SELECT id, qty FROM ready_material_batches
-           WHERE company_id = $1 AND product_id = $2 AND status = 'ready' AND qty <= 0
-           ORDER BY created_at ASC LIMIT 1 FOR UPDATE`,
+           WHERE company_id = $1 AND product_id = $2 AND status = 'ready' AND qty > 0
+           ORDER BY created_at ASC FOR UPDATE`,
           [companyId, item.productId],
         );
-        const existingDeficit = existingDeficitRes.rows[0];
-        if (existingDeficit) {
-          await client.query(
-            `UPDATE ready_material_batches
-             SET qty = qty - $1, worker_name = $2, material_transfer_id = $3, updated_at = NOW()
-             WHERE id = $4`,
-            [remaining, body.sentBy?.trim() || "Manual Transfer", header.id, existingDeficit.id],
-          );
-          savedItems.push({ productId: item.productId, productName, qty: itemQty, unit: item.unit || "QTY" });
-          continue;
+        for (const batch of readyBatches.rows) {
+          if (remaining <= 0) break;
+          const batchQty = Number(batch.qty);
+          if (batchQty <= remaining) {
+            await client.query(
+              `UPDATE ready_material_batches
+               SET status = 'dispatched', dispatched_at = NOW(), material_transfer_id = $1
+               WHERE id = $2`,
+              [header.id, batch.id],
+            );
+            remaining -= batchQty;
+          } else {
+            await client.query(`UPDATE ready_material_batches SET qty = qty - $1 WHERE id = $2`, [remaining, batch.id]);
+            remaining = 0;
+          }
         }
-        await client.query(
-          `INSERT INTO ready_material_batches
-             (company_id, product_id, product_name, unit, qty, batches, worker_name, status, adjustment_reason, material_transfer_id, created_by_user_id)
-           VALUES ($1,$2,$3,$4,$5,1,$6,'ready',$7,$8,$9)`,
-          [
-            companyId,
-            item.productId,
-            productName,
-            item.unit || prodRes.rows[0].unit || "QTY",
-            -remaining,
-            body.sentBy?.trim() || "Manual Transfer",
-            "Transferred before being assembled — record the missing Assemble entry to correct this.",
-            header.id,
-            userId,
-          ],
-        );
+
+        // Anything left over was never assembled/logged at all. A product keeps
+        // exactly one 'ready' line, so if a deficit row already exists here
+        // (from an earlier unlogged transfer), add to it instead of creating a
+        // second one — same "one line per product" rule Assemble follows. The
+        // dispatch endpoint refuses non-positive batches, so this can't be
+        // "dispatched" again — it only nets back toward zero once a real
+        // Assemble entry is recorded for this product.
+        if (remaining > 0) {
+          const existingDeficitRes = await client.query(
+            `SELECT id, qty FROM ready_material_batches
+             WHERE company_id = $1 AND product_id = $2 AND status = 'ready' AND qty <= 0
+             ORDER BY created_at ASC LIMIT 1 FOR UPDATE`,
+            [companyId, item.productId],
+          );
+          const existingDeficit = existingDeficitRes.rows[0];
+          if (existingDeficit) {
+            await client.query(
+              `UPDATE ready_material_batches
+               SET qty = qty - $1, worker_name = $2, material_transfer_id = $3, updated_at = NOW()
+               WHERE id = $4`,
+              [remaining, body.sentBy?.trim() || "Manual Transfer", header.id, existingDeficit.id],
+            );
+            savedItems.push({ productId: item.productId, productName, qty: itemQty, unit: item.unit || "QTY" });
+            continue;
+          }
+          await client.query(
+            `INSERT INTO ready_material_batches
+               (company_id, product_id, product_name, unit, qty, batches, worker_name, status, adjustment_reason, material_transfer_id, created_by_user_id)
+             VALUES ($1,$2,$3,$4,$5,1,$6,'ready',$7,$8,$9)`,
+            [
+              companyId,
+              item.productId,
+              productName,
+              item.unit || prodRes.rows[0].unit || "QTY",
+              -remaining,
+              body.sentBy?.trim() || "Manual Transfer",
+              "Transferred before being assembled — record the missing Assemble entry to correct this.",
+              header.id,
+              userId,
+            ],
+          );
+        }
       }
 
       savedItems.push({ productId: item.productId, productName, qty: itemQty, unit: item.unit || "QTY" });
