@@ -187,12 +187,14 @@ router.post("/material-transfers", async (req, res): Promise<void> => {
         [companyId, item.productId, itemQty, header.id, userId],
       );
 
-      // Consume existing 'ready' batches for this product (oldest first) to
-      // cover the transfer — same accounting a normal dispatch would do.
+      // Consume existing 'ready' batches for this product (oldest first, real
+      // assembled qty only — a negative deficit row from an earlier unlogged
+      // transfer must never be treated as stock to "consume") to cover the
+      // transfer — same accounting a normal dispatch would do.
       let remaining = itemQty;
       const readyBatches = await client.query(
         `SELECT id, qty FROM ready_material_batches
-         WHERE company_id = $1 AND product_id = $2 AND status = 'ready'
+         WHERE company_id = $1 AND product_id = $2 AND status = 'ready' AND qty > 0
          ORDER BY created_at ASC FOR UPDATE`,
         [companyId, item.productId],
       );
@@ -213,14 +215,31 @@ router.post("/material-transfers", async (req, res): Promise<void> => {
         }
       }
 
-      // Anything left over was never assembled/logged at all — surface it as
-      // a negative 'ready' batch (stays status='ready', same as anything
-      // still awaiting dispatch) so it shows up right in the default Ready
-      // Material view, not buried under the Dispatched filter. The dispatch
-      // endpoint refuses non-positive batches, so this can't be "dispatched"
-      // again — it only nets back toward zero once a real Assemble entry is
-      // recorded for this product (a new positive ready batch alongside it).
+      // Anything left over was never assembled/logged at all. A product keeps
+      // exactly one 'ready' line, so if a deficit row already exists here
+      // (from an earlier unlogged transfer), add to it instead of creating a
+      // second one — same "one line per product" rule Assemble follows. The
+      // dispatch endpoint refuses non-positive batches, so this can't be
+      // "dispatched" again — it only nets back toward zero once a real
+      // Assemble entry is recorded for this product.
       if (remaining > 0) {
+        const existingDeficitRes = await client.query(
+          `SELECT id, qty FROM ready_material_batches
+           WHERE company_id = $1 AND product_id = $2 AND status = 'ready' AND qty <= 0
+           ORDER BY created_at ASC LIMIT 1 FOR UPDATE`,
+          [companyId, item.productId],
+        );
+        const existingDeficit = existingDeficitRes.rows[0];
+        if (existingDeficit) {
+          await client.query(
+            `UPDATE ready_material_batches
+             SET qty = qty - $1, worker_name = $2, material_transfer_id = $3, updated_at = NOW()
+             WHERE id = $4`,
+            [remaining, body.sentBy?.trim() || "Manual Transfer", header.id, existingDeficit.id],
+          );
+          savedItems.push({ productId: item.productId, productName, qty: itemQty, unit: item.unit || "QTY" });
+          continue;
+        }
         await client.query(
           `INSERT INTO ready_material_batches
              (company_id, product_id, product_name, unit, qty, batches, worker_name, status, adjustment_reason, material_transfer_id, created_by_user_id)

@@ -446,6 +446,59 @@ async function backfillExpenseAccounts(client: pg.Client): Promise<void> {
 }
 
 /**
+ * One-time (but safe to re-run) cleanup: a product is only ever supposed to
+ * have one 'ready' Ready Material line at a time (Assemble and manual
+ * Material Transfer both now merge into an existing one instead of creating
+ * a new row), but rows created before that fix are still sitting duplicated
+ * — typically a real assembled batch alongside a separate negative deficit
+ * row for the same product. Merges every such group into a single row:
+ * sums qty/batches, keeps the most recent worker/workload attribution, and
+ * clears the deficit note once the combined qty is no longer negative.
+ */
+async function consolidateReadyMaterialBatches(client: pg.Client): Promise<void> {
+  const { rows: groups } = await client.query<{ company_id: number; product_id: number }>(
+    `SELECT company_id, product_id FROM ready_material_batches
+     WHERE status = 'ready'
+     GROUP BY company_id, product_id
+     HAVING COUNT(*) > 1`,
+  );
+  if (groups.length === 0) return;
+
+  let merged = 0;
+  for (const group of groups) {
+    const { rows: batchRows } = await client.query(
+      `SELECT * FROM ready_material_batches
+       WHERE company_id = $1 AND product_id = $2 AND status = 'ready'
+       ORDER BY created_at ASC`,
+      [group.company_id, group.product_id],
+    );
+    if (batchRows.length < 2) continue;
+
+    const keep = batchRows[0];
+    const latest = batchRows[batchRows.length - 1];
+    const totalQty = batchRows.reduce((s, b) => s + Number(b.qty), 0);
+    const totalBatches = batchRows.reduce((s, b) => s + Number(b.batches), 0);
+    const reason = totalQty >= 0 ? null : (batchRows.find((b) => b.adjustment_reason)?.adjustment_reason ?? null);
+
+    await client.query(
+      `UPDATE ready_material_batches
+       SET qty = $1, batches = $2, worker_id = $3, worker_name = $4, workload_card_id = $5,
+           bom_id = $6, adjustment_reason = $7, updated_at = NOW()
+       WHERE id = $8`,
+      [totalQty, totalBatches, latest.worker_id, latest.worker_name, latest.workload_card_id, latest.bom_id, reason, keep.id],
+    );
+    await client.query(
+      `DELETE FROM ready_material_batches WHERE id = ANY($1::int[])`,
+      [batchRows.slice(1).map((b) => b.id)],
+    );
+    merged++;
+  }
+  if (merged > 0) {
+    logger.info({ merged }, "Consolidated duplicate Ready Material lines");
+  }
+}
+
+/**
  * Idempotent startup bootstrap. Connects with a dedicated client (so the schema
  * dump's session-level SET statements never leak into the shared pool), creates
  * all tables from the schema file when the database is empty, and ensures the
@@ -476,6 +529,7 @@ export async function ensureDatabaseReady(): Promise<void> {
     await ensureDefaultAdmin(client);
     await hashPlaintextPasswords(client);
     await backfillExpenseAccounts(client);
+    await consolidateReadyMaterialBatches(client);
   } catch (err) {
     logger.error({ err }, "Database bootstrap failed");
   } finally {

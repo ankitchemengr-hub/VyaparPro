@@ -549,16 +549,41 @@ router.post("/manufacturing/assemble", async (req, res): Promise<void> => {
     // crediting stock directly — it only becomes real stock once dispatched
     // via POST /manufacturing/ready-batches/:id/dispatch. Raw materials above
     // are still consumed immediately since they're physically used up now.
-    await client.query(
-      `INSERT INTO ready_material_batches
-         (company_id, bom_id, product_id, product_name, unit, qty, batches, worker_id, worker_name, workload_card_id, created_by_user_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-      [
-        companyId, bom.id, bom.finishedProductId,
-        finishedProduct?.name ?? "", finishedProduct?.unit ?? "QTY",
-        outputUnits, batches, worker.id, worker.name, cardId, userId,
-      ],
+    //
+    // A product keeps exactly one 'ready' line: if one already exists (a
+    // normal not-yet-dispatched batch, or a negative deficit from a manual
+    // Material Transfer that skipped this step), this assemble adds into it
+    // instead of creating a separate row — that's also how a deficit nets
+    // itself back toward zero, per the Ready Material tab's own promise.
+    const existingReadyRes = await client.query(
+      `SELECT id, qty, batches FROM ready_material_batches
+       WHERE company_id = $1 AND product_id = $2 AND status = 'ready'
+       ORDER BY created_at ASC LIMIT 1 FOR UPDATE`,
+      [companyId, bom.finishedProductId],
     );
+    const existingReady = existingReadyRes.rows[0];
+    if (existingReady) {
+      const mergedQty = Number(existingReady.qty) + outputUnits;
+      await client.query(
+        `UPDATE ready_material_batches
+         SET qty = $1, batches = $2, bom_id = $3, worker_id = $4, worker_name = $5,
+             workload_card_id = $6, adjustment_reason = CASE WHEN $1 >= 0 THEN NULL ELSE adjustment_reason END,
+             updated_at = NOW()
+         WHERE id = $7`,
+        [mergedQty, Number(existingReady.batches) + Number(batches), bom.id, worker.id, worker.name, cardId, existingReady.id],
+      );
+    } else {
+      await client.query(
+        `INSERT INTO ready_material_batches
+           (company_id, bom_id, product_id, product_name, unit, qty, batches, worker_id, worker_name, workload_card_id, created_by_user_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        [
+          companyId, bom.id, bom.finishedProductId,
+          finishedProduct?.name ?? "", finishedProduct?.unit ?? "QTY",
+          outputUnits, batches, worker.id, worker.name, cardId, userId,
+        ],
+      );
+    }
 
     await client.query("COMMIT");
   } catch (err) {
