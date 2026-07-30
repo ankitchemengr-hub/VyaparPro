@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRoute, useLocation } from "wouter";
 import {
   useGetInvoice,
@@ -17,7 +17,8 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { ArrowLeft, Printer, Loader2, LayoutTemplate, IndianRupee, MessageCircle } from "lucide-react";
+import { ArrowLeft, Printer, Loader2, LayoutTemplate, IndianRupee, MessageCircle, Share2 } from "lucide-react";
+import { shareInvoiceImage } from "@/lib/share-invoice";
 import { useAuth } from "@/contexts/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { InvoiceTemplateRenderer } from "@/components/invoice-templates/InvoiceTemplateRenderer";
@@ -44,6 +45,34 @@ export default function InvoiceDetail() {
 
   const [templateOverride, setTemplateOverride] = useState<string | null>(null);
   const [selectorOpen, setSelectorOpen] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const sheetContainerRef = useRef<HTMLDivElement>(null);
+
+  const handleShareInvoice = async () => {
+    if (!invoice) return;
+    const sheetEl = sheetContainerRef.current?.querySelector(".invoice-sheet") as HTMLElement | null;
+    if (!sheetEl) {
+      toast({ title: "Could not find invoice to share", variant: "destructive" });
+      return;
+    }
+    setSharing(true);
+    try {
+      const result = await shareInvoiceImage(sheetEl, {
+        fileName: `Invoice-${String(invoice.invoiceNo).replace(/\//g, "-")}.png`,
+        title: `Invoice ${invoice.invoiceNo}`,
+        text: `Invoice ${invoice.invoiceNo} — ₹${Number(invoice.grandTotal).toLocaleString()}`,
+      });
+      if (result === "downloaded") {
+        toast({ title: "Image downloaded", description: "Your browser doesn't support direct sharing — attach the downloaded image in WhatsApp manually." });
+      }
+    } catch (err: any) {
+      if (err?.name !== "AbortError") {
+        toast({ title: "Could not share invoice", description: err?.message ?? "Unknown error", variant: "destructive" });
+      }
+    } finally {
+      setSharing(false);
+    }
+  };
 
   // WhatsApp send state
   const [waOpen, setWaOpen] = useState(false);
@@ -169,6 +198,17 @@ export default function InvoiceDetail() {
           <Button
             variant="outline"
             size="sm"
+            onClick={handleShareInvoice}
+            disabled={sharing}
+            className="border-green-400 text-green-700 hover:bg-green-50"
+            data-testid="button-share-invoice"
+          >
+            {sharing ? <Loader2 className="h-4 w-4 sm:mr-2 animate-spin" /> : <Share2 className="h-4 w-4 sm:mr-2" />}
+            <span className="hidden sm:inline">Share</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             onClick={openWaDialog}
             className="border-green-400 text-green-700 hover:bg-green-50"
             data-testid="button-whatsapp-send"
@@ -195,12 +235,14 @@ export default function InvoiceDetail() {
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
       ) : (
-        <InvoiceTemplateRenderer
-          invoice={invoice}
-          settings={settings}
-          maps={maps}
-          templateId={activeTemplate}
-        />
+        <div ref={sheetContainerRef}>
+          <InvoiceTemplateRenderer
+            invoice={invoice}
+            settings={settings}
+            maps={maps}
+            templateId={activeTemplate}
+          />
+        </div>
       )}
 
       <InvoiceTemplateSelector

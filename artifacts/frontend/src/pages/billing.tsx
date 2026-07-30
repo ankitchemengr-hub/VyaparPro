@@ -43,10 +43,11 @@ import {
 import {
   Trash2, Printer, Save, CheckCircle, Loader2, User, Phone, MapPin,
   ArrowLeft, Banknote, CreditCard, Building2, Smartphone, Clock, SkipForward,
-  Search, Plus, Pencil, UserPlus,
+  Search, Plus, Pencil, UserPlus, Share2,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { shareInvoiceImage } from "@/lib/share-invoice";
 
 type QtyMode = "unit" | "box";
 
@@ -139,6 +140,8 @@ export default function Billing() {
   const [searchOpen, setSearchOpen] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const [savedInvoice, setSavedInvoice] = useState<any>(null);
+  const [sharing, setSharing] = useState(false);
+  const savedSheetRef = useRef<HTMLDivElement>(null);
   const [prefilled, setPrefilled] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState(0);
   const [paymentMode, setPaymentMode] = useState<"cash" | "upi" | "cheque" | "bank_transfer" | "credit">("cash");
@@ -444,6 +447,32 @@ export default function Billing() {
     });
   };
 
+  const handleShareInvoice = async () => {
+    if (!savedInvoice) return;
+    const sheetEl = savedSheetRef.current?.querySelector(".invoice-sheet") as HTMLElement | null;
+    if (!sheetEl) {
+      toast({ title: "Could not find invoice to share", variant: "destructive" });
+      return;
+    }
+    setSharing(true);
+    try {
+      const result = await shareInvoiceImage(sheetEl, {
+        fileName: `Invoice-${String(savedInvoice.invoiceNo).replace(/\//g, "-")}.png`,
+        title: `Invoice ${savedInvoice.invoiceNo}`,
+        text: `Invoice ${savedInvoice.invoiceNo} — ₹${finalTotal.toLocaleString()}`,
+      });
+      if (result === "downloaded") {
+        toast({ title: "Image downloaded", description: "Your browser doesn't support direct sharing — attach the downloaded image in WhatsApp manually." });
+      }
+    } catch (err: any) {
+      if (err?.name !== "AbortError") {
+        toast({ title: "Could not share invoice", description: err?.message ?? "Unknown error", variant: "destructive" });
+      }
+    } finally {
+      setSharing(false);
+    }
+  };
+
   const modeIcons: Record<string, React.ReactNode> = {
     cash: <Banknote className="w-4 h-4" />, upi: <Smartphone className="w-4 h-4" />,
     cheque: <CreditCard className="w-4 h-4" />, bank_transfer: <Building2 className="w-4 h-4" />,
@@ -484,9 +513,22 @@ export default function Billing() {
                   </div>
                 </div>
               </div>
-              <Button variant="outline" size="sm" className="shrink-0 w-full sm:w-auto" onClick={() => window.print()}>
-                <Printer className="w-4 h-4 mr-1.5" /> Print
-              </Button>
+              <div className="flex gap-2 w-full sm:w-auto">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 sm:flex-none border-green-400 text-green-700 hover:bg-green-50"
+                  onClick={handleShareInvoice}
+                  disabled={sharing}
+                  data-testid="button-share-invoice"
+                >
+                  {sharing ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Share2 className="w-4 h-4 mr-1.5" />}
+                  Share
+                </Button>
+                <Button variant="outline" size="sm" className="flex-1 sm:flex-none" onClick={() => window.print()}>
+                  <Printer className="w-4 h-4 mr-1.5" /> Print
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -659,12 +701,14 @@ export default function Billing() {
         </div>
       </div>
 
-      <InvoiceTemplateRenderer
-        invoice={savedInvoice}
-        settings={printSettings}
-        maps={printMaps}
-        templateId={printSettings.defaultTemplate}
-      />
+      <div ref={savedSheetRef}>
+        <InvoiceTemplateRenderer
+          invoice={savedInvoice}
+          settings={printSettings}
+          maps={printMaps}
+          templateId={printSettings.defaultTemplate}
+        />
+      </div>
       </>
     );
   }
