@@ -1996,6 +1996,46 @@ export const CreateAccountTransactionResponse = zod.object({
 
 
 /**
+ * @summary Admin-only correction of a Cash Book entry. Reflects into the account balance and, if linked to a customer/vendor, that entity's outstanding balance and ledger.
+ */
+export const UpdateAccountTransactionParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const updateAccountTransactionBodyAmountMin = 0.01;
+
+
+
+export const UpdateAccountTransactionBody = zod.object({
+  "amount": zod.number().min(updateAccountTransactionBodyAmountMin),
+  "mode": zod.enum(['cash', 'upi', 'bank_transfer', 'cheque', 'other']),
+  "partyName": zod.string().nullish(),
+  "partyMobile": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "allowNegative": zod.boolean().optional().describe('Admin-only override to let this correction push the account balance negative instead of being blocked.')
+})
+
+export const UpdateAccountTransactionResponse = zod.object({
+  "id": zod.number(),
+  "receiptNo": zod.string().nullish(),
+  "accountId": zod.number(),
+  "accountName": zod.string().nullish(),
+  "direction": zod.enum(['in', 'out']),
+  "amount": zod.number(),
+  "mode": zod.enum(['cash', 'upi', 'bank_transfer', 'cheque', 'other']),
+  "partyName": zod.string().nullish(),
+  "partyMobile": zod.string().nullish(),
+  "partyEntityId": zod.number().nullish(),
+  "notes": zod.string().nullish(),
+  "createdById": zod.number().nullish(),
+  "createdByName": zod.string().nullish(),
+  "createdByRole": zod.string().nullish(),
+  "balanceAfter": zod.number().nullish(),
+  "createdAt": zod.string()
+})
+
+
+/**
  * @summary Record cash collected from a salesman and deposit into an account
  */
 export const CollectCashFromSalesmanBody = zod.object({

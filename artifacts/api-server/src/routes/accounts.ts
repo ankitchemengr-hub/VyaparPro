@@ -9,6 +9,7 @@ import {
   DeleteAccountParams,
   CollectCashFromSalesmanBody,
   CreateAccountTransactionBody,
+  UpdateAccountTransactionBody,
   ListAccountTransactionsQueryParams,
 } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
@@ -450,6 +451,148 @@ router.post("/account-transactions", async (req, res): Promise<void> => {
     await client.query("ROLLBACK");
     logger.error({ err }, "Failed to record account transaction");
     res.status(500).json({ error: "Failed to record transaction" });
+  } finally {
+    client.release();
+  }
+});
+
+// PATCH /account-transactions/:id — admin-only correction of a Cash Book
+// entry. Reflects the amount change into the linked account's balance, and
+// — if this entry settled a customer/vendor's account (the "LINKED" badge in
+// Cash Book) — into that entity's outstanding_balance and ledger_entries.
+// direction/account/party-entity are intentionally NOT editable here: those
+// would need a full reversal-and-reapply rather than a delta, which is a much
+// bigger change than "the amount/mode/notes was mistyped".
+router.patch("/account-transactions/:id", async (req, res): Promise<void> => {
+  if (!requireFinancialWrite(req, res)) return;
+  const companyId = getCompanyId(req);
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  const parsed = UpdateAccountTransactionBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const session = (req as any).session;
+  const { amount: newAmount, mode, partyName, partyMobile, notes, allowNegative } = parsed.data;
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
+
+    const txnRes = await client.query(
+      `SELECT * FROM account_transactions WHERE id = $1 AND company_id = $2 FOR UPDATE`,
+      [id, companyId],
+    );
+    const existing = txnRes.rows[0];
+    if (!existing) {
+      await client.query("ROLLBACK");
+      res.status(404).json({ error: "Entry not found" });
+      return;
+    }
+
+    const oldAmount = Number(existing.amount);
+    const delta = newAmount - oldAmount;
+
+    const acctRes = await client.query(
+      `SELECT id, name, current_balance FROM accounts WHERE id = $1 AND company_id = $2 FOR UPDATE`,
+      [existing.account_id, companyId],
+    );
+    const acct = acctRes.rows[0];
+    if (!acct) {
+      await client.query("ROLLBACK");
+      res.status(404).json({ error: "Linked account not found" });
+      return;
+    }
+
+    const balanceDelta = existing.direction === "in" ? delta : -delta;
+    const newAccountBalance = Number(acct.current_balance) + balanceDelta;
+    const canOverride = session?.role === "admin" && allowNegative === true;
+    if (newAccountBalance < -0.001 && !canOverride) {
+      await client.query("ROLLBACK");
+      res.status(400).json({ error: `This change would leave ${acct.name} at ₹${newAccountBalance.toFixed(2)} — set allowNegative to proceed.` });
+      return;
+    }
+
+    const updRes = await client.query(
+      `UPDATE account_transactions SET amount = $1, mode = $2, party_name = $3, party_mobile = $4, notes = $5
+       WHERE id = $6 RETURNING *`,
+      [newAmount, mode, partyName ?? null, partyMobile ?? null, notes ?? null, id],
+    );
+    const txn = updRes.rows[0];
+
+    const updAcct = await client.query(
+      `UPDATE accounts SET current_balance = current_balance + $1 WHERE id = $2 AND company_id = $3 RETURNING current_balance`,
+      [balanceDelta, existing.account_id, companyId],
+    );
+
+    // Same settlement scoping as creation — only a vendor "out" or customer
+    // "in" ever touched the entity's ledger, so only those need correcting.
+    if (delta !== 0 && existing.party_entity_id) {
+      const partyRes = await client.query(
+        `SELECT id, type FROM entities WHERE id = $1 AND company_id = $2`,
+        [existing.party_entity_id, companyId],
+      );
+      const party = partyRes.rows[0];
+      const isVendorPayout = existing.direction === "out" && party?.type === "vendor";
+      const isCustomerReceipt = existing.direction === "in" && party?.type === "customer";
+      if (party && (isVendorPayout || isCustomerReceipt)) {
+        await client.query(
+          `UPDATE entities SET outstanding_balance = outstanding_balance - $1 WHERE id = $2 AND company_id = $3`,
+          [delta, party.id, companyId],
+        );
+        const ledgerRes = await client.query(
+          `SELECT id, credit, debit, created_at FROM ledger_entries
+           WHERE company_id = $1 AND entity_id = $2 AND reference_id = $3 AND type = 'payment'`,
+          [companyId, party.id, id],
+        );
+        const ledgerRow = ledgerRes.rows[0];
+        if (ledgerRow) {
+          const creditDelta = Number(ledgerRow.credit) > 0 ? delta : 0;
+          const debitDelta = Number(ledgerRow.debit) > 0 ? delta : 0;
+          await client.query(
+            `UPDATE ledger_entries SET credit = credit + $1, debit = debit + $2 WHERE id = $3`,
+            [creditDelta, debitDelta, ledgerRow.id],
+          );
+          // balance is a running cumulative snapshot at insert time -- every
+          // row from this one onward (in insertion order) shifts by exactly
+          // -delta, the same amount applyEntityPayment would subtract going
+          // forward, so a bulk shift is equivalent to recomputing each row.
+          await client.query(
+            `UPDATE ledger_entries SET balance = balance - $1
+             WHERE company_id = $2 AND entity_id = $3 AND (created_at, id) >= ($4, $5)`,
+            [delta, companyId, party.id, ledgerRow.created_at, ledgerRow.id],
+          );
+        }
+      }
+    }
+
+    await client.query("COMMIT");
+    res.json({
+      id: txn.id,
+      receiptNo: txn.receipt_no,
+      accountId: txn.account_id,
+      accountName: acct.name,
+      direction: txn.direction,
+      amount: Number(txn.amount),
+      mode: txn.mode,
+      partyName: txn.party_name ?? null,
+      partyMobile: txn.party_mobile ?? null,
+      partyEntityId: txn.party_entity_id ?? null,
+      notes: txn.notes ?? null,
+      createdById: txn.created_by_id ?? null,
+      createdByName: txn.created_by_name ?? null,
+      createdByRole: txn.created_by_role ?? null,
+      balanceAfter: Number(updAcct.rows[0].current_balance),
+      createdAt: txn.created_at?.toISOString ? txn.created_at.toISOString() : txn.created_at,
+    });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    logger.error({ err }, "Failed to update account transaction");
+    res.status(500).json({ error: "Failed to update entry" });
   } finally {
     client.release();
   }

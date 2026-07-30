@@ -3,9 +3,11 @@ import {
   useGetCashbook,
   useCollectCashFromSalesman,
   useListAccountTransactions,
+  useUpdateAccountTransaction,
   getGetCashbookQueryKey,
   getListPaymentsQueryKey,
   getListAccountsQueryKey,
+  getListAccountTransactionsQueryKey,
   type SalesmanCashSummary,
   type Account,
   type AccountTransaction,
@@ -29,10 +31,11 @@ import {
 } from "@/components/ui/table";
 import {
   Wallet, Smartphone, Landmark, HandCoins, Loader2, ArrowRight, Users,
-  ArrowDownCircle, ArrowUpCircle, Printer, BookOpen,
+  ArrowDownCircle, ArrowUpCircle, Printer, BookOpen, Pencil,
 } from "lucide-react";
 import { CashEntryDialog } from "@/components/cash-entry-dialog";
 import { CashReceiptDialog } from "@/components/cash-receipt-dialog";
+import { useAuth } from "@/contexts/use-auth";
 
 const formatRs = (n: number) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(n);
@@ -42,10 +45,13 @@ const TYPE_ICONS: Record<string, React.ElementType> = {
 };
 
 export default function CashBookPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const { data, isLoading } = useGetCashbook();
   const [collectFrom, setCollectFrom] = useState<SalesmanCashSummary | null>(null);
   const [entryDirection, setEntryDirection] = useState<"in" | "out" | null>(null);
   const [receiptTxn, setReceiptTxn] = useState<AccountTransaction | null>(null);
+  const [editTxn, setEditTxn] = useState<AccountTransaction | null>(null);
 
   const salesmen = data?.salesmen ?? [];
   const accounts = data?.accounts ?? [];
@@ -292,14 +298,27 @@ export default function CashBookPage() {
                       {t.direction === "in" ? "+" : "−"} {formatRs(Number(t.amount))}
                     </TableCell>
                     <TableCell className="no-print">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setReceiptTxn(t)}
-                        data-testid={`button-print-${t.id}`}
-                      >
-                        <Printer className="w-4 h-4" />
-                      </Button>
+                      <div className="flex items-center justify-end gap-0.5">
+                        {isAdmin && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setEditTxn(t)}
+                            title="Edit entry"
+                            data-testid={`button-edit-${t.id}`}
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setReceiptTxn(t)}
+                          data-testid={`button-print-${t.id}`}
+                        >
+                          <Printer className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -327,7 +346,136 @@ export default function CashBookPage() {
         txn={receiptTxn}
         onClose={() => setReceiptTxn(null)}
       />
+
+      <EditCashEntryDialog
+        txn={editTxn}
+        onClose={() => setEditTxn(null)}
+      />
     </div>
+  );
+}
+
+function EditCashEntryDialog({
+  txn, onClose,
+}: {
+  txn: AccountTransaction | null;
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const update = useUpdateAccountTransaction();
+
+  const [amount, setAmount] = useState("");
+  const [mode, setMode] = useState<"cash" | "upi" | "bank_transfer" | "cheque" | "other">("cash");
+  const [partyName, setPartyName] = useState("");
+  const [partyMobile, setPartyMobile] = useState("");
+  const [notes, setNotes] = useState("");
+
+  useEffect(() => {
+    if (txn) {
+      setAmount(String(txn.amount));
+      setMode(txn.mode as any);
+      setPartyName(txn.partyName ?? "");
+      setPartyMobile(txn.partyMobile ?? "");
+      setNotes(txn.notes ?? "");
+    }
+  }, [txn]);
+
+  const handleSave = () => {
+    if (!txn) return;
+    const amt = Number(amount);
+    if (!amt || amt <= 0) {
+      toast({ title: "Enter a valid amount", variant: "destructive" });
+      return;
+    }
+    update.mutate(
+      {
+        id: txn.id,
+        data: {
+          amount: amt,
+          mode,
+          partyName: partyName.trim() || undefined,
+          partyMobile: partyMobile.trim() || undefined,
+          notes: notes.trim() || undefined,
+        },
+      },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getListAccountTransactionsQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getListAccountsQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getGetCashbookQueryKey() });
+          toast({ title: "Entry updated", description: "Account balance and linked ledger adjusted." });
+          onClose();
+        },
+        onError: async (err: any) => {
+          let desc = err?.message ?? "Server error";
+          try {
+            const body = err?.response ? await err.response.json() : null;
+            if (body?.error) desc = String(body.error).slice(0, 300);
+          } catch {}
+          toast({ title: "Could not update entry", description: desc, variant: "destructive" });
+        },
+      },
+    );
+  };
+
+  return (
+    <Dialog open={txn != null} onOpenChange={(v) => { if (!v && !update.isPending) onClose(); }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Pencil className="w-5 h-5 text-primary" /> Edit Cash Book Entry
+          </DialogTitle>
+          <DialogDescription>
+            {txn?.partyEntityId
+              ? "This entry is linked to a customer/vendor — the change also adjusts their outstanding balance and ledger."
+              : "Corrects this entry and the account balance it affected."}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 py-1">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Amount (₹) *</Label>
+              <Input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} data-testid="input-edit-amount" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Mode</Label>
+              <Select value={mode} onValueChange={(v) => setMode(v as any)}>
+                <SelectTrigger data-testid="select-edit-mode"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="upi">UPI</SelectItem>
+                  <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                  <SelectItem value="cheque">Cheque</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Party Name</Label>
+              <Input value={partyName} onChange={(e) => setPartyName(e.target.value)} data-testid="input-edit-party-name" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Party Mobile</Label>
+              <Input value={partyMobile} onChange={(e) => setPartyMobile(e.target.value)} data-testid="input-edit-party-mobile" />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Notes</Label>
+            <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={update.isPending}>Cancel</Button>
+          <Button onClick={handleSave} disabled={update.isPending} data-testid="button-save-edit-entry">
+            {update.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+            Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

@@ -261,6 +261,8 @@ export * from './taxBucket';
 export * from './taxRateRow';
 export * from './taxReport';
 export * from './topProduct';
+export * from './updateAccountTransactionInput';
+export * from './updateAccountTransactionInputMode';
 export * from './updateSubscriptionInput';
 export * from './updateSubscriptionInputPaymentStatus';
 export * from './updateSubscriptionInputPlanName';

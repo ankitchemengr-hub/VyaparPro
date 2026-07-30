@@ -1463,6 +1463,37 @@ paths:
               schema:
                 $ref: "#/components/schemas/AccountTransaction"
 
+  /account-transactions/{id}:
+    patch:
+      operationId: updateAccountTransaction
+      tags: [accounts]
+      summary: Admin-only correction of a Cash Book entry. Reflects into the account balance and, if linked to a customer/vendor, that entity's outstanding balance and ledger.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAccountTransactionInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountTransaction"
+        "400":
+          description: Invalid request, or would leave the account balance negative
+        "403":
+          description: Admin only
+        "404":
+          description: Entry not found
+
   /cashbook/collect:
     post:
       operationId: collectCashFromSalesman
@@ -4872,6 +4903,26 @@ components:
         allowNegative:
           type: boolean
           description: Admin-only override to let a "Payment Out" push the account balance negative instead of being blocked.
+
+    UpdateAccountTransactionInput:
+      type: object
+      required: [amount, mode]
+      properties:
+        amount:
+          type: number
+          minimum: 0.01
+        mode:
+          type: string
+          enum: [cash, upi, bank_transfer, cheque, other]
+        partyName:
+          type: ["string", "null"]
+        partyMobile:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        allowNegative:
+          type: boolean
+          description: Admin-only override to let this correction push the account balance negative instead of being blocked.
 
     RewardScheme:
       type: object

@@ -158,6 +158,7 @@ import type {
   SystemConfig,
   TaxReport,
   TopProduct,
+  UpdateAccountTransactionInput,
   UpdateSubscriptionInput,
   UpdateUserInput,
   UserAccount,
@@ -5549,6 +5550,77 @@ export const useCreateAccountTransaction = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getCreateAccountTransactionMutationOptions(options));
+    }
+
+export const getUpdateAccountTransactionUrl = (id: number,) => {
+
+
+
+
+  return `/api/account-transactions/${id}`
+}
+
+/**
+ * @summary Admin-only correction of a Cash Book entry. Reflects into the account balance and, if linked to a customer/vendor, that entity's outstanding balance and ledger.
+ */
+export const updateAccountTransaction = async (id: number,
+    updateAccountTransactionInput: UpdateAccountTransactionInput, options?: RequestInit): Promise<AccountTransaction> => {
+
+  return customFetch<AccountTransaction>(getUpdateAccountTransactionUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateAccountTransactionInput)
+  }
+);}
+
+
+
+
+export const getUpdateAccountTransactionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAccountTransaction>>, TError,{id: number;data: BodyType<UpdateAccountTransactionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateAccountTransaction>>, TError,{id: number;data: BodyType<UpdateAccountTransactionInput>}, TContext> => {
+
+const mutationKey = ['updateAccountTransaction'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateAccountTransaction>>, {id: number;data: BodyType<UpdateAccountTransactionInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateAccountTransaction(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateAccountTransactionMutationResult = NonNullable<Awaited<ReturnType<typeof updateAccountTransaction>>>
+    export type UpdateAccountTransactionMutationBody = BodyType<UpdateAccountTransactionInput>
+    export type UpdateAccountTransactionMutationError = ErrorType<void>
+
+    /**
+ * @summary Admin-only correction of a Cash Book entry. Reflects into the account balance and, if linked to a customer/vendor, that entity's outstanding balance and ledger.
+ */
+export const useUpdateAccountTransaction = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAccountTransaction>>, TError,{id: number;data: BodyType<UpdateAccountTransactionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateAccountTransaction>>,
+        TError,
+        {id: number;data: BodyType<UpdateAccountTransactionInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateAccountTransactionMutationOptions(options));
     }
 
 export const getCollectCashFromSalesmanUrl = () => {

@@ -1670,6 +1670,31 @@ export interface AccountTransactionInput {
   allowNegative?: boolean;
 }
 
+export type UpdateAccountTransactionInputMode = typeof UpdateAccountTransactionInputMode[keyof typeof UpdateAccountTransactionInputMode];
+
+
+export const UpdateAccountTransactionInputMode = {
+  cash: 'cash',
+  upi: 'upi',
+  bank_transfer: 'bank_transfer',
+  cheque: 'cheque',
+  other: 'other',
+} as const;
+
+export interface UpdateAccountTransactionInput {
+  /** @minimum 0.01 */
+  amount: number;
+  mode: UpdateAccountTransactionInputMode;
+  /** @nullable */
+  partyName?: string | null;
+  /** @nullable */
+  partyMobile?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  /** Admin-only override to let this correction push the account balance negative instead of being blocked. */
+  allowNegative?: boolean;
+}
+
 export type RewardSchemeRewardType = typeof RewardSchemeRewardType[keyof typeof RewardSchemeRewardType];
 
 
