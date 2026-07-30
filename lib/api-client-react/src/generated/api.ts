@@ -159,6 +159,7 @@ import type {
   TaxReport,
   TopProduct,
   UpdateAccountTransactionInput,
+  UpdateMaterialTransferInput,
   UpdateSubscriptionInput,
   UpdateUserInput,
   UserAccount,
@@ -7771,6 +7772,77 @@ export function useGetMaterialTransfer<TData = Awaited<ReturnType<typeof getMate
 
 
 
+
+export const getUpdateMaterialTransferUrl = (id: number,) => {
+
+
+
+
+  return `/api/material-transfers/${id}`
+}
+
+/**
+ * @summary Correct a material transfer slip's date, sent-by, or notes. Line items and quantities are not editable here — they already moved stock, so changing them would need a full reversal-and-reapply; delete and recreate the slip instead.
+ */
+export const updateMaterialTransfer = async (id: number,
+    updateMaterialTransferInput: UpdateMaterialTransferInput, options?: RequestInit): Promise<MaterialTransfer> => {
+
+  return customFetch<MaterialTransfer>(getUpdateMaterialTransferUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateMaterialTransferInput)
+  }
+);}
+
+
+
+
+export const getUpdateMaterialTransferMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateMaterialTransfer>>, TError,{id: number;data: BodyType<UpdateMaterialTransferInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateMaterialTransfer>>, TError,{id: number;data: BodyType<UpdateMaterialTransferInput>}, TContext> => {
+
+const mutationKey = ['updateMaterialTransfer'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateMaterialTransfer>>, {id: number;data: BodyType<UpdateMaterialTransferInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateMaterialTransfer(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateMaterialTransferMutationResult = NonNullable<Awaited<ReturnType<typeof updateMaterialTransfer>>>
+    export type UpdateMaterialTransferMutationBody = BodyType<UpdateMaterialTransferInput>
+    export type UpdateMaterialTransferMutationError = ErrorType<void>
+
+    /**
+ * @summary Correct a material transfer slip's date, sent-by, or notes. Line items and quantities are not editable here — they already moved stock, so changing them would need a full reversal-and-reapply; delete and recreate the slip instead.
+ */
+export const useUpdateMaterialTransfer = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateMaterialTransfer>>, TError,{id: number;data: BodyType<UpdateMaterialTransferInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateMaterialTransfer>>,
+        TError,
+        {id: number;data: BodyType<UpdateMaterialTransferInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateMaterialTransferMutationOptions(options));
+    }
 
 export const getDeleteMaterialTransferUrl = (id: number,) => {
 

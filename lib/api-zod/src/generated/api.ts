@@ -2903,6 +2903,35 @@ export const GetMaterialTransferResponse = zod.object({
 
 
 /**
+ * @summary Correct a material transfer slip's date, sent-by, or notes. Line items and quantities are not editable here — they already moved stock, so changing them would need a full reversal-and-reapply; delete and recreate the slip instead.
+ */
+export const UpdateMaterialTransferParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateMaterialTransferBody = zod.object({
+  "transferDate": zod.string().optional(),
+  "sentBy": zod.string().nullish(),
+  "notes": zod.string().nullish()
+})
+
+export const UpdateMaterialTransferResponse = zod.object({
+  "id": zod.number(),
+  "transferNo": zod.string(),
+  "transferDate": zod.string(),
+  "sentBy": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "items": zod.array(zod.object({
+  "productId": zod.number(),
+  "productName": zod.string(),
+  "qty": zod.number(),
+  "unit": zod.string()
+}))
+})
+
+
+/**
  * @summary Delete a material transfer slip (admin only)
  */
 export const DeleteMaterialTransferParams = zod.object({

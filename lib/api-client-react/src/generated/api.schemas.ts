@@ -2127,6 +2127,14 @@ export interface CreateMaterialTransferInput {
   items: CreateMaterialTransferInputItemsItem[];
 }
 
+export interface UpdateMaterialTransferInput {
+  transferDate?: string;
+  /** @nullable */
+  sentBy?: string | null;
+  /** @nullable */
+  notes?: string | null;
+}
+
 export interface DashboardSummary {
   totalSalesThisMonth: number;
   totalOutstanding: number;

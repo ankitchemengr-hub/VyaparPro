@@ -286,6 +286,70 @@ router.post("/material-transfers", async (req, res): Promise<void> => {
   }
 });
 
+// PATCH /material-transfers/:id — correct the date, sent-by, or notes on an
+// existing slip. Items/quantities are intentionally NOT editable here: they
+// already moved stock and adjusted ready_material_batches (partial-batch
+// consumption doesn't record which transfer took how much from which batch,
+// so it can't be reversed losslessly) — the same reasoning PATCH
+// /account-transactions/:id follows for its own line-item fields. Delete and
+// recreate the slip if a quantity was wrong.
+router.patch("/material-transfers/:id", async (req, res): Promise<void> => {
+  const companyId = getCompanyId(req);
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  const body = req.body as { transferDate?: string; sentBy?: string | null; notes?: string | null };
+
+  const existing = await queryOne(
+    `SELECT id FROM material_transfers WHERE company_id = $1 AND id = $2`,
+    [companyId, id],
+  );
+  if (!existing.id) {
+    res.status(404).json({ error: "Material transfer not found" });
+    return;
+  }
+
+  const header = await queryOne(
+    `UPDATE material_transfers
+     SET transfer_date = COALESCE($1, transfer_date),
+         sent_by = $2,
+         notes = $3
+     WHERE company_id = $4 AND id = $5
+     RETURNING id, transfer_no, transfer_date, sent_by, notes, created_at`,
+    [
+      body.transferDate ? new Date(body.transferDate) : null,
+      body.sentBy?.trim() || null,
+      body.notes?.trim() || null,
+      companyId,
+      id,
+    ],
+  );
+
+  const items = await queryMany(
+    `SELECT product_id, product_name, qty, unit
+     FROM material_transfer_items WHERE company_id = $1 AND transfer_id = $2
+     ORDER BY id ASC`,
+    [companyId, id],
+  );
+
+  res.json({
+    id: header.id,
+    transferNo: header.transfer_no,
+    transferDate: new Date(header.transfer_date).toISOString(),
+    sentBy: header.sent_by ?? null,
+    notes: header.notes ?? null,
+    createdAt: new Date(header.created_at).toISOString(),
+    items: items.map((it) => ({
+      productId: Number(it.product_id),
+      productName: it.product_name,
+      qty: Number(it.qty),
+      unit: it.unit,
+    })),
+  });
+});
+
 // DELETE /material-transfers/:id — admin only.
 router.delete("/material-transfers/:id", async (req, res): Promise<void> => {
   const role = (req as any).session?.role;

@@ -2100,6 +2100,31 @@ paths:
                 $ref: "#/components/schemas/MaterialTransfer"
         "404":
           description: Not found
+    patch:
+      operationId: updateMaterialTransfer
+      tags: [manufacturing]
+      summary: Correct a material transfer slip's date, sent-by, or notes. Line items and quantities are not editable here — they already moved stock, so changing them would need a full reversal-and-reapply; delete and recreate the slip instead.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMaterialTransferInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaterialTransfer"
+        "404":
+          description: Not found
     delete:
       operationId: deleteMaterialTransfer
       tags: [manufacturing]
@@ -5443,6 +5468,16 @@ components:
                 type: number
               unit:
                 type: string
+
+    UpdateMaterialTransferInput:
+      type: object
+      properties:
+        transferDate:
+          type: string
+        sentBy:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
 
     DashboardSummary:
       type: object

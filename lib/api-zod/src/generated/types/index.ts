@@ -263,6 +263,7 @@ export * from './taxReport';
 export * from './topProduct';
 export * from './updateAccountTransactionInput';
 export * from './updateAccountTransactionInputMode';
+export * from './updateMaterialTransferInput';
 export * from './updateSubscriptionInput';
 export * from './updateSubscriptionInputPaymentStatus';
 export * from './updateSubscriptionInputPlanName';

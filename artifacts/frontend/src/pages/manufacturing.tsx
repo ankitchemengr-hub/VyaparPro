@@ -11,6 +11,7 @@ import {
   useUpdateBom,
   useListMaterialTransfers,
   useCreateMaterialTransfer,
+  useUpdateMaterialTransfer,
   useDeleteMaterialTransfer,
   useListWorkers,
   useListReadyMaterialBatches,
@@ -1973,6 +1974,7 @@ function MaterialTransferTab() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const createTransfer = useCreateMaterialTransfer();
+  const updateTransfer = useUpdateMaterialTransfer();
   const deleteTransfer = useDeleteMaterialTransfer();
 
   const [showAdd, setShowAdd] = useState(false);
@@ -1981,6 +1983,11 @@ function MaterialTransferTab() {
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<TransferDraftItem[]>([{ productId: "", qty: "", unit: "QTY" }]);
   const [printingId, setPrintingId] = useState<number | null>(null);
+
+  const [editingTransfer, setEditingTransfer] = useState<any | null>(null);
+  const [editSentBy, setEditSentBy] = useState("");
+  const [editTransferDate, setEditTransferDate] = useState("");
+  const [editNotes, setEditNotes] = useState("");
 
   const productById = useMemo(() => {
     const m = new Map<number, any>();
@@ -2046,6 +2053,40 @@ function MaterialTransferTab() {
         onError: (e: any) =>
           toast({
             title: "Could not delete",
+            description: e?.response?.data?.error ?? e?.message ?? "Unknown error",
+            variant: "destructive",
+          }),
+      },
+    );
+  };
+
+  const handleEditOpen = (t: any) => {
+    setEditingTransfer(t);
+    setEditSentBy(t.sentBy ?? "");
+    setEditTransferDate(new Date(t.transferDate).toISOString().slice(0, 10));
+    setEditNotes(t.notes ?? "");
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingTransfer) return;
+    updateTransfer.mutate(
+      {
+        id: editingTransfer.id,
+        data: {
+          transferDate: editTransferDate ? new Date(editTransferDate).toISOString() : undefined,
+          sentBy: editSentBy.trim() || null,
+          notes: editNotes.trim() || null,
+        },
+      },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getListMaterialTransfersQueryKey() });
+          toast({ title: "Material transfer updated" });
+          setEditingTransfer(null);
+        },
+        onError: (e: any) =>
+          toast({
+            title: "Could not update transfer",
             description: e?.response?.data?.error ?? e?.message ?? "Unknown error",
             variant: "destructive",
           }),
@@ -2165,6 +2206,14 @@ function MaterialTransferTab() {
                     <Button
                       variant="outline"
                       size="sm"
+                      onClick={() => handleEditOpen(t)}
+                      data-testid={`button-edit-transfer-${t.id}`}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => handlePrint(t.id)}
                       disabled={printingId === t.id}
                       data-testid={`button-print-transfer-${t.id}`}
@@ -2207,6 +2256,16 @@ function MaterialTransferTab() {
                   {t.sentBy ? `Sent by ${t.sentBy}` : "—"} · {t.itemCount} item{t.itemCount === 1 ? "" : "s"}
                 </div>
                 <div className="flex items-center gap-2 pt-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => handleEditOpen(t)}
+                    data-testid={`button-edit-transfer-mobile-${t.id}`}
+                  >
+                    <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                    Edit
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
@@ -2353,6 +2412,62 @@ function MaterialTransferTab() {
             <Button className="w-full sm:w-auto" onClick={handleSave} disabled={!canSave} data-testid="button-save-transfer">
               {createTransfer.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Save Transfer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Transfer Dialog — date/sent-by/notes only. Items already moved
+          stock, so quantities aren't editable here; delete and recreate if
+          those were wrong. */}
+      <Dialog open={!!editingTransfer} onOpenChange={(open) => !open && setEditingTransfer(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Transfer {editingTransfer?.transferNo}</DialogTitle>
+            <DialogDescription>
+              Correct the date, sent-by, or notes. Items and quantities can't
+              be changed here — delete and log a new transfer if those were
+              wrong.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label>Date</Label>
+              <Input
+                type="date"
+                value={editTransferDate}
+                onChange={(e) => setEditTransferDate(e.target.value)}
+                data-testid="input-edit-transfer-date"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Sent By</Label>
+              <Input
+                value={editSentBy}
+                onChange={(e) => setEditSentBy(e.target.value)}
+                placeholder="Worker / store person name"
+                data-testid="input-edit-transfer-sent-by"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Notes <span className="text-xs text-muted-foreground">(optional)</span></Label>
+              <Input
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                placeholder="e.g. reason for transfer"
+                data-testid="input-edit-transfer-notes"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" className="w-full sm:w-auto" onClick={() => setEditingTransfer(null)} disabled={updateTransfer.isPending}>
+              Cancel
+            </Button>
+            <Button className="w-full sm:w-auto" onClick={handleSaveEdit} disabled={updateTransfer.isPending} data-testid="button-save-edit-transfer">
+              {updateTransfer.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Save Changes
             </Button>
           </DialogFooter>
         </DialogContent>
