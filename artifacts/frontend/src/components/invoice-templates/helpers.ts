@@ -44,18 +44,23 @@ export function buildUpiUri(settings: { upiId?: string; companyName?: string }, 
   const pa = (settings.upiId ?? "").trim();
   if (!pa) return null;
   const amount = Number(invoice?.grandTotal);
-  const params = new URLSearchParams({
-    pa,
-    pn: settings.companyName || "Merchant",
-    cu: "INR",
-  });
+  // Built manually with encodeURIComponent (percent-encoding, spaces as %20)
+  // instead of URLSearchParams — URLSearchParams uses form-encoding (spaces
+  // as `+`), which several UPI apps parse just loosely enough to show the
+  // payee name/amount before failing strict validation with "Unable to scan
+  // QR" once they hit the literal `+` characters.
+  const parts: string[] = [
+    `pa=${encodeURIComponent(pa)}`,
+    `pn=${encodeURIComponent(settings.companyName || "Merchant")}`,
+    `cu=INR`,
+  ];
   if (Number.isFinite(amount) && amount > 0) {
-    params.set("am", amount.toFixed(2));
+    parts.push(`am=${encodeURIComponent(amount.toFixed(2))}`);
   }
   if (invoice?.invoiceNo) {
-    params.set("tn", `Invoice ${invoice.invoiceNo}`);
+    parts.push(`tn=${encodeURIComponent(`Invoice ${invoice.invoiceNo}`)}`);
   }
-  return `upi://pay?${params.toString()}`;
+  return `upi://pay?${parts.join("&")}`;
 }
 
 // Number → Indian English words (rupees only, no paise).
