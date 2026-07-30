@@ -585,6 +585,25 @@ paths:
         "204":
           description: Deleted
 
+  /products/{id}/recent-prices:
+    get:
+      operationId: getProductRecentPrices
+      tags: [products]
+      summary: Last few sale and purchase prices for a product, for reference while billing
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Recent prices
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductRecentPrices"
+
   /products/{id}/stock-movements:
     get:
       operationId: getProductStockMovements
@@ -4060,6 +4079,28 @@ components:
           type: number
         newRetailPrice:
           type: number
+
+    RecentPricePoint:
+      type: object
+      required: [rate, date]
+      properties:
+        rate:
+          type: number
+        date:
+          type: string
+
+    ProductRecentPrices:
+      type: object
+      required: [lastSalePrices, lastPurchasePrices]
+      properties:
+        lastSalePrices:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecentPricePoint"
+        lastPurchasePrices:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecentPricePoint"
 
     StockMovement:
       type: object

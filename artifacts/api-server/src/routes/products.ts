@@ -379,6 +379,45 @@ router.get("/products/:id", async (req, res): Promise<void> => {
   res.json(formatProduct(product));
 });
 
+// GET /products/:id/recent-prices — last 3 sale and purchase prices, so
+// billing/purchase entry can show what this product last went for instead of
+// relying solely on the (possibly stale) static price fields on the product.
+router.get("/products/:id/recent-prices", async (req, res): Promise<void> => {
+  const params = GetProductParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const companyId = getCompanyId(req);
+  const productId = params.data.id;
+
+  const [salesRes, purchasesRes] = await Promise.all([
+    pool.query(
+      `SELECT ii.rate, i.invoice_date AS date
+       FROM invoice_items ii
+       JOIN invoices i ON i.id = ii.invoice_id AND i.company_id = ii.company_id
+       WHERE ii.company_id = $1 AND ii.product_id = $2 AND i.status = 'saved'
+       ORDER BY i.invoice_date DESC, i.id DESC
+       LIMIT 3`,
+      [companyId, productId],
+    ),
+    pool.query(
+      `SELECT pi.rate, p.bill_date AS date
+       FROM purchase_items pi
+       JOIN purchases p ON p.id = pi.purchase_id AND p.company_id = pi.company_id
+       WHERE pi.company_id = $1 AND pi.product_id = $2 AND p.status != 'cancelled'
+       ORDER BY p.bill_date DESC, p.id DESC
+       LIMIT 3`,
+      [companyId, productId],
+    ),
+  ]);
+
+  res.json({
+    lastSalePrices: salesRes.rows.map((r) => ({ rate: Number(r.rate), date: new Date(r.date).toISOString() })),
+    lastPurchasePrices: purchasesRes.rows.map((r) => ({ rate: Number(r.rate), date: new Date(r.date).toISOString() })),
+  });
+});
+
 // PATCH /products/bulk-price  — update pricing for multiple products at once.
 // Must be registered BEFORE PATCH /products/:id so Express does not swallow
 // the literal path segment "bulk-price" as an :id param.

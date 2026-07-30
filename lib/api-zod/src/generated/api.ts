@@ -751,6 +751,25 @@ export const DeleteProductResponse = zod.void()
 
 
 /**
+ * @summary Last few sale and purchase prices for a product, for reference while billing
+ */
+export const GetProductRecentPricesParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetProductRecentPricesResponse = zod.object({
+  "lastSalePrices": zod.array(zod.object({
+  "rate": zod.number(),
+  "date": zod.string()
+})),
+  "lastPurchasePrices": zod.array(zod.object({
+  "rate": zod.number(),
+  "date": zod.string()
+}))
+})
+
+
+/**
  * @summary Get stock movement history
  */
 export const GetProductStockMovementsParams = zod.object({

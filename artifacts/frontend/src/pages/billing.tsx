@@ -3,6 +3,8 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/use-auth";
 import {
   useListProducts,
+  useGetProductRecentPrices,
+  getGetProductRecentPricesQueryKey,
   useCreateInvoice,
   useUpdateInvoice,
   useGetInvoice,
@@ -98,6 +100,26 @@ function lineLiters(i: { qty: number; qtyMode: QtyMode; unit: string; unitsPerBo
   const u = String(i.unit ?? "").toLowerCase();
   if (["ltr", "l", "liter", "litre", "liters", "litres"].includes(u)) return units;
   return 0;
+}
+
+// Small hint shown under the Rate input while billing so the last few prices
+// this product actually sold/bought at are visible without leaving the row —
+// separate cached query per product, so switching a row's product doesn't
+// wait on every other row's history.
+function RecentPriceHint({ productId }: { productId: number }) {
+  const { data } = useGetProductRecentPrices(productId, {
+    query: { queryKey: getGetProductRecentPricesQueryKey(productId), enabled: !!productId, staleTime: 5 * 60 * 1000 },
+  });
+  if (!data) return null;
+  const sold = data.lastSalePrices.map((p) => `₹${Number(p.rate).toLocaleString()}`).join(", ");
+  const bought = data.lastPurchasePrices.map((p) => `₹${Number(p.rate).toLocaleString()}`).join(", ");
+  if (!sold && !bought) return null;
+  return (
+    <div className="text-[9px] leading-tight text-muted-foreground">
+      {sold && <div>Sold: {sold}</div>}
+      {bought && <div>Bought: {bought}</div>}
+    </div>
+  );
 }
 
 function parseSearch(search: string) {
@@ -918,6 +940,7 @@ export default function Billing() {
                             className="w-24 text-right h-7 text-sm disabled:opacity-100 disabled:cursor-not-allowed"
                             data-testid={`input-rate-${idx}`} disabled={user?.role !== "admin"}
                             title={user?.role !== "admin" ? "Only admin can edit rate" : undefined} />
+                          <RecentPriceHint productId={item.productId} />
                         </TableCell>
                         {isGstInvoiceType(invoiceType) && (
                           <TableCell className="text-right">
@@ -988,6 +1011,7 @@ export default function Billing() {
                           className="h-8 text-sm disabled:opacity-100 disabled:cursor-not-allowed"
                           data-testid={`input-rate-mobile-${idx}`} disabled={user?.role !== "admin"}
                           title={user?.role !== "admin" ? "Only admin can edit rate" : undefined} />
+                        <RecentPriceHint productId={item.productId} />
                       </div>
                     </div>
 

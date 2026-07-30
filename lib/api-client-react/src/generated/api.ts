@@ -124,6 +124,7 @@ import type {
   PrintSettingsUpdate,
   Product,
   ProductInput,
+  ProductRecentPrices,
   ProductUpdate,
   ProductionReport,
   ProfitLossReport,
@@ -2423,6 +2424,83 @@ export const useDeleteProduct = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getDeleteProductMutationOptions(options));
     }
+
+export const getGetProductRecentPricesUrl = (id: number,) => {
+
+
+
+
+  return `/api/products/${id}/recent-prices`
+}
+
+/**
+ * @summary Last few sale and purchase prices for a product, for reference while billing
+ */
+export const getProductRecentPrices = async (id: number, options?: RequestInit): Promise<ProductRecentPrices> => {
+
+  return customFetch<ProductRecentPrices>(getGetProductRecentPricesUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetProductRecentPricesQueryKey = (id: number,) => {
+    return [
+    `/api/products/${id}/recent-prices`
+    ] as const;
+    }
+
+
+export const getGetProductRecentPricesQueryOptions = <TData = Awaited<ReturnType<typeof getProductRecentPrices>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProductRecentPrices>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetProductRecentPricesQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getProductRecentPrices>>> = ({ signal }) => getProductRecentPrices(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getProductRecentPrices>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetProductRecentPricesQueryResult = NonNullable<Awaited<ReturnType<typeof getProductRecentPrices>>>
+export type GetProductRecentPricesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Last few sale and purchase prices for a product, for reference while billing
+ */
+
+export function useGetProductRecentPrices<TData = Awaited<ReturnType<typeof getProductRecentPrices>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProductRecentPrices>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetProductRecentPricesQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetProductStockMovementsUrl = (id: number,) => {
 

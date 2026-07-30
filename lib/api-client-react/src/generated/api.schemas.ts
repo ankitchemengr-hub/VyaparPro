@@ -915,6 +915,16 @@ export interface PriceRecalculationItem {
   newRetailPrice: number;
 }
 
+export interface RecentPricePoint {
+  rate: number;
+  date: string;
+}
+
+export interface ProductRecentPrices {
+  lastSalePrices: RecentPricePoint[];
+  lastPurchasePrices: RecentPricePoint[];
+}
+
 export type StockMovementType = typeof StockMovementType[keyof typeof StockMovementType];
 
 
