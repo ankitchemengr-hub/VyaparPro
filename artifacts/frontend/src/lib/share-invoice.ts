@@ -1,4 +1,9 @@
-import html2canvas from "html2canvas";
+// html2canvas (not -pro) doesn't understand oklch(), the color space
+// Tailwind v4's default palette is defined in — it throws "Attempting to
+// parse an unsupported color function 'oklch'" the moment it hits any
+// Tailwind color utility class. html2canvas-pro is a maintained drop-in
+// fork that adds oklch/lab/lch/color() support; same API otherwise.
+import html2canvas from "html2canvas-pro";
 
 // Snapshots a rendered invoice sheet and hands it to the phone's native share
 // sheet (Web Share API level 2, file sharing) — WhatsApp shows up there like

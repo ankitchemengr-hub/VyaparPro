@@ -236,9 +236,9 @@ importers:
 
   artifacts/frontend:
     dependencies:
-      html2canvas:
-        specifier: ^1.4.1
-        version: 1.4.1
+      html2canvas-pro:
+        specifier: ^2.3.2
+        version: 2.3.2
       jspdf:
         specifier: ^4.2.1
         version: 4.2.1
@@ -4676,6 +4676,10 @@ packages:
   hosted-git-info@7.0.2:
     resolution: {integrity: sha512-puUZAUKT5m8Zzvs72XWy3HtvVbTWljRE66cP60bxJzAqf2DgICo7lYTY2IHUmLnNpjYvw5bvmoHvPc0QO2a62w==}
     engines: {node: ^16.14.0 || >=18.0.0}
+
+  html2canvas-pro@2.3.2:
+    resolution: {integrity: sha512-lYFaxtQM8exYVAtXmjdx8cjkw+/2GycRvSTcr2M2MuxXKuYlWe77+KFKuY92y/tzkvzA8XZTQIDlqoVZDB+mqQ==}
+    engines: {node: '>=16.0.0'}
 
   html2canvas@1.4.1:
     resolution: {integrity: sha512-fPU6BHNpsyIhr8yyMpTLLxAbkaK8ArIBcmZIRiBLiDhjeqvXolaEmDGmELFuX9I4xDcaKKcJl+TKZLqruBbmWA==}
@@ -11838,10 +11842,16 @@ snapshots:
     dependencies:
       lru-cache: 10.4.3
 
+  html2canvas-pro@2.3.2:
+    dependencies:
+      css-line-break: 2.1.0
+      text-segmentation: 1.0.3
+
   html2canvas@1.4.1:
     dependencies:
       css-line-break: 2.1.0
       text-segmentation: 1.0.3
+    optional: true
 
   http-cache-semantics@4.2.0: {}
 
