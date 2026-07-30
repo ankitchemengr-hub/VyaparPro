@@ -17,9 +17,19 @@ export async function shareInvoiceImage(
   sheetEl: HTMLElement,
   opts: { fileName: string; title: string; text: string },
 ): Promise<"shared" | "downloaded"> {
+  // On phones, ScreenFitInvoiceSheet shrinks the sheet with a CSS `transform:
+  // scale()` on an ancestor so it fits the narrow viewport. When no
+  // width/height is given, modern-screenshot sizes its capture off
+  // getBoundingClientRect(), which reflects that visual shrink — so the
+  // shared image came out tiny instead of the full invoice. scrollWidth/
+  // scrollHeight are layout properties transform never touches, so they
+  // still report the sheet's true, unscaled size; passing them explicitly
+  // makes modern-screenshot capture at full size regardless of on-screen zoom.
   const blob = await domToBlob(sheetEl, {
     scale: 2,
     backgroundColor: "#ffffff",
+    width: sheetEl.scrollWidth,
+    height: sheetEl.scrollHeight,
   });
   if (!blob) throw new Error("Could not generate invoice image");
   const file = new File([blob], opts.fileName, { type: "image/png" });
