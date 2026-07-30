@@ -1,9 +1,4 @@
-// html2canvas (not -pro) doesn't understand oklch(), the color space
-// Tailwind v4's default palette is defined in — it throws "Attempting to
-// parse an unsupported color function 'oklch'" the moment it hits any
-// Tailwind color utility class. html2canvas-pro is a maintained drop-in
-// fork that adds oklch/lab/lch/color() support; same API otherwise.
-import html2canvas from "html2canvas-pro";
+import { domToBlob } from "modern-screenshot";
 
 // Snapshots a rendered invoice sheet and hands it to the phone's native share
 // sheet (Web Share API level 2, file sharing) — WhatsApp shows up there like
@@ -11,16 +6,21 @@ import html2canvas from "html2canvas-pro";
 // a text summary. Falls back to downloading the PNG on browsers that don't
 // support sharing files (desktop Chrome/Firefox, older mobile browsers), so
 // the invoice can still be attached manually.
+//
+// Uses modern-screenshot (not html2canvas/html2canvas-pro) — it renders via
+// an SVG <foreignObject>, letting the browser do the actual painting instead
+// of hand-parsing every CSS value. html2canvas-pro added oklch() support but
+// still doesn't understand color-mix(), which Tailwind v4 generates
+// throughout for opacity variants (e.g. bg-green-100, hover states) — that
+// combination made every capture fail with "unsupported color function".
 export async function shareInvoiceImage(
   sheetEl: HTMLElement,
   opts: { fileName: string; title: string; text: string },
 ): Promise<"shared" | "downloaded"> {
-  const canvas = await html2canvas(sheetEl, {
+  const blob = await domToBlob(sheetEl, {
     scale: 2,
     backgroundColor: "#ffffff",
-    useCORS: true,
   });
-  const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
   if (!blob) throw new Error("Could not generate invoice image");
   const file = new File([blob], opts.fileName, { type: "image/png" });
 
