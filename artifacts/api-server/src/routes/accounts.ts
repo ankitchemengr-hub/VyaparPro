@@ -21,7 +21,10 @@ const router: IRouter = Router();
 
 // All accounts/cashbook routes require admin or accountant role (financial data)
 const FINANCIAL_ROLES = new Set(["admin", "accountant"]);
-const WRITE_ROLES = new Set(["admin"]);
+// Platform super_admin acts on a company's own data once switched into it
+// (the same login this user manages every company from) — write actions here
+// must work for that identity exactly like a company's own "admin" role.
+const WRITE_ROLES = new Set(["admin", "super_admin"]);
 
 function requireFinancialRead(req: any, res: any): boolean {
   const role = (req as any).session?.role;
@@ -359,7 +362,7 @@ router.post("/account-transactions", async (req, res): Promise<void> => {
     // Admin can explicitly override the insufficient-balance block (e.g. an
     // opening balance was never fully entered) — everyone else is always
     // blocked, and admin is blocked too unless they pass allowNegative.
-    const canOverride = session?.role === "admin" && allowNegative === true;
+    const canOverride = WRITE_ROLES.has(session?.role) && allowNegative === true;
     if (direction === "out" && current < amount - 0.001 && !canOverride) {
       await client.query("ROLLBACK");
       res.status(400).json({ error: `Insufficient balance in ${acct.name} (₹${current.toFixed(2)})` });
@@ -510,7 +513,7 @@ router.patch("/account-transactions/:id", async (req, res): Promise<void> => {
 
     const balanceDelta = existing.direction === "in" ? delta : -delta;
     const newAccountBalance = Number(acct.current_balance) + balanceDelta;
-    const canOverride = session?.role === "admin" && allowNegative === true;
+    const canOverride = WRITE_ROLES.has(session?.role) && allowNegative === true;
     if (newAccountBalance < -0.001 && !canOverride) {
       await client.query("ROLLBACK");
       res.status(400).json({ error: `This change would leave ${acct.name} at ₹${newAccountBalance.toFixed(2)} — set allowNegative to proceed.` });
