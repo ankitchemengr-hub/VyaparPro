@@ -65,13 +65,23 @@ export default function Dashboard() {
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
   })();
+  const { lastMonthStartStr, lastMonthEndStr } = (() => {
+    const d = new Date();
+    const start = new Date(d.getFullYear(), d.getMonth() - 1, 1);
+    const end = new Date(d.getFullYear(), d.getMonth(), 0);
+    return { lastMonthStartStr: start.toISOString().slice(0, 10), lastMonthEndStr: end.toISOString().slice(0, 10) };
+  })();
   const weekProfitParams = { from: weekStartStr, to: todayStr };
   const monthProfitParams = { from: monthStartStr, to: todayStr };
+  const lastMonthProfitParams = { from: lastMonthStartStr, to: lastMonthEndStr };
   const { data: weekProfit, isLoading: isLoadingWeekProfit } = useGetProfitLossReport(weekProfitParams, {
     query: { queryKey: getGetProfitLossReportQueryKey(weekProfitParams), enabled: isAdmin },
   });
   const { data: monthProfit, isLoading: isLoadingMonthProfit } = useGetProfitLossReport(monthProfitParams, {
     query: { queryKey: getGetProfitLossReportQueryKey(monthProfitParams), enabled: isAdmin },
+  });
+  const { data: lastMonthProfit } = useGetProfitLossReport(lastMonthProfitParams, {
+    query: { queryKey: getGetProfitLossReportQueryKey(lastMonthProfitParams), enabled: isAdmin },
   });
 
   const { data: workloadCards } = useListWorkloadCards();
@@ -297,12 +307,27 @@ export default function Dashboard() {
                   {isLoadingMonthProfit || !monthProfit ? (
                     <div className="h-8 w-24 bg-muted rounded animate-pulse" />
                   ) : (
-                    <div
-                      className={`text-2xl font-bold ${monthProfit.netProfit >= 0 ? "text-green-600" : "text-red-600"}`}
-                      data-testid="text-profit-month-value"
-                    >
-                      ₹{monthProfit.netProfit.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-                    </div>
+                    <>
+                      <div
+                        className={`text-2xl font-bold ${monthProfit.netProfit >= 0 ? "text-green-600" : "text-red-600"}`}
+                        data-testid="text-profit-month-value"
+                      >
+                        ₹{monthProfit.netProfit.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                      </div>
+                      {lastMonthProfit && (() => {
+                        const diff = monthProfit.netProfit - lastMonthProfit.netProfit;
+                        const isUp = diff >= 0;
+                        return (
+                          <div
+                            className={`flex items-center gap-1 text-xs font-medium mt-1 ${isUp ? "text-green-600" : "text-red-600"}`}
+                            data-testid="text-profit-growth-value"
+                          >
+                            {isUp ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                            {isUp ? "+" : "-"}₹{Math.abs(diff).toLocaleString("en-IN", { maximumFractionDigits: 0 })} vs last month
+                          </div>
+                        );
+                      })()}
+                    </>
                   )}
                 </TabsContent>
               </Tabs>
