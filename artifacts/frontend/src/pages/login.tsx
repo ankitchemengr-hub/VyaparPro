@@ -72,7 +72,9 @@ export default function Login() {
   const logoClicksRef = React.useRef(0);
   const logoTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const setActiveCompany = useSetActiveCompany();
-  const { data: companies, isLoading: companiesLoading } = useGetPublicCompanies({
+  const {
+    data: companies, isLoading: companiesLoading, isError: companiesErrored, refetch: refetchCompanies,
+  } = useGetPublicCompanies({
     query: {
       enabled: switcherOpen,
       retry: false,
@@ -286,6 +288,15 @@ export default function Login() {
             <CommandList>
               {companiesLoading ? (
                 <CommandEmpty>Loading companies...</CommandEmpty>
+              ) : companiesErrored ? (
+                <CommandEmpty>
+                  <div className="flex flex-col items-center gap-2">
+                    <span>Couldn't load companies — check your connection.</span>
+                    <Button variant="outline" size="sm" onClick={() => refetchCompanies()}>
+                      Retry
+                    </Button>
+                  </div>
+                </CommandEmpty>
               ) : (
                 <CommandEmpty>No companies found.</CommandEmpty>
               )}
