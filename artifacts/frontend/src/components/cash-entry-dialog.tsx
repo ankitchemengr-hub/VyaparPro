@@ -87,6 +87,7 @@ export function CashEntryDialog({
   const [notes, setNotes] = useState("");
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
   const [negativeConfirmMsg, setNegativeConfirmMsg] = useState<string | null>(null);
+  const [noBalanceConfirmMsg, setNoBalanceConfirmMsg] = useState<string | null>(null);
 
   // dropdown state for name autocomplete
   const [nameOpen, setNameOpen] = useState(false);
@@ -137,6 +138,7 @@ export function CashEntryDialog({
       setMobileOpen(false);
       setReceiptPreview(null);
       setNegativeConfirmMsg(null);
+      setNoBalanceConfirmMsg(null);
       if (direction === "in") {
         fetchReceiptPreview().then(setReceiptPreview);
       }
@@ -169,13 +171,24 @@ export function CashEntryDialog({
     setPartyEntityBalance(null);
   };
 
-  const handleSubmit = (allowNegative = false) => {
+  const handleSubmit = (allowNegative = false, skipBalanceWarning = false) => {
     const amt = Number(amount);
     if (!accountId || !amt || amt <= 0) {
       toast({ title: "Pick an account and enter a positive amount", variant: "destructive" });
       return;
     }
+    // A "Payment In" against a customer who currently owes nothing (already
+    // settled, or in credit) usually means this payment was already recorded
+    // somewhere else — e.g. from the invoice itself — and this would double
+    // it. Doesn't block, just requires an explicit "record anyway" click.
+    if (!skipBalanceWarning && isIn && partyEntityId && partyEntityBalance != null && partyEntityBalance <= 0) {
+      setNoBalanceConfirmMsg(
+        `${partyName.trim() || "This customer"} has no outstanding balance right now — check it wasn't already recorded against an invoice before adding this.`,
+      );
+      return;
+    }
     setNegativeConfirmMsg(null);
+    setNoBalanceConfirmMsg(null);
     create.mutate(
       {
         data: {
@@ -434,6 +447,25 @@ export function CashEntryDialog({
                 >
                   {create.isPending && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}
                   Yes, allow negative balance
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {noBalanceConfirmMsg && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 space-y-2">
+              <p>{noBalanceConfirmMsg}</p>
+              <div className="flex gap-2 justify-end">
+                <Button size="sm" variant="outline" onClick={() => setNoBalanceConfirmMsg(null)}>Cancel</Button>
+                <Button
+                  size="sm"
+                  className="bg-amber-600 hover:bg-amber-700"
+                  onClick={() => handleSubmit(false, true)}
+                  disabled={create.isPending}
+                  data-testid="button-confirm-no-balance"
+                >
+                  {create.isPending && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}
+                  Yes, record anyway
                 </Button>
               </div>
             </div>
