@@ -414,10 +414,10 @@ export default function PriceList() {
                     </div>
                   </td>
                   <td className="px-3 py-2 text-right">
-                    {numericCell(p.id, "purchasePrice", p.purchasePrice)}
-                    {p.manufacturingCost != null && (
+                    {numericCell(p.id, "purchasePrice", p.manufacturingCost ?? p.purchasePrice)}
+                    {p.manufacturingCost != null && edits[p.id]?.purchasePrice === undefined && (
                       <div className="text-[10px] text-muted-foreground mt-0.5" data-testid={`hint-manufacturing-cost-${p.id}`}>
-                        Mfg cost: ₹{p.manufacturingCost.toLocaleString()}
+                        Live recipe cost — not yet saved
                       </div>
                     )}
                   </td>
