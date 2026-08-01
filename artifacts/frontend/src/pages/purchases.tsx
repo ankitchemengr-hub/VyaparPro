@@ -58,11 +58,13 @@ function ProductCombobox({
   value,
   onChange,
   testId,
+  invalid,
 }: {
   products: any[];
   value: number | null;
   onChange: (id: string) => void;
   testId?: string;
+  invalid?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -82,7 +84,7 @@ function ProductCombobox({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="min-w-[180px] justify-between font-normal"
+          className={cn("min-w-[180px] justify-between font-normal", invalid && "border-destructive text-destructive")}
           data-testid={testId}
         >
           <span className="truncate">{selected ? selected.name : "Pick product"}</span>
@@ -485,6 +487,7 @@ function LineItemsEditor({
                     value={l.productId}
                     onChange={(v) => onPickProduct(i, v)}
                     testId={testIdPrefix ? `select-product-${i}` : undefined}
+                    invalid={!l.productId && (Number(l.qty) > 0 || Number(l.rate) > 0)}
                   />
                 </TableCell>
                 <TableCell className="text-right">
@@ -540,7 +543,12 @@ function LineItemsEditor({
           <div key={i} className="p-4 space-y-3" data-testid={testIdPrefix ? `${testIdPrefix}-mobile-${i}` : undefined}>
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1 min-w-0">
-                <ProductCombobox products={products} value={l.productId} onChange={(v) => onPickProduct(i, v)} />
+                <ProductCombobox
+                  products={products}
+                  value={l.productId}
+                  onChange={(v) => onPickProduct(i, v)}
+                  invalid={!l.productId && (Number(l.qty) > 0 || Number(l.rate) > 0)}
+                />
               </div>
               <Button size="icon" variant="ghost" className="shrink-0" onClick={() => onRemoveLine(i)}>
                 <Trash2 className="w-4 h-4 text-destructive" />
@@ -959,7 +967,7 @@ function NewPurchaseTab({
                 <span className="text-xl font-bold tabular-nums" data-testid="text-grand-total">₹{totals.finalTotal.toFixed(2)}</span>
               </div>
               <Button
-                disabled={!valid || submitting}
+                disabled={submitting}
                 onClick={onSubmit}
                 data-testid="button-save-purchase"
                 size="lg"
@@ -1986,7 +1994,10 @@ function EditPurchaseDialog({
   const valid = vendorId && lines.length > 0 && lines.every((l) => l.productId && Number(l.qty) > 0);
 
   const onSubmit = async () => {
-    if (!valid) return;
+    if (!valid) {
+      toast({ title: "Incomplete line items", description: "Pick a vendor, and a product with quantity for each line.", variant: "destructive" });
+      return;
+    }
     setSubmitting(true);
     try {
       await update.mutateAsync({
@@ -2130,7 +2141,7 @@ function EditPurchaseDialog({
 
         <DialogFooter className="mt-2">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>Cancel</Button>
-          <Button disabled={!valid || submitting || isLoading} onClick={onSubmit} data-testid="button-save-edit-purchase">
+          <Button disabled={submitting || isLoading} onClick={onSubmit} data-testid="button-save-edit-purchase">
             {submitting
               ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving…</>
               : <><Save className="w-4 h-4 mr-2" /> Save Changes</>}
