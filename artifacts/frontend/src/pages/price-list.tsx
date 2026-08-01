@@ -191,12 +191,41 @@ export default function PriceList() {
     return edits[id]?.[field] !== undefined ? edits[id][field]! : String(fallback ?? "");
   };
 
+  // Margin % cells drive their matching price cell live, not just via the
+  // bulk "Apply Margin" button — typing a Wholesale % (say) immediately
+  // recomputes Wholesale ₹ for that row from its current Purchase ₹, using
+  // the margin just typed. Still only stages the value (highlighted,
+  // unsaved) until Save is clicked.
+  const MARGIN_TO_PRICE_FIELD: Record<string, keyof EditedRow> = {
+    nonGstMarginPct: "nonGstPrice",
+    retailMarginPct: "retailPrice",
+    wholesaleMarginPct: "wholesalePrice",
+  };
+
   const setCell = useCallback((id: number, field: keyof EditedRow, value: string) => {
-    setEdits((prev) => ({
-      ...prev,
-      [id]: { ...(prev[id] ?? {}), [field]: value },
-    }));
-  }, []);
+    setEdits((prev) => {
+      const rowEdits: Partial<EditedRow> = { ...(prev[id] ?? {}), [field]: value };
+      const priceField = MARGIN_TO_PRICE_FIELD[field];
+      if (priceField) {
+        const original = products.find((p) => p.id === id);
+        const stagedPurchase = rowEdits.purchasePrice;
+        const purchasePrice = stagedPurchase !== undefined
+          ? numOrNull(stagedPurchase)
+          : (original?.manufacturingCost ?? original?.purchasePrice);
+        const marginPct = numOrNull(value);
+        if (purchasePrice != null && purchasePrice > 0 && marginPct != null) {
+          const { nonGstPrice, retailPrice, wholesalePrice } = marginedPrices(purchasePrice, original?.taxRate ?? null, {
+            nonGstMarginPct: field === "nonGstMarginPct" ? marginPct : DEFAULT_NON_GST_MARGIN,
+            retailMarginPct: field === "retailMarginPct" ? marginPct : DEFAULT_RETAIL_MARGIN,
+            wholesaleMarginPct: field === "wholesaleMarginPct" ? marginPct : DEFAULT_WHOLESALE_MARGIN,
+          });
+          const computed = { nonGstPrice, retailPrice, wholesalePrice }[priceField as "nonGstPrice" | "retailPrice" | "wholesalePrice"];
+          rowEdits[priceField] = computed.toFixed(2);
+        }
+      }
+      return { ...prev, [id]: rowEdits };
+    });
+  }, [products]);
 
   const allFilteredSelected = filtered.length > 0 && filtered.every((p) => selected.has(p.id));
 
