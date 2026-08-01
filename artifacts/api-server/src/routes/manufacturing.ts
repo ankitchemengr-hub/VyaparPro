@@ -23,6 +23,7 @@ import {
 } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
 import { getCompanyId } from "../lib/tenant";
+import { applyRecalculation } from "../lib/recalculate-prices";
 
 const router: IRouter = Router();
 
@@ -150,6 +151,16 @@ router.post("/boms", async (req, res): Promise<void> => {
     .where(and(eq(bomItemsTable.companyId, companyId), eq(bomItemsTable.bomId, bomId)));
   const [product] = await db.select({ name: productsTable.name }).from(productsTable).where(and(eq(productsTable.companyId, companyId), eq(productsTable.id, bom.finishedProductId)));
 
+  // A new recipe gives this (and anything that recursively uses it as a
+  // material) a real cost for the first time — push it into purchasePrice
+  // right away instead of waiting for someone to click "Recalculate Prices",
+  // so Price List's Purchase column reflects it immediately.
+  try {
+    await applyRecalculation(companyId);
+  } catch (err) {
+    logger.error({ err }, "Failed to auto-recalculate prices after BOM create");
+  }
+
   res.status(201).json(formatBom(bom, product?.name ?? null, items));
 });
 
@@ -262,6 +273,16 @@ router.patch("/boms/:id", async (req, res): Promise<void> => {
     .where(and(eq(bomItemsTable.companyId, companyId), eq(bomItemsTable.bomId, bom.id)));
 
   const [product] = await db.select({ name: productsTable.name }).from(productsTable).where(and(eq(productsTable.companyId, companyId), eq(productsTable.id, bom.finishedProductId)));
+
+  // Recipe quantities/materials changed, so its cost (and anything that
+  // recursively uses it as a material) may have moved — push it into
+  // purchasePrice right away instead of waiting for someone to click
+  // "Recalculate Prices", so Price List's Purchase column stays current.
+  try {
+    await applyRecalculation(companyId);
+  } catch (err) {
+    logger.error({ err }, "Failed to auto-recalculate prices after BOM update");
+  }
 
   res.json(formatBom(bom, product?.name ?? null, items));
 });
