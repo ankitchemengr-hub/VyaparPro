@@ -131,7 +131,7 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
         <CardContent className="p-4">
           <div className="flex items-center gap-2">
             <Input
-              placeholder="Search invoice number or customer..."
+              placeholder="Search invoice number, customer, or item..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="flex-1 min-w-0"

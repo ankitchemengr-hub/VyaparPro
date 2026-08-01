@@ -165,6 +165,12 @@ export default function Billing() {
   const [sharing, setSharing] = useState(false);
   const savedSheetRef = useRef<HTMLDivElement>(null);
   const [prefilled, setPrefilled] = useState(false);
+  // Prefilling an existing invoice sets docType/invoiceSubtype from the saved
+  // record, which changes `invoiceType` in the same batch as the saved item
+  // rates — that would otherwise re-trigger the price-list rate sync below
+  // and stomp the rates the user actually saved. This ref lets that sync
+  // skip the one render caused by prefill.
+  const skipRateSyncRef = useRef(false);
   const [paymentAmount, setPaymentAmount] = useState(0);
   const [paymentMode, setPaymentMode] = useState<"cash" | "upi" | "cheque" | "bank_transfer" | "credit">("cash");
   const [paymentRef, setPaymentRef] = useState("");
@@ -204,6 +210,7 @@ export default function Billing() {
 
   useEffect(() => {
   if (!products || items.length === 0) return;
+  if (skipRateSyncRef.current) { skipRateSyncRef.current = false; return; }
   setItems((prev) => prev.map((item) => {
     const p = products.find((x: any) => x.id === item.productId);
     if (!p) return item;
@@ -232,6 +239,7 @@ export default function Billing() {
         state: existingInvoice.placeOfSupply, pricingTier: "retail", outstandingBalance: 0,
       });
     }
+    skipRateSyncRef.current = true;
     setItems((existingInvoice.items ?? []).map((it: any) => {
       const prod = (products ?? []).find((x: any) => x.id === it.productId);
       return {
