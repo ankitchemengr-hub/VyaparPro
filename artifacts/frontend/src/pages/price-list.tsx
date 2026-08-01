@@ -23,8 +23,26 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Save, X, CheckSquare, Square, Tag } from "lucide-react";
+import { Search, Save, X, CheckSquare, Square, Tag, Percent } from "lucide-react";
 import { format } from "date-fns";
+
+// Standard sale-price margins over Purchase ₹, applied by the "Apply Margin"
+// action below. Wholesale is worked out on a GST-exclusive basis: add the
+// margin, then divide by (1 + that product's own GST rate) so it lines up
+// with wholesale invoices where GST is charged separately on top.
+const NON_GST_MARGIN = 0.10;
+const RETAIL_MARGIN = 0.15;
+const WHOLESALE_MARGIN = 0.12;
+const DEFAULT_GST_RATE = 18;
+
+function marginedPrices(purchasePrice: number, taxRate: number | null | undefined) {
+  const gstFactor = 1 + (taxRate || DEFAULT_GST_RATE) / 100;
+  return {
+    nonGstPrice: purchasePrice * (1 + NON_GST_MARGIN),
+    retailPrice: purchasePrice * (1 + RETAIL_MARGIN),
+    wholesalePrice: (purchasePrice * (1 + WHOLESALE_MARGIN)) / gstFactor,
+  };
+}
 
 type Product = {
   id: number;
@@ -221,6 +239,33 @@ export default function PriceList() {
     setSelected(new Set());
   };
 
+  // Stages Non-GST/Retail/Wholesale for the selected rows (or every filtered
+  // row if nothing's selected) from each row's current Purchase ₹ — its
+  // staged edit if the user just changed it, otherwise the saved value. Only
+  // fills the input boxes (still editable, still requires Save) so nothing
+  // is written to the catalog until the user reviews and confirms.
+  const applyMargins = () => {
+    const targets = selected.size > 0 ? filtered.filter((p) => selected.has(p.id)) : filtered;
+    if (targets.length === 0) return;
+    setEdits((prev) => {
+      const next = { ...prev };
+      targets.forEach((p) => {
+        const stagedPurchase = prev[p.id]?.purchasePrice;
+        const purchasePrice = stagedPurchase !== undefined ? numOrNull(stagedPurchase) : (p.manufacturingCost ?? p.purchasePrice);
+        if (purchasePrice == null || !(purchasePrice > 0)) return;
+        const { nonGstPrice, retailPrice, wholesalePrice } = marginedPrices(purchasePrice, p.taxRate);
+        next[p.id] = {
+          ...(next[p.id] ?? {}),
+          nonGstPrice: nonGstPrice.toFixed(2),
+          retailPrice: retailPrice.toFixed(2),
+          wholesalePrice: wholesalePrice.toFixed(2),
+        };
+      });
+      return next;
+    });
+    toast({ title: `Margins applied to ${targets.length} product${targets.length !== 1 ? "s" : ""}`, description: "Review the highlighted prices, then Save." });
+  };
+
   const numericCell = (id: number, field: keyof EditedRow, fallback: number | null, prefix = "₹") => {
     const original = products.find((p) => p.id === id);
     const origVal = String(original?.[field as keyof Product] ?? fallback ?? "");
@@ -270,6 +315,16 @@ export default function PriceList() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={applyMargins}
+            title="Non-GST +10%, Retail +15%, Wholesale +12% ÷ (1 + GST%)"
+            data-testid="button-apply-margins"
+          >
+            <Percent className="h-4 w-4 mr-1" />
+            Apply Margin{selected.size > 0 ? ` (${selected.size} selected)` : " (all)"}
+          </Button>
           {dirtyIds.length > 0 && (
             <Button variant="outline" size="sm" onClick={clearEdits}>
               <X className="h-4 w-4 mr-1" /> Discard
@@ -440,6 +495,9 @@ export default function PriceList() {
         <span className="inline-block w-3 h-3 bg-amber-400/30 border border-amber-400 rounded-sm mr-1.5 align-middle" />
         Highlighted cells have unsaved changes. Click <strong>Save</strong> to apply to your company's catalog, inventory, and future invoices.
         Existing invoices are not affected.
+      </p>
+      <p className="text-xs text-muted-foreground">
+        <strong>Apply Margin</strong> fills Non-GST (+10%), Retail (+15%) and Wholesale (+12%, then ÷ (1 + that product's GST%)) from the Purchase ₹ column — still editable, still requires Save.
       </p>
 
       {/* Confirmation dialog */}
