@@ -36,6 +36,7 @@ type Product = {
   hsnCode: string | null;
   taxRate: number | null;
   purchasePrice: number;
+  manufacturingCost: number | null;
   wholesalePrice: number;
   retailPrice: number;
   nonGstPrice: number | null;
@@ -412,7 +413,14 @@ export default function PriceList() {
                       {p.brand && <span>· {p.brand}</span>}
                     </div>
                   </td>
-                  <td className="px-3 py-2 text-right">{numericCell(p.id, "purchasePrice", p.purchasePrice)}</td>
+                  <td className="px-3 py-2 text-right">
+                    {numericCell(p.id, "purchasePrice", p.purchasePrice)}
+                    {p.manufacturingCost != null && (
+                      <div className="text-[10px] text-muted-foreground mt-0.5" data-testid={`hint-manufacturing-cost-${p.id}`}>
+                        Mfg cost: ₹{p.manufacturingCost.toLocaleString()}
+                      </div>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-right">{numericCell(p.id, "wholesalePrice", p.wholesalePrice)}</td>
                   <td className="px-3 py-2 text-right">{numericCell(p.id, "retailPrice", p.retailPrice)}</td>
                   <td className="px-3 py-2 text-right">{numericCell(p.id, "nonGstPrice", p.nonGstPrice)}</td>

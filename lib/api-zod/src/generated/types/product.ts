@@ -17,6 +17,11 @@ export interface Product {
   itemCode: string;
   unit: string;
   purchasePrice: number;
+  /**
+     * Live BOM/recipe cost rollup for products with a recipe (raw-material costs recursed through nested recipes) — null for products with no BOM. purchasePrice is only kept in sync with this when "Recalculate Prices" is run, so the two can drift; shown alongside purchasePrice in Price List for that reason.
+     * @nullable
+     */
+  manufacturingCost?: number | null;
   retailPrice: number;
   wholesalePrice: number;
   mrp: number;
