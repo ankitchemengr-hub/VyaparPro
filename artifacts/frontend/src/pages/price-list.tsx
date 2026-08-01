@@ -26,21 +26,29 @@ import { useToast } from "@/hooks/use-toast";
 import { Search, Save, X, CheckSquare, Square, Tag, Percent } from "lucide-react";
 import { format } from "date-fns";
 
-// Standard sale-price margins over Purchase ₹, applied by the "Apply Margin"
-// action below. Wholesale is worked out on a GST-exclusive basis: add the
-// margin, then divide by (1 + that product's own GST rate) so it lines up
-// with wholesale invoices where GST is charged separately on top.
-const NON_GST_MARGIN = 0.10;
-const RETAIL_MARGIN = 0.15;
-const WHOLESALE_MARGIN = 0.12;
+// Default sale-price margins over Purchase ₹, used whenever a product's own
+// Margin % column is left blank. Applied by the "Apply Margin" action below.
+// Wholesale is worked out on a GST-exclusive basis: add the margin, then
+// divide by (1 + that product's own GST rate) so it lines up with wholesale
+// invoices where GST is charged separately on top. These margin % fields are
+// independent of the older "Pricing Basis: Fixed Margin" product setting
+// (Inventory edit form + raw-material cost cascade), which uses a different
+// formula (no GST divide-back on wholesale) — the two don't share values.
+const DEFAULT_NON_GST_MARGIN = 10;
+const DEFAULT_RETAIL_MARGIN = 15;
+const DEFAULT_WHOLESALE_MARGIN = 12;
 const DEFAULT_GST_RATE = 18;
 
-function marginedPrices(purchasePrice: number, taxRate: number | null | undefined) {
+function marginedPrices(
+  purchasePrice: number,
+  taxRate: number | null | undefined,
+  margins: { nonGstMarginPct: number; retailMarginPct: number; wholesaleMarginPct: number },
+) {
   const gstFactor = 1 + (taxRate || DEFAULT_GST_RATE) / 100;
   return {
-    nonGstPrice: purchasePrice * (1 + NON_GST_MARGIN),
-    retailPrice: purchasePrice * (1 + RETAIL_MARGIN),
-    wholesalePrice: (purchasePrice * (1 + WHOLESALE_MARGIN)) / gstFactor,
+    nonGstPrice: purchasePrice * (1 + margins.nonGstMarginPct / 100),
+    retailPrice: purchasePrice * (1 + margins.retailMarginPct / 100),
+    wholesalePrice: (purchasePrice * (1 + margins.wholesaleMarginPct / 100)) / gstFactor,
   };
 }
 
@@ -58,6 +66,9 @@ type Product = {
   wholesalePrice: number;
   retailPrice: number;
   nonGstPrice: number | null;
+  nonGstMarginPct: number | null;
+  retailMarginPct: number | null;
+  wholesaleMarginPct: number | null;
   updatedAt?: string;
   createdAt?: string;
 };
@@ -67,6 +78,9 @@ type EditedRow = {
   wholesalePrice: string;
   retailPrice: string;
   nonGstPrice: string;
+  nonGstMarginPct: string;
+  retailMarginPct: string;
+  wholesaleMarginPct: string;
 };
 
 const ALL = "__all__";
@@ -95,6 +109,9 @@ async function bulkUpdatePrices(updates: Array<{
   wholesalePrice?: number;
   retailPrice?: number;
   nonGstPrice?: number | null;
+  nonGstMarginPct?: number | null;
+  retailMarginPct?: number | null;
+  wholesaleMarginPct?: number | null;
 }>) {
   const r = await fetch("/api/products/bulk-price", {
     method: "PATCH",
@@ -218,10 +235,14 @@ export default function PriceList() {
         wholesalePrice: e?.wholesalePrice !== undefined ? numOrNull(e.wholesalePrice) : undefined,
         retailPrice: e?.retailPrice !== undefined ? numOrNull(e.retailPrice) : undefined,
         nonGstPrice: e?.nonGstPrice !== undefined ? (e.nonGstPrice.trim() === "" ? null : numOrNull(e.nonGstPrice)) : undefined,
+        nonGstMarginPct: e?.nonGstMarginPct !== undefined ? (e.nonGstMarginPct.trim() === "" ? null : numOrNull(e.nonGstMarginPct)) : undefined,
+        retailMarginPct: e?.retailMarginPct !== undefined ? (e.retailMarginPct.trim() === "" ? null : numOrNull(e.retailMarginPct)) : undefined,
+        wholesaleMarginPct: e?.wholesaleMarginPct !== undefined ? (e.wholesaleMarginPct.trim() === "" ? null : numOrNull(e.wholesaleMarginPct)) : undefined,
       };
     }).filter((u) => {
       return u.purchasePrice !== undefined || u.wholesalePrice !== undefined ||
-        u.retailPrice !== undefined || u.nonGstPrice !== undefined;
+        u.retailPrice !== undefined || u.nonGstPrice !== undefined ||
+        u.nonGstMarginPct !== undefined || u.retailMarginPct !== undefined || u.wholesaleMarginPct !== undefined;
     });
 
     if (updates.length === 0) {
@@ -240,10 +261,11 @@ export default function PriceList() {
   };
 
   // Stages Non-GST/Retail/Wholesale for the selected rows (or every filtered
-  // row if nothing's selected) from each row's current Purchase ₹ — its
-  // staged edit if the user just changed it, otherwise the saved value. Only
-  // fills the input boxes (still editable, still requires Save) so nothing
-  // is written to the catalog until the user reviews and confirms.
+  // row if nothing's selected) from each row's current Purchase ₹ and its own
+  // Margin % columns (falling back to the 10/15/12 defaults when a margin is
+  // blank) — using staged edits where present, otherwise the saved value.
+  // Only fills the input boxes (still editable, still requires Save) so
+  // nothing is written to the catalog until the user reviews and confirms.
   const applyMargins = () => {
     const targets = selected.size > 0 ? filtered.filter((p) => selected.has(p.id)) : filtered;
     if (targets.length === 0) return;
@@ -253,7 +275,18 @@ export default function PriceList() {
         const stagedPurchase = prev[p.id]?.purchasePrice;
         const purchasePrice = stagedPurchase !== undefined ? numOrNull(stagedPurchase) : (p.manufacturingCost ?? p.purchasePrice);
         if (purchasePrice == null || !(purchasePrice > 0)) return;
-        const { nonGstPrice, retailPrice, wholesalePrice } = marginedPrices(purchasePrice, p.taxRate);
+
+        const marginOrDefault = (field: "nonGstMarginPct" | "retailMarginPct" | "wholesaleMarginPct", def: number) => {
+          const staged = prev[p.id]?.[field];
+          const val = staged !== undefined ? numOrNull(staged) : (p[field] ?? undefined);
+          return val ?? def;
+        };
+        const margins = {
+          nonGstMarginPct: marginOrDefault("nonGstMarginPct", DEFAULT_NON_GST_MARGIN),
+          retailMarginPct: marginOrDefault("retailMarginPct", DEFAULT_RETAIL_MARGIN),
+          wholesaleMarginPct: marginOrDefault("wholesaleMarginPct", DEFAULT_WHOLESALE_MARGIN),
+        };
+        const { nonGstPrice, retailPrice, wholesalePrice } = marginedPrices(purchasePrice, p.taxRate, margins);
         next[p.id] = {
           ...(next[p.id] ?? {}),
           nonGstPrice: nonGstPrice.toFixed(2),
@@ -283,6 +316,29 @@ export default function PriceList() {
           onChange={(e) => setCell(id, field, e.target.value)}
           className={`h-8 pl-6 pr-1 text-right text-sm w-28 ${isDirty ? "border-amber-400 bg-amber-50 dark:bg-amber-950/20" : ""}`}
         />
+      </div>
+    );
+  };
+
+  const percentCell = (id: number, field: keyof EditedRow, defaultValue: number) => {
+    const original = products.find((p) => p.id === id);
+    const savedVal = original?.[field as keyof Product] as number | null | undefined;
+    const origVal = String(savedVal ?? "");
+    const current = getVal(id, field, savedVal ?? "");
+    const isDirty = edits[id]?.[field] !== undefined && current !== origVal;
+
+    return (
+      <div className="relative">
+        <Input
+          type="number"
+          step="0.1"
+          min="0"
+          value={current}
+          placeholder={String(defaultValue)}
+          onChange={(e) => setCell(id, field, e.target.value)}
+          className={`h-8 pl-1 pr-5 text-right text-sm w-20 ${isDirty ? "border-amber-400 bg-amber-50 dark:bg-amber-950/20" : ""}`}
+        />
+        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">%</span>
       </div>
     );
   };
@@ -319,7 +375,7 @@ export default function PriceList() {
             variant="outline"
             size="sm"
             onClick={applyMargins}
-            title="Non-GST +10%, Retail +15%, Wholesale +12% ÷ (1 + GST%)"
+            title="Uses each product's Non-GST %/Retail %/Wholesale % column (defaults 10/15/12); Wholesale is also ÷ (1 + GST%)"
             data-testid="button-apply-margins"
           >
             <Percent className="h-4 w-4 mr-1" />
@@ -422,6 +478,9 @@ export default function PriceList() {
                     : <Square className="h-4 w-4 text-muted-foreground" />}
                 </button>
               </th>
+              <th className="text-right px-3 py-2.5 font-semibold w-20" title="Overrides the default 10% used by Apply Margin">Non-GST %</th>
+              <th className="text-right px-3 py-2.5 font-semibold w-20" title="Overrides the default 15% used by Apply Margin">Retail %</th>
+              <th className="text-right px-3 py-2.5 font-semibold w-20" title="Overrides the default 12% used by Apply Margin">Wholesale %</th>
               <th className="text-left px-3 py-2.5 font-semibold min-w-44">Product</th>
               <th className="text-right px-3 py-2.5 font-semibold w-32">Purchase ₹</th>
               <th className="text-right px-3 py-2.5 font-semibold w-32">Wholesale ₹</th>
@@ -432,10 +491,10 @@ export default function PriceList() {
           </thead>
           <tbody>
             {isLoading && (
-              <tr><td colSpan={7} className="text-center py-12 text-muted-foreground">Loading…</td></tr>
+              <tr><td colSpan={10} className="text-center py-12 text-muted-foreground">Loading…</td></tr>
             )}
             {!isLoading && filtered.length === 0 && (
-              <tr><td colSpan={7} className="text-center py-12 text-muted-foreground">No products found</td></tr>
+              <tr><td colSpan={10} className="text-center py-12 text-muted-foreground">No products found</td></tr>
             )}
             {filtered.map((p, idx) => {
               const isSelected = selected.has(p.id);
@@ -460,6 +519,9 @@ export default function PriceList() {
                         : <Square className="h-4 w-4 text-muted-foreground" />}
                     </button>
                   </td>
+                  <td className="px-3 py-2 text-right">{percentCell(p.id, "nonGstMarginPct", DEFAULT_NON_GST_MARGIN)}</td>
+                  <td className="px-3 py-2 text-right">{percentCell(p.id, "retailMarginPct", DEFAULT_RETAIL_MARGIN)}</td>
+                  <td className="px-3 py-2 text-right">{percentCell(p.id, "wholesaleMarginPct", DEFAULT_WHOLESALE_MARGIN)}</td>
                   <td className="px-3 py-2">
                     <div className="font-medium leading-tight">{p.name}</div>
                     <div className="text-xs text-muted-foreground mt-0.5 flex gap-1.5">
@@ -497,7 +559,7 @@ export default function PriceList() {
         Existing invoices are not affected.
       </p>
       <p className="text-xs text-muted-foreground">
-        <strong>Apply Margin</strong> fills Non-GST (+10%), Retail (+15%) and Wholesale (+12%, then ÷ (1 + that product's GST%)) from the Purchase ₹ column — still editable, still requires Save.
+        <strong>Apply Margin</strong> fills Non-GST, Retail and Wholesale (Wholesale ÷ (1 + that product's GST%)) from Purchase ₹ using each product's own Non-GST %/Retail %/Wholesale % column — defaulting to 10%/15%/12% when left blank. Still editable afterward, still requires Save.
       </p>
 
       {/* Confirmation dialog */}

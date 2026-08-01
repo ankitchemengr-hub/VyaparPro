@@ -381,6 +381,9 @@ router.patch("/products/bulk-price", async (req, res): Promise<void> => {
         nonGstPrice?: number | null;
         hsnCode?: string;
         taxRate?: number;
+        nonGstMarginPct?: number | null;
+        retailMarginPct?: number | null;
+        wholesaleMarginPct?: number | null;
       }>;
     };
 
@@ -414,6 +417,9 @@ router.patch("/products/bulk-price", async (req, res): Promise<void> => {
       if (u.nonGstPrice !== undefined) patch.nonGstPrice = u.nonGstPrice != null ? String(u.nonGstPrice) : null;
       if (u.hsnCode !== undefined) patch.hsnCode = u.hsnCode;
       if (u.taxRate !== undefined) patch.taxRate = String(u.taxRate);
+      if (u.nonGstMarginPct !== undefined) patch.nonGstMarginPct = u.nonGstMarginPct != null ? String(u.nonGstMarginPct) : null;
+      if (u.retailMarginPct !== undefined) patch.retailMarginPct = u.retailMarginPct != null ? String(u.retailMarginPct) : null;
+      if (u.wholesaleMarginPct !== undefined) patch.wholesaleMarginPct = u.wholesaleMarginPct != null ? String(u.wholesaleMarginPct) : null;
 
       const [updated] = await db
         .update(productsTable)
@@ -786,6 +792,9 @@ function formatProduct(p: any) {
     pricingBasis: p.pricingBasis,
     wholesaleMargin: p.wholesaleMargin != null ? Number(p.wholesaleMargin) : null,
     retailMargin: p.retailMargin != null ? Number(p.retailMargin) : null,
+    nonGstMarginPct: p.nonGstMarginPct != null ? Number(p.nonGstMarginPct) : null,
+    retailMarginPct: p.retailMarginPct != null ? Number(p.retailMarginPct) : null,
+    wholesaleMarginPct: p.wholesaleMarginPct != null ? Number(p.wholesaleMarginPct) : null,
     hsnCode: p.hsnCode ?? null,
     taxRate: p.taxRate != null ? Number(p.taxRate) : null,
     commissionPerLiter: p.commissionPerLiter != null ? Number(p.commissionPerLiter) : null,

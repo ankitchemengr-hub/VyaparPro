@@ -22,6 +22,14 @@ export const productsTable = pgTable("products", {
   pricingBasis: text("pricing_basis").notNull().default("manual"),
   wholesaleMargin: numeric("wholesale_margin", { precision: 10, scale: 2 }),
   retailMargin: numeric("retail_margin", { precision: 10, scale: 2 }),
+  // Per-product overrides for the Price List page's "Apply Margin" tool —
+  // deliberately separate from wholesaleMargin/retailMargin above, which
+  // belong to the older "Pricing Basis: Fixed Margin" feature (Inventory edit
+  // form + raw-material cost cascade) and use a different formula (no GST
+  // divide-back on wholesale). Null means "use the 10/15/12 default".
+  nonGstMarginPct: numeric("non_gst_margin_pct", { precision: 5, scale: 2 }),
+  retailMarginPct: numeric("retail_margin_pct", { precision: 5, scale: 2 }),
+  wholesaleMarginPct: numeric("wholesale_margin_pct", { precision: 5, scale: 2 }),
   hsnCode: text("hsn_code"),
   taxRate: numeric("tax_rate", { precision: 5, scale: 2 }).default("18"),
   commissionPerLiter: numeric("commission_per_liter", { precision: 12, scale: 2 }).notNull().default("0"),
