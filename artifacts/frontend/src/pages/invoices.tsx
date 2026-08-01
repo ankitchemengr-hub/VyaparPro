@@ -5,7 +5,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import {
   useListInvoices,
   useDeleteInvoice,
+  useListUsers,
   getListInvoicesQueryKey,
+  getListUsersQueryKey,
 } from "@workspace/api-client-react";
 import { RecordPaymentDialog } from "@/components/record-payment-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -46,10 +48,13 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
   const [payStatus, setPayStatus] = useState<string>("all");
   const [dateFrom, setDateFrom] = useState<Date | undefined>();
   const [dateTo, setDateTo] = useState<Date | undefined>();
+  const [createdByUserId, setCreatedByUserId] = useState<string>("all");
   const [deleting, setDeleting] = useState<{ id: number; invoiceNo: string; invoiceType: string } | null>(null);
 
   const isSalesman = user?.role === "salesman";
   const isAdmin = user?.role === "admin";
+
+  const { data: staffUsers } = useListUsers({ query: { enabled: isAdmin, queryKey: getListUsersQueryKey() } });
 
   const applyPreset = (preset: "today" | "7d" | "30d" | "mtd") => {
     const today = startOfDay(new Date());
@@ -61,10 +66,10 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
 
   const clearFilters = () => {
     setSearch(""); setType("all"); setPayStatus("all");
-    setDateFrom(undefined); setDateTo(undefined);
+    setDateFrom(undefined); setDateTo(undefined); setCreatedByUserId("all");
   };
 
-  const hasFilters = !!search || type !== "all" || payStatus !== "all" || !!dateFrom || !!dateTo;
+  const hasFilters = !!search || type !== "all" || payStatus !== "all" || !!dateFrom || !!dateTo || createdByUserId !== "all";
 
   // Salesman scoping is enforced server-side from their session entity — no need
   // (and incorrect) to send user.id here, which is the user-account id, not the
@@ -75,6 +80,7 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
     status: payStatus === "cancelled" ? "cancelled" : undefined,
     dateFrom: dateFrom ? format(dateFrom, "yyyy-MM-dd") : undefined,
     dateTo: dateTo ? format(dateTo, "yyyy-MM-dd") : undefined,
+    createdByUserId: createdByUserId !== "all" ? Number(createdByUserId) : undefined,
   });
 
   const deleteInvoice = useDeleteInvoice();
@@ -182,6 +188,23 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
                     </SelectContent>
                   </Select>
                 </div>
+
+                {isAdmin && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Created By</Label>
+                    <Select value={createdByUserId} onValueChange={setCreatedByUserId}>
+                      <SelectTrigger className="w-full" data-testid="select-created-by">
+                        <SelectValue placeholder="Anyone" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Anyone</SelectItem>
+                        {(staffUsers ?? []).map((u) => (
+                          <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
                 <div className="space-y-1.5">
                   <Label className="text-xs">Date Range</Label>

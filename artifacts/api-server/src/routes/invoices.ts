@@ -90,6 +90,9 @@ router.get("/invoices", async (req, res): Promise<void> => {
       AND ${invoiceItemsTable.productId} = ${params.data.productId}
     )`);
   }
+  if (params.data.createdByUserId) {
+    conditions.push(eq(invoicesTable.createdByUserId, params.data.createdByUserId));
+  }
   if (params.data.search) {
     const searchTerm = `%${params.data.search}%`;
     conditions.push(

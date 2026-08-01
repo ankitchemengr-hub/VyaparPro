@@ -2828,6 +2828,10 @@ salesmanId?: number;
  * Only invoices with a line item for this exact product
  */
 productId?: number;
+/**
+ * Only invoices created by this staff user account
+ */
+createdByUserId?: number;
 type?: ListInvoicesType;
 month?: string;
 year?: number;

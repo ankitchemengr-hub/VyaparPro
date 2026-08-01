@@ -1043,6 +1043,11 @@ paths:
           description: Only invoices with a line item for this exact product
           schema:
             type: integer
+        - name: createdByUserId
+          in: query
+          description: Only invoices created by this staff user account
+          schema:
+            type: integer
         - name: type
           in: query
           schema:
