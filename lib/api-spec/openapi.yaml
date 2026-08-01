@@ -1038,6 +1038,11 @@ paths:
           in: query
           schema:
             type: integer
+        - name: productId
+          in: query
+          description: Only invoices with a line item for this exact product
+          schema:
+            type: integer
         - name: type
           in: query
           schema:

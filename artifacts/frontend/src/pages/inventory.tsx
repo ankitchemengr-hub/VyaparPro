@@ -4,8 +4,9 @@ import {
   useListProducts, useCreateProduct, useUpdateProduct, useDeleteProduct,
   useListBrandMaster, useCreateBrand, getListBrandMasterQueryKey,
   useCreateStockMovement, getGetProductStockMovementsQueryKey,
-  useListPackagingUnits,
+  useListPackagingUnits, useListInvoices, getListInvoicesQueryKey,
 } from "@workspace/api-client-react";
+import { Link } from "wouter";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -29,7 +30,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { getListProductsQueryKey } from "@workspace/api-client-react";
 import {
   PackageSearch, PackagePlus, Upload, X, ImageIcon, Loader2, ChevronRight,
-  Pencil, Trash2, Save, Eye, EyeOff, Check, ChevronsUpDown, Plus, Wand2,
+  Pencil, Trash2, Save, Eye, EyeOff, Check, ChevronsUpDown, Plus, Wand2, Receipt,
 } from "lucide-react";
 
 // Brand field for the product form — picks from the Brand Master list, or
@@ -213,6 +214,7 @@ export default function Inventory() {
   const [addOpen, setAddOpen] = useState(false);
   const [editProduct, setEditProduct] = useState<any | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  const [billsProduct, setBillsProduct] = useState<any | null>(null);
   const [showValue, setShowValue] = useState(false);
   const { data: products, isLoading } = useListProducts({ search: search || undefined, brand: brandFilter || undefined });
   const { data: brandOptions } = useListBrandMaster();
@@ -323,7 +325,7 @@ export default function Inventory() {
                 <TableHead>Stock</TableHead>
                 <TableHead>Pricing (W / R)</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="w-28 text-right">Actions</TableHead>
+                <TableHead className="w-36 text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -382,6 +384,14 @@ export default function Inventory() {
                       <div className="flex justify-end gap-1">
                         <Button
                           size="icon" variant="ghost" className="h-8 w-8"
+                          onClick={() => setBillsProduct(product)}
+                          data-testid={`button-view-bills-${product.id}`}
+                          title="View bills"
+                        >
+                          <Receipt className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          size="icon" variant="ghost" className="h-8 w-8"
                           onClick={() => setEditProduct(product)}
                           data-testid={`button-edit-${product.id}`}
                           title="Edit product"
@@ -437,10 +447,71 @@ export default function Inventory() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <ProductBillsDialog
+        open={!!billsProduct}
+        onOpenChange={(v) => { if (!v) setBillsProduct(null); }}
+        product={billsProduct}
+      />
     </div>
   );
 }
 
+
+// Bills that include this product — looked up by productId (not name substring
+// matching, which the Invoices page search box already offers separately) so
+// two differently-named products never bleed into each other's list.
+function ProductBillsDialog({
+  open, onOpenChange, product,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  product: any | null;
+}) {
+  const billsParams = { productId: product?.id };
+  const { data: bills, isLoading } = useListInvoices(billsParams, {
+    query: { enabled: open && !!product?.id, queryKey: getListInvoicesQueryKey(billsParams) },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Receipt className="w-4 h-4 text-primary" /> Bills for "{product?.name}"
+          </DialogTitle>
+        </DialogHeader>
+        {isLoading ? (
+          <div className="py-8 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+        ) : !bills || bills.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-6 text-center">No bills contain this item yet.</p>
+        ) : (
+          <div className="space-y-1">
+            {bills.map((inv) => (
+              <Link key={inv.id} href={`/invoices/${inv.id}`} onClick={() => onOpenChange(false)}>
+                <div
+                  className="flex items-center justify-between gap-3 rounded-md px-3 py-2 text-sm hover:bg-muted cursor-pointer border-b last:border-0"
+                  data-testid={`product-bill-${inv.id}`}
+                >
+                  <div className="min-w-0">
+                    <div className="font-medium font-mono">{inv.invoiceNo}</div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {inv.customerName || "Cash Sale"} · {new Date(inv.invoiceDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="font-bold">₹{Number(inv.grandTotal).toLocaleString()}</div>
+                    <Badge variant="outline" className="text-[10px] capitalize">{inv.invoiceType.replace(/_/g, " ")}</Badge>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 type ProductForm = {
   gstPrice: string;

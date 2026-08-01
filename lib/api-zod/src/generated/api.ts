@@ -1243,6 +1243,7 @@ export const ListInvoicesQueryParams = zod.object({
   "search": zod.coerce.string().optional(),
   "customerId": zod.coerce.number().optional(),
   "salesmanId": zod.coerce.number().optional(),
+  "productId": zod.coerce.number().optional().describe('Only invoices with a line item for this exact product'),
   "type": zod.enum(['gst', 'non_gst']).optional(),
   "month": zod.coerce.string().optional(),
   "year": zod.coerce.number().optional(),

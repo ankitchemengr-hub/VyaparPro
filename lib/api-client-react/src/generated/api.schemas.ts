@@ -2824,6 +2824,10 @@ export type ListInvoicesParams = {
 search?: string;
 customerId?: number;
 salesmanId?: number;
+/**
+ * Only invoices with a line item for this exact product
+ */
+productId?: number;
 type?: ListInvoicesType;
 month?: string;
 year?: number;

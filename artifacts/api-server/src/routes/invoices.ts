@@ -83,6 +83,13 @@ router.get("/invoices", async (req, res): Promise<void> => {
     conditions.push(eq(invoicesTable.salesmanId, params.data.salesmanId));
   }
   if (params.data.type) conditions.push(eq(invoicesTable.invoiceType, params.data.type));
+  if (params.data.productId) {
+    conditions.push(sql`EXISTS (
+      SELECT 1 FROM ${invoiceItemsTable}
+      WHERE ${invoiceItemsTable.invoiceId} = ${invoicesTable.id}
+      AND ${invoiceItemsTable.productId} = ${params.data.productId}
+    )`);
+  }
   if (params.data.search) {
     const searchTerm = `%${params.data.search}%`;
     conditions.push(
