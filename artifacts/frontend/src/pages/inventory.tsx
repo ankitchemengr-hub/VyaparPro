@@ -5,6 +5,7 @@ import {
   useListBrandMaster, useCreateBrand, getListBrandMasterQueryKey,
   useCreateStockMovement, getGetProductStockMovementsQueryKey,
   useListPackagingUnits, useListInvoices, getListInvoicesQueryKey,
+  useListReadyMaterialBatches, getListReadyMaterialBatchesQueryKey,
 } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -224,10 +225,18 @@ export default function Inventory() {
     {},
     { query: { enabled: isAdmin, queryKey: getListProductsQueryKey({}) } },
   );
-  const totalValue = (allProducts ?? []).reduce(
-    (sum, p) => sum + Number(p.currentStock ?? 0) * Number(p.purchasePrice ?? 0),
-    0,
-  );
+  // Assembled batches sit in Ready Material (not yet dispatched into
+  // products.currentStock — see manufacturing.ts's /assemble route) but the
+  // raw material they consumed has already left current_stock, so they must
+  // be added here too or the total dips by that cost until dispatch.
+  const readyBatchesParams = { status: "ready" as const };
+  const { data: readyBatches } = useListReadyMaterialBatches(readyBatchesParams, {
+    query: { enabled: isAdmin, queryKey: getListReadyMaterialBatchesQueryKey(readyBatchesParams) },
+  });
+  const productPriceById = new Map((allProducts ?? []).map((p) => [p.id, Number(p.purchasePrice ?? 0)]));
+  const totalValue =
+    (allProducts ?? []).reduce((sum, p) => sum + Number(p.currentStock ?? 0) * Number(p.purchasePrice ?? 0), 0) +
+    (readyBatches ?? []).reduce((sum, b) => sum + Number(b.qty ?? 0) * (productPriceById.get(b.productId) ?? 0), 0);
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const deleteProduct = useDeleteProduct();

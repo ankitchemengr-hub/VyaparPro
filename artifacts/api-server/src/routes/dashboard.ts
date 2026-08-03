@@ -68,11 +68,25 @@ router.get("/dashboard/capital", async (req, res): Promise<void> => {
 
   const companyId = getCompanyId(req);
 
-  const [invRow, recvRow, cashRow, payRow, expRow] = await Promise.all([
+  const [invRow, readyRow, recvRow, cashRow, payRow, expRow] = await Promise.all([
     queryOne(
       `SELECT COALESCE(SUM(current_stock * purchase_price), 0) AS v
        FROM products
        WHERE company_id = $1 AND deleted_at IS NULL`,
+      [companyId]
+    ),
+    // Assemble immediately debits raw-material stock but stages the finished
+    // output in ready_material_batches rather than crediting products.current_stock
+    // (see POST /manufacturing/assemble) — it only becomes real stock at dispatch.
+    // Without this, capital would dip by the consumed raw-material cost the
+    // moment a batch is assembled and only "recover" it once dispatched, even
+    // though nothing was actually lost — the value is just sitting as finished
+    // goods awaiting dispatch instead of as raw material.
+    queryOne(
+      `SELECT COALESCE(SUM(rmb.qty * p.purchase_price), 0) AS v
+       FROM ready_material_batches rmb
+       JOIN products p ON p.id = rmb.product_id AND p.company_id = rmb.company_id
+       WHERE rmb.company_id = $1 AND rmb.status = 'ready' AND p.deleted_at IS NULL`,
       [companyId]
     ),
     queryOne(
@@ -99,7 +113,7 @@ router.get("/dashboard/capital", async (req, res): Promise<void> => {
     ),
   ]);
 
-  const inventoryValue = Number(invRow.v ?? 0);
+  const inventoryValue = Number(invRow.v ?? 0) + Number(readyRow.v ?? 0);
   const receivable = Number(recvRow.v ?? 0);
   const cashInAccounts = Number(cashRow.v ?? 0);
   const payable = Number(payRow.v ?? 0);
