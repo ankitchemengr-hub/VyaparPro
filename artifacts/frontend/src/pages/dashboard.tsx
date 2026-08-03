@@ -59,17 +59,34 @@ export default function Dashboard() {
     query: { queryKey: getGetLitersSoldQueryKey(), enabled: isAdmin },
   });
 
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const weekStartStr = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  // Formats a Date using ITS OWN local fields (year/month/day), not
+  // .toISOString() — that converts to UTC first, which silently rolls a
+  // local-midnight date back a calendar day in any timezone ahead of UTC
+  // (e.g. IST), making "month start" resolve to the last day of the
+  // previous month instead of the 1st.
+  const toLocalDateStr = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+  const todayStr = toLocalDateStr(new Date());
+  // Calendar week (Monday–Sunday), not a rolling 7-day window — so the
+  // "Week" profit figure resets to zero on Monday instead of always
+  // showing the trailing 7 days.
+  const weekStartStr = (() => {
+    const d = new Date();
+    const dayOfWeek = d.getDay(); // 0 = Sunday, 1 = Monday, ... 6 = Saturday
+    const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const monday = new Date(d.getFullYear(), d.getMonth(), d.getDate() - daysSinceMonday);
+    return toLocalDateStr(monday);
+  })();
   const monthStartStr = (() => {
     const d = new Date();
-    return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
+    return toLocalDateStr(new Date(d.getFullYear(), d.getMonth(), 1));
   })();
   const { lastMonthStartStr, lastMonthEndStr } = (() => {
     const d = new Date();
     const start = new Date(d.getFullYear(), d.getMonth() - 1, 1);
     const end = new Date(d.getFullYear(), d.getMonth(), 0);
-    return { lastMonthStartStr: start.toISOString().slice(0, 10), lastMonthEndStr: end.toISOString().slice(0, 10) };
+    return { lastMonthStartStr: toLocalDateStr(start), lastMonthEndStr: toLocalDateStr(end) };
   })();
   const weekProfitParams = { from: weekStartStr, to: todayStr };
   const monthProfitParams = { from: monthStartStr, to: todayStr };
