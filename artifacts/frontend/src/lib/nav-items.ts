@@ -84,3 +84,13 @@ export const moduleNavItems: NavItem[] = [
   { name: "Backup & Restore", href: "/backup-restore", icon: DatabaseBackup, roles: ["admin"], description: "Backup, restore and reset data" },
   { name: "Recycle Bin", href: "/recycle-bin", icon: RotateCcw, roles: ["admin"], description: "Cancelled invoices — permanently delete or review" },
 ];
+
+// Where a "go home" link should send each role — Dashboard ("/") is
+// admin-only, so anyone else needs a real destination they actually have
+// access to instead of bouncing straight back through another redirect.
+export function homePathForRole(role: Role | undefined): string {
+  if (role === "admin") return "/";
+  if (role === "super_admin") return "/subscriptions";
+  if (role === "accountant") return "/menu";
+  return "/catalog";
+}

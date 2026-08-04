@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/table";
 import { BomDialog, type BomDialogState } from "@/components/bom-dialog";
 import { RecalculatePricesDialog } from "@/components/recalculate-prices-dialog";
+import { homePathForRole } from "@/lib/nav-items";
 import {
   FileText, Loader2, Plus, Pencil, Search, AlertTriangle, ShieldOff, Package, Calculator,
 } from "lucide-react";
@@ -37,7 +38,7 @@ export default function BomPage() {
               Bill of Materials management is restricted to administrators.
             </p>
           </div>
-          <Button variant="outline" onClick={() => navigate("/")}>Back to Dashboard</Button>
+          <Button variant="outline" onClick={() => navigate(homePathForRole(user?.role))}>Back to Home</Button>
         </CardContent>
       </Card>
     );

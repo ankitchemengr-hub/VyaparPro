@@ -1,6 +1,7 @@
 import React from "react";
 import { Redirect } from "wouter";
 import { useAuth } from "@/contexts/use-auth";
+import { homePathForRole } from "@/lib/nav-items";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
   useGetDashboardSummary,
@@ -40,14 +41,8 @@ export default function Dashboard() {
   if (!isAdmin) {
     // Dashboard is admin only. Anyone else landing on "/" (direct URL,
     // stale bookmark, browser back button, etc.) never sees any version of
-    // it — sent straight to their real home page instead. Accountant has no
-    // Catalog access, so it gets its own fallback rather than sharing
-    // everyone else's "/catalog".
-    const fallback =
-      user?.role === "super_admin" ? "/subscriptions" :
-      user?.role === "accountant" ? "/menu" :
-      "/catalog";
-    return <Redirect to={fallback} />;
+    // it — sent straight to their real home page instead.
+    return <Redirect to={homePathForRole(user?.role)} />;
   }
 
   const { data: summary, isLoading: isLoadingSummary } = useGetDashboardSummary();

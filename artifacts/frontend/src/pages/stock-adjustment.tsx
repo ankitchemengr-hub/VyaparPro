@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { useListProducts } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/use-auth";
+import { homePathForRole } from "@/lib/nav-items";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -129,7 +130,7 @@ export default function StockAdjustment() {
       <div className="p-6 flex flex-col items-center justify-center min-h-[60vh] gap-3 text-muted-foreground">
         <AlertTriangle className="w-10 h-10" />
         <p className="font-medium">Admin access required.</p>
-        <Button variant="outline" onClick={() => setLocation("/")}>Go to Dashboard</Button>
+        <Button variant="outline" onClick={() => setLocation(homePathForRole(user?.role))}>Go Home</Button>
       </div>
     );
   }
