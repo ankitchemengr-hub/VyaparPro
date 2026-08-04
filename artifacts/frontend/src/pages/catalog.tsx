@@ -325,22 +325,27 @@ const proceedToOrderWithCustomer = (customer: any) => {
           if (isCounter) {
             // Counter has no order list — show a final printable slip right
             // here instead of navigating away, using the cart snapshot since
-            // the create response doesn't round-trip line items.
-            setPlacedOrder({
-              order,
-              customer,
-              invoiceMode,
-              items: cartSummaryRows.map((r) => ({
-                name: r.product.name,
-                itemCode: r.product.itemCode,
-                qty: r.qty,
-                rate: r.rate,
-                gstAmount: r.gstAmount,
-                lineTotal: r.lineTotal,
-              })),
-            });
+            // the create response doesn't round-trip line items. Closing the
+            // customer dialog and opening this one in the same tick races
+            // with Radix's own focus/dismiss handling (same issue as
+            // openCustomerDialog above), so let the close finish first.
             setCart({});
             setShowCustomerDialog(false);
+            setTimeout(() => {
+              setPlacedOrder({
+                order,
+                customer,
+                invoiceMode,
+                items: cartSummaryRows.map((r) => ({
+                  name: r.product.name,
+                  itemCode: r.product.itemCode,
+                  qty: r.qty,
+                  rate: r.rate,
+                  gstAmount: r.gstAmount,
+                  lineTotal: r.lineTotal,
+                })),
+              });
+            }, 200);
             return;
           }
           toast({
@@ -374,7 +379,13 @@ const proceedToOrderWithCustomer = (customer: any) => {
     setShowCartReview(true);
   };
 
-  // Called when user confirms cart review and is staff — opens customer lookup
+  // Called when user confirms cart review and is staff — opens customer lookup.
+  // Closing the Cart Review dialog and opening this one in the very same
+  // synchronous update is unreliable with Radix: the outgoing dialog's own
+  // focus/dismiss handling can race with the incoming one and close it right
+  // back, which looks exactly like "Continue does nothing, back to Catalog."
+  // Letting the first dialog's close animation finish before opening the
+  // next one avoids that race.
   const openCustomerDialog = () => {
     setShowCartReview(false);
     setMobileInput("");
@@ -384,7 +395,7 @@ const proceedToOrderWithCustomer = (customer: any) => {
     setNameSearch("");
     setSearchMode("mobile");
     newCustomerForm.reset({ name: "", mobile: "", gstin: "", address: "", city: "", state: "Maharashtra", pricingTier: "retail", assignedSalesmanId: "" });
-    setShowCustomerDialog(true);
+    setTimeout(() => setShowCustomerDialog(true), 200);
   };
 
   // New customer form
