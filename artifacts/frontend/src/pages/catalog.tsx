@@ -8,11 +8,14 @@ import {
   useListEntities,
   useLookupEntityByMobile,
   useCreateEntity,
+  useCreateCustomerOrder,
   useGetEntity,
   useGetTopProducts,
+  getListCustomerOrdersQueryKey,
   getGetEntityQueryKey,
   getListEntitiesQueryKey,
 } from "@workspace/api-client-react";
+import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -32,6 +35,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Search, Plus, Minus, ShoppingCart, Phone, User, CheckCircle, UserPlus, Loader2, X, SlidersHorizontal, ZoomIn } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { getLookupEntityByMobileQueryKey } from "@workspace/api-client-react";
 import { useForm } from "react-hook-form";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
@@ -54,6 +58,16 @@ export default function Catalog() {
 
   // Cart review dialog (shown before customer lookup)
   const [showCartReview, setShowCartReview] = useState(false);
+
+  // Final order-slip summary shown to a counter login after submitting —
+  // captured from cart data at submit time since customer_orders doesn't
+  // round-trip line items back on create.
+  const [placedOrder, setPlacedOrder] = useState<{
+    order: any;
+    customer: any;
+    items: Array<{ name: string; itemCode?: string; qty: number; rate: number; gstAmount: number; lineTotal: number }>;
+    invoiceMode: "gst" | "non_gst";
+  } | null>(null);
 
   // Customer lookup dialog state
   const [showCustomerDialog, setShowCustomerDialog] = useState(false);
@@ -135,16 +149,21 @@ export default function Catalog() {
   const showNonGstRate = hasRole(["admin", "salesman", "store"]) || isWholesaleCustomer || isCounter;
   // Wholesale customers, salesmen, store users, and counter logins pick Cash Memo
   // (non-GST) vs E-Invoice (GST) before the order is placed. The choice carries
-  // through to billing.tsx, which everyone now redirects to, via the
+  // through to billing.tsx (for salesman/store, who redirect there) via the
   // invoiceType param.
   const showInvoiceTypeChoice = isWholesaleCustomer || isSalesman || isStore || isCounter;
-  // Every role bills through billing.tsx now, which creates a real invoice
-  // and deducts real stock immediately (unconditionally — it doesn't block
-  // on insufficient stock either), so letting the cart quantity go past the
-  // shown stock number here is still safe: it just goes negative as a
-  // backorder, same as before.
+  // Customer/counter/salesman checkout only ever places a customer_orders
+  // record (no real stock deduction — see handlePlaceOrder/proceedToOrderWithCustomer
+  // below) so it's fine, and expected, for them to order something that's out
+  // of stock: Manufacturing/Store see it as a backorder and produce/restock
+  // it. Only admin/store redirect straight to billing.tsx, which creates a
+  // real invoice and does deduct real stock immediately, so that path alone
+  // still needs the stock cap.
   const allowsBackorder = isB2B || isCounter || isSalesman;
   const [invoiceMode, setInvoiceMode] = useState<"gst" | "non_gst">("gst");
+  const { toast } = useToast();
+  const placeOrder = useCreateCustomerOrder();
+  const queryClient = useQueryClient();
 
   // Derived cart data
   const cartItems = Object.entries(cart)
@@ -189,6 +208,31 @@ export default function Catalog() {
     if (stock > 10) return <Badge className="bg-green-600 text-white border-transparent text-[10px]">{stock} {unit}</Badge>;
     if (stock > 0) return <Badge className="bg-amber-500 text-white border-transparent text-[10px]">{stock} {unit}</Badge>;
     return <Badge variant="destructive" className="text-[10px]">Out of Stock</Badge>;
+  };
+
+  const handlePlaceOrder = () => {
+    if (!hasSelection) return;
+    placeOrder.mutate(
+      { data: { items: cartItems, invoiceType: invoiceMode } },
+      {
+        onSuccess: (order: any) => {
+          toast({
+            title: "Order placed",
+            description: `Your order ${order.orderNo ?? ""} has been submitted.`,
+          });
+          setCart({});
+          queryClient.invalidateQueries({ queryKey: getListCustomerOrdersQueryKey() });
+          setLocation("/my-orders");
+        },
+        onError: (err: any) => {
+          toast({
+            title: "Failed to place order",
+            description: err?.message ?? "Please try again",
+            variant: "destructive",
+          });
+        },
+      }
+    );
   };
 
   const isStaff = hasRole(["admin", "salesman", "store", "manufacturing", "accountant", "counter"]);
@@ -267,11 +311,56 @@ export default function Catalog() {
   }
 
 
-// Every role bills a customer the same way now: find or add them, then go
-// straight to Billing and create a real invoice. No role places a
-// trackable, reviewable "order" anymore — the sale is final the moment
-// it's billed.
 const proceedToOrderWithCustomer = (customer: any) => {
+  if (isSalesman || isCounter) {
+    // Salesman/counter places the order directly with customer info — store now
+    // creates invoices directly via billing.tsx instead (see the else
+    // branch below), same as admin.
+    placeOrder.mutate(
+      { data: { items: cartItems, customerName: customer?.name, customerMobile: customer?.mobile, invoiceType: invoiceMode } },
+      {
+        onSuccess: (order: any) => {
+          queryClient.invalidateQueries({ queryKey: getListCustomerOrdersQueryKey() });
+          if (isCounter) {
+            // Counter has no order list — show a final printable slip right
+            // here instead of navigating away, using the cart snapshot since
+            // the create response doesn't round-trip line items.
+            setPlacedOrder({
+              order,
+              customer,
+              invoiceMode,
+              items: cartSummaryRows.map((r) => ({
+                name: r.product.name,
+                itemCode: r.product.itemCode,
+                qty: r.qty,
+                rate: r.rate,
+                gstAmount: r.gstAmount,
+                lineTotal: r.lineTotal,
+              })),
+            });
+            setCart({});
+            setShowCustomerDialog(false);
+            return;
+          }
+          toast({
+            title: "Order placed",
+            description: `Order ${order.orderNo ?? ""} submitted for ${customer?.name ?? "customer"}.`,
+          });
+          setCart({});
+          setShowCustomerDialog(false);
+          setLocation("/my-orders");
+        },
+        onError: (err: any) => {
+          toast({
+            title: "Failed to place order",
+            description: err?.message ?? "Please try again",
+            variant: "destructive",
+          });
+        },
+      }
+    );
+    return;
+  }
   const cartParam = encodeURIComponent(JSON.stringify(cartItems));
   const customerParam = encodeURIComponent(JSON.stringify(customer));
   setLocation(`/billing?cart=${cartParam}&customer=${customerParam}&invoiceType=${invoiceMode}`);
@@ -342,6 +431,52 @@ const proceedToOrderWithCustomer = (customer: any) => {
 
   const proceedLabel = `Proceed to Order${hasSelection ? ` (${cartCount} Item${cartCount !== 1 ? "s" : ""})` : ""}`;
 
+  const handlePrintOrderSlip = () => {
+    if (!placedOrder) return;
+    const { order, customer, items, invoiceMode: mode } = placedOrder;
+    const total = items.reduce((s, i) => s + i.lineTotal, 0);
+    const rows = items
+      .map(
+        (i) => `<tr>
+          <td>${i.name}${i.itemCode ? ` <span class="muted">(${i.itemCode})</span>` : ""}</td>
+          <td class="num">${i.qty}</td>
+          <td class="num">₹${i.rate.toFixed(2)}</td>
+          <td class="num">₹${i.lineTotal.toFixed(2)}</td>
+        </tr>`
+      )
+      .join("");
+    const html = `<!doctype html><html><head><title>Order ${order.orderNo ?? ""}</title>
+      <style>
+        body { font-family: Arial, sans-serif; padding: 24px; color: #111; }
+        h1 { font-size: 18px; margin: 0 0 4px; }
+        .muted { color: #666; font-size: 11px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+        th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #ddd; font-size: 13px; }
+        .num { text-align: right; }
+        .grand { font-weight: bold; font-size: 15px; }
+        .meta { margin-top: 12px; font-size: 13px; }
+      </style></head>
+      <body>
+        <h1>Order ${order.orderNo ?? ""}</h1>
+        <div class="muted">${mode === "non_gst" ? "Cash Memo" : "E-Invoice"} — Pending</div>
+        <div class="meta">
+          <div><strong>Customer:</strong> ${customer?.name ?? "Customer"}</div>
+          <div><strong>Mobile:</strong> ${customer?.mobile ?? ""}</div>
+        </div>
+        <table>
+          <thead><tr><th>Product</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th></tr></thead>
+          <tbody>${rows}</tbody>
+          <tfoot><tr><td colspan="3" class="grand" style="text-align:right">Total</td><td class="num grand">₹${total.toFixed(2)}</td></tr></tfoot>
+        </table>
+      </body></html>`;
+    const win = window.open("", "_blank", "width=420,height=600");
+    if (!win) return;
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    win.print();
+  };
+
   return (
     <div className="flex flex-col h-[calc(100vh-theme(spacing.20))]">
       {/* Header */}
@@ -349,12 +484,16 @@ const proceedToOrderWithCustomer = (customer: any) => {
         <h1 className="text-xl font-bold tracking-tight sm:text-3xl">Product Catalog</h1>
         <Button
           size="sm"
-          disabled={!hasSelection}
+          disabled={!hasSelection || (!isStaff && placeOrder.isPending)}
           onClick={handleProceedClick}
           data-testid="button-proceed-order"
           className="shrink-0"
         >
-          <ShoppingCart className="w-4 h-4 mr-1" />
+          {placeOrder.isPending ? (
+            <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+          ) : (
+            <ShoppingCart className="w-4 h-4 mr-1" />
+          )}
           <span className="hidden sm:inline">{proceedLabel}</span>
           <span className="sm:hidden">
             {hasSelection ? `Order (${cartCount})` : "Order"}
@@ -715,17 +854,22 @@ const proceedToOrderWithCustomer = (customer: any) => {
              <Button
                className="flex-1"
                onClick={() => {
-                 if (isStaff) {
+                 if (isSalesman) {
+                   openCustomerDialog();
+                 } else if (isStaff) {
                    openCustomerDialog();
                  } else {
-                   // Customer self-checkout — no one to find, they ARE the
-                   // customer — so bill them directly with their own entity.
                    setShowCartReview(false);
-                   proceedToOrderWithCustomer(ownEntity);
-                 }
+                   handlePlaceOrder();
+                }
                }}
+              disabled={placeOrder.isPending}
             >
-              <CheckCircle className="w-4 h-4 mr-2" />
+              {placeOrder.isPending ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <CheckCircle className="w-4 h-4 mr-2" />
+              )}
               Continue
             </Button>
           </div>
@@ -1076,6 +1220,61 @@ const proceedToOrderWithCustomer = (customer: any) => {
                 </Form>
               </div>
             </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Order Placed Slip (counter logins only) ── */}
+      <Dialog open={!!placedOrder} onOpenChange={(open) => { if (!open) setPlacedOrder(null); }}>
+        <DialogContent className="w-full max-w-md mx-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle className="w-5 h-5 text-primary" />
+              Order {placedOrder?.order?.orderNo ?? ""} Submitted
+            </DialogTitle>
+          </DialogHeader>
+          {placedOrder && (
+            <div className="space-y-3">
+              <div className="text-sm">
+                <div><span className="text-muted-foreground">Customer:</span> {placedOrder.customer?.name ?? "Customer"}</div>
+                <div><span className="text-muted-foreground">Mobile:</span> {placedOrder.customer?.mobile ?? ""}</div>
+                <div><span className="text-muted-foreground">Type:</span> {placedOrder.invoiceMode === "non_gst" ? "Cash Memo" : "E-Invoice"}</div>
+              </div>
+              <div className="overflow-x-auto -mx-1 max-h-64 overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-muted-foreground text-xs">
+                      <th className="text-left py-1 px-1">Product</th>
+                      <th className="text-right py-1 px-1">Qty</th>
+                      <th className="text-right py-1 px-1">Rate</th>
+                      <th className="text-right py-1 px-1">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {placedOrder.items.map((i, idx) => (
+                      <tr key={idx} className="border-b last:border-0">
+                        <td className="py-1 px-1">{i.name}</td>
+                        <td className="text-right py-1 px-1 tabular-nums">{i.qty}</td>
+                        <td className="text-right py-1 px-1 tabular-nums">₹{i.rate.toFixed(2)}</td>
+                        <td className="text-right py-1 px-1 tabular-nums font-medium">₹{i.lineTotal.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex justify-between font-bold text-sm pt-1 border-t">
+                <span>Total</span>
+                <span>₹{placedOrder.items.reduce((s, i) => s + i.lineTotal, 0).toFixed(2)}</span>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <Button type="button" variant="outline" className="flex-1" onClick={handlePrintOrderSlip}>
+                  Print
+                </Button>
+                <Button type="button" className="flex-1" onClick={() => setPlacedOrder(null)}>
+                  New Order
+                </Button>
+              </div>
+            </div>
           )}
         </DialogContent>
       </Dialog>

@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/use-auth";
-import { homePathForRole } from "@/lib/nav-items";
 import {
   useListProducts,
   useGetProductRecentPrices,
@@ -300,12 +299,11 @@ export default function Billing() {
   }, [searchOpen]);
 
   // ── Guard — after ALL hooks ──
-  // Every role that can check out from Catalog (admin, store, salesman,
-  // counter, customer, manufacturing) lands here to create the invoice
-  // directly — no order-review detour for anyone anymore. Editing an
-  // existing invoice by id stays admin-only below regardless.
-  if (!hasRole(["admin", "store", "salesman", "counter", "customer", "manufacturing"])) {
-    setLocation(homePathForRole(user?.role));
+  // Store can create invoices directly (no catalog/order detour), same as
+  // admin, but editing an existing invoice by id stays admin-only — store
+  // has no ownership check here and could otherwise open/edit any invoice.
+  if (!hasRole(["admin", "store"])) {
+    setLocation("/");
     return null;
   }
   if (isEditMode && !hasRole(["admin"])) {
