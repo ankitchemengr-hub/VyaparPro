@@ -1,4 +1,5 @@
 import React from "react";
+import { Redirect } from "wouter";
 import { useAuth } from "@/contexts/use-auth";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
@@ -38,16 +39,11 @@ export default function Dashboard() {
   const [showGrowthDetails, setShowGrowthDetails] = React.useState(false);
 
   if (!isManagement) {
-    // If not management, they shouldn't really be here, they should be redirected to catalog
-    // But just in case, show a welcome message
-    return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Welcome, {user?.name}</h1>
-          <p className="text-muted-foreground mt-2">Navigate using the sidebar to access your modules.</p>
-        </div>
-      </div>
-    );
+    // Dashboard is admin/accountant only. A store, salesman, manufacturing,
+    // customer or counter user landing on "/" (direct URL, stale bookmark,
+    // browser back button, etc.) never sees any version of it — sent
+    // straight to their real home page instead.
+    return <Redirect to={user?.role === "super_admin" ? "/subscriptions" : "/catalog"} />;
   }
 
   const { data: summary, isLoading: isLoadingSummary } = useGetDashboardSummary();
