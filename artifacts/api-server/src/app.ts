@@ -115,7 +115,31 @@ const INDEX_HTML = path.join(STATIC_DIR, "index.html");
 
 if (fs.existsSync(INDEX_HTML)) {
   logger.info({ staticDir: STATIC_DIR }, "Serving frontend SPA from API server");
-  app.use(express.static(STATIC_DIR));
+  app.use(express.static(STATIC_DIR, {
+    setHeaders: (res, filePath) => {
+      const base = path.basename(filePath);
+      // sw.js, index.html and the manifest must always be revalidated —
+      // express.static's default (Cache-Control: public, max-age=0) is weak
+      // enough that some mobile browsers still serve them from their own
+      // heuristic cache. If the service worker script itself is served
+      // stale, the PWA's autoUpdate mechanism (which relies on the browser
+      // fetching a byte-different sw.js to notice a new deploy) never even
+      // gets a chance to run, so users — especially on an installed
+      // homescreen app, where there's no "hard refresh" gesture — can stay
+      // stuck on an old build indefinitely, seeing already-shipped fixes as
+      // if they never happened.
+      if (base === "sw.js" || base === "index.html" || base === "manifest.webmanifest") {
+        res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        return;
+      }
+      // Vite content-hashes everything under /assets/ (new bundle = new
+      // filename), so those can be cached hard — a stale cached copy of an
+      // old filename is simply never requested again after a deploy.
+      if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+        res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      }
+    },
+  }));
   // SPA history fallback — GET non-/api routes return index.html.
   app.use((req, res, next) => {
     if (req.method !== "GET" || req.path.startsWith("/api")) {
