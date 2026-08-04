@@ -76,6 +76,7 @@ export default function Catalog() {
   const [step, setStep] = useState<"mobile" | "not_found" | "found">("mobile");
   const [foundCustomer, setFoundCustomer] = useState<any>(null);
   const [nameSearch, setNameSearch] = useState("");
+  const [searchMode, setSearchMode] = useState<"mobile" | "name">("mobile");
 
   const { data: products, isLoading } = useListProducts({
     search: search || undefined,
@@ -381,6 +382,7 @@ const proceedToOrderWithCustomer = (customer: any) => {
     setStep("mobile");
     setFoundCustomer(null);
     setNameSearch("");
+    setSearchMode("mobile");
     newCustomerForm.reset({ name: "", mobile: "", gstin: "", address: "", city: "", state: "Maharashtra", pricingTier: "retail", assignedSalesmanId: "" });
     setShowCustomerDialog(true);
   };
@@ -889,83 +891,101 @@ const proceedToOrderWithCustomer = (customer: any) => {
               </DialogHeader>
               <div className="space-y-4 pt-2">
                 <p className="text-sm text-muted-foreground">
-                  Enter the customer's mobile number to look up their profile or register a new customer.
+                  Search by name or mobile number, or register a new customer.
                 </p>
-                <div className="space-y-2">
-                  <Label htmlFor="mobile-input">Mobile Number</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="mobile-input"
-                      data-testid="input-customer-mobile"
-                      placeholder="10-digit mobile number"
-                      value={mobileInput}
-                      maxLength={10}
-                      onChange={(e) => {
-                        const v = e.target.value.replace(/\D/g, "");
-                        setMobileInput(v);
-                        setSearchMobile("");
-                      }}
-                      onKeyDown={(e) => { if (e.key === "Enter") handleMobileLookup(); }}
-                      className="text-lg tracking-wider font-mono"
-                    />
-                    <Button
-                      onClick={handleMobileLookup}
-                      disabled={mobileInput.length !== 10 || isLooking}
-                      data-testid="button-lookup-mobile"
-                    >
-                      {isLooking ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                    </Button>
-                  </div>
-                  {mobileInput.length > 0 && mobileInput.length < 10 && (
-                    <p className="text-xs text-muted-foreground">{10 - mobileInput.length} more digits needed</p>
-                  )}
+
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant={searchMode === "mobile" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setSearchMode("mobile")}
+                    data-testid="button-search-mode-mobile"
+                  >
+                    By Mobile
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={searchMode === "name" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setSearchMode("name")}
+                    data-testid="button-search-mode-name"
+                  >
+                    By Name
+                  </Button>
                 </div>
 
-                <div className="relative flex items-center gap-2 text-xs text-muted-foreground">
-                  <div className="flex-1 h-px bg-border" />
-                  or search by name
-                  <div className="flex-1 h-px bg-border" />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="name-search-input">Customer Name</Label>
-                  <div className="relative">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="name-search-input"
-                      data-testid="input-customer-name-search"
-                      placeholder="Start typing a name..."
-                      value={nameSearch}
-                      onChange={(e) => setNameSearch(e.target.value)}
-                      className="pl-8"
-                    />
-                  </div>
-                  {trimmedNameSearch.length >= 2 && (
-                    <div className="border rounded-md max-h-40 overflow-y-auto divide-y">
-                      {isNameSearching ? (
-                        <div className="flex items-center justify-center py-3 text-muted-foreground">
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        </div>
-                      ) : nameSearchResults && nameSearchResults.length > 0 ? (
-                        nameSearchResults.map((entity: any) => (
-                          <button
-                            key={entity.id}
-                            type="button"
-                            data-testid={`option-customer-${entity.id}`}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted transition-colors"
-                            onClick={() => { setFoundCustomer(entity); setStep("found"); }}
-                          >
-                            <User className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                            <span className="font-medium">{entity.name}</span>
-                            {entity.mobile && <span className="text-muted-foreground">({entity.mobile})</span>}
-                          </button>
-                        ))
-                      ) : (
-                        <p className="text-xs text-muted-foreground text-center py-3">No customers match "{trimmedNameSearch}"</p>
-                      )}
+                {searchMode === "mobile" ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="mobile-input">Mobile Number</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="mobile-input"
+                        data-testid="input-customer-mobile"
+                        placeholder="10-digit mobile number"
+                        value={mobileInput}
+                        maxLength={10}
+                        onChange={(e) => {
+                          const v = e.target.value.replace(/\D/g, "");
+                          setMobileInput(v);
+                          setSearchMobile("");
+                        }}
+                        onKeyDown={(e) => { if (e.key === "Enter") handleMobileLookup(); }}
+                        className="text-lg tracking-wider font-mono"
+                      />
+                      <Button
+                        onClick={handleMobileLookup}
+                        disabled={mobileInput.length !== 10 || isLooking}
+                        data-testid="button-lookup-mobile"
+                      >
+                        {isLooking ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                      </Button>
                     </div>
-                  )}
-                </div>
+                    {mobileInput.length > 0 && mobileInput.length < 10 && (
+                      <p className="text-xs text-muted-foreground">{10 - mobileInput.length} more digits needed</p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label htmlFor="name-search-input">Customer Name</Label>
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="name-search-input"
+                        data-testid="input-customer-name-search"
+                        placeholder="Start typing a name..."
+                        value={nameSearch}
+                        onChange={(e) => setNameSearch(e.target.value)}
+                        className="pl-8"
+                      />
+                    </div>
+                    {trimmedNameSearch.length >= 2 && (
+                      <div className="border rounded-md max-h-40 overflow-y-auto divide-y">
+                        {isNameSearching ? (
+                          <div className="flex items-center justify-center py-3 text-muted-foreground">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          </div>
+                        ) : nameSearchResults && nameSearchResults.length > 0 ? (
+                          nameSearchResults.map((entity: any) => (
+                            <button
+                              key={entity.id}
+                              type="button"
+                              data-testid={`option-customer-${entity.id}`}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted transition-colors"
+                              onClick={() => { setFoundCustomer(entity); setStep("found"); }}
+                            >
+                              <User className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                              <span className="font-medium">{entity.name}</span>
+                              {entity.mobile && <span className="text-muted-foreground">({entity.mobile})</span>}
+                            </button>
+                          ))
+                        ) : (
+                          <p className="text-xs text-muted-foreground text-center py-3">No customers match "{trimmedNameSearch}"</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <Button variant="outline" className="w-full" onClick={() => proceedToOrderWithCustomer(null)}>
                   Skip — Walk-in / Cash Customer
