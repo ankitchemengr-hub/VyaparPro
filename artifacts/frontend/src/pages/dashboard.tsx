@@ -33,17 +33,21 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 export default function Dashboard() {
   const { user, hasRole } = useAuth();
 
-  const isManagement = hasRole(["admin", "accountant"]);
   const isAdmin = hasRole(["admin"]);
   const [showCapitalDetails, setShowCapitalDetails] = React.useState(false);
   const [showGrowthDetails, setShowGrowthDetails] = React.useState(false);
 
-  if (!isManagement) {
-    // Dashboard is admin/accountant only. A store, salesman, manufacturing,
-    // customer or counter user landing on "/" (direct URL, stale bookmark,
-    // browser back button, etc.) never sees any version of it — sent
-    // straight to their real home page instead.
-    return <Redirect to={user?.role === "super_admin" ? "/subscriptions" : "/catalog"} />;
+  if (!isAdmin) {
+    // Dashboard is admin only. Anyone else landing on "/" (direct URL,
+    // stale bookmark, browser back button, etc.) never sees any version of
+    // it — sent straight to their real home page instead. Accountant has no
+    // Catalog access, so it gets its own fallback rather than sharing
+    // everyone else's "/catalog".
+    const fallback =
+      user?.role === "super_admin" ? "/subscriptions" :
+      user?.role === "accountant" ? "/menu" :
+      "/catalog";
+    return <Redirect to={fallback} />;
   }
 
   const { data: summary, isLoading: isLoadingSummary } = useGetDashboardSummary();
