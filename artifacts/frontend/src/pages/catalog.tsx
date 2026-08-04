@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/use-auth";
 import {
@@ -55,6 +55,29 @@ export default function Catalog() {
   const [qtyDrafts, setQtyDrafts] = useState<Record<number, string>>({});
   const [showFilters, setShowFilters] = useState(false);
   const [zoomImage, setZoomImage] = useState<{ url: string; name: string } | null>(null);
+
+  // Prices are masked on every card until tapped — tapping reveals just that
+  // product's price for a few seconds, then it masks itself again. Keeps
+  // pricing off the screen at a glance (e.g. someone looking over your
+  // shoulder) without hiding it from you entirely.
+  const [revealedPriceIds, setRevealedPriceIds] = useState<Set<number>>(new Set());
+  const priceRevealTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+  const revealPrice = (productId: number) => {
+    setRevealedPriceIds((prev) => new Set(prev).add(productId));
+    if (priceRevealTimers.current[productId]) clearTimeout(priceRevealTimers.current[productId]);
+    priceRevealTimers.current[productId] = setTimeout(() => {
+      setRevealedPriceIds((prev) => {
+        const next = new Set(prev);
+        next.delete(productId);
+        return next;
+      });
+      delete priceRevealTimers.current[productId];
+    }, 5000);
+  };
+  useEffect(() => {
+    const timers = priceRevealTimers.current;
+    return () => { Object.values(timers).forEach(clearTimeout); };
+  }, []);
 
   // Cart review dialog (shown before customer lookup)
   const [showCartReview, setShowCartReview] = useState(false);
@@ -656,30 +679,41 @@ const proceedToOrderWithCustomer = (customer: any) => {
                     </div>
                     <h3 className="font-semibold text-sm leading-tight line-clamp-2">{product.name}</h3>
                     {!hidePrices && (
-                      showRetailOnly ? (
-                        <div className="text-primary font-bold text-sm">₹{product.retailPrice}</div>
-                      ) : (isWholesaleCustomer || isCounterWholesale) ? (
-                        <div className="flex items-center gap-1 text-[11px] text-muted-foreground flex-wrap">
-                          <span>W: <span className="text-foreground font-medium">₹{product.wholesalePrice}</span></span>
-                          {product.nonGstPrice != null && (
-                            <>
-                              <span className="text-border">|</span>
-                              <span>NG: <span className="text-foreground font-medium">₹{product.nonGstPrice}</span></span>
-                            </>
-                          )}
-                        </div>
+                      revealedPriceIds.has(product.id) ? (
+                        showRetailOnly ? (
+                          <div className="text-primary font-bold text-sm">₹{product.retailPrice}</div>
+                        ) : (isWholesaleCustomer || isCounterWholesale) ? (
+                          <div className="flex items-center gap-1 text-[11px] text-muted-foreground flex-wrap">
+                            <span>W: <span className="text-foreground font-medium">₹{product.wholesalePrice}</span></span>
+                            {product.nonGstPrice != null && (
+                              <>
+                                <span className="text-border">|</span>
+                                <span>NG: <span className="text-foreground font-medium">₹{product.nonGstPrice}</span></span>
+                              </>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1 text-[11px] text-muted-foreground flex-wrap">
+                            <span>W: <span className="text-foreground font-medium">₹{product.wholesalePrice}</span></span>
+                            <span className="text-border">|</span>
+                            <span>R: <span className="text-foreground font-medium">₹{product.retailPrice}</span></span>
+                            {showNonGstRate && product.nonGstPrice != null && (
+                              <>
+                                <span className="text-border">|</span>
+                                <span>NG: <span className="text-foreground font-medium">₹{product.nonGstPrice}</span></span>
+                              </>
+                            )}
+                          </div>
+                        )
                       ) : (
-                        <div className="flex items-center gap-1 text-[11px] text-muted-foreground flex-wrap">
-                          <span>W: <span className="text-foreground font-medium">₹{product.wholesalePrice}</span></span>
-                          <span className="text-border">|</span>
-                          <span>R: <span className="text-foreground font-medium">₹{product.retailPrice}</span></span>
-                          {showNonGstRate && product.nonGstPrice != null && (
-                            <>
-                              <span className="text-border">|</span>
-                              <span>NG: <span className="text-foreground font-medium">₹{product.nonGstPrice}</span></span>
-                            </>
-                          )}
-                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); revealPrice(product.id); }}
+                          className="text-[11px] text-muted-foreground italic hover:text-foreground transition-colors text-left"
+                          data-testid={`button-reveal-price-${product.id}`}
+                        >
+                          ₹ ••• · tap to view
+                        </button>
                       )
                     )}
                     <div className="mt-auto flex flex-col gap-2">
