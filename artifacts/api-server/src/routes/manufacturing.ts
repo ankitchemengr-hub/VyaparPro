@@ -508,36 +508,11 @@ router.post("/manufacturing/assemble", async (req, res): Promise<void> => {
   try {
     await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
 
-    // Sufficiency check inside the txn so SELECT participates in the snapshot
-    const shortages: Array<{
-      materialProductId: number;
-      materialProductName: string | null;
-      required: number;
-      available: number;
-      unit: string;
-    }> = [];
-    for (const { item, materialName } of bomItems) {
-      const required = Number(item.quantity) * Number(batches);
-      const stockRow = await client.query(
-        `SELECT current_stock FROM products WHERE id = $1 AND company_id = $2 AND deleted_at IS NULL`,
-        [item.materialProductId, companyId],
-      );
-      const available = Number(stockRow.rows[0]?.current_stock ?? 0);
-      if (available < required) {
-        shortages.push({
-          materialProductId: item.materialProductId,
-          materialProductName: materialName ?? null,
-          required,
-          available,
-          unit: item.unit,
-        });
-      }
-    }
-    if (shortages.length > 0) {
-      await client.query("ROLLBACK");
-      res.status(409).json({ error: "Insufficient raw material", shortages });
-      return;
-    }
+    // No raw-material sufficiency check — Assemble always proceeds, the same
+    // as Catalog already lets staff oversell an out-of-stock item. Raw
+    // material stock is allowed to go negative (a backorder on the
+    // production side); it shows up as a shortage for Store/Purchasing to
+    // resolve rather than blocking the assembly itself.
 
     // Create the workload card already marked done — single row, no orphan state
     const session = (req as any).session;

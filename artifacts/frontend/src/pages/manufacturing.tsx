@@ -1245,9 +1245,12 @@ function AssembleTab({
     });
   }, [selectedBom, batchCount, productById]);
 
+  // A shortage no longer blocks assembly — raw material is allowed to go
+  // negative, same as Catalog already lets staff oversell an out-of-stock
+  // item — this stays purely informational so Store/Purchasing can see
+  // what to restock.
   const anyShortage = requirements.some((r) => !r.sufficient);
-  const canAssemble =
-    !!selectedBom && batchCount > 0 && !!workerId && !anyShortage && !submitting;
+  const canAssemble = !!selectedBom && batchCount > 0 && !!workerId && !submitting;
 
 
   const handleAssemble = async () => {
@@ -1278,22 +1281,12 @@ function AssembleTab({
       setWorkerId("");
       setShowAssembleDialog(false);
     } catch (err: any) {
-      let title = "Assembly failed";
       let desc = err?.message ?? "Server error";
       try {
         const body = err?.response ? await err.response.json() : null;
         if (body?.error) desc = String(body.error).slice(0, 300);
-        if (Array.isArray(body?.shortages) && body.shortages.length > 0) {
-          title = "Insufficient raw material";
-          desc = body.shortages
-            .map(
-              (s: any) =>
-                `${s.materialProductName}: need ${s.required} ${s.unit}, have ${s.available}`,
-            )
-            .join("; ");
-        }
       } catch {}
-      toast({ title, description: desc, variant: "destructive" });
+      toast({ title: "Assembly failed", description: desc, variant: "destructive" });
     } finally {
       setSubmitting(false);
     }
@@ -1569,8 +1562,7 @@ function AssembleTab({
                     {anyShortage && batchCount > 0 && (
                       <p className="text-xs text-destructive flex items-center gap-1">
                         <AlertCircle className="w-3.5 h-3.5" />
-                        Insufficient raw material for one or more inputs. Reduce
-                        batch count or restock.
+                        Insufficient raw material for one or more inputs — assembling anyway will take stock negative.
                       </p>
                     )}
                   </div>
