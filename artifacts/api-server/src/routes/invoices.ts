@@ -906,6 +906,37 @@ router.delete("/invoices/:id", async (req, res): Promise<void> => {
       customerName: updated.rows[0].customer_name,
     };
 
+    // Reverse the ledger effect — a cancelled invoice must stop counting
+    // toward the customer's outstanding balance and Khatabook history, even
+    // though the invoice document itself is only soft-deleted (status flip),
+    // not removed. Quotations never touched the ledger to begin with (see
+    // POST /invoices), so there's nothing to reverse for those. Matches
+    // either 'invoice' or 'invoice_edit' — an invoice that was reassigned to
+    // a different customer via edit carries the latter type on its current
+    // customer's ledger row.
+    if (inv.customerId && inv.invoiceType !== "quotation") {
+      const ledgerRes = await client.query(
+        `SELECT debit FROM ledger_entries
+         WHERE company_id = $1 AND entity_id = $2 AND type IN ('invoice', 'invoice_edit') AND reference_id = $3
+         ORDER BY id DESC LIMIT 1`,
+        [companyId, inv.customerId, params.data.id]
+      );
+      const debitAmt = Number(ledgerRes.rows[0]?.debit ?? 0);
+      if (debitAmt > 0) {
+        await client.query(
+          `UPDATE entities SET outstanding_balance = outstanding_balance - $1 WHERE id = $2 AND company_id = $3`,
+          [debitAmt, inv.customerId, companyId]
+        );
+        const balRes = await client.query(`SELECT outstanding_balance FROM entities WHERE id = $1 AND company_id = $2`, [inv.customerId, companyId]);
+        const newBal = balRes.rows[0]?.outstanding_balance ?? 0;
+        await client.query(
+          `INSERT INTO ledger_entries (company_id, entity_id, date, description, debit, credit, balance, type, reference_id, reference_no)
+           VALUES ($1, $2, NOW(), $3, 0, $4, $5, 'invoice_cancelled', $6, $7)`,
+          [companyId, inv.customerId, `Invoice ${inv.invoiceNo} cancelled — reversal`, debitAmt, newBal, params.data.id, inv.invoiceNo]
+        );
+      }
+    }
+
     await client.query(
       `INSERT INTO audit_log (company_id, action, description, user_id, user_name, metadata)
        VALUES ($1, 'invoice_cancelled', $2, $3, $4, $5)`,
