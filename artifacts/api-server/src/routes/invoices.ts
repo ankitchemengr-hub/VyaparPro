@@ -426,8 +426,9 @@ router.post("/invoices", async (req, res): Promise<void> => {
     // Fetch with items
     const [fullInv] = await db.select().from(invoicesTable).where(and(eq(invoicesTable.companyId, companyId), eq(invoicesTable.id, invRow.id)));
     const items = await db.select().from(invoiceItemsTable).where(and(eq(invoiceItemsTable.companyId, companyId), eq(invoiceItemsTable.invoiceId, invRow.id)));
+    const customerBalance = await getCustomerBalanceSnapshot(companyId, invRow.id, fullInv.customerId ?? null);
 
-    res.status(201).json(formatInvoice(fullInv, items));
+    res.status(201).json(formatInvoice(fullInv, items, null, customerBalance));
   } catch (err) {
     await client.query("ROLLBACK");
     logger.error({ err }, "Failed to create invoice");
@@ -478,7 +479,8 @@ router.get("/invoices/:id", async (req, res): Promise<void> => {
     const [creator] = await db.select({ name: usersTable.name }).from(usersTable).where(eq(usersTable.id, inv.createdByUserId));
     createdByName = creator?.name ?? null;
   }
-  res.json(formatInvoice(inv, items, createdByName));
+  const customerBalance = await getCustomerBalanceSnapshot(companyId, inv.id, inv.customerId ?? null);
+  res.json(formatInvoice(inv, items, createdByName, customerBalance));
 });
 
 // PATCH /invoices/:id  — admin only
@@ -536,7 +538,8 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
       .returning();
     if (!inv) { res.status(404).json({ error: "Invoice not found" }); return; }
     const items = await db.select().from(invoiceItemsTable).where(and(eq(invoiceItemsTable.companyId, companyId), eq(invoiceItemsTable.invoiceId, inv.id)));
-    res.json(formatInvoice(inv, items));
+    const customerBalance = await getCustomerBalanceSnapshot(companyId, inv.id, inv.customerId ?? null);
+    res.json(formatInvoice(inv, items, null, customerBalance));
     return;
   }
 
@@ -832,7 +835,8 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
 
     const [fullInv] = await db.select().from(invoicesTable).where(and(eq(invoicesTable.companyId, companyId), eq(invoicesTable.id, invoiceId)));
     const newItems = await db.select().from(invoiceItemsTable).where(and(eq(invoiceItemsTable.companyId, companyId), eq(invoiceItemsTable.invoiceId, invoiceId)));
-    res.json(formatInvoice(fullInv, newItems));
+    const customerBalance = await getCustomerBalanceSnapshot(companyId, invoiceId, fullInv.customerId ?? null);
+    res.json(formatInvoice(fullInv, newItems, null, customerBalance));
   } catch (err) {
     await client.query("ROLLBACK");
     logger.error({ err }, "Failed to edit invoice");
@@ -1005,7 +1009,41 @@ router.delete("/invoices/:id/permanent", async (req, res): Promise<void> => {
   }
 });
 
-function formatInvoice(inv: any, items: any[], createdByName: string | null = null) {
+// The customer's running ledger balance right after this invoice posted
+// (historically accurate even for an old invoice reprinted later, since
+// ledger_entries.balance is a snapshot taken at that row, not today's
+// current balance) and right before it, derived from that same row's own
+// credit/debit. Null for a cash sale (no customerId) or a quotation
+// (never touches the ledger).
+async function getCustomerBalanceSnapshot(
+  companyId: number,
+  invoiceId: number,
+  customerId: number | null,
+): Promise<{ before: number; after: number } | null> {
+  if (!customerId) return null;
+  const [row] = await db
+    .select({ balance: ledgerEntriesTable.balance, credit: ledgerEntriesTable.credit, debit: ledgerEntriesTable.debit })
+    .from(ledgerEntriesTable)
+    .where(and(
+      eq(ledgerEntriesTable.companyId, companyId),
+      eq(ledgerEntriesTable.entityId, customerId),
+      eq(ledgerEntriesTable.type, "invoice"),
+      eq(ledgerEntriesTable.referenceId, invoiceId),
+    ))
+    .orderBy(ledgerEntriesTable.id)
+    .limit(1);
+  if (!row) return null;
+  const after = Number(row.balance);
+  const before = after - Number(row.credit) + Number(row.debit);
+  return { before, after };
+}
+
+function formatInvoice(
+  inv: any,
+  items: any[],
+  createdByName: string | null = null,
+  customerBalance: { before: number; after: number } | null = null,
+) {
   return {
     id: inv.id,
     invoiceNo: inv.invoiceNo,
@@ -1023,6 +1061,8 @@ function formatInvoice(inv: any, items: any[], createdByName: string | null = nu
     createdByName,
     poNumber: inv.poNumber ?? null,
     eWayBillNo: inv.eWayBillNo ?? null,
+    customerBalanceBefore: customerBalance?.before ?? null,
+    customerBalanceAfter: customerBalance?.after ?? null,
     subtotal: Number(inv.subtotal),
     totalDiscount: Number(inv.totalDiscount),
     totalTax: Number(inv.totalTax),

@@ -1247,6 +1247,16 @@ export interface Invoice {
   poNumber?: string | null;
   /** @nullable */
   eWayBillNo?: string | null;
+  /**
+     * Customer's running ledger balance right before this invoice posted. Null for a cash sale (no customer) or a quotation (never touches the ledger).
+     * @nullable
+     */
+  customerBalanceBefore?: number | null;
+  /**
+     * Customer's running ledger balance right after this invoice posted — a historical snapshot, not the customer's current balance. Null for a cash sale or a quotation.
+     * @nullable
+     */
+  customerBalanceAfter?: number | null;
   subtotal: number;
   totalDiscount?: number;
   totalTax: number;

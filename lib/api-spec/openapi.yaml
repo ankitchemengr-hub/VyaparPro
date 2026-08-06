@@ -4412,6 +4412,12 @@ components:
           type: ["string", "null"]
         eWayBillNo:
           type: ["string", "null"]
+        customerBalanceBefore:
+          type: ["number", "null"]
+          description: Customer's running ledger balance right before this invoice posted. Null for a cash sale (no customer) or a quotation (never touches the ledger).
+        customerBalanceAfter:
+          type: ["number", "null"]
+          description: Customer's running ledger balance right after this invoice posted — a historical snapshot, not the customer's current balance. Null for a cash sale or a quotation.
         subtotal:
           type: number
         totalDiscount:

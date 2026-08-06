@@ -112,7 +112,11 @@ export function A5CompactTemplate({ invoice, maps, settings, computed }: Templat
             <div className="font-medium">A/c Balance</div>
             <div>:</div>
             <div className="font-bold italic">
-              ₹ {inr(invoice.balanceDue ?? 0)} {Number(invoice.balanceDue ?? 0) > 0 ? "Dr" : ""}
+              {invoice.customerBalanceAfter != null ? (
+                <>₹ {inr(Math.abs(invoice.customerBalanceAfter))} {invoice.customerBalanceAfter > 0 ? "Dr" : invoice.customerBalanceAfter < 0 ? "Cr" : ""}</>
+              ) : (
+                <>₹ {inr(invoice.balanceDue ?? 0)} {Number(invoice.balanceDue ?? 0) > 0 ? "Dr" : ""}</>
+              )}
             </div>
           </div>
         </div>
@@ -266,6 +270,14 @@ export function A5CompactTemplate({ invoice, maps, settings, computed }: Templat
                 <td className="px-3 py-1.5 font-semibold">Sub Total</td>
                 <td className="px-3 py-1.5 text-right font-semibold">₹ {inr(invoice.subtotal)}</td>
               </tr>
+              {invoice.customerBalanceBefore != null && invoice.customerBalanceBefore !== 0 && (
+                <tr className="border-b border-black">
+                  <td className="px-3 py-1.5">
+                    Balance B/F {invoice.customerBalanceBefore < 0 ? "(Cr)" : ""}
+                  </td>
+                  <td className="px-3 py-1.5 text-right">₹ {inr(Math.abs(invoice.customerBalanceBefore))}</td>
+                </tr>
+              )}
               {(invoice.totalDiscount ?? 0) > 0 && (
                 <tr className="border-b border-black">
                   <td className="px-3 py-1.5">Less Discount</td>
