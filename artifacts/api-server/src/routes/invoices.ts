@@ -766,7 +766,7 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
       const existingLedgerRow = existingLedgerRes.rows[0];
       if (existingLedgerRow) {
         await client.query(
-          `UPDATE ledger_entries SET credit = $1, description = $2, balance = balance + $3 WHERE id = $4`,
+          `UPDATE ledger_entries SET debit = $1, description = $2, balance = balance + $3 WHERE id = $4`,
           [newGrandTotal, `Invoice ${existing.invoice_no}`, delta, existingLedgerRow.id]
         );
         await client.query(
@@ -1058,14 +1058,16 @@ async function getCustomerBalanceSnapshot(
     .where(and(
       eq(ledgerEntriesTable.companyId, companyId),
       eq(ledgerEntriesTable.entityId, customerId),
-      eq(ledgerEntriesTable.type, "invoice"),
+      inArray(ledgerEntriesTable.type, ["invoice", "invoice_edit"]),
       eq(ledgerEntriesTable.referenceId, invoiceId),
     ))
-    .orderBy(ledgerEntriesTable.id)
+    .orderBy(sql`${ledgerEntriesTable.id} DESC`)
     .limit(1);
   if (!row) return null;
+  // balance_after = balance_before + debit - credit, so balance_before =
+  // balance_after - debit + credit.
   const after = Number(row.balance);
-  const before = after - Number(row.credit) + Number(row.debit);
+  const before = after - Number(row.debit) + Number(row.credit);
   return { before, after };
 }
 
