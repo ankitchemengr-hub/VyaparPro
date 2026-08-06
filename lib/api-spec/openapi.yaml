@@ -2444,6 +2444,28 @@ paths:
               schema:
                 $ref: "#/components/schemas/CommissionReport"
 
+  /reports/item-register:
+    get:
+      operationId: getItemRegister
+      tags: [reports]
+      summary: Purchase / sale / adjustment movement register for one product over a date range
+      description: |
+        Purchased and Sold quantities are netted across every stock_movements row
+        tied to that flow (creation, edit reversal, re-apply, cancellation), so a
+        mid-range edit doesn't double count. Current Stock is a live snapshot, not
+        date-ranged.
+      parameters:
+        - { name: productId, in: query, required: true, schema: { type: integer } }
+        - { name: from, in: query, schema: { type: string } }
+        - { name: to, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Item register
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemRegisterReport"
+
   /search:
     get:
       operationId: globalSearch
@@ -5753,6 +5775,43 @@ components:
                       type: number
                     commission:
                       type: number
+
+    ItemRegisterReport:
+      type: object
+      required: [productId, productName, unit, purchasedQty, soldQty, adjustedQty, currentStock, movements]
+      properties:
+        productId:
+          type: integer
+        productName:
+          type: string
+        unit:
+          type: string
+        purchasedQty:
+          type: number
+        soldQty:
+          type: number
+        adjustedQty:
+          type: number
+        currentStock:
+          type: number
+        movements:
+          type: array
+          items:
+            type: object
+            required: [id, date, type, reason, quantity]
+            properties:
+              id:
+                type: integer
+              date:
+                type: string
+              type:
+                type: string
+              referenceType:
+                type: ["string", "null"]
+              reason:
+                type: string
+              quantity:
+                type: number
 
     CapitalSnapshot:
       type: object

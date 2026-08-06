@@ -2329,6 +2329,27 @@ export interface CommissionReport {
   rows: CommissionReportRowsItem[];
 }
 
+export type ItemRegisterReportMovementsItem = {
+  id: number;
+  date: string;
+  type: string;
+  /** @nullable */
+  referenceType?: string | null;
+  reason: string;
+  quantity: number;
+};
+
+export interface ItemRegisterReport {
+  productId: number;
+  productName: string;
+  unit: string;
+  purchasedQty: number;
+  soldQty: number;
+  adjustedQty: number;
+  currentStock: number;
+  movements: ItemRegisterReportMovementsItem[];
+}
+
 export type CapitalSnapshotGrowthBreakdownItem = {
   label: string;
   change: number;
@@ -3039,6 +3060,12 @@ export type GetCommissionReportParams = {
 from?: string;
 to?: string;
 salesmanId?: number;
+};
+
+export type GetItemRegisterParams = {
+productId: number;
+from?: string;
+to?: string;
 };
 
 export type GlobalSearchParams = {

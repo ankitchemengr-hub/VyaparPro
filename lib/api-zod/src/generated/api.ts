@@ -3361,6 +3361,38 @@ export const GetCommissionReportResponse = zod.object({
 
 
 /**
+ * Purchased and Sold quantities are netted across every stock_movements row
+ * tied to that flow (creation, edit reversal, re-apply, cancellation), so a
+ * mid-range edit doesn't double count. Current Stock is a live snapshot, not
+ * date-ranged.
+ * @summary Purchase / sale / adjustment movement register for one product over a date range
+ */
+export const GetItemRegisterQueryParams = zod.object({
+  "productId": zod.coerce.number(),
+  "from": zod.coerce.string().optional(),
+  "to": zod.coerce.string().optional()
+})
+
+export const GetItemRegisterResponse = zod.object({
+  "productId": zod.number(),
+  "productName": zod.string(),
+  "unit": zod.string(),
+  "purchasedQty": zod.number(),
+  "soldQty": zod.number(),
+  "adjustedQty": zod.number(),
+  "currentStock": zod.number(),
+  "movements": zod.array(zod.object({
+  "id": zod.number(),
+  "date": zod.string(),
+  "type": zod.string(),
+  "referenceType": zod.string().nullish(),
+  "reason": zod.string(),
+  "quantity": zod.number()
+}))
+})
+
+
+/**
  * @summary Global search across entities, invoices, products
  */
 export const GlobalSearchQueryParams = zod.object({

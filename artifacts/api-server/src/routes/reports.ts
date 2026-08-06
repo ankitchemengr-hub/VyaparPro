@@ -474,4 +474,82 @@ router.get("/reports/commission", async (req, res): Promise<void> => {
   res.json({ totalCommission, totalLiters, rows: resultRows });
 });
 
+// ── GET /reports/item-register ──────────────────────────────────────
+// Per-item stock movement register: how much of one product was
+// purchased, sold, and manually adjusted within a date range, plus its
+// current available quantity right now. Purchase/Sale are netted across
+// every stock_movements row tied to that flow (creation, edit reversal,
+// re-apply, cancellation) so a mid-range edit doesn't double count — the
+// number shown is the true net effect on stock attributable to that
+// activity in the window, matching how current_stock itself is derived.
+router.get("/reports/item-register", async (req, res): Promise<void> => {
+  const role = (req as any).session?.role;
+  if (role !== "admin" && role !== "accountant" && role !== "store") {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  const companyId = getCompanyId(req);
+  const productId = Number((req.query as any).productId);
+  if (!productId) {
+    res.status(400).json({ error: "productId is required" });
+    return;
+  }
+  const { from, to } = req.query as any;
+
+  const product = await queryOne(
+    `SELECT id, name, unit, current_stock FROM products WHERE id = $1 AND company_id = $2 AND deleted_at IS NULL`,
+    [productId, companyId]
+  );
+  if (!product.id) {
+    res.status(404).json({ error: "Product not found" });
+    return;
+  }
+
+  const params: any[] = [companyId, productId];
+  const where: string[] = [`company_id = $1`, `product_id = $2`];
+  if (from) { params.push(new Date(from)); where.push(`created_at >= $${params.length}`); }
+  if (to) { const d = new Date(to); d.setHours(23, 59, 59, 999); params.push(d); where.push(`created_at <= $${params.length}`); }
+
+  const summary = await queryOne(
+    `SELECT
+       COALESCE(SUM(CASE WHEN reference_type = 'purchase' AND type = 'inward' THEN quantity
+                          WHEN reference_type = 'purchase' AND type = 'outward' THEN -quantity
+                          ELSE 0 END), 0) AS purchased_qty,
+       COALESCE(SUM(CASE WHEN reference_type IN ('invoice', 'invoice_edit') AND type = 'outward' THEN quantity
+                          WHEN reference_type IN ('invoice', 'invoice_edit', 'invoice_edit_reversal') AND type = 'inward' THEN -quantity
+                          ELSE 0 END), 0) AS sold_qty,
+       COALESCE(SUM(CASE WHEN reference_type = 'stock_reconciliation' THEN quantity ELSE 0 END), 0) AS adjusted_qty
+     FROM stock_movements
+     WHERE ${where.join(" AND ")}`,
+    params
+  );
+
+  const movementRows = await queryMany(
+    `SELECT id, created_at, type, reason, reference_type, quantity
+     FROM stock_movements
+     WHERE ${where.join(" AND ")}
+     ORDER BY created_at DESC, id DESC
+     LIMIT 500`,
+    params
+  );
+
+  res.json({
+    productId: product.id,
+    productName: product.name,
+    unit: product.unit,
+    purchasedQty: Number(summary.purchased_qty),
+    soldQty: Number(summary.sold_qty),
+    adjustedQty: Number(summary.adjusted_qty),
+    currentStock: Number(product.current_stock),
+    movements: movementRows.map((r) => ({
+      id: r.id,
+      date: new Date(r.created_at).toISOString(),
+      type: r.type,
+      referenceType: r.reference_type,
+      reason: r.reason,
+      quantity: Number(r.quantity),
+    })),
+  });
+});
+
 export default router;

@@ -74,6 +74,7 @@ import type {
   GetCommissionReportParams,
   GetCustomerWiseSalesReportParams,
   GetExpiringSubscriptionsParams,
+  GetItemRegisterParams,
   GetItemWiseSalesReportParams,
   GetLedgerReportParams,
   GetProductionReportParams,
@@ -87,6 +88,7 @@ import type {
   InvoiceInput,
   InvoiceSummary,
   InvoiceUpdate,
+  ItemRegisterReport,
   ItemWiseSalesReport,
   KhatabookEntry,
   LedgerAdjustmentInput,
@@ -9270,6 +9272,94 @@ export function useGetCommissionReport<TData = Awaited<ReturnType<typeof getComm
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetCommissionReportQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetItemRegisterUrl = (params: GetItemRegisterParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reports/item-register?${stringifiedParams}` : `/api/reports/item-register`
+}
+
+/**
+ * Purchased and Sold quantities are netted across every stock_movements row
+ * tied to that flow (creation, edit reversal, re-apply, cancellation), so a
+ * mid-range edit doesn't double count. Current Stock is a live snapshot, not
+ * date-ranged.
+ * @summary Purchase / sale / adjustment movement register for one product over a date range
+ */
+export const getItemRegister = async (params: GetItemRegisterParams, options?: RequestInit): Promise<ItemRegisterReport> => {
+
+  return customFetch<ItemRegisterReport>(getGetItemRegisterUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetItemRegisterQueryKey = (params?: GetItemRegisterParams,) => {
+    return [
+    `/api/reports/item-register`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetItemRegisterQueryOptions = <TData = Awaited<ReturnType<typeof getItemRegister>>, TError = ErrorType<unknown>>(params: GetItemRegisterParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getItemRegister>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetItemRegisterQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getItemRegister>>> = ({ signal }) => getItemRegister(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getItemRegister>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetItemRegisterQueryResult = NonNullable<Awaited<ReturnType<typeof getItemRegister>>>
+export type GetItemRegisterQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Purchase / sale / adjustment movement register for one product over a date range
+ */
+
+export function useGetItemRegister<TData = Awaited<ReturnType<typeof getItemRegister>>, TError = ErrorType<unknown>>(
+ params: GetItemRegisterParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getItemRegister>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetItemRegisterQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

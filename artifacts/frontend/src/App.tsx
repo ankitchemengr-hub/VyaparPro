@@ -17,6 +17,7 @@ import SalesReturn from "@/pages/sales-return";
 import RecycleBin from "@/pages/recycle-bin";
  import Inventory from "@/pages/inventory";
 import Brands from "@/pages/brands";
+import ItemRegister from "@/pages/item-register";
 import StockAdjustment from "@/pages/stock-adjustment";
 import Customers from "@/pages/customers";
 import CustomerProfile from "@/pages/customer-profile";
@@ -86,6 +87,7 @@ function ProtectedRoutes() {
         <Route path="/quotations" component={Quotations} />
         <Route path="/inventory" component={Inventory} />
         <Route path="/inventory" component={Inventory} />
+        <Route path="/item-register" component={ItemRegister} />
         <Route path="/brands" component={Brands} />
         <Route path="/stock-adjustment" component={StockAdjustment} />
         <Route path="/customers" component={Customers} />
