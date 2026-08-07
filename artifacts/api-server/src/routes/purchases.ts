@@ -38,41 +38,6 @@ function requireSession(req: any, res: any, roles: Set<string>): { userId: numbe
   return { userId: session.userId, role: session.role };
 }
 
-// Keeps a raw material's Purchase Price current without letting one-off
-// rate spikes (an import surcharge, a rush order) whipsaw it — recomputed
-// as a qty-weighted average over its last 5 purchase line items (all
-// vendors, all bills) every time a purchase touching it is saved. Doesn't
-// override a product that computes its own cost from a BOM recipe (see
-// bom-dialog.tsx's unitCost) — that path never reads purchase_price for a
-// manufactured item, so updating it here is harmless either way.
-const PURCHASE_PRICE_AVERAGING_WINDOW = 5;
-
-async function recalcPurchasePriceFromRecentPurchases(client: any, companyId: number, productId: number): Promise<void> {
-  const rows = await client.query(
-    `SELECT pi.qty, pi.rate
-     FROM purchase_items pi
-     JOIN purchases p ON p.id = pi.purchase_id AND p.company_id = pi.company_id
-     WHERE pi.company_id = $1 AND pi.product_id = $2
-     ORDER BY p.bill_date DESC, pi.id DESC
-     LIMIT $3`,
-    [companyId, productId, PURCHASE_PRICE_AVERAGING_WINDOW],
-  );
-  if (rows.rows.length === 0) return;
-  let totalQty = 0;
-  let totalCost = 0;
-  for (const r of rows.rows) {
-    const qty = Number(r.qty);
-    totalQty += qty;
-    totalCost += qty * Number(r.rate);
-  }
-  if (totalQty <= 0) return;
-  const avgRate = totalCost / totalQty;
-  await client.query(
-    `UPDATE products SET purchase_price = $1 WHERE company_id = $2 AND id = $3`,
-    [avgRate.toFixed(2), companyId, productId],
-  );
-}
-
 async function generateBillNumber(client: any, companyId: number): Promise<string> {
   const now = new Date();
   const month = now.getMonth() + 1;
@@ -437,7 +402,6 @@ router.post("/purchases", async (req, res): Promise<void> => {
         `UPDATE products SET current_stock = current_stock + $1 WHERE company_id = $2 AND id = $3`,
         [item.qty, companyId, item.productId],
       );
-      await recalcPurchasePriceFromRecentPurchases(client, companyId, item.productId);
     }
 
     // Vendor payable: increase outstanding (we owe them) + credit-side ledger entry
@@ -655,7 +619,6 @@ router.put("/purchases/:id", async (req, res): Promise<void> => {
         `UPDATE products SET current_stock = current_stock + $1 WHERE company_id = $2 AND id = $3`,
         [String(item.qty), companyId, item.productId],
       );
-      await recalcPurchasePriceFromRecentPurchases(client, companyId, item.productId);
     }
 
     // Vendor payable + ledger: adjust the existing ledger row in place when
