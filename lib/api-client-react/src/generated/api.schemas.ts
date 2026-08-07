@@ -1227,6 +1227,11 @@ export interface Invoice {
   customerId: number | null;
   /** @nullable */
   customerName?: string | null;
+  /**
+     * Looked up live from the customer entity (not snapshotted at invoice time), so it reflects their current number on a reprint.
+     * @nullable
+     */
+  customerMobile?: string | null;
   /** @nullable */
   customerGstin?: string | null;
   /** @nullable */

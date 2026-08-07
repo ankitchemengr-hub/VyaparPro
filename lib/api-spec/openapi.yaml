@@ -4415,6 +4415,9 @@ components:
           type: ["integer", "null"]
         customerName:
           type: ["string", "null"]
+        customerMobile:
+          type: ["string", "null"]
+          description: Looked up live from the customer entity (not snapshotted at invoice time), so it reflects their current number on a reprint.
         customerGstin:
           type: ["string", "null"]
         billingAddress:

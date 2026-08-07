@@ -427,8 +427,9 @@ router.post("/invoices", async (req, res): Promise<void> => {
     const [fullInv] = await db.select().from(invoicesTable).where(and(eq(invoicesTable.companyId, companyId), eq(invoicesTable.id, invRow.id)));
     const items = await db.select().from(invoiceItemsTable).where(and(eq(invoiceItemsTable.companyId, companyId), eq(invoiceItemsTable.invoiceId, invRow.id)));
     const customerBalance = await getCustomerBalanceSnapshot(companyId, invRow.id, fullInv.customerId ?? null);
+    const customerMobile = await getCustomerMobile(companyId, fullInv.customerId ?? null);
 
-    res.status(201).json(formatInvoice(fullInv, items, null, customerBalance));
+    res.status(201).json(formatInvoice(fullInv, items, null, customerBalance, customerMobile));
   } catch (err) {
     await client.query("ROLLBACK");
     logger.error({ err }, "Failed to create invoice");
@@ -480,7 +481,8 @@ router.get("/invoices/:id", async (req, res): Promise<void> => {
     createdByName = creator?.name ?? null;
   }
   const customerBalance = await getCustomerBalanceSnapshot(companyId, inv.id, inv.customerId ?? null);
-  res.json(formatInvoice(inv, items, createdByName, customerBalance));
+  const customerMobile = await getCustomerMobile(companyId, inv.customerId ?? null);
+  res.json(formatInvoice(inv, items, createdByName, customerBalance, customerMobile));
 });
 
 // PATCH /invoices/:id  — admin only
@@ -539,7 +541,8 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
     if (!inv) { res.status(404).json({ error: "Invoice not found" }); return; }
     const items = await db.select().from(invoiceItemsTable).where(and(eq(invoiceItemsTable.companyId, companyId), eq(invoiceItemsTable.invoiceId, inv.id)));
     const customerBalance = await getCustomerBalanceSnapshot(companyId, inv.id, inv.customerId ?? null);
-    res.json(formatInvoice(inv, items, null, customerBalance));
+    const customerMobile = await getCustomerMobile(companyId, inv.customerId ?? null);
+    res.json(formatInvoice(inv, items, null, customerBalance, customerMobile));
     return;
   }
 
@@ -836,7 +839,8 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
     const [fullInv] = await db.select().from(invoicesTable).where(and(eq(invoicesTable.companyId, companyId), eq(invoicesTable.id, invoiceId)));
     const newItems = await db.select().from(invoiceItemsTable).where(and(eq(invoiceItemsTable.companyId, companyId), eq(invoiceItemsTable.invoiceId, invoiceId)));
     const customerBalance = await getCustomerBalanceSnapshot(companyId, invoiceId, fullInv.customerId ?? null);
-    res.json(formatInvoice(fullInv, newItems, null, customerBalance));
+    const customerMobile = await getCustomerMobile(companyId, fullInv.customerId ?? null);
+    res.json(formatInvoice(fullInv, newItems, null, customerBalance, customerMobile));
   } catch (err) {
     await client.query("ROLLBACK");
     logger.error({ err }, "Failed to edit invoice");
@@ -1071,11 +1075,25 @@ async function getCustomerBalanceSnapshot(
   return { before, after };
 }
 
+// Invoices don't snapshot the customer's mobile number at creation time (only
+// name/GSTIN/address), so it's looked up live from the entity — fine for
+// display purposes, and means a later change to the customer's number shows
+// up on a reprint rather than freezing whatever it was at billing time.
+async function getCustomerMobile(companyId: number, customerId: number | null): Promise<string | null> {
+  if (!customerId) return null;
+  const [row] = await db
+    .select({ mobile: entitiesTable.mobile })
+    .from(entitiesTable)
+    .where(and(eq(entitiesTable.companyId, companyId), eq(entitiesTable.id, customerId)));
+  return row?.mobile ?? null;
+}
+
 function formatInvoice(
   inv: any,
   items: any[],
   createdByName: string | null = null,
   customerBalance: { before: number; after: number } | null = null,
+  customerMobile: string | null = null,
 ) {
   return {
     id: inv.id,
@@ -1085,6 +1103,7 @@ function formatInvoice(
     invoiceType: inv.invoiceType,
     customerId: inv.customerId ?? null,
     customerName: inv.customerName ?? null,
+    customerMobile,
     customerGstin: inv.customerGstin ?? null,
     billingAddress: inv.billingAddress ?? null,
     shippingAddress: inv.shippingAddress ?? null,

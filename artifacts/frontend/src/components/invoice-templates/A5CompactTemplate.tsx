@@ -96,6 +96,12 @@ export function A5CompactTemplate({ invoice, maps, settings, computed }: Templat
           <div className="grid grid-cols-[auto_1fr_auto_1fr] gap-x-4 text-[12px] pt-1">
             <span>PoS:</span>
             <span>{placeOfSupply}</span>
+            {invoice.customerMobile && (
+              <>
+                <span>Mobile:</span>
+                <span className="font-mono">{invoice.customerMobile}</span>
+              </>
+            )}
             {isGst && invoice.customerGstin && (
               <>
                 <span>GSTIN:</span>
