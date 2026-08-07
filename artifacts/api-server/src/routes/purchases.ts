@@ -402,6 +402,14 @@ router.post("/purchases", async (req, res): Promise<void> => {
         `UPDATE products SET current_stock = current_stock + $1 WHERE company_id = $2 AND id = $3`,
         [item.qty, companyId, item.productId],
       );
+      // Purchase Price reflects what was actually paid on this bill — the
+      // entered rate, not an average. If this product feeds a BOM, its
+      // stale cost is what "Recalculate Prices" (surfaced right after save,
+      // see the frontend) cascades into every recipe that uses it.
+      await client.query(
+        `UPDATE products SET purchase_price = $1 WHERE company_id = $2 AND id = $3`,
+        [item.rate, companyId, item.productId],
+      );
     }
 
     // Vendor payable: increase outstanding (we owe them) + credit-side ledger entry
@@ -618,6 +626,10 @@ router.put("/purchases/:id", async (req, res): Promise<void> => {
       await client.query(
         `UPDATE products SET current_stock = current_stock + $1 WHERE company_id = $2 AND id = $3`,
         [String(item.qty), companyId, item.productId],
+      );
+      await client.query(
+        `UPDATE products SET purchase_price = $1 WHERE company_id = $2 AND id = $3`,
+        [String(item.rate), companyId, item.productId],
       );
     }
 

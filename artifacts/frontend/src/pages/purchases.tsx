@@ -17,7 +17,9 @@ import {
   getListProductsQueryKey,
   getListEntitiesQueryKey,
   getListBrandMasterQueryKey,
+  getRecalculatePricePreview,
 } from "@workspace/api-client-react";
+import { RecalculatePricesDialog } from "@/components/recalculate-prices-dialog";
 import { useAuth } from "@/contexts/use-auth";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -695,6 +697,7 @@ function NewPurchaseTab({
   const [lines, setLines] = useState<Line[]>([emptyLine()]);
   const [submitting, setSubmitting] = useState(false);
   const [savedPurchaseId, setSavedPurchaseId] = useState<number | null>(null);
+  const [showRecalcPrompt, setShowRecalcPrompt] = useState(false);
 
   const productMap = useMemo(() => {
     const m = new Map<number, any>();
@@ -813,6 +816,16 @@ function NewPurchaseTab({
       setVendorBillNo("");
       setNotes("");
       setFreight("0");
+      // If any purchased item feeds a BOM, its new Purchase Price may have
+      // just moved a finished product's recipe cost — surface the existing
+      // "Recalculate Prices" review instead of silently leaving those stale.
+      try {
+        const changes = await getRecalculatePricePreview();
+        if (changes.length > 0) setShowRecalcPrompt(true);
+      } catch {
+        // Non-critical — worst case the admin runs Recalculate Prices from
+        // the BOM page later, same as before this existed.
+      }
     } catch (err: any) {
       let desc = err?.message ?? "Server error";
       try {
@@ -987,6 +1000,8 @@ function NewPurchaseTab({
         onOpenChange={setVendorDialogOpen}
         onCreated={(v) => setVendorId(String(v.id))}
       />
+
+      <RecalculatePricesDialog open={showRecalcPrompt} onOpenChange={setShowRecalcPrompt} />
 
       {savedPurchaseId && (
         <Card>
