@@ -150,7 +150,7 @@ export default function Billing() {
   const [showCustomerEdit, setShowCustomerEdit] = useState(false);
   const [docType, setDocType] = useState<string>("invoice");
   const [invoiceSubtype, setInvoiceSubtype] = useState<"gst" | "non_gst">(
-    () => (params.invoiceType === "non_gst" ? "non_gst" : "gst")
+    () => (params.invoiceType === "gst" ? "gst" : "non_gst")
   );
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
   const [placeOfSupply, setPlaceOfSupply] = useState(customer?.state || "Maharashtra");

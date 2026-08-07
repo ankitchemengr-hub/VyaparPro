@@ -184,7 +184,7 @@ export default function Catalog() {
   // real invoice and does deduct real stock immediately, so that path alone
   // still needs the stock cap.
   const allowsBackorder = isB2B || isCounter || isSalesman;
-  const [invoiceMode, setInvoiceMode] = useState<"gst" | "non_gst">("gst");
+  const [invoiceMode, setInvoiceMode] = useState<"gst" | "non_gst">("non_gst");
   const { toast } = useToast();
   const placeOrder = useCreateCustomerOrder();
   const queryClient = useQueryClient();
