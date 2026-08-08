@@ -179,6 +179,11 @@ export default function Billing() {
   const [paymentSkipped, setPaymentSkipped] = useState(false);
   const [savedPayment, setSavedPayment] = useState<any>(null);
   const [accountId, setAccountId] = useState<number | null>(null);
+  // Keyboard shortcuts call through this ref instead of `handleSave` directly
+  // — `handleSave` isn't defined until after the early-return role guards
+  // below, and hooks (this effect included) must run unconditionally before
+  // those guards, so the effect can't close over it directly.
+  const handleSaveRef = useRef<() => void>(() => {});
 
   // ── All data hooks ──
   const { data: products } = useListProducts({ forSale: true });
@@ -297,6 +302,36 @@ export default function Billing() {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [searchOpen]);
+
+  // Desktop-only keyboard shortcuts (Ctrl/Cmd+S save, "/" focus product
+  // search, Esc close it) — gated on the same md breakpoint the rest of
+  // this page already uses to distinguish desktop from mobile, so touch
+  // devices never see a "/" keypress hijacked from a text field.
+  useEffect(() => {
+    const isDesktop = () => window.matchMedia("(min-width: 768px)").matches;
+    const handler = (e: KeyboardEvent) => {
+      if (!isDesktop()) return;
+      const target = e.target as HTMLElement | null;
+      const isEditable = !!target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        handleSaveRef.current();
+        return;
+      }
+      if (e.key === "Escape") {
+        setSearchOpen(false);
+        return;
+      }
+      if (e.key === "/" && !isEditable) {
+        e.preventDefault();
+        setSearchOpen(true);
+        searchRef.current?.querySelector("input")?.focus();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   // ── Guard — after ALL hooks ──
   // Store can create invoices directly (no catalog/order detour), same as
@@ -440,6 +475,8 @@ export default function Billing() {
       },
     });
   };
+
+  handleSaveRef.current = handleSave;
 
   const handleRecordPayment = () => {
     const isWalkIn = !customer?.id;
@@ -779,6 +816,7 @@ export default function Billing() {
           <Button onClick={handleSave} disabled={createInvoice.isPending || updateInvoice.isPending || items.length === 0} data-testid="button-save-invoice">
             {(createInvoice.isPending || updateInvoice.isPending) ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
             {isEditMode ? "Update" : ({ quotation: "Save Quotation", proforma_invoice: "Save Proforma", bill_of_supply: "Save Bill", delivery_challan: "Save Challan", sale_order: "Save Order" }[invoiceType] ?? "Save Invoice")}
+            <kbd className="hidden md:inline-flex ml-2 items-center rounded border border-primary-foreground/30 px-1.5 py-0.5 text-[10px] font-mono opacity-70">Ctrl+S</kbd>
           </Button>
           {isEditMode && existingInvoice && (
             <Button variant="outline" onClick={() => window.print()} data-testid="button-print-invoice">
@@ -867,7 +905,8 @@ export default function Billing() {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                 <Input value={productSearch} onChange={(e) => { setProductSearch(e.target.value); setSearchOpen(true); }}
-                  onFocus={() => setSearchOpen(true)} placeholder="Search product to add..." className="pl-9 h-9" data-testid="input-product-search" />
+                  onFocus={() => setSearchOpen(true)} placeholder="Search product to add..." className="pl-9 pr-14 h-9" data-testid="input-product-search" />
+                <kbd className="hidden md:inline-flex absolute right-2.5 top-1/2 -translate-y-1/2 items-center rounded border px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground pointer-events-none">/</kbd>
               </div>
               {searchOpen && (
                 <div className="absolute z-50 left-5 right-5 top-full mt-1 max-h-64 overflow-y-auto rounded-md border bg-popover shadow-lg">
