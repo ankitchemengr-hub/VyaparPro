@@ -2940,16 +2940,24 @@ export const GetMaterialTransferResponse = zod.object({
 
 
 /**
- * @summary Correct a material transfer slip's date, sent-by, or notes. Line items and quantities are not editable here — they already moved stock, so changing them would need a full reversal-and-reapply; delete and recreate the slip instead.
+ * @summary Correct a material transfer slip's date, sent-by, notes, or line items. Item edits are applied as a per-product delta — an increase safely extends Ready Material tracking, a decrease only adjusts Store's stock (Ready Material batch detail may not fully reconcile for a decrease).
  */
 export const UpdateMaterialTransferParams = zod.object({
   "id": zod.coerce.number()
 })
 
+
+
+
 export const UpdateMaterialTransferBody = zod.object({
   "transferDate": zod.string().optional(),
   "sentBy": zod.string().nullish(),
-  "notes": zod.string().nullish()
+  "notes": zod.string().nullish(),
+  "items": zod.array(zod.object({
+  "productId": zod.number(),
+  "qty": zod.number(),
+  "unit": zod.string()
+})).min(1).optional().describe('Replaces the full line list, applied as a per-product delta against the current items. Omit to leave items unchanged.')
 })
 
 export const UpdateMaterialTransferResponse = zod.object({

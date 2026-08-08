@@ -286,21 +286,38 @@ router.post("/material-transfers", async (req, res): Promise<void> => {
   }
 });
 
-// PATCH /material-transfers/:id — correct the date, sent-by, or notes on an
-// existing slip. Items/quantities are intentionally NOT editable here: they
-// already moved stock and adjusted ready_material_batches (partial-batch
-// consumption doesn't record which transfer took how much from which batch,
-// so it can't be reversed losslessly) — the same reasoning PATCH
-// /account-transactions/:id follows for its own line-item fields. Delete and
-// recreate the slip if a quantity was wrong.
+// PATCH /material-transfers/:id — corrects the date/sent-by/notes, and
+// optionally the items themselves (send `items` to replace the line list).
+// Item edits are applied as a per-product DELTA (new qty − old qty), not a
+// full reverse-and-reapply:
+//   - Store's current_stock always moves by the exact delta, in either
+//     direction — that's the number Catalog/staff actually sell against, so
+//     it must always be exact regardless of whether a qty went up or down.
+//   - A qty INCREASE also extends Ready Material tracking for just that
+//     extra amount, using the same oldest-batch-first consume-then-deficit
+//     logic POST uses — this is fully safe, same as if a small follow-up
+//     transfer had been logged for the difference.
+//   - A qty DECREASE deliberately does NOT touch Ready Material batches:
+//     partial-batch consumption at creation time never recorded which batch
+//     it drew from, so there's no reliable way to know what to give back.
+//     Ready Material's batch-level detail may not perfectly reconcile after
+//     a decrease — accepted trade-off, Store's stock is what matters day to
+//     day. Delete and recreate the slip if that precision matters here.
 router.patch("/material-transfers/:id", async (req, res): Promise<void> => {
   const companyId = getCompanyId(req);
+  const auth = (req as any).session;
+  const userId = auth?.userId ?? 1;
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) {
     res.status(400).json({ error: "Invalid id" });
     return;
   }
-  const body = req.body as { transferDate?: string; sentBy?: string | null; notes?: string | null };
+  const body = req.body as {
+    transferDate?: string;
+    sentBy?: string | null;
+    notes?: string | null;
+    items?: MaterialTransferItemInput[];
+  };
 
   const existing = await queryOne(
     `SELECT id FROM material_transfers WHERE company_id = $1 AND id = $2`,
@@ -311,43 +328,175 @@ router.patch("/material-transfers/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  const header = await queryOne(
-    `UPDATE material_transfers
-     SET transfer_date = COALESCE($1, transfer_date),
-         sent_by = $2,
-         notes = $3
-     WHERE company_id = $4 AND id = $5
-     RETURNING id, transfer_no, transfer_date, sent_by, notes, created_at`,
-    [
-      body.transferDate ? new Date(body.transferDate) : null,
-      body.sentBy?.trim() || null,
-      body.notes?.trim() || null,
-      companyId,
-      id,
-    ],
-  );
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
 
-  const items = await queryMany(
-    `SELECT product_id, product_name, qty, unit
-     FROM material_transfer_items WHERE company_id = $1 AND transfer_id = $2
-     ORDER BY id ASC`,
-    [companyId, id],
-  );
+    const headerRes = await client.query(
+      `UPDATE material_transfers
+       SET transfer_date = COALESCE($1, transfer_date),
+           sent_by = $2,
+           notes = $3
+       WHERE company_id = $4 AND id = $5
+       RETURNING id, transfer_no, transfer_date, sent_by, notes, created_at`,
+      [
+        body.transferDate ? new Date(body.transferDate) : null,
+        body.sentBy?.trim() || null,
+        body.notes?.trim() || null,
+        companyId,
+        id,
+      ],
+    );
+    const header = headerRes.rows[0];
 
-  res.json({
-    id: header.id,
-    transferNo: header.transfer_no,
-    transferDate: new Date(header.transfer_date).toISOString(),
-    sentBy: header.sent_by ?? null,
-    notes: header.notes ?? null,
-    createdAt: new Date(header.created_at).toISOString(),
-    items: items.map((it) => ({
-      productId: Number(it.product_id),
-      productName: it.product_name,
-      qty: Number(it.qty),
-      unit: it.unit,
-    })),
-  });
+    if (Array.isArray(body.items)) {
+      if (body.items.length === 0) {
+        throw new Error("At least one item is required");
+      }
+      for (const [idx, it] of body.items.entries()) {
+        if (!it.productId || !Number.isFinite(Number(it.qty)) || Number(it.qty) <= 0) {
+          throw new Error(`Line ${idx + 1}: product and a positive qty are required`);
+        }
+      }
+
+      const oldItemsRes = await client.query(
+        `SELECT product_id, qty FROM material_transfer_items WHERE company_id = $1 AND transfer_id = $2`,
+        [companyId, id],
+      );
+      const oldMap = new Map<number, number>();
+      for (const r of oldItemsRes.rows) {
+        oldMap.set(Number(r.product_id), (oldMap.get(Number(r.product_id)) ?? 0) + Number(r.qty));
+      }
+      const newMap = new Map<number, number>();
+      const newUnitByProduct = new Map<number, string>();
+      for (const it of body.items) {
+        newMap.set(it.productId, (newMap.get(it.productId) ?? 0) + Number(it.qty));
+        newUnitByProduct.set(it.productId, it.unit || "QTY");
+      }
+
+      const productIds = new Set<number>([...oldMap.keys(), ...newMap.keys()]);
+      const productNameById = new Map<number, string>();
+
+      for (const productId of productIds) {
+        const oldQty = oldMap.get(productId) ?? 0;
+        const newQty = newMap.get(productId) ?? 0;
+        const delta = newQty - oldQty;
+
+        const prodRes = await client.query(
+          `SELECT name, unit, add_for_manufacturing FROM products WHERE company_id = $1 AND id = $2`,
+          [companyId, productId],
+        );
+        if (prodRes.rows.length === 0) {
+          throw new Error(`Product ${productId} not found`);
+        }
+        const productName = prodRes.rows[0].name;
+        productNameById.set(productId, productName);
+        const isManufacturedItem = prodRes.rows[0].add_for_manufacturing === true;
+        const unit = newUnitByProduct.get(productId) || prodRes.rows[0].unit || "QTY";
+
+        if (delta !== 0) {
+          await client.query(
+            `UPDATE products SET current_stock = current_stock + $1 WHERE id = $2 AND company_id = $3`,
+            [delta, productId, companyId],
+          );
+          await client.query(
+            `INSERT INTO stock_movements (company_id, product_id, type, quantity, reason, reference_id, reference_type, user_id)
+             VALUES ($1, $2, $3, $4, 'Material transfer edited', $5, 'material_transfer_edit', $6)`,
+            [companyId, productId, delta > 0 ? "inward" : "outward", Math.abs(delta), id, userId],
+          );
+        }
+
+        if (delta > 0 && isManufacturedItem) {
+          let remaining = delta;
+          const readyBatches = await client.query(
+            `SELECT id, qty FROM ready_material_batches
+             WHERE company_id = $1 AND product_id = $2 AND status = 'ready' AND qty > 0
+             ORDER BY created_at ASC FOR UPDATE`,
+            [companyId, productId],
+          );
+          for (const batch of readyBatches.rows) {
+            if (remaining <= 0) break;
+            const batchQty = Number(batch.qty);
+            if (batchQty <= remaining) {
+              await client.query(
+                `UPDATE ready_material_batches SET status = 'dispatched', dispatched_at = NOW(), material_transfer_id = $1 WHERE id = $2`,
+                [id, batch.id],
+              );
+              remaining -= batchQty;
+            } else {
+              await client.query(`UPDATE ready_material_batches SET qty = qty - $1 WHERE id = $2`, [remaining, batch.id]);
+              remaining = 0;
+            }
+          }
+          if (remaining > 0) {
+            const existingDeficitRes = await client.query(
+              `SELECT id FROM ready_material_batches
+               WHERE company_id = $1 AND product_id = $2 AND status = 'ready' AND qty <= 0
+               ORDER BY created_at ASC LIMIT 1 FOR UPDATE`,
+              [companyId, productId],
+            );
+            const existingDeficit = existingDeficitRes.rows[0];
+            if (existingDeficit) {
+              await client.query(
+                `UPDATE ready_material_batches SET qty = qty - $1, material_transfer_id = $2, updated_at = NOW() WHERE id = $3`,
+                [remaining, id, existingDeficit.id],
+              );
+            } else {
+              await client.query(
+                `INSERT INTO ready_material_batches
+                   (company_id, product_id, product_name, unit, qty, batches, worker_name, status, adjustment_reason, material_transfer_id, created_by_user_id)
+                 VALUES ($1,$2,$3,$4,$5,1,$6,'ready',$7,$8,$9)`,
+                [
+                  companyId, productId, productName, unit, -remaining,
+                  body.sentBy?.trim() || "Manual Transfer",
+                  "Transferred before being assembled — record the missing Assemble entry to correct this.",
+                  id, userId,
+                ],
+              );
+            }
+          }
+        }
+        // delta < 0: Store stock already reduced above; Ready Material
+        // batches intentionally left untouched — see function comment.
+      }
+
+      await client.query(`DELETE FROM material_transfer_items WHERE company_id = $1 AND transfer_id = $2`, [companyId, id]);
+      for (const it of body.items) {
+        await client.query(
+          `INSERT INTO material_transfer_items (company_id, transfer_id, product_id, product_name, qty, unit)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [companyId, id, it.productId, productNameById.get(it.productId) ?? "", Number(it.qty), it.unit || "QTY"],
+        );
+      }
+    }
+
+    await client.query("COMMIT");
+
+    const items = await queryMany(
+      `SELECT product_id, product_name, qty, unit FROM material_transfer_items WHERE company_id = $1 AND transfer_id = $2 ORDER BY id ASC`,
+      [companyId, id],
+    );
+
+    res.json({
+      id: header.id,
+      transferNo: header.transfer_no,
+      transferDate: new Date(header.transfer_date).toISOString(),
+      sentBy: header.sent_by ?? null,
+      notes: header.notes ?? null,
+      createdAt: new Date(header.created_at).toISOString(),
+      items: items.map((it) => ({
+        productId: Number(it.product_id),
+        productName: it.product_name,
+        qty: Number(it.qty),
+        unit: it.unit,
+      })),
+    });
+  } catch (err: any) {
+    await client.query("ROLLBACK");
+    res.status(400).json({ error: err?.message ?? "Failed to update material transfer" });
+  } finally {
+    client.release();
+  }
 });
 
 // DELETE /material-transfers/:id — admin only.

@@ -269,6 +269,7 @@ export * from './topProduct';
 export * from './updateAccountTransactionInput';
 export * from './updateAccountTransactionInputMode';
 export * from './updateMaterialTransferInput';
+export * from './updateMaterialTransferInputItemsItem';
 export * from './updateSubscriptionInput';
 export * from './updateSubscriptionInputPaymentStatus';
 export * from './updateSubscriptionInputPlanName';

@@ -13,6 +13,7 @@ import {
   useCreateMaterialTransfer,
   useUpdateMaterialTransfer,
   useDeleteMaterialTransfer,
+  useGetMaterialTransfer,
   useListWorkers,
   useListReadyMaterialBatches,
   useAdjustReadyMaterialBatch,
@@ -22,6 +23,7 @@ import {
   getGetLowStockAlertsQueryKey,
   getListBomsQueryKey,
   getListMaterialTransfersQueryKey,
+  getGetMaterialTransferQueryKey,
   getListReadyMaterialBatchesQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -73,6 +75,7 @@ import {
   Boxes,
   Wrench,
   User,
+  Eye,
 } from "lucide-react";
 import { BomDialog } from "@/components/bom-dialog";
 
@@ -1958,6 +1961,88 @@ interface TransferDraftItem {
   unit: string;
 }
 
+// Shared item-rows editor — used by both the New Transfer and Edit Transfer
+// dialogs so their item-list UI (and any future changes to it) stay in sync.
+function TransferItemsEditor({
+  items, products, productById, onAdd, onRemove, onUpdate, testIdPrefix,
+}: {
+  items: TransferDraftItem[];
+  products: any[];
+  productById: Map<number, any>;
+  onAdd: () => void;
+  onRemove: (idx: number) => void;
+  onUpdate: (idx: number, patch: Partial<TransferDraftItem>) => void;
+  testIdPrefix: string;
+}) {
+  return (
+    <div className="border rounded-md">
+      <div className="hidden gap-2 px-3 py-2 text-xs uppercase text-muted-foreground font-medium border-b bg-muted/50 sm:grid sm:grid-cols-[minmax(0,1fr)_100px_80px_36px]">
+        <div>Item</div>
+        <div className="text-right">Qty</div>
+        <div>Unit</div>
+        <div></div>
+      </div>
+      <div className="divide-y">
+        {items.map((row, idx) => (
+          <div
+            key={idx}
+            className="flex flex-col gap-2 px-3 py-3 sm:grid sm:grid-cols-[minmax(0,1fr)_100px_80px_36px] sm:gap-2 sm:py-2 sm:items-center"
+          >
+            <TransferItemCombobox
+              products={products}
+              value={row.productId}
+              onChange={(v) => {
+                const prod = productById.get(Number(v));
+                onUpdate(idx, { productId: v, unit: row.unit || prod?.unit || "QTY" });
+              }}
+              testId={`${testIdPrefix}-${idx}`}
+            />
+            <div className="grid grid-cols-2 gap-2 sm:contents">
+              <div className="sm:contents">
+                <Label className="mb-1 block text-[11px] text-muted-foreground sm:hidden">Qty</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.001"
+                  value={row.qty}
+                  onChange={(e) => onUpdate(idx, { qty: e.target.value })}
+                  className="text-right"
+                  data-testid={`${testIdPrefix}-qty-${idx}`}
+                />
+              </div>
+              <div className="sm:contents">
+                <Label className="mb-1 block text-[11px] text-muted-foreground sm:hidden">Unit</Label>
+                <Input
+                  value={row.unit}
+                  onChange={(e) => onUpdate(idx, { unit: e.target.value })}
+                  placeholder="QTY"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end sm:contents">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0"
+                onClick={() => onRemove(idx)}
+                disabled={items.length === 1}
+                title="Remove row"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="p-2 border-t bg-muted/30">
+        <Button variant="outline" size="sm" onClick={onAdd} data-testid={`button-add-${testIdPrefix}`}>
+          <Plus className="h-3.5 w-3.5 mr-1" />Add item
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function MaterialTransferTab() {
   const { data: transfers, isLoading } = useListMaterialTransfers();
   const { data: products } = useListProducts();
@@ -1980,6 +2065,9 @@ function MaterialTransferTab() {
   const [editSentBy, setEditSentBy] = useState("");
   const [editTransferDate, setEditTransferDate] = useState("");
   const [editNotes, setEditNotes] = useState("");
+  const [editItems, setEditItems] = useState<TransferDraftItem[]>([{ productId: "", qty: "", unit: "QTY" }]);
+  const [editLoading, setEditLoading] = useState(false);
+  const [viewingTransferId, setViewingTransferId] = useState<number | null>(null);
 
   const productById = useMemo(() => {
     const m = new Map<number, any>();
@@ -2052,15 +2140,45 @@ function MaterialTransferTab() {
     );
   };
 
-  const handleEditOpen = (t: any) => {
+  // Item edits need the full line list, which the list row (t) doesn't
+  // carry (only itemCount) — fetch the detail before opening the dialog.
+  const handleEditOpen = async (t: any) => {
     setEditingTransfer(t);
     setEditSentBy(t.sentBy ?? "");
     setEditTransferDate(new Date(t.transferDate).toISOString().slice(0, 10));
     setEditNotes(t.notes ?? "");
+    setEditItems([{ productId: "", qty: "", unit: "QTY" }]);
+    setEditLoading(true);
+    try {
+      const res = await fetch(`/api/material-transfers/${t.id}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load transfer");
+      const full = await res.json();
+      setEditItems(
+        (full.items ?? []).map((it: any) => ({
+          productId: String(it.productId),
+          qty: String(it.qty),
+          unit: it.unit || "QTY",
+        })),
+      );
+    } catch {
+      toast({ title: "Could not load transfer items", variant: "destructive" });
+    } finally {
+      setEditLoading(false);
+    }
   };
+
+  const addEditRow = () => setEditItems((rows) => [...rows, { productId: "", qty: "", unit: "QTY" }]);
+  const removeEditRow = (idx: number) => setEditItems((rows) => rows.filter((_, i) => i !== idx));
+  const updateEditRow = (idx: number, patch: Partial<TransferDraftItem>) =>
+    setEditItems((rows) => rows.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+  const validEditItems = editItems.filter((i) => i.productId && Number(i.qty) > 0);
 
   const handleSaveEdit = () => {
     if (!editingTransfer) return;
+    if (validEditItems.length === 0) {
+      toast({ title: "At least one item is required", variant: "destructive" });
+      return;
+    }
     updateTransfer.mutate(
       {
         id: editingTransfer.id,
@@ -2068,11 +2186,18 @@ function MaterialTransferTab() {
           transferDate: editTransferDate ? new Date(editTransferDate).toISOString() : undefined,
           sentBy: editSentBy.trim() || null,
           notes: editNotes.trim() || null,
+          items: validEditItems.map((i) => ({
+            productId: Number(i.productId),
+            qty: Number(i.qty),
+            unit: i.unit || "QTY",
+          })),
         },
       },
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getListMaterialTransfersQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getListReadyMaterialBatchesQueryKey() });
           toast({ title: "Material transfer updated" });
           setEditingTransfer(null);
         },
@@ -2198,7 +2323,17 @@ function MaterialTransferTab() {
                     <Button
                       variant="outline"
                       size="sm"
+                      onClick={() => setViewingTransferId(t.id)}
+                      title="View"
+                      data-testid={`button-view-transfer-${t.id}`}
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => handleEditOpen(t)}
+                      title="Edit"
                       data-testid={`button-edit-transfer-${t.id}`}
                     >
                       <Pencil className="h-3.5 w-3.5" />
@@ -2248,6 +2383,16 @@ function MaterialTransferTab() {
                   {t.sentBy ? `Sent by ${t.sentBy}` : "—"} · {t.itemCount} item{t.itemCount === 1 ? "" : "s"}
                 </div>
                 <div className="flex items-center gap-2 pt-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => setViewingTransferId(t.id)}
+                    data-testid={`button-view-transfer-mobile-${t.id}`}
+                  >
+                    <Eye className="h-3.5 w-3.5 mr-1.5" />
+                    View
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
@@ -2325,71 +2470,15 @@ function MaterialTransferTab() {
               </div>
             </div>
 
-            <div className="border rounded-md">
-              <div className="hidden gap-2 px-3 py-2 text-xs uppercase text-muted-foreground font-medium border-b bg-muted/50 sm:grid sm:grid-cols-[minmax(0,1fr)_100px_80px_36px]">
-                <div>Item</div>
-                <div className="text-right">Qty</div>
-                <div>Unit</div>
-                <div></div>
-              </div>
-              <div className="divide-y">
-                {items.map((row, idx) => (
-                  <div
-                    key={idx}
-                    className="flex flex-col gap-2 px-3 py-3 sm:grid sm:grid-cols-[minmax(0,1fr)_100px_80px_36px] sm:gap-2 sm:py-2 sm:items-center"
-                  >
-                    <TransferItemCombobox
-                      products={products ?? []}
-                      value={row.productId}
-                      onChange={(v) => {
-                        const prod = productById.get(Number(v));
-                        updateRow(idx, { productId: v, unit: row.unit || prod?.unit || "QTY" });
-                      }}
-                      testId={`select-transfer-item-${idx}`}
-                    />
-                    <div className="grid grid-cols-2 gap-2 sm:contents">
-                      <div className="sm:contents">
-                        <Label className="mb-1 block text-[11px] text-muted-foreground sm:hidden">Qty</Label>
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.001"
-                          value={row.qty}
-                          onChange={(e) => updateRow(idx, { qty: e.target.value })}
-                          className="text-right"
-                          data-testid={`input-transfer-qty-${idx}`}
-                        />
-                      </div>
-                      <div className="sm:contents">
-                        <Label className="mb-1 block text-[11px] text-muted-foreground sm:hidden">Unit</Label>
-                        <Input
-                          value={row.unit}
-                          onChange={(e) => updateRow(idx, { unit: e.target.value })}
-                          placeholder="QTY"
-                        />
-                      </div>
-                    </div>
-                    <div className="flex justify-end sm:contents">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 shrink-0"
-                        onClick={() => removeRow(idx)}
-                        disabled={items.length === 1}
-                        title="Remove row"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="p-2 border-t bg-muted/30">
-                <Button variant="outline" size="sm" onClick={addRow} data-testid="button-add-transfer-item">
-                  <Plus className="h-3.5 w-3.5 mr-1" />Add item
-                </Button>
-              </div>
-            </div>
+            <TransferItemsEditor
+              items={items}
+              products={products ?? []}
+              productById={productById}
+              onAdd={addRow}
+              onRemove={removeRow}
+              onUpdate={updateRow}
+              testIdPrefix="select-transfer-item"
+            />
 
             <div className="space-y-1.5">
               <Label>Notes <span className="text-xs text-muted-foreground">(optional)</span></Label>
@@ -2409,62 +2498,159 @@ function MaterialTransferTab() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Transfer Dialog — date/sent-by/notes only. Items already moved
-          stock, so quantities aren't editable here; delete and recreate if
-          those were wrong. */}
+      {/* Edit Transfer Dialog — date, sent-by, notes, and now the items
+          themselves. Increasing a qty is fully safe; decreasing one only
+          guarantees Store's stock count is exact (Ready Material's
+          batch-level detail may not perfectly reconcile for a decrease —
+          see the backend route's own comment for why). */}
       <Dialog open={!!editingTransfer} onOpenChange={(open) => !open && setEditingTransfer(null)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Transfer {editingTransfer?.transferNo}</DialogTitle>
             <DialogDescription>
-              Correct the date, sent-by, or notes. Items and quantities can't
-              be changed here — delete and log a new transfer if those were
-              wrong.
+              Increasing a quantity is always fully accounted for. Decreasing
+              one keeps Store's stock count exact, but Ready Material's
+              batch-level detail may not perfectly reconcile — delete and log
+              a fresh transfer instead if that precision matters here.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label>Date</Label>
-              <Input
-                type="date"
-                value={editTransferDate}
-                onChange={(e) => setEditTransferDate(e.target.value)}
-                data-testid="input-edit-transfer-date"
+          {editLoading ? (
+            <div className="py-10 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Date</Label>
+                  <Input
+                    type="date"
+                    value={editTransferDate}
+                    onChange={(e) => setEditTransferDate(e.target.value)}
+                    data-testid="input-edit-transfer-date"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Sent By</Label>
+                  <Input
+                    value={editSentBy}
+                    onChange={(e) => setEditSentBy(e.target.value)}
+                    placeholder="Worker / store person name"
+                    data-testid="input-edit-transfer-sent-by"
+                  />
+                </div>
+              </div>
+
+              <TransferItemsEditor
+                items={editItems}
+                products={products ?? []}
+                productById={productById}
+                onAdd={addEditRow}
+                onRemove={removeEditRow}
+                onUpdate={updateEditRow}
+                testIdPrefix="select-edit-transfer-item"
               />
+
+              <div className="space-y-1.5">
+                <Label>Notes <span className="text-xs text-muted-foreground">(optional)</span></Label>
+                <Input
+                  value={editNotes}
+                  onChange={(e) => setEditNotes(e.target.value)}
+                  placeholder="e.g. reason for transfer"
+                  data-testid="input-edit-transfer-notes"
+                />
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <Label>Sent By</Label>
-              <Input
-                value={editSentBy}
-                onChange={(e) => setEditSentBy(e.target.value)}
-                placeholder="Worker / store person name"
-                data-testid="input-edit-transfer-sent-by"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Notes <span className="text-xs text-muted-foreground">(optional)</span></Label>
-              <Input
-                value={editNotes}
-                onChange={(e) => setEditNotes(e.target.value)}
-                placeholder="e.g. reason for transfer"
-                data-testid="input-edit-transfer-notes"
-              />
-            </div>
-          </div>
+          )}
 
           <DialogFooter>
             <Button variant="outline" className="w-full sm:w-auto" onClick={() => setEditingTransfer(null)} disabled={updateTransfer.isPending}>
               Cancel
             </Button>
-            <Button className="w-full sm:w-auto" onClick={handleSaveEdit} disabled={updateTransfer.isPending} data-testid="button-save-edit-transfer">
+            <Button
+              className="w-full sm:w-auto"
+              onClick={handleSaveEdit}
+              disabled={updateTransfer.isPending || editLoading || validEditItems.length === 0}
+              data-testid="button-save-edit-transfer"
+            >
               {updateTransfer.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Save Changes
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* View Transfer Dialog — read-only, for a quick look at what's in a
+          slip without opening it for editing. */}
+      <ViewTransferDialog transferId={viewingTransferId} onOpenChange={(open) => !open && setViewingTransferId(null)} />
     </div>
+  );
+}
+
+// Read-only look at a single transfer's items — same data GET
+// /material-transfers/:id already serves for print, just rendered on screen.
+function ViewTransferDialog({
+  transferId, onOpenChange,
+}: {
+  transferId: number | null;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { data: transfer, isLoading } = useGetMaterialTransfer(transferId ?? 0, {
+    query: {
+      enabled: transferId != null,
+      queryKey: getGetMaterialTransferQueryKey(transferId ?? 0),
+    },
+  });
+
+  return (
+    <Dialog open={transferId != null} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>
+            {transfer ? `Transfer ${transfer.transferNo}` : "Transfer"}
+          </DialogTitle>
+        </DialogHeader>
+        {isLoading ? (
+          <div className="py-10 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+        ) : !transfer ? (
+          <p className="text-sm text-muted-foreground py-6 text-center">Could not load this transfer.</p>
+        ) : (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <div className="text-xs text-muted-foreground">Date</div>
+                <div>{new Date(transfer.transferDate).toLocaleDateString("en-IN")}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Sent By</div>
+                <div>{transfer.sentBy || "—"}</div>
+              </div>
+            </div>
+            {transfer.notes && (
+              <div className="text-sm">
+                <div className="text-xs text-muted-foreground">Notes</div>
+                <div>{transfer.notes}</div>
+              </div>
+            )}
+            <div className="border rounded-md overflow-hidden">
+              <div className="grid grid-cols-[1fr_80px_60px] gap-2 px-3 py-2 text-xs uppercase text-muted-foreground font-medium border-b bg-muted/50">
+                <div>Item</div>
+                <div className="text-right">Qty</div>
+                <div>Unit</div>
+              </div>
+              <div className="divide-y">
+                {transfer.items.map((it: any, idx: number) => (
+                  <div key={idx} className="grid grid-cols-[1fr_80px_60px] gap-2 px-3 py-2 text-sm">
+                    <div className="truncate">{it.productName}</div>
+                    <div className="text-right tabular-nums">{Number(it.qty).toLocaleString()}</div>
+                    <div className="text-muted-foreground">{it.unit}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 

@@ -2157,12 +2157,23 @@ export interface CreateMaterialTransferInput {
   items: CreateMaterialTransferInputItemsItem[];
 }
 
+export type UpdateMaterialTransferInputItemsItem = {
+  productId: number;
+  qty: number;
+  unit: string;
+};
+
 export interface UpdateMaterialTransferInput {
   transferDate?: string;
   /** @nullable */
   sentBy?: string | null;
   /** @nullable */
   notes?: string | null;
+  /**
+     * Replaces the full line list, applied as a per-product delta against the current items. Omit to leave items unchanged.
+     * @minItems 1
+     */
+  items?: UpdateMaterialTransferInputItemsItem[];
 }
 
 export interface DashboardSummary {

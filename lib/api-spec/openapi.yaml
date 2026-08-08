@@ -2132,7 +2132,7 @@ paths:
     patch:
       operationId: updateMaterialTransfer
       tags: [manufacturing]
-      summary: Correct a material transfer slip's date, sent-by, or notes. Line items and quantities are not editable here — they already moved stock, so changing them would need a full reversal-and-reapply; delete and recreate the slip instead.
+      summary: Correct a material transfer slip's date, sent-by, notes, or line items. Item edits are applied as a per-product delta — an increase safely extends Ready Material tracking, a decrease only adjusts Store's stock (Ready Material batch detail may not fully reconcile for a decrease).
       parameters:
         - name: id
           in: path
@@ -5563,6 +5563,20 @@ components:
           type: ["string", "null"]
         notes:
           type: ["string", "null"]
+        items:
+          type: array
+          minItems: 1
+          description: Replaces the full line list, applied as a per-product delta against the current items. Omit to leave items unchanged.
+          items:
+            type: object
+            required: [productId, qty, unit]
+            properties:
+              productId:
+                type: integer
+              qty:
+                type: number
+              unit:
+                type: string
 
     DashboardSummary:
       type: object

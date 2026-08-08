@@ -5,6 +5,7 @@
  * Shradha Oil Center ERP API
  * OpenAPI spec version: 0.1.0
  */
+import type { UpdateMaterialTransferInputItemsItem } from './updateMaterialTransferInputItemsItem';
 
 export interface UpdateMaterialTransferInput {
   transferDate?: string;
@@ -12,4 +13,9 @@ export interface UpdateMaterialTransferInput {
   sentBy?: string | null;
   /** @nullable */
   notes?: string | null;
+  /**
+     * Replaces the full line list, applied as a per-product delta against the current items. Omit to leave items unchanged.
+     * @minItems 1
+     */
+  items?: UpdateMaterialTransferInputItemsItem[];
 }

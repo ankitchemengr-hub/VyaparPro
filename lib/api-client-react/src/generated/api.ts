@@ -7862,7 +7862,7 @@ export const getUpdateMaterialTransferUrl = (id: number,) => {
 }
 
 /**
- * @summary Correct a material transfer slip's date, sent-by, or notes. Line items and quantities are not editable here — they already moved stock, so changing them would need a full reversal-and-reapply; delete and recreate the slip instead.
+ * @summary Correct a material transfer slip's date, sent-by, notes, or line items. Item edits are applied as a per-product delta — an increase safely extends Ready Material tracking, a decrease only adjusts Store's stock (Ready Material batch detail may not fully reconcile for a decrease).
  */
 export const updateMaterialTransfer = async (id: number,
     updateMaterialTransferInput: UpdateMaterialTransferInput, options?: RequestInit): Promise<MaterialTransfer> => {
@@ -7911,7 +7911,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type UpdateMaterialTransferMutationError = ErrorType<void>
 
     /**
- * @summary Correct a material transfer slip's date, sent-by, or notes. Line items and quantities are not editable here — they already moved stock, so changing them would need a full reversal-and-reapply; delete and recreate the slip instead.
+ * @summary Correct a material transfer slip's date, sent-by, notes, or line items. Item edits are applied as a per-product delta — an increase safely extends Ready Material tracking, a decrease only adjusts Store's stock (Ready Material batch detail may not fully reconcile for a decrease).
  */
 export const useUpdateMaterialTransfer = <TError = ErrorType<void>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateMaterialTransfer>>, TError,{id: number;data: BodyType<UpdateMaterialTransferInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
