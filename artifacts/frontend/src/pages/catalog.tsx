@@ -34,7 +34,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Search, Plus, Minus, ShoppingCart, Phone, User, CheckCircle, UserPlus, Loader2, X, SlidersHorizontal, ZoomIn } from "lucide-react";
+import { Search, Plus, Minus, ShoppingCart, Phone, User, CheckCircle, UserPlus, Loader2, X, SlidersHorizontal, ZoomIn, Share2 } from "lucide-react";
+import { shareInvoiceImage } from "@/lib/share-invoice";
 import { useQueryClient } from "@tanstack/react-query";
 import { getLookupEntityByMobileQueryKey } from "@workspace/api-client-react";
 import { useForm } from "react-hook-form";
@@ -511,6 +512,31 @@ const proceedToOrderWithCustomer = (customer: any) => {
     win.document.close();
     win.focus();
     win.print();
+  };
+
+  const slipRef = useRef<HTMLDivElement>(null);
+  const [sharingSlip, setSharingSlip] = useState(false);
+
+  const handleShareOrderSlip = async () => {
+    if (!placedOrder || !slipRef.current) return;
+    setSharingSlip(true);
+    try {
+      const total = placedOrder.items.reduce((s, i) => s + i.lineTotal, 0);
+      const result = await shareInvoiceImage(slipRef.current, {
+        fileName: `Order-${String(placedOrder.order?.orderNo ?? "slip").replace(/\//g, "-")}.png`,
+        title: `Order ${placedOrder.order?.orderNo ?? ""}`,
+        text: `Order ${placedOrder.order?.orderNo ?? ""} — ₹${total.toLocaleString()}`,
+      });
+      if (result === "downloaded") {
+        toast({ title: "Image downloaded", description: "Your browser doesn't support direct sharing — attach the downloaded image in WhatsApp manually." });
+      }
+    } catch (err: any) {
+      if (err?.name !== "AbortError") {
+        toast({ title: "Could not share order", description: err?.message ?? "Unknown error", variant: "destructive" });
+      }
+    } finally {
+      setSharingSlip(false);
+    }
   };
 
   return (
@@ -1300,40 +1326,51 @@ const proceedToOrderWithCustomer = (customer: any) => {
           </DialogHeader>
           {placedOrder && (
             <div className="space-y-3">
-              <div className="text-sm">
-                <div><span className="text-muted-foreground">Customer:</span> {placedOrder.customer?.name ?? "Customer"}</div>
-                <div><span className="text-muted-foreground">Mobile:</span> {placedOrder.customer?.mobile ?? ""}</div>
-                <div><span className="text-muted-foreground">Type:</span> {placedOrder.invoiceMode === "non_gst" ? "Cash Memo" : "E-Invoice"}</div>
-              </div>
-              <div className="overflow-x-auto -mx-1 max-h-64 overflow-y-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b text-muted-foreground text-xs">
-                      <th className="text-left py-1 px-1">Product</th>
-                      <th className="text-right py-1 px-1">Qty</th>
-                      <th className="text-right py-1 px-1">Rate</th>
-                      <th className="text-right py-1 px-1">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {placedOrder.items.map((i, idx) => (
-                      <tr key={idx} className="border-b last:border-0">
-                        <td className="py-1 px-1">{i.name}</td>
-                        <td className="text-right py-1 px-1 tabular-nums">{i.qty}</td>
-                        <td className="text-right py-1 px-1 tabular-nums">₹{i.rate.toFixed(2)}</td>
-                        <td className="text-right py-1 px-1 tabular-nums font-medium">₹{i.lineTotal.toFixed(2)}</td>
+              {/* Explicit black/grey (not text-muted-foreground) so the
+                  captured share image always looks like a printed slip —
+                  theme tokens would otherwise render dark-mode's lighter
+                  grey against this div's forced white background. */}
+              <div ref={slipRef} className="space-y-3 bg-white text-black p-3 rounded border border-gray-200">
+                <div className="text-sm font-semibold">Order {placedOrder.order?.orderNo ?? ""}</div>
+                <div className="text-sm">
+                  <div><span className="text-gray-500">Customer:</span> {placedOrder.customer?.name ?? "Customer"}</div>
+                  <div><span className="text-gray-500">Mobile:</span> {placedOrder.customer?.mobile ?? ""}</div>
+                  <div><span className="text-gray-500">Type:</span> {placedOrder.invoiceMode === "non_gst" ? "Cash Memo" : "E-Invoice"}</div>
+                </div>
+                <div className="overflow-x-auto -mx-1 max-h-64 overflow-y-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200 text-gray-500 text-xs">
+                        <th className="text-left py-1 px-1">Product</th>
+                        <th className="text-right py-1 px-1">Qty</th>
+                        <th className="text-right py-1 px-1">Rate</th>
+                        <th className="text-right py-1 px-1">Amount</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div className="flex justify-between font-bold text-sm pt-1 border-t">
-                <span>Total</span>
-                <span>₹{placedOrder.items.reduce((s, i) => s + i.lineTotal, 0).toFixed(2)}</span>
+                    </thead>
+                    <tbody>
+                      {placedOrder.items.map((i, idx) => (
+                        <tr key={idx} className="border-b border-gray-200 last:border-0">
+                          <td className="py-1 px-1">{i.name}</td>
+                          <td className="text-right py-1 px-1 tabular-nums">{i.qty}</td>
+                          <td className="text-right py-1 px-1 tabular-nums">₹{i.rate.toFixed(2)}</td>
+                          <td className="text-right py-1 px-1 tabular-nums font-medium">₹{i.lineTotal.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="flex justify-between font-bold text-sm pt-1 border-t border-gray-200">
+                  <span>Total</span>
+                  <span>₹{placedOrder.items.reduce((s, i) => s + i.lineTotal, 0).toFixed(2)}</span>
+                </div>
               </div>
               <div className="flex gap-2 pt-1">
                 <Button type="button" variant="outline" className="flex-1" onClick={handlePrintOrderSlip}>
                   Print
+                </Button>
+                <Button type="button" variant="outline" className="flex-1" onClick={handleShareOrderSlip} disabled={sharingSlip} data-testid="button-share-order-slip">
+                  {sharingSlip ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />}
+                  <span className="ml-1.5">Share</span>
                 </Button>
                 <Button type="button" className="flex-1" onClick={() => setPlacedOrder(null)}>
                   New Order
