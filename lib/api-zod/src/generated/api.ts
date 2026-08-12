@@ -2443,6 +2443,20 @@ export const ListPurchasesResponseItem = zod.object({
   "discountAmt": zod.string().optional(),
   "taxPct": zod.string().optional(),
   "amount": zod.string()
+})).optional(),
+  "priceChanges": zod.array(zod.object({
+  "productId": zod.number(),
+  "name": zod.string(),
+  "itemCode": zod.string().nullish(),
+  "oldPurchasePrice": zod.number(),
+  "newPurchasePrice": zod.number(),
+  "taxRate": zod.number().nullish(),
+  "currentNonGstPrice": zod.number(),
+  "currentRetailPrice": zod.number(),
+  "currentWholesalePrice": zod.number(),
+  "suggestedNonGstPrice": zod.number(),
+  "suggestedRetailPrice": zod.number(),
+  "suggestedWholesalePrice": zod.number()
 })).optional()
 })
 export const ListPurchasesResponse = zod.array(ListPurchasesResponseItem)
@@ -2514,6 +2528,20 @@ export const CreatePurchaseResponse = zod.object({
   "discountAmt": zod.string().optional(),
   "taxPct": zod.string().optional(),
   "amount": zod.string()
+})).optional(),
+  "priceChanges": zod.array(zod.object({
+  "productId": zod.number(),
+  "name": zod.string(),
+  "itemCode": zod.string().nullish(),
+  "oldPurchasePrice": zod.number(),
+  "newPurchasePrice": zod.number(),
+  "taxRate": zod.number().nullish(),
+  "currentNonGstPrice": zod.number(),
+  "currentRetailPrice": zod.number(),
+  "currentWholesalePrice": zod.number(),
+  "suggestedNonGstPrice": zod.number(),
+  "suggestedRetailPrice": zod.number(),
+  "suggestedWholesalePrice": zod.number()
 })).optional()
 })
 
@@ -2562,6 +2590,20 @@ export const GetPurchaseResponse = zod.object({
   "discountAmt": zod.string().optional(),
   "taxPct": zod.string().optional(),
   "amount": zod.string()
+})).optional(),
+  "priceChanges": zod.array(zod.object({
+  "productId": zod.number(),
+  "name": zod.string(),
+  "itemCode": zod.string().nullish(),
+  "oldPurchasePrice": zod.number(),
+  "newPurchasePrice": zod.number(),
+  "taxRate": zod.number().nullish(),
+  "currentNonGstPrice": zod.number(),
+  "currentRetailPrice": zod.number(),
+  "currentWholesalePrice": zod.number(),
+  "suggestedNonGstPrice": zod.number(),
+  "suggestedRetailPrice": zod.number(),
+  "suggestedWholesalePrice": zod.number()
 })).optional()
 })
 
@@ -2636,6 +2678,20 @@ export const UpdatePurchaseResponse = zod.object({
   "discountAmt": zod.string().optional(),
   "taxPct": zod.string().optional(),
   "amount": zod.string()
+})).optional(),
+  "priceChanges": zod.array(zod.object({
+  "productId": zod.number(),
+  "name": zod.string(),
+  "itemCode": zod.string().nullish(),
+  "oldPurchasePrice": zod.number(),
+  "newPurchasePrice": zod.number(),
+  "taxRate": zod.number().nullish(),
+  "currentNonGstPrice": zod.number(),
+  "currentRetailPrice": zod.number(),
+  "currentWholesalePrice": zod.number(),
+  "suggestedNonGstPrice": zod.number(),
+  "suggestedRetailPrice": zod.number(),
+  "suggestedWholesalePrice": zod.number()
 })).optional()
 })
 
@@ -2684,6 +2740,20 @@ export const DeletePurchaseResponse = zod.object({
   "discountAmt": zod.string().optional(),
   "taxPct": zod.string().optional(),
   "amount": zod.string()
+})).optional(),
+  "priceChanges": zod.array(zod.object({
+  "productId": zod.number(),
+  "name": zod.string(),
+  "itemCode": zod.string().nullish(),
+  "oldPurchasePrice": zod.number(),
+  "newPurchasePrice": zod.number(),
+  "taxRate": zod.number().nullish(),
+  "currentNonGstPrice": zod.number(),
+  "currentRetailPrice": zod.number(),
+  "currentWholesalePrice": zod.number(),
+  "suggestedNonGstPrice": zod.number(),
+  "suggestedRetailPrice": zod.number(),
+  "suggestedWholesalePrice": zod.number()
 })).optional()
 })
 
@@ -3339,6 +3409,44 @@ export const GetProfitLossReportResponse = zod.object({
   "categoryName": zod.string(),
   "total": zod.number()
 }))
+})
+
+
+/**
+ * One row per saved invoice: revenue (ex-GST), COGS (qty x cost snapshotted
+ * on the line item at sale time, falling back to the product's current
+ * purchase price for older rows), profit and margin %. Same shape as the
+ * Sales report, plus the profit breakdown.
+ * @summary Per-invoice profit margin report
+ */
+export const GetBillWiseProfitReportQueryParams = zod.object({
+  "from": zod.coerce.string().optional(),
+  "to": zod.coerce.string().optional(),
+  "type": zod.enum(['all', 'gst', 'non_gst']).optional(),
+  "search": zod.coerce.string().optional()
+})
+
+export const GetBillWiseProfitReportResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "invoiceNo": zod.string(),
+  "invoiceDate": zod.string(),
+  "invoiceType": zod.string(),
+  "customerId": zod.number().nullish(),
+  "customerName": zod.string().nullable(),
+  "revenue": zod.number(),
+  "cogs": zod.number(),
+  "profit": zod.number(),
+  "marginPct": zod.number(),
+  "grandTotal": zod.number()
+})),
+  "totals": zod.object({
+  "revenue": zod.number(),
+  "cogs": zod.number(),
+  "profit": zod.number(),
+  "marginPct": zod.number(),
+  "count": zod.number()
+})
 })
 
 

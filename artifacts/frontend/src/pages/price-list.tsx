@@ -47,7 +47,9 @@ function marginedPrices(
   const gstFactor = 1 + (taxRate || DEFAULT_GST_RATE) / 100;
   return {
     nonGstPrice: purchasePrice * (1 + margins.nonGstMarginPct / 100),
-    retailPrice: purchasePrice * (1 + margins.retailMarginPct / 100),
+    // Retail price is rounded up to the nearest ₹5 so shelf/counter prices
+    // land on round numbers instead of odd-looking figures like ₹138.00.
+    retailPrice: Math.ceil((purchasePrice * (1 + margins.retailMarginPct / 100)) / 5) * 5,
     wholesalePrice: (purchasePrice * (1 + margins.wholesaleMarginPct / 100)) / gstFactor,
   };
 }
@@ -588,7 +590,7 @@ export default function PriceList() {
         Existing invoices are not affected.
       </p>
       <p className="text-xs text-muted-foreground">
-        <strong>Apply Margin</strong> fills Non-GST, Retail and Wholesale (Wholesale ÷ (1 + that product's GST%)) from Purchase ₹ using each product's own Non-GST %/Retail %/Wholesale % column — defaulting to 10%/15%/12% when left blank. Still editable afterward, still requires Save.
+        <strong>Apply Margin</strong> fills Non-GST, Retail and Wholesale (Wholesale ÷ (1 + that product's GST%)) from Purchase ₹ using each product's own Non-GST %/Retail %/Wholesale % column — defaulting to 10%/15%/12% when left blank. Retail ₹ is rounded up to the nearest ₹5. Still editable afterward, still requires Save.
       </p>
 
       {/* Confirmation dialog */}

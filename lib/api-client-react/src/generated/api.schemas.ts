@@ -1905,6 +1905,23 @@ export const PurchaseBillType = {
   non_gst: 'non_gst',
 } as const;
 
+export interface PurchasePriceChange {
+  productId: number;
+  name: string;
+  /** @nullable */
+  itemCode?: string | null;
+  oldPurchasePrice: number;
+  newPurchasePrice: number;
+  /** @nullable */
+  taxRate?: number | null;
+  currentNonGstPrice: number;
+  currentRetailPrice: number;
+  currentWholesalePrice: number;
+  suggestedNonGstPrice: number;
+  suggestedRetailPrice: number;
+  suggestedWholesalePrice: number;
+}
+
 export interface Purchase {
   id: number;
   billNo: string;
@@ -1937,6 +1954,7 @@ export interface Purchase {
   status: string;
   createdAt?: string;
   items?: PurchaseItem[];
+  priceChanges?: PurchasePriceChange[];
 }
 
 export type CreatePurchaseInputBillType = typeof CreatePurchaseInputBillType[keyof typeof CreatePurchaseInputBillType];
@@ -2818,6 +2836,35 @@ export interface ProfitLossReport {
   expensesByCategory: ProfitLossReportExpensesByCategoryItem[];
 }
 
+export interface BillWiseProfitRow {
+  id: number;
+  invoiceNo: string;
+  invoiceDate: string;
+  invoiceType: string;
+  /** @nullable */
+  customerId?: number | null;
+  /** @nullable */
+  customerName: string | null;
+  revenue: number;
+  cogs: number;
+  profit: number;
+  marginPct: number;
+  grandTotal: number;
+}
+
+export type BillWiseProfitReportTotals = {
+  revenue: number;
+  cogs: number;
+  profit: number;
+  marginPct: number;
+  count: number;
+};
+
+export interface BillWiseProfitReport {
+  items: BillWiseProfitRow[];
+  totals: BillWiseProfitReportTotals;
+}
+
 export type LookupGstinParams = {
 gstin: string;
 };
@@ -3071,6 +3118,22 @@ export type GetProfitLossReportParams = {
 from?: string;
 to?: string;
 };
+
+export type GetBillWiseProfitReportParams = {
+from?: string;
+to?: string;
+type?: GetBillWiseProfitReportType;
+search?: string;
+};
+
+export type GetBillWiseProfitReportType = typeof GetBillWiseProfitReportType[keyof typeof GetBillWiseProfitReportType];
+
+
+export const GetBillWiseProfitReportType = {
+  all: 'all',
+  gst: 'gst',
+  non_gst: 'non_gst',
+} as const;
 
 export type GetCommissionReportParams = {
 from?: string;

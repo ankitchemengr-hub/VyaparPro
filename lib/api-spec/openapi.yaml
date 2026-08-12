@@ -2424,6 +2424,29 @@ paths:
               schema:
                 $ref: "#/components/schemas/ProfitLossReport"
 
+  /reports/bill-wise-profit:
+    get:
+      operationId: getBillWiseProfitReport
+      tags: [reports]
+      summary: Per-invoice profit margin report
+      description: |
+        One row per saved invoice: revenue (ex-GST), COGS (qty x cost snapshotted
+        on the line item at sale time, falling back to the product's current
+        purchase price for older rows), profit and margin %. Same shape as the
+        Sales report, plus the profit breakdown.
+      parameters:
+        - { name: from, in: query, schema: { type: string } }
+        - { name: to, in: query, schema: { type: string } }
+        - { name: type, in: query, schema: { type: string, enum: [all, gst, non_gst] } }
+        - { name: search, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Bill-wise profit margin report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillWiseProfitReport"
+
   /reports/commission:
     get:
       operationId: getCommissionReport
@@ -5288,6 +5311,36 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PurchaseItem"
+        # Only populated on the create/update response — items whose entered
+        # rate differs from the product's previously-stored purchase price,
+        # each with a suggested new sale price for the "Update Sale Price?"
+        # prompt. Absent on GET/list responses.
+        priceChanges:
+          type: array
+          items:
+            $ref: "#/components/schemas/PurchasePriceChange"
+
+    PurchasePriceChange:
+      type: object
+      required:
+        [
+          productId, name, oldPurchasePrice, newPurchasePrice,
+          currentNonGstPrice, currentRetailPrice, currentWholesalePrice,
+          suggestedNonGstPrice, suggestedRetailPrice, suggestedWholesalePrice,
+        ]
+      properties:
+        productId: { type: integer }
+        name: { type: string }
+        itemCode: { type: ["string", "null"] }
+        oldPurchasePrice: { type: number }
+        newPurchasePrice: { type: number }
+        taxRate: { type: ["number", "null"] }
+        currentNonGstPrice: { type: number }
+        currentRetailPrice: { type: number }
+        currentWholesalePrice: { type: number }
+        suggestedNonGstPrice: { type: number }
+        suggestedRetailPrice: { type: number }
+        suggestedWholesalePrice: { type: number }
 
     CreatePurchaseInput:
       type: object
@@ -6401,3 +6454,36 @@ components:
             properties:
               categoryName: { type: string }
               total: { type: number }
+
+    BillWiseProfitRow:
+      type: object
+      required: [id, invoiceNo, invoiceDate, invoiceType, customerName, revenue, cogs, profit, marginPct, grandTotal]
+      properties:
+        id: { type: integer }
+        invoiceNo: { type: string }
+        invoiceDate: { type: string }
+        invoiceType: { type: string }
+        customerId: { type: ["integer", "null"] }
+        customerName: { type: ["string", "null"] }
+        revenue: { type: number }
+        cogs: { type: number }
+        profit: { type: number }
+        marginPct: { type: number }
+        grandTotal: { type: number }
+
+    BillWiseProfitReport:
+      type: object
+      required: [items, totals]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/BillWiseProfitRow" }
+        totals:
+          type: object
+          required: [revenue, cogs, profit, marginPct, count]
+          properties:
+            revenue: { type: number }
+            cogs: { type: number }
+            profit: { type: number }
+            marginPct: { type: number }
+            count: { type: integer }

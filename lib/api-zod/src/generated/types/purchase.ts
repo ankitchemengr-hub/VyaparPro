@@ -7,6 +7,7 @@
  */
 import type { PurchaseBillType } from './purchaseBillType';
 import type { PurchaseItem } from './purchaseItem';
+import type { PurchasePriceChange } from './purchasePriceChange';
 
 export interface Purchase {
   id: number;
@@ -40,4 +41,5 @@ export interface Purchase {
   status: string;
   createdAt?: string;
   items?: PurchaseItem[];
+  priceChanges?: PurchasePriceChange[];
 }

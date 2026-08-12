@@ -785,7 +785,7 @@ export default function Billing() {
     <div className="space-y-5 pb-10 print:hidden">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-3 flex-wrap">
-          <Button variant="ghost" size="icon" className="shrink-0" onClick={() => setLocation("/catalog")} data-testid="button-back-catalog">
+          <Button variant="ghost" size="icon" className="shrink-0" onClick={() => setLocation(isEditMode ? "/invoices" : "/catalog")} data-testid="button-back-catalog">
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <h1 className="text-2xl font-bold tracking-tight">
@@ -1154,8 +1154,8 @@ export default function Billing() {
             {(createInvoice.isPending || updateInvoice.isPending) ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
             {isEditMode ? "Update Invoice" : "Save & Generate Invoice"}
           </Button>
-          <Button variant="outline" className="w-full" onClick={() => setLocation("/catalog")} data-testid="button-back-to-catalog">
-            <ArrowLeft className="w-4 h-4 mr-2" /> Back to Catalog
+          <Button variant="outline" className="w-full" onClick={() => setLocation(isEditMode ? "/invoices" : "/catalog")} data-testid="button-back-to-catalog">
+            <ArrowLeft className="w-4 h-4 mr-2" /> {isEditMode ? "Back to Invoices" : "Back to Catalog"}
           </Button>
         </div>
       </div>

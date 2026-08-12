@@ -36,6 +36,7 @@ import type {
   BackupHistoryItem,
   BackupSettings,
   BackupSettingsUpdate,
+  BillWiseProfitReport,
   Bom,
   BomInput,
   BomUpdate,
@@ -71,6 +72,7 @@ import type {
   ExpenseCategoryInput,
   ExpenseInput,
   ExpenseList,
+  GetBillWiseProfitReportParams,
   GetCommissionReportParams,
   GetCustomerWiseSalesReportParams,
   GetExpiringSubscriptionsParams,
@@ -9186,6 +9188,94 @@ export function useGetProfitLossReport<TData = Awaited<ReturnType<typeof getProf
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetProfitLossReportQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetBillWiseProfitReportUrl = (params?: GetBillWiseProfitReportParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reports/bill-wise-profit?${stringifiedParams}` : `/api/reports/bill-wise-profit`
+}
+
+/**
+ * One row per saved invoice: revenue (ex-GST), COGS (qty x cost snapshotted
+ * on the line item at sale time, falling back to the product's current
+ * purchase price for older rows), profit and margin %. Same shape as the
+ * Sales report, plus the profit breakdown.
+ * @summary Per-invoice profit margin report
+ */
+export const getBillWiseProfitReport = async (params?: GetBillWiseProfitReportParams, options?: RequestInit): Promise<BillWiseProfitReport> => {
+
+  return customFetch<BillWiseProfitReport>(getGetBillWiseProfitReportUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBillWiseProfitReportQueryKey = (params?: GetBillWiseProfitReportParams,) => {
+    return [
+    `/api/reports/bill-wise-profit`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetBillWiseProfitReportQueryOptions = <TData = Awaited<ReturnType<typeof getBillWiseProfitReport>>, TError = ErrorType<unknown>>(params?: GetBillWiseProfitReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBillWiseProfitReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBillWiseProfitReportQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBillWiseProfitReport>>> = ({ signal }) => getBillWiseProfitReport(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBillWiseProfitReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBillWiseProfitReportQueryResult = NonNullable<Awaited<ReturnType<typeof getBillWiseProfitReport>>>
+export type GetBillWiseProfitReportQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Per-invoice profit margin report
+ */
+
+export function useGetBillWiseProfitReport<TData = Awaited<ReturnType<typeof getBillWiseProfitReport>>, TError = ErrorType<unknown>>(
+ params?: GetBillWiseProfitReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBillWiseProfitReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBillWiseProfitReportQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

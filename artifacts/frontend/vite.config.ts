@@ -71,6 +71,21 @@ export default defineConfig({
             },
           },
           {
+            // Product photos get their own real URL (see
+            // artifacts/api-server/src/lib/product-image.ts) specifically so
+            // this rule can apply — the URL is versioned by the product's
+            // updatedAt, so a fresh upload is always a new URL, making it
+            // safe to cache indefinitely. Must come before the catch-all
+            // /api/ NetworkOnly rule below (Workbox matches rules in order).
+            urlPattern: ({ url }: { url: URL }) => /^\/api\/products\/\d+\/image$/.test(url.pathname),
+            handler: "CacheFirst",
+            options: {
+              cacheName: "product-images",
+              expiration: { maxEntries: 500, maxAgeSeconds: 60 * 60 * 24 * 365 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
             // API responses must never be cached by the service worker — the
             // server already marks every JSON response Cache-Control:
             // no-store (artifacts/api-server/src/app.ts), but Workbox's

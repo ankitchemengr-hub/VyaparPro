@@ -396,6 +396,74 @@ router.get("/reports/profit-loss", async (req, res): Promise<void> => {
   });
 });
 
+// ── GET /reports/bill-wise-profit ───────────────────────────────────
+router.get("/reports/bill-wise-profit", async (req, res): Promise<void> => {
+  if (!requireAdmin(req, res)) return;
+  const companyId = getCompanyId(req);
+  const { from, to } = req.query as any;
+  const type = String((req.query as any).type ?? "all");
+  const search = String((req.query as any).search ?? "").trim();
+
+  const params: any[] = [companyId];
+  const where: string[] = [`i.company_id = $1`, `i.status = 'saved'`];
+  if (from) { params.push(new Date(from)); where.push(`i.invoice_date >= $${params.length}`); }
+  if (to) { const d = new Date(to); d.setHours(23,59,59,999); params.push(d); where.push(`i.invoice_date <= $${params.length}`); }
+  if (type === "gst" || type === "non_gst") { params.push(type); where.push(`i.invoice_type = $${params.length}`); }
+  if (search) {
+    params.push(`%${search}%`);
+    where.push(`(i.invoice_no ILIKE $${params.length} OR COALESCE(i.customer_name,'') ILIKE $${params.length})`);
+  }
+
+  const rows = await queryMany(
+    // Revenue is ex-GST (i.subtotal, same basis as the P&L report). COGS
+    // prefers the cost snapshotted on each line item at sale time so a
+    // later purchase-price change doesn't retroactively shift a past bill's
+    // margin, falling back to the product's current purchase price for
+    // rows saved before cost_price existed.
+    `SELECT i.id, i.invoice_no, i.invoice_date, i.invoice_type, i.customer_id, i.customer_name,
+            i.subtotal, i.grand_total,
+            COALESCE(SUM(ii.qty * COALESCE(ii.cost_price, prod.purchase_price, 0)), 0) AS cogs
+     FROM invoices i
+     JOIN invoice_items ii ON ii.invoice_id = i.id
+     JOIN products prod ON prod.id = ii.product_id
+     WHERE ${where.join(" AND ")}
+     GROUP BY i.id, i.invoice_no, i.invoice_date, i.invoice_type, i.customer_id, i.customer_name, i.subtotal, i.grand_total
+     ORDER BY i.invoice_date DESC, i.id DESC
+     LIMIT 1000`, params
+  );
+
+  const items = rows.map(r => {
+    const revenue = Number(r.subtotal);
+    const cogs = Number(r.cogs);
+    const profit = revenue - cogs;
+    return {
+      id: r.id,
+      invoiceNo: r.invoice_no,
+      invoiceDate: new Date(r.invoice_date).toISOString(),
+      invoiceType: r.invoice_type,
+      customerId: r.customer_id,
+      customerName: r.customer_name,
+      revenue,
+      cogs,
+      profit,
+      marginPct: revenue > 0 ? (profit / revenue) * 100 : 0,
+      grandTotal: Number(r.grand_total),
+    };
+  });
+
+  const totals = items.reduce((acc, it) => {
+    acc.revenue += it.revenue;
+    acc.cogs += it.cogs;
+    acc.profit += it.profit;
+    return acc;
+  }, { revenue: 0, cogs: 0, profit: 0, count: items.length });
+
+  res.json({
+    items,
+    totals: { ...totals, marginPct: totals.revenue > 0 ? (totals.profit / totals.revenue) * 100 : 0 },
+  });
+});
+
 // ── GET /reports/commission ─────────────────────────────────────────
 // Salesman commission = sum of (liters sold x product commission-per-liter)
 // across that salesman's saved invoices. Admin/accountant see every salesman;

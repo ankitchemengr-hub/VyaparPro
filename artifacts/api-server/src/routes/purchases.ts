@@ -18,6 +18,7 @@ import {
 } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
 import { getCompanyId } from "../lib/tenant";
+import { computeMarginedPrices } from "../lib/margin-pricing";
 import multer from "multer";
 
 const router: IRouter = Router();
@@ -54,7 +55,7 @@ async function generateBillNumber(client: any, companyId: number): Promise<strin
   return `PUR/${year}/${String(month).padStart(2, "0")}/${seqNum}`;
 }
 
-function formatPurchase(row: any, items: any[]) {
+function formatPurchase(row: any, items: any[], priceChanges?: PriceChange[]) {
   return {
     id: row.id,
     billNo: row.billNo ?? row.bill_no,
@@ -93,6 +94,60 @@ function formatPurchase(row: any, items: any[]) {
       taxPct: String(it.taxPct ?? it.tax_pct),
       amount: String(it.amount),
     })),
+    // Only present on the create/update response — a nudge to update this
+    // item's own sale price when its purchase rate just changed, distinct
+    // from "Recalculate Prices" (which only cascades into BOM-based
+    // manufactured products, never a directly-resold item's own price).
+    ...(priceChanges !== undefined ? { priceChanges } : {}),
+  };
+}
+
+interface PriceChange {
+  productId: number;
+  name: string;
+  itemCode: string | null;
+  oldPurchasePrice: number;
+  newPurchasePrice: number;
+  taxRate: number | null;
+  currentNonGstPrice: number;
+  currentRetailPrice: number;
+  currentWholesalePrice: number;
+  suggestedNonGstPrice: number;
+  suggestedRetailPrice: number;
+  suggestedWholesalePrice: number;
+}
+
+// Row shape from the `SELECT ... FROM products` query each item loop below
+// runs before overwriting purchase_price — captured BEFORE the overwrite so
+// oldPurchasePrice reflects what was actually stored a moment ago, not the
+// value this same purchase is about to set.
+function buildPriceChange(productId: number, prod: any, newRate: number): PriceChange | null {
+  if (!prod) return null;
+  const oldPurchasePrice = Number(prod.purchase_price);
+  if (Math.abs(newRate - oldPurchasePrice) <= 0.004) return null;
+  const taxRate = prod.tax_rate != null ? Number(prod.tax_rate) : null;
+  const suggested = computeMarginedPrices(
+    newRate,
+    {
+      nonGstMarginPct: prod.non_gst_margin_pct != null ? Number(prod.non_gst_margin_pct) : null,
+      retailMarginPct: prod.retail_margin_pct != null ? Number(prod.retail_margin_pct) : null,
+      wholesaleMarginPct: prod.wholesale_margin_pct != null ? Number(prod.wholesale_margin_pct) : null,
+    },
+    taxRate,
+  );
+  return {
+    productId,
+    name: prod.name ?? "Unknown",
+    itemCode: prod.item_code ?? null,
+    oldPurchasePrice,
+    newPurchasePrice: newRate,
+    taxRate,
+    currentNonGstPrice: Number(prod.non_gst_price ?? 0),
+    currentRetailPrice: Number(prod.retail_price ?? 0),
+    currentWholesalePrice: Number(prod.wholesale_price ?? 0),
+    suggestedNonGstPrice: suggested.nonGstPrice,
+    suggestedRetailPrice: suggested.retailPrice,
+    suggestedWholesalePrice: suggested.wholesalePrice,
   };
 }
 
@@ -367,12 +422,16 @@ router.post("/purchases", async (req, res): Promise<void> => {
     );
     const billRow = billRes.rows[0];
 
+    const priceChanges: PriceChange[] = [];
     for (const item of processed) {
       const prodRes = await client.query(
-        `SELECT name FROM products WHERE company_id = $1 AND id = $2`,
+        `SELECT name, item_code, purchase_price, wholesale_price, retail_price, non_gst_price,
+                tax_rate, non_gst_margin_pct, retail_margin_pct, wholesale_margin_pct
+           FROM products WHERE company_id = $1 AND id = $2`,
         [companyId, item.productId],
       );
-      const prodName = prodRes.rows[0]?.name ?? "Unknown";
+      const prod = prodRes.rows[0];
+      const prodName = prod?.name ?? "Unknown";
       await client.query(
         `INSERT INTO purchase_items (company_id, purchase_id, product_id, product_name, qty, unit, rate,
            discount_pct, discount_amt, tax_pct, amount)
@@ -402,6 +461,8 @@ router.post("/purchases", async (req, res): Promise<void> => {
         `UPDATE products SET current_stock = current_stock + $1 WHERE company_id = $2 AND id = $3`,
         [item.qty, companyId, item.productId],
       );
+      const priceChange = buildPriceChange(item.productId, prod, Number(item.rate));
+      if (priceChange) priceChanges.push(priceChange);
       // Purchase Price reflects what was actually paid on this bill — the
       // entered rate, not an average. If this product feeds a BOM, its
       // stale cost is what "Recalculate Prices" (surfaced right after save,
@@ -432,7 +493,7 @@ router.post("/purchases", async (req, res): Promise<void> => {
 
     const [full] = await db.select().from(purchasesTable).where(and(eq(purchasesTable.companyId, companyId), eq(purchasesTable.id, billRow.id)));
     const items = await db.select().from(purchaseItemsTable).where(and(eq(purchaseItemsTable.companyId, companyId), eq(purchaseItemsTable.purchaseId, billRow.id)));
-    res.status(201).json(formatPurchase(full, items));
+    res.status(201).json(formatPurchase(full, items, priceChanges));
   } catch (err) {
     await client.query("ROLLBACK");
     logger.error({ err }, "Failed to create purchase");
@@ -603,12 +664,16 @@ router.put("/purchases/:id", async (req, res): Promise<void> => {
     );
 
     // Insert new items + stock
+    const priceChanges: PriceChange[] = [];
     for (const item of processed) {
       const prodRes = await client.query(
-        `SELECT name FROM products WHERE company_id = $1 AND id = $2`,
+        `SELECT name, item_code, purchase_price, wholesale_price, retail_price, non_gst_price,
+                tax_rate, non_gst_margin_pct, retail_margin_pct, wholesale_margin_pct
+           FROM products WHERE company_id = $1 AND id = $2`,
         [companyId, item.productId],
       );
-      const prodName = prodRes.rows[0]?.name ?? "Unknown";
+      const prod = prodRes.rows[0];
+      const prodName = prod?.name ?? "Unknown";
       await client.query(
         `INSERT INTO purchase_items (company_id, purchase_id, product_id, product_name, qty, unit, rate,
            discount_pct, discount_amt, tax_pct, amount)
@@ -627,6 +692,8 @@ router.put("/purchases/:id", async (req, res): Promise<void> => {
         `UPDATE products SET current_stock = current_stock + $1 WHERE company_id = $2 AND id = $3`,
         [String(item.qty), companyId, item.productId],
       );
+      const priceChange = buildPriceChange(item.productId, prod, Number(item.rate));
+      if (priceChange) priceChanges.push(priceChange);
       await client.query(
         `UPDATE products SET purchase_price = $1 WHERE company_id = $2 AND id = $3`,
         [String(item.rate), companyId, item.productId],
@@ -708,7 +775,7 @@ router.put("/purchases/:id", async (req, res): Promise<void> => {
     const items = await db.select().from(purchaseItemsTable).where(
       and(eq(purchaseItemsTable.companyId, companyId), eq(purchaseItemsTable.purchaseId, purchaseId))
     );
-    res.json(formatPurchase(full, items));
+    res.json(formatPurchase(full, items, priceChanges));
   } catch (err) {
     await client.query("ROLLBACK");
     logger.error({ err }, "Failed to update purchase");

@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { pool } from "@workspace/db";
 import { getCompanyId } from "../lib/tenant";
+import { buildProductImageUrl } from "../lib/product-image";
 
 const router: IRouter = Router();
 
@@ -71,7 +72,7 @@ router.get("/smart-order/suggestions", async (req, res): Promise<void> => {
   const lookbackStart = new Date(Date.now() - settings.lookbackDays * 24 * 60 * 60 * 1000);
 
   const productRows = await pool.query(
-    `SELECT p.id, p.name, p.item_code, p.unit, p.current_stock, p.purchase_price, p.image_url,
+    `SELECT p.id, p.name, p.item_code, p.unit, p.current_stock, p.purchase_price, p.image_url, p.updated_at,
             SUM(ii.qty) AS units_moved,
             SUM(CASE WHEN ii.cost_price IS NOT NULL THEN (ii.net_price - ii.cost_price) * ii.qty ELSE 0 END) AS total_margin
      FROM products p
@@ -86,7 +87,7 @@ router.get("/smart-order/suggestions", async (req, res): Promise<void> => {
   );
 
   const rawMaterialRows = await pool.query(
-    `SELECT p.id, p.name, p.item_code, p.unit, p.current_stock, p.purchase_price, p.image_url,
+    `SELECT p.id, p.name, p.item_code, p.unit, p.current_stock, p.purchase_price, p.image_url, p.updated_at,
             SUM(sm.quantity) AS units_moved
      FROM products p
      JOIN stock_movements sm ON sm.product_id = p.id AND sm.company_id = p.company_id
@@ -110,7 +111,7 @@ router.get("/smart-order/suggestions", async (req, res): Promise<void> => {
       productId: r.id,
       productName: r.name,
       itemCode: r.item_code ?? null,
-      imageUrl: r.image_url ?? null,
+      imageUrl: r.image_url ? buildProductImageUrl(r.id, r.updated_at) : null,
       unit: r.unit,
       category,
       currentStock,

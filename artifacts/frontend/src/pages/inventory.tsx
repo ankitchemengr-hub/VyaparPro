@@ -588,6 +588,12 @@ function ProductDialog({ open, onOpenChange, product, isAdmin }: { open: boolean
   const [itemCodeAuto, setItemCodeAuto] = useState(true);
   const [productType, setProductType] = useState<"Purchased" | "Manufactured">("Purchased");
   const [imagePreview, setImagePreview] = useState<string>("");
+  // `product.imageUrl` from the API is now a lightweight cacheable URL, not
+  // the raw image data (see artifacts/api-server/src/lib/product-image.ts) —
+  // it can't be resubmitted as-is. This tracks whether the user actually
+  // touched the photo in this session, so an unrelated edit (price, stock...)
+  // doesn't overwrite the stored image with that URL string.
+  const [imageChanged, setImageChanged] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [adjustSrc, setAdjustSrc] = useState<string>("");
@@ -625,9 +631,13 @@ function ProductDialog({ open, onOpenChange, product, isAdmin }: { open: boolean
         minStockThreshold: product.minStockThreshold != null ? String(product.minStockThreshold) : "5",
         notForSale: !!product.notForSale,
         addForManufacturing: !!product.addForManufacturing,
-        imageUrl: product.imageUrl ?? "",
+        // Not prefilled from product.imageUrl (that's a display URL now, not
+        // resubmittable data) — stays empty until the user picks/clears a
+        // photo, so an unrelated field edit doesn't overwrite the saved image.
+        imageUrl: "",
       });
       setImagePreview(product.imageUrl ?? "");
+      setImageChanged(false);
       setProductType(Number(product.purchasePrice) === 0 ? "Manufactured" : "Purchased");
       setTab("details");
       setItemCodeAuto(false);
@@ -636,6 +646,7 @@ function ProductDialog({ open, onOpenChange, product, isAdmin }: { open: boolean
     } else if (open && !product) {
       setForm(emptyForm);
       setImagePreview("");
+      setImageChanged(false);
       setProductType("Purchased");
       setTab("details");
       setItemCodeAuto(true);
@@ -657,6 +668,7 @@ function ProductDialog({ open, onOpenChange, product, isAdmin }: { open: boolean
   const handleClose = () => {
     setForm(emptyForm);
     setImagePreview("");
+    setImageChanged(false);
     setTab("details");
     onOpenChange(false);
   };
@@ -726,7 +738,11 @@ function ProductDialog({ open, onOpenChange, product, isAdmin }: { open: boolean
       minStockThreshold: form.minStockThreshold ? Number(form.minStockThreshold) : undefined,
       notForSale: form.notForSale,
       addForManufacturing: form.addForManufacturing,
-      imageUrl: form.imageUrl || undefined,
+      // On edit, only send imageUrl if the photo was actually touched this
+      // session — otherwise omit it entirely so the existing stored image is
+      // left alone. "" is sent as-is (not collapsed to undefined) so clearing
+      // the photo actually clears it instead of silently doing nothing.
+      ...(isEdit ? (imageChanged ? { imageUrl: form.imageUrl } : {}) : { imageUrl: form.imageUrl || undefined }),
     };
 
     const handleError = async (err: any, fallback: string) => {
@@ -1185,6 +1201,7 @@ function ProductDialog({ open, onOpenChange, product, isAdmin }: { open: boolean
               onConfirm={(dataUrl) => {
                 setImagePreview(dataUrl);
                 set("imageUrl", dataUrl);
+                setImageChanged(true);
               }}
             />
 
@@ -1239,7 +1256,7 @@ function ProductDialog({ open, onOpenChange, product, isAdmin }: { open: boolean
                         size="sm"
                         variant="ghost"
                         className="text-destructive hover:text-destructive"
-                        onClick={() => { setImagePreview(""); set("imageUrl", ""); }}
+                        onClick={() => { setImagePreview(""); set("imageUrl", ""); setImageChanged(true); }}
                         data-testid="button-remove-image"
                       >
                         <X className="w-3.5 h-3.5 mr-1.5" />

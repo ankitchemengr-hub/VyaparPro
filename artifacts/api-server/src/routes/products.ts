@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, ilike, and, sql, or, isNull, ne, gte, lte } from "drizzle-orm";
+import { eq, ilike, and, sql, or, isNull, ne, gte, lte, getTableColumns } from "drizzle-orm";
 import { db, pool } from "@workspace/db";
 import {
   productsTable,
@@ -20,6 +20,7 @@ import {
 import { getCompanyId, handleTenantError } from "../lib/tenant";
 import { computeProductCosts } from "../lib/bom-cost";
 import { computeRecalculation, applyRecalculation } from "../lib/recalculate-prices";
+import { buildProductImageUrl, decodeProductImageDataUrl } from "../lib/product-image";
 
 const router: IRouter = Router();
 
@@ -54,8 +55,13 @@ router.get("/products", async (req, res): Promise<void> => {
   if (forSale === true) conditions.push(eq(productsTable.notForSale, false));
   if (forManufacturing === true) conditions.push(eq(productsTable.addForManufacturing, true));
 
+  // Every other column, minus the (potentially multi-MB, base64) imageUrl
+  // text column — a search/list response has no business carrying full image
+  // bytes for every row on every keystroke. `hasImage` is enough for
+  // formatProduct() to build the lightweight, cacheable image URL below.
+  const { imageUrl: _imageUrlCol, ...listColumns } = getTableColumns(productsTable);
   const products = await db
-    .select()
+    .select({ ...listColumns, hasImage: sql<boolean>`${productsTable.imageUrl} is not null` })
     .from(productsTable)
     .where(and(...conditions))
     .orderBy(productsTable.name);
@@ -325,6 +331,35 @@ router.get("/products/:id", async (req, res): Promise<void> => {
   }
 
   res.json(formatProduct(product));
+});
+
+// GET /products/:id/image — serves the product photo as a real, cacheable
+// HTTP resource (see lib/product-image.ts for why this exists). Not part of
+// the JSON API surface — the frontend just points an <img> tag at the URL
+// formatProduct() already builds, so this intentionally isn't in openapi.yaml.
+router.get("/products/:id/image", async (req, res): Promise<void> => {
+  const params = GetProductParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).end();
+    return;
+  }
+  const companyId = getCompanyId(req);
+  const [product] = await db
+    .select({ imageUrl: productsTable.imageUrl })
+    .from(productsTable)
+    .where(and(eq(productsTable.companyId, companyId), eq(productsTable.id, params.data.id)));
+
+  const decoded = product?.imageUrl ? decodeProductImageDataUrl(product.imageUrl) : null;
+  if (!decoded) {
+    res.status(404).end();
+    return;
+  }
+  res.setHeader("Content-Type", decoded.mimeType);
+  // Safe to cache indefinitely — the `v=` query param changes whenever the
+  // image itself does (see buildProductImageUrl), so this exact URL never
+  // points at stale content.
+  res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+  res.send(decoded.bytes);
 });
 
 // GET /products/:id/recent-prices — last 3 sale and purchase prices, so
@@ -805,7 +840,11 @@ function formatProduct(p: any) {
     notForSale: p.notForSale,
     addForManufacturing: p.addForManufacturing,
     minStockThreshold: p.minStockThreshold != null ? Number(p.minStockThreshold) : null,
-    imageUrl: p.imageUrl ?? null,
+    // Rows from the list query above carry `hasImage` (no raw bytes fetched);
+    // rows from a full `.select()` (single-product GET, create/update
+    // responses) carry the actual base64 `imageUrl` — either way the client
+    // only ever sees the small, cacheable URL below, never the raw blob.
+    imageUrl: (p.hasImage !== undefined ? p.hasImage : p.imageUrl != null) ? buildProductImageUrl(p.id, p.updatedAt) : null,
     createdAt: p.createdAt?.toISOString(),
     updatedAt: p.updatedAt?.toISOString(),
     

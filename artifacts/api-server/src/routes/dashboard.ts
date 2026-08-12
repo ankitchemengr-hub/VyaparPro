@@ -8,6 +8,7 @@ import {
 } from "@workspace/db";
 import { db } from "@workspace/db";
 import { getCompanyId } from "../lib/tenant";
+import { buildProductImageUrl } from "../lib/product-image";
 
 const router: IRouter = Router();
 
@@ -456,7 +457,7 @@ router.get("/search", async (req, res): Promise<void> => {
       notForSale: p.notForSale,
       addForManufacturing: p.addForManufacturing,
       minStockThreshold: p.minStockThreshold != null ? Number(p.minStockThreshold) : null,
-      imageUrl: p.imageUrl ?? null,
+      imageUrl: p.imageUrl ? buildProductImageUrl(p.id, p.updatedAt) : null,
       createdAt: p.createdAt?.toISOString(),
     })),
     entities: entities.map((e) => ({

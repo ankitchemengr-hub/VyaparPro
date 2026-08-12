@@ -18,8 +18,10 @@ import {
   getListEntitiesQueryKey,
   getListBrandMasterQueryKey,
   getRecalculatePricePreview,
+  type PurchasePriceChange,
 } from "@workspace/api-client-react";
 import { RecalculatePricesDialog } from "@/components/recalculate-prices-dialog";
+import { UpdateSalePriceDialog } from "@/components/update-sale-price-dialog";
 import { useAuth } from "@/contexts/use-auth";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -698,6 +700,20 @@ function NewPurchaseTab({
   const [submitting, setSubmitting] = useState(false);
   const [savedPurchaseId, setSavedPurchaseId] = useState<number | null>(null);
   const [showRecalcPrompt, setShowRecalcPrompt] = useState(false);
+  const [salePriceChanges, setSalePriceChanges] = useState<PurchasePriceChange[]>([]);
+  const [showSalePricePrompt, setShowSalePricePrompt] = useState(false);
+
+  // Only checked for BOM cost cascades once the sale-price prompt (if any)
+  // has been dismissed, so the two prompts never stack on top of each other.
+  const checkRecalcPrompt = async () => {
+    try {
+      const changes = await getRecalculatePricePreview();
+      if (changes.length > 0) setShowRecalcPrompt(true);
+    } catch {
+      // Non-critical — worst case the admin runs Recalculate Prices from
+      // the BOM page later, same as before this existed.
+    }
+  };
 
   const productMap = useMemo(() => {
     const m = new Map<number, any>();
@@ -816,15 +832,15 @@ function NewPurchaseTab({
       setVendorBillNo("");
       setNotes("");
       setFreight("0");
-      // If any purchased item feeds a BOM, its new Purchase Price may have
-      // just moved a finished product's recipe cost — surface the existing
-      // "Recalculate Prices" review instead of silently leaving those stale.
-      try {
-        const changes = await getRecalculatePricePreview();
-        if (changes.length > 0) setShowRecalcPrompt(true);
-      } catch {
-        // Non-critical — worst case the admin runs Recalculate Prices from
-        // the BOM page later, same as before this existed.
+      // If any item's rate differs from its previously-stored purchase
+      // price, offer to update that item's own sale price right away.
+      // Otherwise fall through to the BOM cost-cascade check (a raw
+      // material can feed a recipe without ever being resold directly).
+      if (newPurchase.priceChanges && newPurchase.priceChanges.length > 0) {
+        setSalePriceChanges(newPurchase.priceChanges);
+        setShowSalePricePrompt(true);
+      } else {
+        await checkRecalcPrompt();
       }
     } catch (err: any) {
       let desc = err?.message ?? "Server error";
@@ -1002,6 +1018,15 @@ function NewPurchaseTab({
       />
 
       <RecalculatePricesDialog open={showRecalcPrompt} onOpenChange={setShowRecalcPrompt} />
+
+      <UpdateSalePriceDialog
+        open={showSalePricePrompt}
+        onOpenChange={(v) => {
+          setShowSalePricePrompt(v);
+          if (!v) checkRecalcPrompt();
+        }}
+        changes={salePriceChanges}
+      />
 
       {savedPurchaseId && (
         <Card>

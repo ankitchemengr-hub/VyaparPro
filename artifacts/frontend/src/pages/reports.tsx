@@ -9,6 +9,7 @@ import {
   useGetProductionReport,
   useGetTaxReport,
   useGetProfitLossReport,
+  useGetBillWiseProfitReport,
   getGetAuditLogQueryKey,
   getGetLedgerReportQueryKey,
   getGetSalesReportQueryKey,
@@ -17,6 +18,7 @@ import {
   getGetProductionReportQueryKey,
   getGetTaxReportQueryKey,
   getGetProfitLossReportQueryKey,
+  getGetBillWiseProfitReportQueryKey,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -147,6 +149,7 @@ export default function Reports() {
           <TabsTrigger value="production">Production</TabsTrigger>
           <TabsTrigger value="tax">Input / Output Tax</TabsTrigger>
           <TabsTrigger value="pnl">Profit & Loss</TabsTrigger>
+          <TabsTrigger value="bill-wise-profit">Bill-wise Profit Margin</TabsTrigger>
           <TabsTrigger value="ledger">Ledger</TabsTrigger>
           <TabsTrigger value="audit">Audit Log</TabsTrigger>
         </TabsList>
@@ -157,6 +160,7 @@ export default function Reports() {
         <TabsContent value="production" className="mt-6"><ProductionTab /></TabsContent>
         <TabsContent value="tax" className="mt-6"><TaxTab /></TabsContent>
         <TabsContent value="pnl" className="mt-6"><PnLTab /></TabsContent>
+        <TabsContent value="bill-wise-profit" className="mt-6"><BillWiseProfitTab /></TabsContent>
         <TabsContent value="ledger" className="mt-6"><LedgerTab /></TabsContent>
         <TabsContent value="audit" className="mt-6"><AuditTab /></TabsContent>
       </Tabs>
@@ -785,6 +789,129 @@ function PnLTab() {
             </div>
           </div>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ───────── BILL-WISE PROFIT MARGIN ───────── */
+function BillWiseProfitTab() {
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [type, setType] = useState("all");
+  const [search, setSearch] = useState("");
+
+  const params: any = { from: from || undefined, to: to || undefined, type, search: search || undefined };
+  const { data, isLoading } = useGetBillWiseProfitReport(params, { query: { queryKey: getGetBillWiseProfitReportQueryKey(params) } });
+
+  const items = data?.items ?? [];
+  const t = data?.totals;
+
+  const exportRows: ExportRow[] = [
+    ["Invoice No", "Date", "Type", "Customer", "Revenue (ex-GST)", "COGS", "Profit", "Margin %", "Grand Total"],
+    ...items.map(i => [
+      i.invoiceNo, format(new Date(i.invoiceDate), "dd-MM-yyyy"), i.invoiceType,
+      i.customerName ?? "—", i.revenue, i.cogs, i.profit, i.marginPct.toFixed(1), i.grandTotal,
+    ] as ExportRow),
+  ];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Bill-wise Profit Margin</CardTitle>
+        <CardDescription>Revenue − COGS per invoice, using the cost snapshotted at sale time. (Excludes GST.)</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-wrap gap-3 items-end mb-4">
+          <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">Type</label>
+            <Select value={type} onValueChange={setType}>
+              <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="gst">GST</SelectItem>
+                <SelectItem value="non_gst">Non-GST</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <SearchBox value={search} onChange={setSearch} placeholder="Invoice / customer…" />
+          <div className="ml-auto">
+            <ExportMenu disabled={!items.length} baseName={`bill-wise-profit-${Date.now()}`} sheetName="Bill-wise Profit" title="Bill-wise Profit Margin" rows={exportRows} />
+          </div>
+        </div>
+
+        {t && items.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+            <Card>
+              <CardContent className="pt-4">
+                <div className="text-xs uppercase text-muted-foreground">Revenue (ex-GST)</div>
+                <div className="text-xl font-bold tabular-nums mt-1">{fmt(t.revenue)}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4">
+                <div className="text-xs uppercase text-muted-foreground">COGS</div>
+                <div className="text-xl font-bold tabular-nums mt-1">{fmt(t.cogs)}</div>
+              </CardContent>
+            </Card>
+            <Card className={t.profit >= 0 ? "bg-emerald-50 dark:bg-emerald-950/40" : "bg-rose-50 dark:bg-rose-950/40"}>
+              <CardContent className="pt-4">
+                <div className="text-xs uppercase text-muted-foreground">Profit</div>
+                <div className="text-xl font-bold tabular-nums mt-1">{fmt(t.profit)}</div>
+                <div className="text-xs text-muted-foreground mt-1">Margin {t.marginPct.toFixed(1)}%</div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        <div className="border rounded-md overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Invoice No</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Customer</TableHead>
+                <TableHead className="text-right">Revenue</TableHead>
+                <TableHead className="text-right">COGS</TableHead>
+                <TableHead className="text-right">Profit</TableHead>
+                <TableHead className="text-right">Margin %</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow><TableCell colSpan={8} className="text-center py-8">Loading…</TableCell></TableRow>
+              ) : items.length === 0 ? (
+                <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No invoices in this range.</TableCell></TableRow>
+              ) : items.map(i => (
+                <TableRow key={i.id}>
+                  <TableCell className="font-mono text-xs">{i.invoiceNo}</TableCell>
+                  <TableCell className="whitespace-nowrap">{format(new Date(i.invoiceDate), "dd-MM-yyyy")}</TableCell>
+                  <TableCell>
+                    <Badge variant={i.invoiceType === "gst" ? "default" : "secondary"} className="uppercase">{i.invoiceType.replace("_", " ")}</Badge>
+                  </TableCell>
+                  <TableCell className="font-medium">{i.customerName ?? "—"}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmt(i.revenue)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmt(i.cogs)}</TableCell>
+                  <TableCell className={`text-right tabular-nums font-semibold ${i.profit >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{fmt(i.profit)}</TableCell>
+                  <TableCell className={`text-right tabular-nums ${i.marginPct >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{i.marginPct.toFixed(1)}%</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+            {t && items.length > 0 && (
+              <TableFooter>
+                <TableRow>
+                  <TableCell colSpan={4} className="font-semibold">Total ({t.count} invoices)</TableCell>
+                  <TableCell className="text-right tabular-nums font-semibold">{fmt(t.revenue)}</TableCell>
+                  <TableCell className="text-right tabular-nums font-semibold">{fmt(t.cogs)}</TableCell>
+                  <TableCell className="text-right tabular-nums font-semibold">{fmt(t.profit)}</TableCell>
+                  <TableCell className="text-right tabular-nums font-semibold">{t.marginPct.toFixed(1)}%</TableCell>
+                </TableRow>
+              </TableFooter>
+            )}
+          </Table>
+        </div>
       </CardContent>
     </Card>
   );

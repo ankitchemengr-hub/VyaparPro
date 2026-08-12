@@ -24,6 +24,7 @@ import {
 import { logger } from "../lib/logger";
 import { getCompanyId } from "../lib/tenant";
 import { applyRecalculation } from "../lib/recalculate-prices";
+import { buildProductImageUrl } from "../lib/product-image";
 
 const router: IRouter = Router();
 
@@ -300,13 +301,19 @@ router.get("/workload", async (req, res): Promise<void> => {
   if (params.data.status) conditions.push(eq(workloadCardsTable.status, params.data.status));
 
   const cards = await db
-    .select({ card: workloadCardsTable, productName: productsTable.name, productImageUrl: productsTable.imageUrl })
+    .select({
+      card: workloadCardsTable,
+      productName: productsTable.name,
+      productImageUrl: productsTable.imageUrl,
+      productUpdatedAt: productsTable.updatedAt,
+    })
     .from(workloadCardsTable)
     .leftJoin(productsTable, eq(workloadCardsTable.productId, productsTable.id))
     .where(and(...conditions))
     .orderBy(sql`${workloadCardsTable.createdAt} DESC`);
 
-  res.json(cards.map(({ card, productName, productImageUrl }) => formatWorkloadCard(card, productName, productImageUrl)));
+  res.json(cards.map(({ card, productName, productImageUrl, productUpdatedAt }) =>
+    formatWorkloadCard(card, productName, productImageUrl, productUpdatedAt)));
 });
 
 // POST /workload
@@ -338,10 +345,10 @@ router.post("/workload", async (req, res): Promise<void> => {
     status: "pending",
   }).returning();
 
-  const [product] = await db.select({ name: productsTable.name, imageUrl: productsTable.imageUrl })
+  const [product] = await db.select({ name: productsTable.name, imageUrl: productsTable.imageUrl, updatedAt: productsTable.updatedAt })
     .from(productsTable).where(and(eq(productsTable.companyId, companyId), eq(productsTable.id, card.productId)));
 
-  res.status(201).json(formatWorkloadCard(card, product?.name ?? null, product?.imageUrl ?? null));
+  res.status(201).json(formatWorkloadCard(card, product?.name ?? null, product?.imageUrl ?? null, product?.updatedAt ?? null));
 });
 
 // PATCH /workload/:id
@@ -455,10 +462,10 @@ router.patch("/workload/:id", async (req, res): Promise<void> => {
     .set(updateData)
     .where(and(eq(workloadCardsTable.companyId, companyId), eq(workloadCardsTable.id, id)))
     .returning();
-  const [product] = await db.select({ name: productsTable.name, imageUrl: productsTable.imageUrl })
+  const [product] = await db.select({ name: productsTable.name, imageUrl: productsTable.imageUrl, updatedAt: productsTable.updatedAt })
     .from(productsTable).where(and(eq(productsTable.companyId, companyId), eq(productsTable.id, card.productId)));
 
-  res.json(formatWorkloadCard(card, product?.name ?? null, product?.imageUrl ?? null));
+  res.json(formatWorkloadCard(card, product?.name ?? null, product?.imageUrl ?? null, product?.updatedAt ?? null));
 });
 
 // POST /manufacturing/assemble
@@ -592,10 +599,10 @@ router.post("/manufacturing/assemble", async (req, res): Promise<void> => {
 
   const [card] = await db.select().from(workloadCardsTable).where(and(eq(workloadCardsTable.companyId, companyId), eq(workloadCardsTable.id, cardId!)));
   const [product] = await db
-    .select({ name: productsTable.name, imageUrl: productsTable.imageUrl })
+    .select({ name: productsTable.name, imageUrl: productsTable.imageUrl, updatedAt: productsTable.updatedAt })
     .from(productsTable)
     .where(and(eq(productsTable.companyId, companyId), eq(productsTable.id, card.productId)));
-  res.status(201).json(formatWorkloadCard(card, product?.name ?? null, product?.imageUrl ?? null));
+  res.status(201).json(formatWorkloadCard(card, product?.name ?? null, product?.imageUrl ?? null, product?.updatedAt ?? null));
 });
 
 // GET /manufacturing/ready-batches
@@ -790,12 +797,12 @@ function formatBom(bom: any, productName: string | null, items: any[]) {
   };
 }
 
-function formatWorkloadCard(c: any, productName: string | null, productImageUrl: string | null) {
+function formatWorkloadCard(c: any, productName: string | null, productImageUrl: string | null, productUpdatedAt: Date | string | null = null) {
   return {
     id: c.id,
     productId: c.productId,
     productName: productName ?? null,
-    productImageUrl: productImageUrl ?? null,
+    productImageUrl: productImageUrl ? buildProductImageUrl(c.productId, productUpdatedAt) : null,
     targetQty: Number(c.targetQty),
     status: c.status,
     workerId: c.workerId ?? null,
