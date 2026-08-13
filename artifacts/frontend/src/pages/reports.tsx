@@ -33,7 +33,7 @@ import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { format } from "date-fns";
-import { Download, Search, FileSpreadsheet, FileText } from "lucide-react";
+import { Download, Search, FileSpreadsheet, FileText, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -113,6 +113,28 @@ function DateRange({ from, to, onFrom, onTo }: { from: string; to: string; onFro
         <Input type="date" value={to} onChange={e => onTo(e.target.value)} className="w-[160px]" />
       </div>
     </>
+  );
+}
+
+type SortDir = "asc" | "desc";
+
+function SortableHead<K extends string>({
+  label, sortKey, activeKey, dir, onSort, className,
+}: { label: string; sortKey: K; activeKey: K | null; dir: SortDir; onSort: (key: K) => void; className?: string }) {
+  const active = activeKey === sortKey;
+  const Icon = active ? (dir === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
+  return (
+    <TableHead className={className}>
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={`inline-flex items-center gap-1 hover:text-foreground transition-colors ${active ? "text-foreground font-semibold" : ""}`}
+        title={active ? (dir === "asc" ? "Sorted ascending — click for descending" : "Sorted descending — click for ascending") : "Click to sort"}
+      >
+        {label}
+        <Icon className="w-3.5 h-3.5" />
+      </button>
+    </TableHead>
   );
 }
 
@@ -381,8 +403,24 @@ function CustomerWiseTab() {
 
   const params: any = { from: from || undefined, to: to || undefined, type, search: search || undefined };
   const { data, isLoading } = useGetCustomerWiseSalesReport(params, { query: { queryKey: getGetCustomerWiseSalesReportQueryKey(params) } });
-  const items = data?.items ?? [];
+  const rawItems = data?.items ?? [];
   const t = data?.totals;
+
+  const [sortKey, setSortKey] = useState<"qty" | "total" | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const handleSort = (key: "qty" | "total") => {
+    if (sortKey === key) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+  const items = useMemo(() => {
+    if (!sortKey) return rawItems;
+    const sorted = [...rawItems].sort((a, b) => a[sortKey] - b[sortKey]);
+    return sortDir === "asc" ? sorted : sorted.reverse();
+  }, [rawItems, sortKey, sortDir]);
 
   const exportRows: ExportRow[] = [
     ["Customer", "Invoices", "Qty", "Subtotal", "Tax", "Total", "Paid", "Balance"],
@@ -421,10 +459,10 @@ function CustomerWiseTab() {
               <TableRow>
                 <TableHead>Customer</TableHead>
                 <TableHead className="text-right">Invoices</TableHead>
-                <TableHead className="text-right">Qty (Ltr)</TableHead>
+                <SortableHead className="text-right" label="Qty (Ltr)" sortKey="qty" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
                 <TableHead className="text-right">Subtotal</TableHead>
                 <TableHead className="text-right">Tax</TableHead>
-                <TableHead className="text-right">Total</TableHead>
+                <SortableHead className="text-right" label="Total" sortKey="total" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
                 <TableHead className="text-right">Paid</TableHead>
                 <TableHead className="text-right">Balance</TableHead>
               </TableRow>
