@@ -181,6 +181,7 @@ router.get("/reports/sales/customer-wise", async (req, res): Promise<void> => {
                 SELECT id FROM invoices i2
                 WHERE ${where.join(" AND ").replace(/\bi\./g, "i2.")}
                   AND (i2.customer_id IS NOT DISTINCT FROM i.customer_id)
+                  AND (i2.customer_name IS NOT DISTINCT FROM i.customer_name)
               )
             ), 0) AS qty
      FROM invoices i
