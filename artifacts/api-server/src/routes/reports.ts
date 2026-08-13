@@ -160,6 +160,11 @@ router.get("/reports/sales/customer-wise", async (req, res): Promise<void> => {
   if (type === "gst" || type === "non_gst") { params.push(type); where.push(`i.invoice_type = $${params.length}`); }
   if (search) { params.push(`%${search}%`); where.push(`COALESCE(i.customer_name,'') ILIKE $${params.length}`); }
 
+  // "Qty (Ltr)" is a liter/kg total across possibly many different products
+  // (each with its own unit — PKT, BKT, QTY…), so it must sum each item's
+  // already-converted total_liters (qty x liters-per-unit), not the raw qty
+  // column — raw qty mixes incompatible units (e.g. 8 boxes + 25 bottles)
+  // and would wildly undercount the true liters.
   const rows = await queryMany(
     `SELECT i.customer_id,
             COALESCE(i.customer_name, '— Walk-in —') AS customer_name,
@@ -170,7 +175,7 @@ router.get("/reports/sales/customer-wise", async (req, res): Promise<void> => {
             SUM(i.amount_paid) AS paid,
             SUM(i.balance_due) AS balance,
             COALESCE((
-              SELECT SUM(ii.qty)
+              SELECT SUM(COALESCE(ii.total_liters, 0))
               FROM invoice_items ii
               WHERE ii.invoice_id IN (
                 SELECT id FROM invoices i2
