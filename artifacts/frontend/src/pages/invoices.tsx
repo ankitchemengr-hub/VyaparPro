@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/use-auth";
 import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
@@ -28,6 +28,18 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 
+type InvoiceFilters = {
+  search: string;
+  type: string;
+  payStatus: string;
+  dateFrom: Date | undefined;
+  dateTo: Date | undefined;
+  createdByUserId: string;
+};
+// Persists filters across mount/unmount of this component (e.g. viewing an
+// invoice and navigating back) for the lifetime of the page session.
+const filterStore = new Map<string, InvoiceFilters>();
+
 const TYPE_LABELS: Record<string, string> = {
   gst: "GST",
   non_gst: "Non-GST",
@@ -43,13 +55,23 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
-  const [search, setSearch] = useState("");
-  const [type, setType] = useState<string>(initialType);
-  const [payStatus, setPayStatus] = useState<string>("all");
-  const [dateFrom, setDateFrom] = useState<Date | undefined>();
-  const [dateTo, setDateTo] = useState<Date | undefined>();
-  const [createdByUserId, setCreatedByUserId] = useState<string>("all");
+  // Filters live in a module-level store keyed by page, not just component
+  // state, so navigating to an invoice's detail page and back (which
+  // unmounts/remounts this component) keeps whatever the user picked —
+  // filters should only reset when "Clear filters" is clicked.
+  const storeKey = pageTitle ?? "invoices";
+  const saved = filterStore.get(storeKey);
+  const [search, setSearch] = useState(saved?.search ?? "");
+  const [type, setType] = useState<string>(saved?.type ?? initialType);
+  const [payStatus, setPayStatus] = useState<string>(saved?.payStatus ?? "all");
+  const [dateFrom, setDateFrom] = useState<Date | undefined>(saved?.dateFrom);
+  const [dateTo, setDateTo] = useState<Date | undefined>(saved?.dateTo);
+  const [createdByUserId, setCreatedByUserId] = useState<string>(saved?.createdByUserId ?? "all");
   const [deleting, setDeleting] = useState<{ id: number; invoiceNo: string; invoiceType: string } | null>(null);
+
+  useEffect(() => {
+    filterStore.set(storeKey, { search, type, payStatus, dateFrom, dateTo, createdByUserId });
+  }, [storeKey, search, type, payStatus, dateFrom, dateTo, createdByUserId]);
 
   const isSalesman = user?.role === "salesman";
   const isAdmin = user?.role === "admin";
