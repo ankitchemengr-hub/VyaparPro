@@ -145,6 +145,77 @@ function ProductCombobox({
   );
 }
 
+// Searchable vendor picker — the plain Select's dropdown wouldn't scroll
+// reliably on touch/mobile browsers and had no search, so vendor lists that
+// grew past a few entries were hard to use. This swaps in the same
+// Popover+Command combobox pattern already used for products/brands.
+function VendorCombobox({
+  vendors,
+  value,
+  onChange,
+}: {
+  vendors: any[];
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const selected = vendors.find((v) => String(v.id) === value);
+  const trimmedQuery = query.trim();
+  const filtered = trimmedQuery
+    ? vendors.filter((v) => v.name.toLowerCase().includes(trimmedQuery.toLowerCase()))
+    : vendors;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          type="button"
+          aria-expanded={open}
+          className="flex-1 justify-between font-normal"
+          data-testid="select-vendor"
+        >
+          <span className={cn("truncate", !selected && "text-muted-foreground")}>
+            {selected ? `${selected.name}${selected.mobile ? ` · ${selected.mobile}` : ""}` : "Select vendor"}
+          </span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[280px] max-w-[calc(100vw-2rem)] p-0" align="start">
+        <Command shouldFilter={false}>
+          <CommandInput placeholder="Search vendor…" value={query} onValueChange={setQuery} />
+          <CommandList className="max-h-60">
+            {vendors.length === 0 && (
+              <div className="px-2 py-3 text-sm text-muted-foreground">No vendors yet. Click + to add one.</div>
+            )}
+            {vendors.length > 0 && filtered.length === 0 && (
+              <CommandEmpty className="py-2 px-3 text-sm text-muted-foreground">No vendor found.</CommandEmpty>
+            )}
+            <CommandGroup>
+              {filtered.map((v) => (
+                <CommandItem
+                  key={v.id}
+                  value={v.name}
+                  onSelect={() => {
+                    onChange(String(v.id));
+                    setOpen(false);
+                    setQuery("");
+                  }}
+                >
+                  <Check className={cn("mr-2 h-4 w-4", value === String(v.id) ? "opacity-100" : "opacity-0")} />
+                  {v.name}{v.mobile ? ` · ${v.mobile}` : ""}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 // Lightweight duplicate of Inventory's BrandCombobox — lets a brand be added
 // inline from here too, since a product created mid-purchase often needs a
 // brand that doesn't exist yet either.
@@ -866,21 +937,7 @@ function NewPurchaseTab({
             <div className="space-y-1.5 sm:col-span-2">
               <Label>Vendor</Label>
               <div className="flex gap-2">
-                <Select value={vendorId} onValueChange={setVendorId}>
-                  <SelectTrigger data-testid="select-vendor" className="flex-1">
-                    <SelectValue placeholder="Select vendor" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(vendors ?? []).length === 0 && (
-                      <div className="px-2 py-3 text-sm text-muted-foreground">No vendors yet. Click + to add one.</div>
-                    )}
-                    {(vendors ?? []).map((v: any) => (
-                      <SelectItem key={v.id} value={String(v.id)}>
-                        {v.name}{v.mobile ? ` · ${v.mobile}` : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <VendorCombobox vendors={vendors ?? []} value={vendorId} onChange={setVendorId} />
                 <Button type="button" variant="outline" size="icon" onClick={() => setVendorDialogOpen(true)}
                   data-testid="button-add-vendor" title="Add new vendor">
                   <Plus className="w-4 h-4" />
@@ -2095,16 +2152,7 @@ function EditPurchaseDialog({
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div className="space-y-1.5 sm:col-span-2">
                 <Label>Vendor</Label>
-                <Select value={vendorId} onValueChange={setVendorId}>
-                  <SelectTrigger><SelectValue placeholder="Select vendor" /></SelectTrigger>
-                  <SelectContent>
-                    {(vendors ?? []).map((v: any) => (
-                      <SelectItem key={v.id} value={String(v.id)}>
-                        {v.name}{v.mobile ? ` · ${v.mobile}` : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <VendorCombobox vendors={vendors ?? []} value={vendorId} onChange={setVendorId} />
               </div>
               <div className="space-y-1.5">
                 <Label>Vendor Bill #</Label>
