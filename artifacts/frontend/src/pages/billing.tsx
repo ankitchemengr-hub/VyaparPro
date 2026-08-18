@@ -11,6 +11,7 @@ import {
   useLogPayment,
   useListAccounts,
   useListEntities,
+  useGetEntity,
   useGetPrintSettings,
   useLookupEntityByMobile,
   useCreateEntity,
@@ -55,6 +56,20 @@ type QtyMode = "unit" | "box";
 
 const GST_INVOICE_TYPES = new Set(["gst", "proforma_invoice"]);
 function isGstInvoiceType(t: string) { return GST_INVOICE_TYPES.has(t); }
+
+// Mirrors the rate selection in customer-orders.ts: a non-GST invoice always
+// uses the product's explicit non-GST rate when set, otherwise the base rate
+// comes from the customer's pricing tier (retail vs wholesale) — not just
+// wholesale unconditionally.
+function getBaseRate(p: any, customer: any, invoiceType: string): number {
+  const nonGstPrice = Number((p as any).nonGstPrice) || 0;
+  if (!isGstInvoiceType(invoiceType) && nonGstPrice > 0) return nonGstPrice;
+  const wholesalePrice = Number(p.wholesalePrice) || 0;
+  const retailPrice = Number(p.retailPrice) || 0;
+  return customer?.pricingTier === "wholesale"
+    ? (wholesalePrice || retailPrice)
+    : (retailPrice || wholesalePrice);
+}
 
 const DOC_TYPE_OPTIONS = [
   { value: "invoice", label: "Invoice" },
@@ -189,6 +204,12 @@ export default function Billing() {
   const { data: products } = useListProducts({ forSale: true });
   const { data: salesmanEntities } = useListEntities({ type: "salesman" } as any);
   const { data: existingInvoice } = useGetInvoice(editId as number, { query: { enabled: isEditMode } as any });
+  // Invoices don't store the customer's pricing tier, only a name/GSTIN
+  // snapshot — fetched separately so editing an invoice for a wholesale
+  // customer doesn't silently default the tier (and rate) back to retail.
+  const { data: existingCustomerEntity } = useGetEntity(existingInvoice?.customerId as number, {
+    query: { enabled: isEditMode && !!existingInvoice?.customerId } as any,
+  });
   const { data: accounts } = useListAccounts();
   const { data: printSettingsData } = useGetPrintSettings();
   const logo = useCompanyLogo();
@@ -219,18 +240,21 @@ export default function Billing() {
   setItems((prev) => prev.map((item) => {
     const p = products.find((x: any) => x.id === item.productId);
     if (!p) return item;
-    const newRate = isGstInvoiceType(invoiceType)
-      ? Number(p.wholesalePrice)
-      : (Number((p as any).nonGstPrice) > 0 ? Number((p as any).nonGstPrice) : Number(p.wholesalePrice));
+    const newRate = getBaseRate(p, customer, invoiceType);
     const taxPct = isGstInvoiceType(invoiceType) ? (Number(p.taxRate) || 18) : 0;
     const amount = Math.round(billedUnits(item) * newRate * (1 + taxPct / 100) * 100) / 100;
     return { ...item, rate: newRate, taxPct, amount };
   }));
 // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [invoiceType, products]);
+}, [invoiceType, products, customer?.pricingTier]);
 
   useEffect(() => {
     if (!isEditMode || !existingInvoice || prefilled) return;
+    // Wait for the customer's real pricing tier before prefilling — otherwise
+    // it would default to "retail" and, combined with the rate-sync effect
+    // above, silently reprice a wholesale customer's items if the invoice
+    // type is later toggled while editing.
+    if (existingInvoice.customerId && !existingCustomerEntity) return;
     const et = existingInvoice.invoiceType as string;
     if (et === "gst" || et === "non_gst") { setDocType("invoice"); setInvoiceSubtype(et); }
     else { setDocType(et); }
@@ -241,7 +265,9 @@ export default function Billing() {
       setCustomer({
         id: existingInvoice.customerId, name: existingInvoice.customerName,
         gstin: existingInvoice.customerGstin, address: existingInvoice.billingAddress,
-        state: existingInvoice.placeOfSupply, pricingTier: "retail", outstandingBalance: 0,
+        state: existingInvoice.placeOfSupply,
+        pricingTier: existingCustomerEntity?.pricingTier ?? "retail",
+        outstandingBalance: 0,
       });
     }
     skipRateSyncRef.current = true;
@@ -257,7 +283,7 @@ export default function Billing() {
       };
     }));
     setPrefilled(true);
-  }, [isEditMode, existingInvoice, prefilled]);
+  }, [isEditMode, existingInvoice, existingCustomerEntity, prefilled]);
 
   useEffect(() => {
     if (!params.cart || !products) return;
@@ -266,9 +292,7 @@ export default function Billing() {
       const billing: BillingItem[] = cartItems.map(({ productId, qty }) => {
         const p = products.find((x) => x.id === productId);
         if (!p) return null;
-        const rate = isGstInvoiceType(invoiceType)
-          ? p.wholesalePrice
-          : (Number((p as any).nonGstPrice) > 0 ? Number((p as any).nonGstPrice) : p.wholesalePrice);
+        const rate = getBaseRate(p, customer, invoiceType);
         const taxPct = isGstInvoiceType(invoiceType) ? (p.taxRate ?? 18) : 0;
         const amount = qty * Number(rate) * (1 + taxPct / 100);
         return {
@@ -376,9 +400,7 @@ export default function Billing() {
     const existing = items.findIndex((i) => i.productId === p.id);
     if (existing >= 0) { updateItem(existing, "qty", items[existing].qty + 1); }
     else {
-      const rate = isGstInvoiceType(invoiceType)
-        ? p.wholesalePrice
-        : (Number((p as any).nonGstPrice) > 0 ? Number((p as any).nonGstPrice) : p.wholesalePrice);
+      const rate = getBaseRate(p, customer, invoiceType);
       const taxPct = isGstInvoiceType(invoiceType) ? (Number(p.taxRate) || 18) : 0;
       const amount = Number(rate ?? 0) * (1 + taxPct / 100);
       setItems((prev) => [...prev, {
@@ -921,7 +943,7 @@ export default function Billing() {
                         <div className="min-w-0 flex-1">
                           <div className="font-medium truncate">{p.name}</div>
                           <div className="text-xs text-muted-foreground">
-                            ₹{Number(isGstInvoiceType(invoiceType) ? p.wholesalePrice : ((p as any).nonGstPrice > 0 ? (p as any).nonGstPrice : p.wholesalePrice)).toLocaleString()}
+                            ₹{getBaseRate(p, customer, invoiceType).toLocaleString()}
                             {isGstInvoiceType(invoiceType) && p.taxRate ? ` · GST ${p.taxRate}%` : ""}
                           </div>
                         </div>
