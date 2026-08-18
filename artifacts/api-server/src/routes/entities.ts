@@ -19,34 +19,34 @@ import { getCompanyId } from "../lib/tenant";
 
 const router: IRouter = Router();
 
-const ENTITY_CODE_PREFIX: Record<string, string> = {
-  customer: "CUST",
-  vendor: "VEN",
-  worker: "WORK",
-  salesman: "SALE",
-};
+// entity_code_sequence rows are keyed by (company_id, entity_type), but code
+// generation always uses this fixed type key rather than the entity's real
+// type — the code itself is plain numeric with no type prefix, and
+// entities_company_code_uq is unique per company across ALL types, so the
+// counter has to be shared company-wide too, not per-type, or two different
+// entity types could both land on "0001" and collide.
+const SHARED_CODE_SEQUENCE_KEY = "all";
 
-// Atomically allocates the next per-type code for a company (e.g. "CUST-0001")
-// from entity_code_sequence, same increment-then-return pattern as material
-// transfer numbers. The sequence never reuses a number, so if a number ever
-// collides with a manually-typed code from before this existed, the retry
-// just moves on to the next one — this always terminates.
-async function generateEntityCode(companyId: number, type: string): Promise<string> {
-  const prefix = ENTITY_CODE_PREFIX[type] ?? "ENT";
+// Atomically allocates the next code for a company (e.g. "0001") from the
+// shared entity_code_sequence counter, same increment-then-return pattern as
+// material transfer numbers. The sequence never reuses a number, so if a
+// number ever collides with a manually-typed code from before this existed,
+// the retry just moves on to the next one — this always terminates.
+async function generateEntityCode(companyId: number): Promise<string> {
   for (let attempt = 0; attempt < 5; attempt++) {
     await pool.query(
       `INSERT INTO entity_code_sequence (company_id, entity_type, last_number)
        VALUES ($1, $2, 0)
        ON CONFLICT (company_id, entity_type) DO NOTHING`,
-      [companyId, type],
+      [companyId, SHARED_CODE_SEQUENCE_KEY],
     );
     const seqRes = await pool.query(
       `UPDATE entity_code_sequence SET last_number = last_number + 1
        WHERE company_id = $1 AND entity_type = $2
        RETURNING last_number`,
-      [companyId, type],
+      [companyId, SHARED_CODE_SEQUENCE_KEY],
     );
-    const candidate = `${prefix}-${String(seqRes.rows[0].last_number).padStart(4, "0")}`;
+    const candidate = String(seqRes.rows[0].last_number).padStart(4, "0");
     const [dupe] = await db
       .select({ id: entitiesTable.id })
       .from(entitiesTable)
@@ -175,7 +175,7 @@ router.post("/entities", async (req, res): Promise<void> => {
       return;
     }
   } else {
-    code = await generateEntityCode(companyId, parsed.data.type);
+    code = await generateEntityCode(companyId);
   }
 
   // Handle optional salesman assignment for customers (not in Zod schema — read directly from body).

@@ -8,10 +8,9 @@ export const entitiesTable = pgTable("entities", {
   type: text("type").notNull(), // customer, vendor, worker, salesman
   name: text("name").notNull(),
   mobile: text("mobile").notNull(),
-  // Auto-generated short code that identifies this one customer/vendor (e.g.
-  // "CUST-0001") — see entityCodeSequenceTable below. Nullable since rows
-  // created before this feature existed have none, but unique per company
-  // once set.
+  // Auto-generated short numeric code that identifies this one entity (e.g.
+  // "0001") — see entityCodeSequenceTable below. Nullable since rows created
+  // before this feature existed have none, but unique per company once set.
   code: text("code"),
   gstin: text("gstin"),
   address: text("address"),
@@ -42,9 +41,11 @@ export const entitiesTable = pgTable("entities", {
   uniqueIndex("entities_company_code_uq").on(t.companyId, t.code),
 ]);
 
-// One counter per (company, entity type) — allocates the numeric suffix for
-// auto-generated entity codes (e.g. "CUST-0001"), same pattern as
-// materialTransferSequenceTable.
+// Allocates the numeric suffix for auto-generated entity codes (e.g.
+// "0001"), same increment-then-return pattern as materialTransferSequenceTable.
+// entityType is always the constant "all" — the counter is shared across
+// every entity type in a company (not one per type), because entity codes
+// have no type prefix and must be unique per company regardless of type.
 export const entityCodeSequenceTable = pgTable("entity_code_sequence", {
   id: serial("id").primaryKey(),
   companyId: integer("company_id").notNull(),
