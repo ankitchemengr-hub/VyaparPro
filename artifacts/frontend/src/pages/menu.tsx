@@ -3,10 +3,8 @@ import { Link } from "wouter";
 import { useAuth } from "@/contexts/use-auth";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Search, Package, Users, FileText } from "lucide-react";
+import { Search } from "lucide-react";
 import {
-  useGlobalSearch, getGlobalSearchQueryKey,
   useListCustomerOrders, getListCustomerOrdersQueryKey,
   useListEntities, getListEntitiesQueryKey,
 } from "@workspace/api-client-react";
@@ -32,14 +30,9 @@ const TILE_COLORS = [
 ];
 
 export default function Menu() {
-  const { user, hasRole } = useAuth();
+  const { hasRole } = useAuth();
   const [query, setQuery] = React.useState("");
   const trimmed = query.trim();
-
-  const { data: results, isFetching } = useGlobalSearch(
-    { q: trimmed },
-    { query: { queryKey: getGlobalSearchQueryKey({ q: trimmed }), enabled: trimmed.length >= 2 } },
-  );
 
   const modules = moduleNavItems.filter((item) => hasRole(item.roles as any));
   const filteredModules = trimmed
@@ -61,18 +54,12 @@ export default function Menu() {
     "/customers": newCustomers?.length ?? 0,
   };
 
-  const hasResults =
-    results &&
-    ((results.products?.length ?? 0) > 0 ||
-      (results.entities?.length ?? 0) > 0 ||
-      (results.invoices?.length ?? 0) > 0);
-
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Menu</h1>
         <p className="text-muted-foreground mt-2">
-          Quick access to every module, plus search across modules, products, customers and invoices.
+          Quick access to every module.
         </p>
       </div>
 
@@ -81,95 +68,11 @@ export default function Menu() {
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search modules, products, customers, invoices..."
+          placeholder="Search modules..."
           className="pl-9"
           data-testid="input-global-search"
         />
       </div>
-
-      {trimmed.length >= 2 && (
-        <Card>
-          <CardContent className="p-4 space-y-4">
-            {isFetching && !results ? (
-              <p className="text-sm text-muted-foreground">Searching...</p>
-            ) : hasResults ? (
-              <div className="space-y-5">
-                {(results?.products?.length ?? 0) > 0 && (
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <Package className="h-4 w-4 text-primary" />
-                      <h3 className="text-sm font-semibold">Products</h3>
-                    </div>
-                    <div className="space-y-1">
-                      {results!.products.map((p) => (
-                        <Link key={p.id} href="/inventory">
-                          <div
-                            className="flex items-center justify-between rounded-md px-3 py-2 text-sm hover:bg-muted cursor-pointer"
-                            data-testid={`search-product-${p.id}`}
-                          >
-                            <span className="font-medium">{p.name}</span>
-                            <Badge variant="secondary">
-                              {p.currentStock} {p.unit}
-                            </Badge>
-                          </div>
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {(results?.entities?.length ?? 0) > 0 && (
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <Users className="h-4 w-4 text-primary" />
-                      <h3 className="text-sm font-semibold">Customers & Entities</h3>
-                    </div>
-                    <div className="space-y-1">
-                      {results!.entities.map((e) => (
-                        <Link key={e.id} href={`/customers/${e.id}`}>
-                          <div
-                            className="flex items-center justify-between rounded-md px-3 py-2 text-sm hover:bg-muted cursor-pointer"
-                            data-testid={`search-entity-${e.id}`}
-                          >
-                            <span className="font-medium">{e.name}</span>
-                            <span className="text-xs text-muted-foreground capitalize">{e.type}</span>
-                          </div>
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {(results?.invoices?.length ?? 0) > 0 && (
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <FileText className="h-4 w-4 text-primary" />
-                      <h3 className="text-sm font-semibold">Invoices</h3>
-                    </div>
-                    <div className="space-y-1">
-                      {results!.invoices.map((inv) => (
-                        <Link key={inv.id} href={`/invoices/${inv.id}`}>
-                          <div
-                            className="flex items-center justify-between rounded-md px-3 py-2 text-sm hover:bg-muted cursor-pointer"
-                            data-testid={`search-invoice-${inv.id}`}
-                          >
-                            <span className="font-medium">{inv.invoiceNo}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {inv.customerName || "Cash Sale"} · ₹{inv.grandTotal.toLocaleString()}
-                            </span>
-                          </div>
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">No results for "{trimmed}".</p>
-            )}
-          </CardContent>
-        </Card>
-      )}
 
       <div>
         <h2 className="text-lg font-semibold mb-3">Modules</h2>
