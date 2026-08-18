@@ -6,6 +6,9 @@ import {
   getGetCashbookQueryKey,
   getListAccountsQueryKey,
   getListAccountTransactionsQueryKey,
+  getGetEntityLedgerQueryKey,
+  getGetDashboardSummaryQueryKey,
+  getListKhatabookQueryKey,
   type Account,
   type AccountTransaction,
   type Entity,
@@ -208,6 +211,14 @@ export function CashEntryDialog({
           queryClient.invalidateQueries({ queryKey: getGetCashbookQueryKey() });
           queryClient.invalidateQueries({ queryKey: getListAccountsQueryKey() });
           queryClient.invalidateQueries({ queryKey: getListAccountTransactionsQueryKey() });
+          // A linked entry settles part of what the party owes — refresh
+          // everywhere that balance/ledger is shown, not just Cash Book.
+          if (txn.partyEntityId) {
+            queryClient.invalidateQueries({ queryKey: getGetEntityLedgerQueryKey(txn.partyEntityId) });
+          }
+          queryClient.invalidateQueries({ queryKey: getListEntitiesQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getListKhatabookQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() });
           toast({
             title: direction === "in" ? "Payment recorded" : "Payment issued",
             description: `Receipt ${txn.receiptNo ?? `#${txn.id}`}`,

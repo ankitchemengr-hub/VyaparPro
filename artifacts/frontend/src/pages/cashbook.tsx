@@ -8,6 +8,10 @@ import {
   getListPaymentsQueryKey,
   getListAccountsQueryKey,
   getListAccountTransactionsQueryKey,
+  getListEntitiesQueryKey,
+  getGetEntityLedgerQueryKey,
+  getGetDashboardSummaryQueryKey,
+  getListKhatabookQueryKey,
   type SalesmanCashSummary,
   type Account,
   type AccountTransaction,
@@ -436,6 +440,14 @@ function EditCashEntryDialog({
           queryClient.invalidateQueries({ queryKey: getListAccountTransactionsQueryKey() });
           queryClient.invalidateQueries({ queryKey: getListAccountsQueryKey() });
           queryClient.invalidateQueries({ queryKey: getGetCashbookQueryKey() });
+          // A linked entry's edit adjusts the party's balance/ledger too —
+          // refresh everywhere that's shown, not just Cash Book.
+          if (txn?.partyEntityId) {
+            queryClient.invalidateQueries({ queryKey: getGetEntityLedgerQueryKey(txn.partyEntityId) });
+          }
+          queryClient.invalidateQueries({ queryKey: getListEntitiesQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getListKhatabookQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() });
           toast({ title: "Entry updated", description: "Account balance and linked ledger adjusted." });
           setNegativeBalanceWarning(null);
           onClose();
