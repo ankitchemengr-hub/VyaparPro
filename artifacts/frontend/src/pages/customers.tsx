@@ -64,6 +64,7 @@ const TYPE_LABELS: Record<EntityType, string> = {
 type EditFormValues = {
   name: string;
   mobile: string;
+  code: string;
   gstin: string;
   address: string;
   city: string;
@@ -202,6 +203,7 @@ export default function Customers() {
       type: (type !== "all" ? type : "customer") as EntityType,
       name: "",
       mobile: "",
+      code: "",
       gstin: "",
       address: "",
       city: "",
@@ -218,6 +220,7 @@ export default function Customers() {
     defaultValues: {
       name: "",
       mobile: "",
+      code: "",
       gstin: "",
       address: "",
       city: "",
@@ -235,6 +238,7 @@ export default function Customers() {
       type: (type !== "all" ? type : "customer") as EntityType,
       name: "",
       mobile: "",
+      code: "",
       gstin: "",
       address: "",
       city: "",
@@ -254,6 +258,7 @@ export default function Customers() {
     editForm.reset({
       name: entity.name || "",
       mobile: entity.mobile || "",
+      code: entity.code || "",
       gstin: entity.gstin || "",
       address: entity.address || "",
       city: entity.city || "",
@@ -279,6 +284,7 @@ export default function Customers() {
       type: data.type,
       name: data.name.trim() || undefined,
       mobile: data.mobile.trim(),
+      code: data.code?.trim() || undefined,
       gstin: data.gstin?.trim() || undefined,
       address: data.address?.trim() || undefined,
       city: data.city?.trim() || undefined,
@@ -320,6 +326,10 @@ export default function Customers() {
     const payload: any = {
       name: data.name.trim() || undefined,
       mobile: data.mobile.trim(),
+      // Sent as "" rather than undefined (unlike the fields below) so clearing
+      // this box actually removes the code — it identifies one entity only,
+      // so it has to be reassignable/removable, not stuck once set.
+      code: data.code?.trim() ?? "",
       gstin: data.gstin?.trim() || undefined,
       address: data.address?.trim() || undefined,
       city: data.city?.trim() || undefined,
@@ -387,7 +397,7 @@ export default function Customers() {
         <div className="relative w-full sm:max-w-sm">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search name or mobile..."
+            placeholder="Search name, mobile, or code..."
             className="pl-8"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -460,6 +470,7 @@ export default function Customers() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
+                  <TableHead className="hidden md:table-cell">Code</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Mobile</TableHead>
                   <TableHead className="hidden md:table-cell">Pricing Tier</TableHead>
@@ -472,11 +483,11 @@ export default function Customers() {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8">Loading...</TableCell>
+                    <TableCell colSpan={9} className="text-center py-8">Loading...</TableCell>
                   </TableRow>
                 ) : filteredEntities.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No entities found.</TableCell>
+                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No entities found.</TableCell>
                   </TableRow>
                 ) : (
                   [...filteredEntities].sort((a, b) => {
@@ -514,6 +525,11 @@ export default function Customers() {
                               <Badge variant="outline" className="text-[10px] text-muted-foreground">Inactive</Badge>
                             )}
                           </div>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          {(entity as any).code
+                            ? <span className="font-mono text-sm">{(entity as any).code}</span>
+                            : <span className="text-xs text-muted-foreground italic">—</span>}
                         </TableCell>
                         <TableCell className="capitalize">{entity.type}</TableCell>
                         <TableCell>{entity.mobile}</TableCell>
@@ -652,6 +668,20 @@ export default function Customers() {
                   )}
                 />
               </div>
+
+              <FormField
+                control={form.control}
+                name="code"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Code <span className="font-normal text-muted-foreground">(optional)</span></FormLabel>
+                    <FormControl>
+                      <Input data-testid="input-add-entity-code" placeholder="e.g. CUST-001 — used to identify this entity only" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
               {isCustomerForm && (
                 <>
@@ -896,6 +926,20 @@ export default function Customers() {
                   )}
                 />
               </div>
+
+              <FormField
+                control={editForm.control}
+                name="code"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Code <span className="font-normal text-muted-foreground">(optional)</span></FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. CUST-001 — used to identify this entity only" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
               {editingEntity?.type === "customer" && (
                 <>

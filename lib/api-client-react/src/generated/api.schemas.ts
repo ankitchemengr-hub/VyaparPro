@@ -1016,6 +1016,11 @@ export interface Entity {
   type: EntityType;
   name: string;
   mobile: string;
+  /**
+     * Optional short identifier the business assigns to this customer/vendor, unique per company.
+     * @nullable
+     */
+  code?: string | null;
   /** @nullable */
   gstin?: string | null;
   /** @nullable */
@@ -1085,6 +1090,8 @@ export interface EntityInput {
   type: EntityInputType;
   name?: string;
   mobile: string;
+  /** Optional short identifier the business assigns to this customer/vendor, unique per company. */
+  code?: string;
   gstin?: string;
   address?: string;
   city?: string;
@@ -1106,6 +1113,11 @@ export interface EntityUpdate {
   type?: string;
   name?: string;
   mobile?: string;
+  /**
+     * Optional short identifier the business assigns to this customer/vendor, unique per company.
+     * @nullable
+     */
+  code?: string | null;
   gstin?: string;
   address?: string;
   city?: string;

@@ -10,6 +10,11 @@ export interface EntityUpdate {
   type?: string;
   name?: string;
   mobile?: string;
+  /**
+     * Optional short identifier the business assigns to this customer/vendor, unique per company.
+     * @nullable
+     */
+  code?: string | null;
   gstin?: string;
   address?: string;
   city?: string;

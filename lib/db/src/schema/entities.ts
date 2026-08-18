@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, boolean, numeric, index } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, boolean, numeric, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -8,6 +8,10 @@ export const entitiesTable = pgTable("entities", {
   type: text("type").notNull(), // customer, vendor, worker, salesman
   name: text("name").notNull(),
   mobile: text("mobile").notNull(),
+  // Optional short code the business assigns to identify this customer/vendor
+  // by (e.g. a legacy ledger code) — nullable since most existing rows won't
+  // have one, but unique per company once set.
+  code: text("code"),
   gstin: text("gstin"),
   address: text("address"),
   city: text("city"),
@@ -34,6 +38,7 @@ export const entitiesTable = pgTable("entities", {
   index("entities_company_idx").on(t.companyId),
   index("entities_mobile_idx").on(t.mobile),
   index("entities_type_idx").on(t.type),
+  uniqueIndex("entities_company_code_uq").on(t.companyId, t.code),
 ]);
 
 export const ledgerEntriesTable = pgTable("ledger_entries", {

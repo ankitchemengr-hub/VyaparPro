@@ -60,7 +60,8 @@ router.get("/entities", async (req, res): Promise<void> => {
       or(
         ilike(entitiesTable.name, `%${params.data.search}%`),
         ilike(entitiesTable.mobile, `%${params.data.search}%`),
-        ilike(entitiesTable.gstin ?? sql`''`, `%${params.data.search}%`)
+        ilike(entitiesTable.gstin ?? sql`''`, `%${params.data.search}%`),
+        ilike(entitiesTable.code ?? sql`''`, `%${params.data.search}%`)
       )
     );
   }
@@ -123,6 +124,21 @@ router.post("/entities", async (req, res): Promise<void> => {
     return;
   }
 
+  // A code identifies exactly one entity, company-wide — blank means "none",
+  // never a value that could collide with another blank one under the
+  // unique index (which treats '' as real, unlike NULL).
+  const code = parsed.data.code?.trim() || null;
+  if (code) {
+    const [codeDupe] = await db
+      .select({ id: entitiesTable.id, name: entitiesTable.name })
+      .from(entitiesTable)
+      .where(and(eq(entitiesTable.companyId, companyId), eq(entitiesTable.code, code)));
+    if (codeDupe) {
+      res.status(409).json({ error: `Code "${code}" is already used by ${codeDupe.name}` });
+      return;
+    }
+  }
+
   // Handle optional salesman assignment for customers (not in Zod schema — read directly from body).
   const assignedSalesmanIdRaw = (req.body as any).assignedSalesmanId;
   const assignedSalesmanId = assignedSalesmanIdRaw != null && assignedSalesmanIdRaw !== ""
@@ -133,6 +149,7 @@ router.post("/entities", async (req, res): Promise<void> => {
     ...parsed.data,
     companyId,
     name,
+    code,
     pricingTier,
     creditLimit: parsed.data.creditLimit != null ? String(parsed.data.creditLimit) : null,
     customerSource: session?.role === "salesman" ? "salesman" : "admin",
@@ -232,6 +249,25 @@ router.patch("/entities/:id", async (req, res): Promise<void> => {
     }
   }
 
+  // Same "blank means none, never a colliding blank" normalization as create.
+  const code = parsed.data.code !== undefined ? (parsed.data.code?.trim() || null) : undefined;
+  if (code) {
+    const [codeDupe] = await db
+      .select({ id: entitiesTable.id, name: entitiesTable.name })
+      .from(entitiesTable)
+      .where(
+        and(
+          eq(entitiesTable.companyId, companyId),
+          eq(entitiesTable.code, code),
+          ne(entitiesTable.id, params.data.id),
+        ),
+      );
+    if (codeDupe) {
+      res.status(409).json({ error: `Code "${code}" is already used by ${codeDupe.name}` });
+      return;
+    }
+  }
+
   // Pull salesman-assignment fields directly from body (not in UpdateEntityBody Zod schema).
   const assignedSalesmanId: number | null | undefined = (req.body as any).assignedSalesmanId !== undefined
     ? ((req.body as any).assignedSalesmanId === null || (req.body as any).assignedSalesmanId === ""
@@ -255,6 +291,7 @@ router.patch("/entities/:id", async (req, res): Promise<void> => {
     .update(entitiesTable)
     .set({
       ...parsed.data,
+      code,
       creditLimit: parsed.data.creditLimit != null ? String(parsed.data.creditLimit) : undefined,
       // Editing is itself an admin action on this customer — clears the "new" flag.
       isNewFromSalesman: false,
@@ -507,6 +544,7 @@ function formatEntity(e: any) {
     type: e.type,
     name: e.name,
     mobile: e.mobile,
+    code: e.code ?? null,
     gstin: e.gstin ?? null,
     address: e.address ?? null,
     city: e.city ?? null,

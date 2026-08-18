@@ -17,6 +17,8 @@ export interface EntityInput {
   type: EntityInputType;
   name?: string;
   mobile: string;
+  /** Optional short identifier the business assigns to this customer/vendor, unique per company. */
+  code?: string;
   gstin?: string;
   address?: string;
   city?: string;

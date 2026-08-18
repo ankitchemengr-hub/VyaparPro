@@ -4231,6 +4231,9 @@ components:
           type: string
         mobile:
           type: string
+        code:
+          type: ["string", "null"]
+          description: Optional short identifier the business assigns to this customer/vendor, unique per company.
         gstin:
           type: ["string", "null"]
         address:
@@ -4298,6 +4301,9 @@ components:
           type: string
         mobile:
           type: string
+        code:
+          type: string
+          description: Optional short identifier the business assigns to this customer/vendor, unique per company.
         gstin:
           type: string
         address:
@@ -4332,6 +4338,9 @@ components:
           type: string
         mobile:
           type: string
+        code:
+          type: ["string", "null"]
+          description: Optional short identifier the business assigns to this customer/vendor, unique per company.
         gstin:
           type: string
         address:

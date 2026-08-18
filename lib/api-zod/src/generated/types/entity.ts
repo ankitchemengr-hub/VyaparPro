@@ -13,6 +13,11 @@ export interface Entity {
   type: EntityType;
   name: string;
   mobile: string;
+  /**
+     * Optional short identifier the business assigns to this customer/vendor, unique per company.
+     * @nullable
+     */
+  code?: string | null;
   /** @nullable */
   gstin?: string | null;
   /** @nullable */
