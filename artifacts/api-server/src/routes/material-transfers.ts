@@ -20,6 +20,97 @@ async function queryMany(text: string, params: any[] = []): Promise<any[]> {
   return result.rows;
 }
 
+// Shared by POST and PATCH: covers a transferred qty from existing 'ready'
+// batches (oldest first), same as a normal dispatch. Ready stock is clamped
+// at zero — it never goes negative. Whatever isn't covered by ready batches
+// is treated as "assemble it right now": the BOM's raw materials are
+// auto-deducted for the shortfall (mirroring POST /manufacturing/assemble),
+// instead of parking a negative deficit row on Ready Material.
+async function consumeReadyStockOrAutoAssemble(client: any, params: {
+  companyId: number; productId: number; productName: string; unit: string;
+  qty: number; referenceId: number; userId: number; sentBy: string;
+}): Promise<void> {
+  const { companyId, productId, productName, unit, qty, referenceId, userId, sentBy } = params;
+  let remaining = qty;
+  const readyBatches = await client.query(
+    `SELECT id, qty FROM ready_material_batches
+     WHERE company_id = $1 AND product_id = $2 AND status = 'ready' AND qty > 0
+     ORDER BY created_at ASC FOR UPDATE`,
+    [companyId, productId],
+  );
+  for (const batch of readyBatches.rows) {
+    if (remaining <= 0) break;
+    const batchQty = Number(batch.qty);
+    if (batchQty <= remaining) {
+      await client.query(
+        `UPDATE ready_material_batches
+         SET status = 'dispatched', dispatched_at = NOW(), material_transfer_id = $1
+         WHERE id = $2`,
+        [referenceId, batch.id],
+      );
+      remaining -= batchQty;
+    } else {
+      await client.query(`UPDATE ready_material_batches SET qty = qty - $1 WHERE id = $2`, [remaining, batch.id]);
+      remaining = 0;
+    }
+  }
+  if (remaining <= 0) return;
+
+  const bomRes = await client.query(
+    `SELECT id, output_quantity FROM boms WHERE company_id = $1 AND finished_product_id = $2 LIMIT 1`,
+    [companyId, productId],
+  );
+  const bom = bomRes.rows[0];
+  if (!bom) {
+    // No BOM configured for this manufactured item — nothing to compute
+    // raw-material consumption from, so fall back to a deficit marker.
+    const existingDeficitRes = await client.query(
+      `SELECT id FROM ready_material_batches
+       WHERE company_id = $1 AND product_id = $2 AND status = 'ready' AND qty <= 0
+       ORDER BY created_at ASC LIMIT 1 FOR UPDATE`,
+      [companyId, productId],
+    );
+    const existingDeficit = existingDeficitRes.rows[0];
+    if (existingDeficit) {
+      await client.query(
+        `UPDATE ready_material_batches SET qty = qty - $1, material_transfer_id = $2, updated_at = NOW() WHERE id = $3`,
+        [remaining, referenceId, existingDeficit.id],
+      );
+    } else {
+      await client.query(
+        `INSERT INTO ready_material_batches
+           (company_id, product_id, product_name, unit, qty, batches, worker_name, status, adjustment_reason, material_transfer_id, created_by_user_id)
+         VALUES ($1,$2,$3,$4,$5,1,$6,'ready',$7,$8,$9)`,
+        [
+          companyId, productId, productName, unit, -remaining, sentBy,
+          "Transferred with no BOM configured to auto-consume raw materials — add a BOM or correct this manually.",
+          referenceId, userId,
+        ],
+      );
+    }
+    return;
+  }
+
+  const bomItemsRes = await client.query(
+    `SELECT material_product_id, quantity FROM bom_items WHERE company_id = $1 AND bom_id = $2`,
+    [companyId, bom.id],
+  );
+  const outputQty = Number(bom.output_quantity) || 1;
+  const batchesNeeded = remaining / outputQty;
+  for (const bomItem of bomItemsRes.rows) {
+    const consumeQty = Number(bomItem.quantity) * batchesNeeded;
+    await client.query(
+      `UPDATE products SET current_stock = current_stock - $1 WHERE id = $2 AND company_id = $3`,
+      [consumeQty, bomItem.material_product_id, companyId],
+    );
+    await client.query(
+      `INSERT INTO stock_movements (company_id, product_id, type, quantity, reason, reference_id, reference_type, user_id)
+       VALUES ($1, $2, 'manufacturing_consume', $3, 'Auto-consumed for material transfer shortfall', $4, 'material_transfer', $5)`,
+      [companyId, bomItem.material_product_id, consumeQty, referenceId, userId],
+    );
+  }
+}
+
 // GET /material-transfers — list, most recent first, with item count.
 router.get("/material-transfers", async (req, res): Promise<void> => {
   const companyId = getCompanyId(req);
@@ -97,9 +188,8 @@ router.get("/material-transfers/:id", async (req, res): Promise<void> => {
 // customers order against it. The gap this shortcuts (no Ready Material batch
 // ever recorded) instead shows up on the Manufacturing side: existing 'ready'
 // batches for the product are consumed first (oldest first, same as a normal
-// dispatch); anything left over becomes a NEGATIVE ready batch, flagging that
-// this much was sent out without ever being logged as assembled. It only goes
-// away once someone assembles the item for real and/or an admin corrects it.
+// dispatch — never below zero); anything left over is auto-assembled on the
+// spot, deducting the item's BOM raw materials for the shortfall.
 router.post("/material-transfers", async (req, res): Promise<void> => {
   const companyId = getCompanyId(req);
   const auth = (req as any).session;
@@ -190,78 +280,14 @@ router.post("/material-transfers", async (req, res): Promise<void> => {
 
       // Ready Material bookkeeping only applies to items actually flagged for
       // manufacturing — a purchased/resale product has no BOM or Assemble
-      // step, so there's nothing for a deficit row to ever be corrected by.
+      // step, so there's nothing to auto-assemble a shortfall from.
       if (isManufacturedItem) {
-        // Consume existing 'ready' batches for this product (oldest first, real
-        // assembled qty only — a negative deficit row from an earlier unlogged
-        // transfer must never be treated as stock to "consume") to cover the
-        // transfer — same accounting a normal dispatch would do.
-        let remaining = itemQty;
-        const readyBatches = await client.query(
-          `SELECT id, qty FROM ready_material_batches
-           WHERE company_id = $1 AND product_id = $2 AND status = 'ready' AND qty > 0
-           ORDER BY created_at ASC FOR UPDATE`,
-          [companyId, item.productId],
-        );
-        for (const batch of readyBatches.rows) {
-          if (remaining <= 0) break;
-          const batchQty = Number(batch.qty);
-          if (batchQty <= remaining) {
-            await client.query(
-              `UPDATE ready_material_batches
-               SET status = 'dispatched', dispatched_at = NOW(), material_transfer_id = $1
-               WHERE id = $2`,
-              [header.id, batch.id],
-            );
-            remaining -= batchQty;
-          } else {
-            await client.query(`UPDATE ready_material_batches SET qty = qty - $1 WHERE id = $2`, [remaining, batch.id]);
-            remaining = 0;
-          }
-        }
-
-        // Anything left over was never assembled/logged at all. A product keeps
-        // exactly one 'ready' line, so if a deficit row already exists here
-        // (from an earlier unlogged transfer), add to it instead of creating a
-        // second one — same "one line per product" rule Assemble follows. The
-        // dispatch endpoint refuses non-positive batches, so this can't be
-        // "dispatched" again — it only nets back toward zero once a real
-        // Assemble entry is recorded for this product.
-        if (remaining > 0) {
-          const existingDeficitRes = await client.query(
-            `SELECT id, qty FROM ready_material_batches
-             WHERE company_id = $1 AND product_id = $2 AND status = 'ready' AND qty <= 0
-             ORDER BY created_at ASC LIMIT 1 FOR UPDATE`,
-            [companyId, item.productId],
-          );
-          const existingDeficit = existingDeficitRes.rows[0];
-          if (existingDeficit) {
-            await client.query(
-              `UPDATE ready_material_batches
-               SET qty = qty - $1, worker_name = $2, material_transfer_id = $3, updated_at = NOW()
-               WHERE id = $4`,
-              [remaining, body.sentBy?.trim() || "Manual Transfer", header.id, existingDeficit.id],
-            );
-            savedItems.push({ productId: item.productId, productName, qty: itemQty, unit: item.unit || "QTY" });
-            continue;
-          }
-          await client.query(
-            `INSERT INTO ready_material_batches
-               (company_id, product_id, product_name, unit, qty, batches, worker_name, status, adjustment_reason, material_transfer_id, created_by_user_id)
-             VALUES ($1,$2,$3,$4,$5,1,$6,'ready',$7,$8,$9)`,
-            [
-              companyId,
-              item.productId,
-              productName,
-              item.unit || prodRes.rows[0].unit || "QTY",
-              -remaining,
-              body.sentBy?.trim() || "Manual Transfer",
-              "Transferred before being assembled — record the missing Assemble entry to correct this.",
-              header.id,
-              userId,
-            ],
-          );
-        }
+        await consumeReadyStockOrAutoAssemble(client, {
+          companyId, productId: item.productId, productName,
+          unit: item.unit || prodRes.rows[0].unit || "QTY",
+          qty: itemQty, referenceId: header.id, userId,
+          sentBy: body.sentBy?.trim() || "Manual Transfer",
+        });
       }
 
       savedItems.push({ productId: item.productId, productName, qty: itemQty, unit: item.unit || "QTY" });
@@ -294,9 +320,9 @@ router.post("/material-transfers", async (req, res): Promise<void> => {
 //     direction — that's the number Catalog/staff actually sell against, so
 //     it must always be exact regardless of whether a qty went up or down.
 //   - A qty INCREASE also extends Ready Material tracking for just that
-//     extra amount, using the same oldest-batch-first consume-then-deficit
-//     logic POST uses — this is fully safe, same as if a small follow-up
-//     transfer had been logged for the difference.
+//     extra amount, using the same oldest-batch-first consume-then-auto-
+//     assemble logic POST uses — this is fully safe, same as if a small
+//     follow-up transfer had been logged for the difference.
 //   - A qty DECREASE deliberately does NOT touch Ready Material batches:
 //     partial-batch consumption at creation time never recorded which batch
 //     it drew from, so there's no reliable way to know what to give back.
@@ -407,54 +433,11 @@ router.patch("/material-transfers/:id", async (req, res): Promise<void> => {
         }
 
         if (delta > 0 && isManufacturedItem) {
-          let remaining = delta;
-          const readyBatches = await client.query(
-            `SELECT id, qty FROM ready_material_batches
-             WHERE company_id = $1 AND product_id = $2 AND status = 'ready' AND qty > 0
-             ORDER BY created_at ASC FOR UPDATE`,
-            [companyId, productId],
-          );
-          for (const batch of readyBatches.rows) {
-            if (remaining <= 0) break;
-            const batchQty = Number(batch.qty);
-            if (batchQty <= remaining) {
-              await client.query(
-                `UPDATE ready_material_batches SET status = 'dispatched', dispatched_at = NOW(), material_transfer_id = $1 WHERE id = $2`,
-                [id, batch.id],
-              );
-              remaining -= batchQty;
-            } else {
-              await client.query(`UPDATE ready_material_batches SET qty = qty - $1 WHERE id = $2`, [remaining, batch.id]);
-              remaining = 0;
-            }
-          }
-          if (remaining > 0) {
-            const existingDeficitRes = await client.query(
-              `SELECT id FROM ready_material_batches
-               WHERE company_id = $1 AND product_id = $2 AND status = 'ready' AND qty <= 0
-               ORDER BY created_at ASC LIMIT 1 FOR UPDATE`,
-              [companyId, productId],
-            );
-            const existingDeficit = existingDeficitRes.rows[0];
-            if (existingDeficit) {
-              await client.query(
-                `UPDATE ready_material_batches SET qty = qty - $1, material_transfer_id = $2, updated_at = NOW() WHERE id = $3`,
-                [remaining, id, existingDeficit.id],
-              );
-            } else {
-              await client.query(
-                `INSERT INTO ready_material_batches
-                   (company_id, product_id, product_name, unit, qty, batches, worker_name, status, adjustment_reason, material_transfer_id, created_by_user_id)
-                 VALUES ($1,$2,$3,$4,$5,1,$6,'ready',$7,$8,$9)`,
-                [
-                  companyId, productId, productName, unit, -remaining,
-                  body.sentBy?.trim() || "Manual Transfer",
-                  "Transferred before being assembled — record the missing Assemble entry to correct this.",
-                  id, userId,
-                ],
-              );
-            }
-          }
+          await consumeReadyStockOrAutoAssemble(client, {
+            companyId, productId, productName, unit,
+            qty: delta, referenceId: id, userId,
+            sentBy: body.sentBy?.trim() || "Manual Transfer",
+          });
         }
         // delta < 0: Store stock already reduced above; Ready Material
         // batches intentionally left untouched — see function comment.
