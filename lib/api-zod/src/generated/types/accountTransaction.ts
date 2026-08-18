@@ -24,6 +24,13 @@ export interface AccountTransaction {
   partyMobile?: string | null;
   /** @nullable */
   partyEntityId?: number | null;
+  /**
+     * If this "Payment In" was applied against one specific invoice, that invoice's id.
+     * @nullable
+     */
+  invoiceId?: number | null;
+  /** @nullable */
+  invoiceNo?: string | null;
   /** @nullable */
   notes?: string | null;
   /** @nullable */

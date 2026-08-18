@@ -2,6 +2,7 @@ import { pgTable, text, serial, timestamp, integer, numeric, index, unique } fro
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { accountsTable } from "./accounts";
+import { invoicesTable } from "./invoices";
 
 export const accountTransactionsTable = pgTable("account_transactions", {
   id: serial("id").primaryKey(),
@@ -14,6 +15,12 @@ export const accountTransactionsTable = pgTable("account_transactions", {
   partyName: text("party_name"),
   partyMobile: text("party_mobile"),
   partyEntityId: integer("party_entity_id"),
+  // Optional — a "Payment In" linked to a customer can also target one of
+  // their specific outstanding invoices, so that invoice's balance_due
+  // actually reduces (and can reach "Paid") instead of only the customer's
+  // overall outstanding_balance moving. Never editable after the fact, same
+  // as partyEntityId — see the PATCH route's comment.
+  invoiceId: integer("invoice_id").references(() => invoicesTable.id),
   notes: text("notes"),
   createdById: integer("created_by_id"),
   createdByName: text("created_by_name"),

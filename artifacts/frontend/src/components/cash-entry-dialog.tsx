@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import {
   useCreateAccountTransaction,
   useListEntities,
+  useListInvoices,
   getListEntitiesQueryKey,
   getGetCashbookQueryKey,
   getListAccountsQueryKey,
@@ -9,6 +10,8 @@ import {
   getGetEntityLedgerQueryKey,
   getGetDashboardSummaryQueryKey,
   getListKhatabookQueryKey,
+  getGetInvoiceQueryKey,
+  getListInvoicesQueryKey,
   type Account,
   type AccountTransaction,
   type Entity,
@@ -87,6 +90,7 @@ export function CashEntryDialog({
   const [partyMobile, setPartyMobile] = useState("");
   const [partyEntityId, setPartyEntityId] = useState<number | null>(null);
   const [partyEntityBalance, setPartyEntityBalance] = useState<number | null>(null);
+  const [invoiceId, setInvoiceId] = useState<number | null>(null);
   const [notes, setNotes] = useState("");
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
   const [negativeConfirmMsg, setNegativeConfirmMsg] = useState<string | null>(null);
@@ -136,6 +140,7 @@ export function CashEntryDialog({
       setPartyMobile(presetEntity?.mobile ?? "");
       setPartyEntityId(presetEntity?.id ?? null);
       setPartyEntityBalance(presetEntity?.balance ?? null);
+      setInvoiceId(null);
       setNotes("");
       setNameOpen(false);
       setMobileOpen(false);
@@ -147,6 +152,24 @@ export function CashEntryDialog({
       }
     }
   }, [open, direction, accounts, presetEntity]);
+
+  // A "Payment In" linked to a customer can optionally be applied against
+  // one of their specific outstanding invoices, so that invoice's own
+  // balance_due actually moves (and can reach "Paid") instead of only the
+  // customer's overall balance. Only fetched when there's a customer to
+  // narrow to, since this endpoint isn't filtered by pay status server-side.
+  const isIn = direction === "in";
+  const outstandingInvoicesParams = { customerId: partyEntityId ?? undefined };
+  const { data: customerInvoices = [] } = useListInvoices(outstandingInvoicesParams, {
+    query: {
+      queryKey: getListInvoicesQueryKey(outstandingInvoicesParams),
+      enabled: isIn && !!partyEntityId,
+    },
+  });
+  const NO_PAY_INVOICE_TYPES = new Set(["quotation", "proforma_invoice", "sale_order", "delivery_challan"]);
+  const outstandingInvoices = customerInvoices.filter(
+    (i) => (i.status as string) !== "cancelled" && !NO_PAY_INVOICE_TYPES.has(i.invoiceType as string) && (i.balanceDue ?? 0) > 0,
+  );
 
   // close dropdowns on outside click
   useEffect(() => {
@@ -165,6 +188,7 @@ export function CashEntryDialog({
     setPartyName(e.name);
     setPartyMobile(e.mobile);
     setPartyEntityBalance(Number((e as any).outstandingBalance ?? 0));
+    setInvoiceId(null);
     setNameOpen(false);
     setMobileOpen(false);
   };
@@ -172,6 +196,7 @@ export function CashEntryDialog({
   const clearLinkedEntity = () => {
     setPartyEntityId(null);
     setPartyEntityBalance(null);
+    setInvoiceId(null);
   };
 
   const handleSubmit = (allowNegative = false, skipBalanceWarning = false) => {
@@ -184,7 +209,9 @@ export function CashEntryDialog({
     // settled, or in credit) usually means this payment was already recorded
     // somewhere else — e.g. from the invoice itself — and this would double
     // it. Doesn't block, just requires an explicit "record anyway" click.
-    if (!skipBalanceWarning && isIn && partyEntityId && partyEntityBalance != null && partyEntityBalance <= 0) {
+    // Skipped when a specific invoice is picked — its own balance already
+    // confirms there's something outstanding to apply this against.
+    if (!skipBalanceWarning && !invoiceId && isIn && partyEntityId && partyEntityBalance != null && partyEntityBalance <= 0) {
       setNoBalanceConfirmMsg(
         `${partyName.trim() || "This customer"} has no outstanding balance right now — check it wasn't already recorded against an invoice before adding this.`,
       );
@@ -202,6 +229,7 @@ export function CashEntryDialog({
           partyName: partyName.trim() || undefined,
           partyMobile: partyMobile.trim() || undefined,
           partyEntityId: partyEntityId ?? undefined,
+          invoiceId: invoiceId ?? undefined,
           notes: notes.trim() || undefined,
           ...(allowNegative ? { allowNegative: true } : {}),
         },
@@ -216,6 +244,10 @@ export function CashEntryDialog({
           if (txn.partyEntityId) {
             queryClient.invalidateQueries({ queryKey: getGetEntityLedgerQueryKey(txn.partyEntityId) });
           }
+          if (txn.invoiceId) {
+            queryClient.invalidateQueries({ queryKey: getGetInvoiceQueryKey(txn.invoiceId) });
+          }
+          queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
           queryClient.invalidateQueries({ queryKey: getListEntitiesQueryKey() });
           queryClient.invalidateQueries({ queryKey: getListKhatabookQueryKey() });
           queryClient.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() });
@@ -238,7 +270,6 @@ export function CashEntryDialog({
     );
   };
 
-  const isIn = direction === "in";
   const Icon = isIn ? ArrowDownCircle : ArrowUpCircle;
 
   return (
@@ -337,6 +368,26 @@ export function CashEntryDialog({
               </div>
             )}
 
+            {isIn && partyEntityId && outstandingInvoices.length > 0 && (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Apply to Invoice <span className="font-normal text-muted-foreground">(optional)</span></Label>
+                <Select value={invoiceId ? String(invoiceId) : "__none__"} onValueChange={(v) => setInvoiceId(v === "__none__" ? null : Number(v))}>
+                  <SelectTrigger data-testid="select-entry-invoice"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">None — general payment against balance</SelectItem>
+                    {outstandingInvoices.map((inv) => (
+                      <SelectItem key={inv.id} value={String(inv.id)}>
+                        {inv.invoiceNo} — due ₹{(inv.balanceDue ?? 0).toLocaleString("en-IN")}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Marks that specific invoice as paid (fully or partially) instead of only reducing the customer's overall balance.
+                </p>
+              </div>
+            )}
+
             {/* Name with autocomplete */}
             <div className="space-y-1.5 relative" ref={nameRef}>
               <Label>Name</Label>
@@ -344,7 +395,7 @@ export function CashEntryDialog({
                 value={partyName}
                 onChange={(e) => {
                   setPartyName(e.target.value);
-                  if (partyEntityId) setPartyEntityId(null);
+                  if (partyEntityId) { setPartyEntityId(null); setInvoiceId(null); }
                   setNameOpen(true);
                 }}
                 onFocus={() => { if (!partyEntityId) setNameOpen(true); }}
@@ -398,7 +449,7 @@ export function CashEntryDialog({
                 value={partyMobile}
                 onChange={(e) => {
                   setPartyMobile(e.target.value);
-                  if (partyEntityId) setPartyEntityId(null);
+                  if (partyEntityId) { setPartyEntityId(null); setInvoiceId(null); }
                   setMobileOpen(true);
                 }}
                 onFocus={() => { if (!partyEntityId) setMobileOpen(true); }}

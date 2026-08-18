@@ -300,11 +300,12 @@ router.get("/account-transactions", async (req, res): Promise<void> => {
 
   const rows = await db.execute(sql`
     SELECT t.id, t.receipt_no, t.account_id, t.direction, t.amount, t.mode,
-           t.party_name, t.party_mobile, t.party_entity_id, t.notes,
+           t.party_name, t.party_mobile, t.party_entity_id, t.invoice_id, t.notes,
            t.created_by_id, t.created_by_name, t.created_by_role,
-           t.created_at, a.name as account_name
+           t.created_at, a.name as account_name, i.invoice_no
     FROM account_transactions t
     LEFT JOIN accounts a ON a.id = t.account_id
+    LEFT JOIN invoices i ON i.id = t.invoice_id
     ${whereSql}
     ORDER BY t.created_at DESC
     LIMIT 500
@@ -322,6 +323,8 @@ router.get("/account-transactions", async (req, res): Promise<void> => {
       partyName: r.party_name ?? null,
       partyMobile: r.party_mobile ?? null,
       partyEntityId: r.party_entity_id ?? null,
+      invoiceId: r.invoice_id ?? null,
+      invoiceNo: r.invoice_no ?? null,
       notes: r.notes ?? null,
       createdById: r.created_by_id ?? null,
       createdByName: r.created_by_name ?? null,
@@ -342,7 +345,15 @@ router.post("/account-transactions", async (req, res): Promise<void> => {
   }
   const session = (req as any).session;
   const companyId = getCompanyId(req);
-  const { accountId, direction, amount, mode, partyName, partyMobile, partyEntityId, notes, allowNegative } = parsed.data;
+  const { accountId, direction, amount, mode, partyName, partyMobile, partyEntityId, invoiceId, notes, allowNegative } = parsed.data;
+
+  // invoiceId only ever makes sense on a customer "Payment In" — validated
+  // properly below once we know the party's type, but reject the
+  // structurally-impossible combos up front.
+  if (invoiceId != null && !(direction === "in" && partyEntityId)) {
+    res.status(400).json({ error: "invoiceId requires direction \"in\" and a linked customer" });
+    return;
+  }
 
   const client = await pool.connect();
   try {
@@ -369,12 +380,38 @@ router.post("/account-transactions", async (req, res): Promise<void> => {
       return;
     }
 
+    let invoiceNo: string | null = null;
+    if (invoiceId != null) {
+      const invRes = await client.query(
+        `SELECT invoice_no, customer_id, balance_due FROM invoices
+         WHERE id = $1 AND company_id = $2 AND status != 'cancelled' FOR UPDATE`,
+        [invoiceId, companyId],
+      );
+      const inv = invRes.rows[0];
+      if (!inv) {
+        await client.query("ROLLBACK");
+        res.status(404).json({ error: "Invoice not found or cancelled" });
+        return;
+      }
+      if (inv.customer_id !== partyEntityId) {
+        await client.query("ROLLBACK");
+        res.status(400).json({ error: "That invoice does not belong to the linked customer" });
+        return;
+      }
+      if (Number(inv.balance_due) <= 0) {
+        await client.query("ROLLBACK");
+        res.status(400).json({ error: "Invoice is already fully paid" });
+        return;
+      }
+      invoiceNo = inv.invoice_no;
+    }
+
     const receiptNo = await generateSeriesNumber(client, "payment_receipt", companyId);
 
     const ins = await client.query(
       `INSERT INTO account_transactions
-        (company_id, account_id, direction, amount, mode, party_name, party_mobile, party_entity_id, notes, receipt_no, created_by_id, created_by_name, created_by_role)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+        (company_id, account_id, direction, amount, mode, party_name, party_mobile, party_entity_id, invoice_id, notes, receipt_no, created_by_id, created_by_name, created_by_role)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
        RETURNING *`,
       [
         companyId,
@@ -385,6 +422,7 @@ router.post("/account-transactions", async (req, res): Promise<void> => {
         partyName ?? null,
         partyMobile ?? null,
         partyEntityId ?? null,
+        invoiceId ?? null,
         notes ?? null,
         receiptNo,
         session?.userId ?? null,
@@ -425,6 +463,7 @@ router.post("/account-transactions", async (req, res): Promise<void> => {
           mode,
           receiptNo,
           referenceId: txn.id,
+          invoiceId: isCustomerReceipt ? (invoiceId ?? null) : null,
           description: isVendorPayout ? `Payment made (${mode})` : `Payment received (${mode})`,
         });
       }
@@ -443,6 +482,8 @@ router.post("/account-transactions", async (req, res): Promise<void> => {
       partyName: txn.party_name ?? null,
       partyMobile: txn.party_mobile ?? null,
       partyEntityId: txn.party_entity_id ?? null,
+      invoiceId: txn.invoice_id ?? null,
+      invoiceNo,
       notes: txn.notes ?? null,
       createdById: txn.created_by_id ?? null,
       createdByName: txn.created_by_name ?? null,
@@ -462,10 +503,12 @@ router.post("/account-transactions", async (req, res): Promise<void> => {
 // PATCH /account-transactions/:id — admin-only correction of a Cash Book
 // entry. Reflects the amount change into the linked account's balance, and
 // — if this entry settled a customer/vendor's account (the "LINKED" badge in
-// Cash Book) — into that entity's outstanding_balance and ledger_entries.
-// direction/account/party-entity are intentionally NOT editable here: those
-// would need a full reversal-and-reapply rather than a delta, which is a much
-// bigger change than "the amount/mode/notes was mistyped".
+// Cash Book) — into that entity's outstanding_balance and ledger_entries,
+// and if it was applied against one specific invoice, that invoice's
+// balance_due/amount_paid too. direction/account/party-entity/invoice are
+// intentionally NOT editable here: those would need a full reversal-and-
+// reapply rather than a delta, which is a much bigger change than "the
+// amount/mode/notes was mistyped".
 router.patch("/account-transactions/:id", async (req, res): Promise<void> => {
   if (!requireFinancialWrite(req, res)) return;
   const companyId = getCompanyId(req);
@@ -573,6 +616,29 @@ router.patch("/account-transactions/:id", async (req, res): Promise<void> => {
       }
     }
 
+    // If this entry was applied against a specific invoice (only ever true
+    // for a customer receipt, per the invoiceId validation on create),
+    // reverse what the old amount did to it and reapply the new amount —
+    // same clamped formula applyEntityPayment uses, so the invoice's
+    // balance_due can't go negative or amount_paid past the invoice total
+    // even if it's also been partly settled by some other payment.
+    if (delta !== 0 && existing.invoice_id) {
+      await client.query(
+        `UPDATE invoices
+         SET amount_paid = GREATEST(0, amount_paid - $1),
+             balance_due = LEAST(grand_total, balance_due + $1)
+         WHERE id = $2 AND company_id = $3`,
+        [oldAmount, existing.invoice_id, companyId],
+      );
+      await client.query(
+        `UPDATE invoices
+         SET amount_paid = amount_paid + LEAST($1, balance_due),
+             balance_due = GREATEST(0, balance_due - $1)
+         WHERE id = $2 AND company_id = $3`,
+        [newAmount, existing.invoice_id, companyId],
+      );
+    }
+
     await client.query("COMMIT");
     res.json({
       id: txn.id,
@@ -585,6 +651,7 @@ router.patch("/account-transactions/:id", async (req, res): Promise<void> => {
       partyName: txn.party_name ?? null,
       partyMobile: txn.party_mobile ?? null,
       partyEntityId: txn.party_entity_id ?? null,
+      invoiceId: txn.invoice_id ?? null,
       notes: txn.notes ?? null,
       createdById: txn.created_by_id ?? null,
       createdByName: txn.created_by_name ?? null,

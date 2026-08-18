@@ -5006,6 +5006,11 @@ components:
           type: ["string", "null"]
         partyEntityId:
           type: ["integer", "null"]
+        invoiceId:
+          type: ["integer", "null"]
+          description: If this "Payment In" was applied against one specific invoice, that invoice's id.
+        invoiceNo:
+          type: ["string", "null"]
         notes:
           type: ["string", "null"]
         createdById:
@@ -5040,6 +5045,9 @@ components:
           type: string
         partyEntityId:
           type: integer
+        invoiceId:
+          type: integer
+          description: Optional — apply this "Payment In" against one specific outstanding invoice for the linked customer, reducing its balance_due directly (not just the customer's overall outstanding balance).
         notes:
           type: string
         allowNegative:

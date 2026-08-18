@@ -17,6 +17,8 @@ export interface AccountTransactionInput {
   partyName?: string;
   partyMobile?: string;
   partyEntityId?: number;
+  /** Optional — apply this "Payment In" against one specific outstanding invoice for the linked customer, reducing its balance_due directly (not just the customer's overall outstanding balance). */
+  invoiceId?: number;
   notes?: string;
   /** Admin-only override to let a "Payment Out" push the account balance negative instead of being blocked. */
   allowNegative?: boolean;
