@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, boolean, numeric, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, boolean, numeric, index, uniqueIndex, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -8,9 +8,10 @@ export const entitiesTable = pgTable("entities", {
   type: text("type").notNull(), // customer, vendor, worker, salesman
   name: text("name").notNull(),
   mobile: text("mobile").notNull(),
-  // Optional short code the business assigns to identify this customer/vendor
-  // by (e.g. a legacy ledger code) — nullable since most existing rows won't
-  // have one, but unique per company once set.
+  // Auto-generated short code that identifies this one customer/vendor (e.g.
+  // "CUST-0001") — see entityCodeSequenceTable below. Nullable since rows
+  // created before this feature existed have none, but unique per company
+  // once set.
   code: text("code"),
   gstin: text("gstin"),
   address: text("address"),
@@ -39,6 +40,18 @@ export const entitiesTable = pgTable("entities", {
   index("entities_mobile_idx").on(t.mobile),
   index("entities_type_idx").on(t.type),
   uniqueIndex("entities_company_code_uq").on(t.companyId, t.code),
+]);
+
+// One counter per (company, entity type) — allocates the numeric suffix for
+// auto-generated entity codes (e.g. "CUST-0001"), same pattern as
+// materialTransferSequenceTable.
+export const entityCodeSequenceTable = pgTable("entity_code_sequence", {
+  id: serial("id").primaryKey(),
+  companyId: integer("company_id").notNull(),
+  entityType: text("entity_type").notNull(),
+  lastNumber: integer("last_number").notNull().default(0),
+}, (t) => [
+  unique("entity_code_sequence_company_type_unique").on(t.companyId, t.entityType),
 ]);
 
 export const ledgerEntriesTable = pgTable("ledger_entries", {

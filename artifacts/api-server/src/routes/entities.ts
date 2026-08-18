@@ -19,6 +19,43 @@ import { getCompanyId } from "../lib/tenant";
 
 const router: IRouter = Router();
 
+const ENTITY_CODE_PREFIX: Record<string, string> = {
+  customer: "CUST",
+  vendor: "VEN",
+  worker: "WORK",
+  salesman: "SALE",
+};
+
+// Atomically allocates the next per-type code for a company (e.g. "CUST-0001")
+// from entity_code_sequence, same increment-then-return pattern as material
+// transfer numbers. The sequence never reuses a number, so if a number ever
+// collides with a manually-typed code from before this existed, the retry
+// just moves on to the next one — this always terminates.
+async function generateEntityCode(companyId: number, type: string): Promise<string> {
+  const prefix = ENTITY_CODE_PREFIX[type] ?? "ENT";
+  for (let attempt = 0; attempt < 5; attempt++) {
+    await pool.query(
+      `INSERT INTO entity_code_sequence (company_id, entity_type, last_number)
+       VALUES ($1, $2, 0)
+       ON CONFLICT (company_id, entity_type) DO NOTHING`,
+      [companyId, type],
+    );
+    const seqRes = await pool.query(
+      `UPDATE entity_code_sequence SET last_number = last_number + 1
+       WHERE company_id = $1 AND entity_type = $2
+       RETURNING last_number`,
+      [companyId, type],
+    );
+    const candidate = `${prefix}-${String(seqRes.rows[0].last_number).padStart(4, "0")}`;
+    const [dupe] = await db
+      .select({ id: entitiesTable.id })
+      .from(entitiesTable)
+      .where(and(eq(entitiesTable.companyId, companyId), eq(entitiesTable.code, candidate)));
+    if (!dupe) return candidate;
+  }
+  throw new Error("Could not allocate a unique entity code — please try again");
+}
+
 // GET /entities/lookup
 router.get("/entities/lookup", async (req, res): Promise<void> => {
   const params = LookupEntityByMobileQueryParams.safeParse(req.query);
@@ -124,10 +161,10 @@ router.post("/entities", async (req, res): Promise<void> => {
     return;
   }
 
-  // A code identifies exactly one entity, company-wide — blank means "none",
-  // never a value that could collide with another blank one under the
-  // unique index (which treats '' as real, unlike NULL).
-  const code = parsed.data.code?.trim() || null;
+  // A code identifies exactly one entity — auto-generated unless the caller
+  // explicitly supplies one (e.g. to match a legacy paper ledger code), in
+  // which case it must not collide with another entity's.
+  let code = parsed.data.code?.trim() || null;
   if (code) {
     const [codeDupe] = await db
       .select({ id: entitiesTable.id, name: entitiesTable.name })
@@ -137,6 +174,8 @@ router.post("/entities", async (req, res): Promise<void> => {
       res.status(409).json({ error: `Code "${code}" is already used by ${codeDupe.name}` });
       return;
     }
+  } else {
+    code = await generateEntityCode(companyId, parsed.data.type);
   }
 
   // Handle optional salesman assignment for customers (not in Zod schema — read directly from body).

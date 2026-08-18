@@ -64,7 +64,6 @@ const TYPE_LABELS: Record<EntityType, string> = {
 type EditFormValues = {
   name: string;
   mobile: string;
-  code: string;
   gstin: string;
   address: string;
   city: string;
@@ -203,7 +202,6 @@ export default function Customers() {
       type: (type !== "all" ? type : "customer") as EntityType,
       name: "",
       mobile: "",
-      code: "",
       gstin: "",
       address: "",
       city: "",
@@ -220,7 +218,6 @@ export default function Customers() {
     defaultValues: {
       name: "",
       mobile: "",
-      code: "",
       gstin: "",
       address: "",
       city: "",
@@ -238,7 +235,6 @@ export default function Customers() {
       type: (type !== "all" ? type : "customer") as EntityType,
       name: "",
       mobile: "",
-      code: "",
       gstin: "",
       address: "",
       city: "",
@@ -258,7 +254,6 @@ export default function Customers() {
     editForm.reset({
       name: entity.name || "",
       mobile: entity.mobile || "",
-      code: entity.code || "",
       gstin: entity.gstin || "",
       address: entity.address || "",
       city: entity.city || "",
@@ -284,7 +279,7 @@ export default function Customers() {
       type: data.type,
       name: data.name.trim() || undefined,
       mobile: data.mobile.trim(),
-      code: data.code?.trim() || undefined,
+      // No code field on the Add form — the server always auto-generates one.
       gstin: data.gstin?.trim() || undefined,
       address: data.address?.trim() || undefined,
       city: data.city?.trim() || undefined,
@@ -326,10 +321,7 @@ export default function Customers() {
     const payload: any = {
       name: data.name.trim() || undefined,
       mobile: data.mobile.trim(),
-      // Sent as "" rather than undefined (unlike the fields below) so clearing
-      // this box actually removes the code — it identifies one entity only,
-      // so it has to be reassignable/removable, not stuck once set.
-      code: data.code?.trim() ?? "",
+      // Code is system-assigned, not part of this form — left untouched.
       gstin: data.gstin?.trim() || undefined,
       address: data.address?.trim() || undefined,
       city: data.city?.trim() || undefined,
@@ -669,20 +661,6 @@ export default function Customers() {
                 />
               </div>
 
-              <FormField
-                control={form.control}
-                name="code"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Code <span className="font-normal text-muted-foreground">(optional)</span></FormLabel>
-                    <FormControl>
-                      <Input data-testid="input-add-entity-code" placeholder="e.g. CUST-001 — used to identify this entity only" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
               {isCustomerForm && (
                 <>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -927,19 +905,12 @@ export default function Customers() {
                 />
               </div>
 
-              <FormField
-                control={editForm.control}
-                name="code"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Code <span className="font-normal text-muted-foreground">(optional)</span></FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g. CUST-001 — used to identify this entity only" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {/* Code is auto-generated on creation, not editable here. */}
+              <div className="text-sm text-muted-foreground">
+                Code: {editingEntity?.code
+                  ? <span className="font-mono text-foreground">{editingEntity.code}</span>
+                  : <span className="italic">none (created before this feature)</span>}
+              </div>
 
               {editingEntity?.type === "customer" && (
                 <>
