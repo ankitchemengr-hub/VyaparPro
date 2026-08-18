@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/table";
 import {
   Wallet, Smartphone, Landmark, HandCoins, Loader2, ArrowRight, Users,
-  ArrowDownCircle, ArrowUpCircle, Printer, BookOpen, Pencil,
+  ArrowDownCircle, ArrowUpCircle, Printer, BookOpen, Pencil, Search,
 } from "lucide-react";
 import { CashEntryDialog } from "@/components/cash-entry-dialog";
 import { CashReceiptDialog } from "@/components/cash-receipt-dialog";
@@ -52,6 +52,7 @@ export default function CashBookPage() {
   const [entryDirection, setEntryDirection] = useState<"in" | "out" | null>(null);
   const [receiptTxn, setReceiptTxn] = useState<AccountTransaction | null>(null);
   const [editTxn, setEditTxn] = useState<AccountTransaction | null>(null);
+  const [search, setSearch] = useState("");
 
   const salesmen = data?.salesmen ?? [];
   const accounts = data?.accounts ?? [];
@@ -60,6 +61,12 @@ export default function CashBookPage() {
   const totalInAccounts = accounts.reduce((s, a) => s + (a.isActive ? Number(a.currentBalance ?? 0) : 0), 0);
 
   const { data: txns = [], isLoading: txnsLoading } = useListAccountTransactions();
+  const trimmedSearch = search.trim().toLowerCase();
+  const filteredTxns = trimmedSearch
+    ? txns.filter((t) => [
+        t.receiptNo, t.accountName, t.mode, t.partyName, t.partyMobile, t.createdByName,
+      ].some((field) => field?.toLowerCase().includes(trimmedSearch)))
+    : txns;
 
   return (
     <div className="space-y-6">
@@ -230,7 +237,7 @@ export default function CashBookPage() {
         }
       `}</style>
       <Card className="cashbook-print-area">
-        <CardHeader>
+        <CardHeader className="space-y-3">
           <CardTitle className="flex items-center justify-between gap-2 text-base">
             <span className="flex items-center gap-2"><BookOpen className="w-4 h-4" /> Recent Cash Book Entries</span>
             <Button
@@ -243,6 +250,16 @@ export default function CashBookPage() {
               <Printer className="w-3.5 h-3.5 mr-1.5" /> Print
             </Button>
           </CardTitle>
+          <div className="relative max-w-sm no-print">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search receipt no., party, account, mode..."
+              className="pl-8"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              data-testid="input-cashbook-search"
+            />
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           {txnsLoading ? (
@@ -251,6 +268,11 @@ export default function CashBookPage() {
             <div className="p-12 text-center text-muted-foreground text-sm">
               <BookOpen className="w-10 h-10 mx-auto mb-3 opacity-30" />
               No Payment In / Out entries recorded yet.
+            </div>
+          ) : filteredTxns.length === 0 ? (
+            <div className="p-12 text-center text-muted-foreground text-sm">
+              <Search className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              No entries match "{search.trim()}".
             </div>
           ) : (
             <Table>
@@ -268,7 +290,7 @@ export default function CashBookPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {txns.map((t) => (
+                {filteredTxns.map((t) => (
                   <TableRow key={t.id} data-testid={`row-txn-${t.id}`}>
                     <TableCell className="font-mono text-xs">{t.receiptNo ?? `#${t.id}`}</TableCell>
                     <TableCell className="text-xs">{new Date(t.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</TableCell>
