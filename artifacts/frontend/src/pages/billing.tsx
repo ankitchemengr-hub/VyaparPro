@@ -57,18 +57,16 @@ type QtyMode = "unit" | "box";
 const GST_INVOICE_TYPES = new Set(["gst", "proforma_invoice"]);
 function isGstInvoiceType(t: string) { return GST_INVOICE_TYPES.has(t); }
 
-// Mirrors the rate selection in customer-orders.ts: a non-GST invoice always
-// uses the product's explicit non-GST rate when set, otherwise the base rate
-// comes from the customer's pricing tier (retail vs wholesale) — not just
-// wholesale unconditionally.
+// Retail customers always get retailPrice, on both GST and Non-GST invoices.
+// The product's dedicated "Non-GST Price" field is a wholesale-only cash-bill
+// rate — it only kicks in for wholesale customers on a Non-GST invoice.
 function getBaseRate(p: any, customer: any, invoiceType: string): number {
-  const nonGstPrice = Number((p as any).nonGstPrice) || 0;
-  if (!isGstInvoiceType(invoiceType) && nonGstPrice > 0) return nonGstPrice;
   const wholesalePrice = Number(p.wholesalePrice) || 0;
   const retailPrice = Number(p.retailPrice) || 0;
-  return customer?.pricingTier === "wholesale"
-    ? (wholesalePrice || retailPrice)
-    : (retailPrice || wholesalePrice);
+  if (customer?.pricingTier !== "wholesale") return retailPrice || wholesalePrice;
+  const nonGstPrice = Number((p as any).nonGstPrice) || 0;
+  if (!isGstInvoiceType(invoiceType) && nonGstPrice > 0) return nonGstPrice;
+  return wholesalePrice || retailPrice;
 }
 
 const DOC_TYPE_OPTIONS = [

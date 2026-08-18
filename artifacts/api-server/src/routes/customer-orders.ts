@@ -133,9 +133,10 @@ router.post("/customer-orders", async (req, res): Promise<void> => {
     const p = byId.get(pid);
     if (!p) continue;
     // Salesman/store-created orders and wholesale-tier customers are quoted
-    // at the wholesale (B2B) rate; other customers are billed at retail. When
-    // the order is placed as a cash memo (non_gst), the snapshot uses the
-    // product's non-GST rate instead (falling back to the base rate if unset).
+    // at the wholesale (B2B) rate; other customers are always billed at
+    // retail, on both GST and non-GST orders. The product's non-GST rate is
+    // a wholesale-only cash-bill price, so it only overrides for a wholesale
+    // base — retail customers never get bumped off retailPrice by it.
     // A "counter" login's tier is fixed on the account itself (session.pricingTier),
     // since it isn't tied to one customer the way session.role === "customer" is.
     const isWholesaleBase =
@@ -143,11 +144,10 @@ router.post("/customer-orders", async (req, res): Promise<void> => {
       session.role === "store" ||
       customerPricingTier === "wholesale" ||
       (session.role === "counter" && session.pricingTier === "wholesale");
-    const baseRate = isWholesaleBase
-      ? Number(p.wholesalePrice ?? p.retailPrice ?? 0)
-      : Number(p.retailPrice ?? 0);
     const nonGstRate = Number(p.nonGstPrice ?? 0);
-    const price = invoiceType === "non_gst" && nonGstRate > 0 ? nonGstRate : baseRate;
+    const price = isWholesaleBase
+      ? (invoiceType === "non_gst" && nonGstRate > 0 ? nonGstRate : Number(p.wholesalePrice ?? p.retailPrice ?? 0))
+      : Number(p.retailPrice ?? p.wholesalePrice ?? 0);
     const lineTotal = qty * price;
     resolvedItems.push({
       productId: pid,
