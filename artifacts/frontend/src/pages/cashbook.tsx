@@ -27,6 +27,10 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
@@ -392,6 +396,10 @@ function EditCashEntryDialog({
   const [partyName, setPartyName] = useState("");
   const [partyMobile, setPartyMobile] = useState("");
   const [notes, setNotes] = useState("");
+  // Set when a save is blocked because it would push the account balance
+  // negative — holds the server's message so "Proceed anyway" can retry the
+  // exact same save with allowNegative instead of re-deriving anything.
+  const [negativeBalanceWarning, setNegativeBalanceWarning] = useState<string | null>(null);
 
   useEffect(() => {
     if (txn) {
@@ -400,10 +408,11 @@ function EditCashEntryDialog({
       setPartyName(txn.partyName ?? "");
       setPartyMobile(txn.partyMobile ?? "");
       setNotes(txn.notes ?? "");
+      setNegativeBalanceWarning(null);
     }
   }, [txn]);
 
-  const handleSave = () => {
+  const handleSave = (allowNegative = false) => {
     if (!txn) return;
     const amt = Number(amount);
     if (!amt || amt <= 0) {
@@ -419,6 +428,7 @@ function EditCashEntryDialog({
           partyName: partyName.trim() || undefined,
           partyMobile: partyMobile.trim() || undefined,
           notes: notes.trim() || undefined,
+          ...(allowNegative ? { allowNegative: true } : {}),
         },
       },
       {
@@ -427,6 +437,7 @@ function EditCashEntryDialog({
           queryClient.invalidateQueries({ queryKey: getListAccountsQueryKey() });
           queryClient.invalidateQueries({ queryKey: getGetCashbookQueryKey() });
           toast({ title: "Entry updated", description: "Account balance and linked ledger adjusted." });
+          setNegativeBalanceWarning(null);
           onClose();
         },
         onError: async (err: any) => {
@@ -435,6 +446,12 @@ function EditCashEntryDialog({
             const body = err?.response ? await err.response.json() : null;
             if (body?.error) desc = String(body.error).slice(0, 300);
           } catch {}
+          // This specific block is recoverable by an admin choosing to
+          // proceed anyway — offer that instead of a dead-end error toast.
+          if (!allowNegative && /set allowNegative to proceed/i.test(desc)) {
+            setNegativeBalanceWarning(desc);
+            return;
+          }
           toast({ title: "Could not update entry", description: desc, variant: "destructive" });
         },
       },
@@ -442,7 +459,8 @@ function EditCashEntryDialog({
   };
 
   return (
-    <Dialog open={txn != null} onOpenChange={(v) => { if (!v && !update.isPending) onClose(); }}>
+    <>
+    <Dialog open={txn != null} onOpenChange={(v) => { if (!v && !update.isPending) { setNegativeBalanceWarning(null); onClose(); } }}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -490,14 +508,38 @@ function EditCashEntryDialog({
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={update.isPending}>Cancel</Button>
-          <Button onClick={handleSave} disabled={update.isPending} data-testid="button-save-edit-entry">
+          <Button variant="outline" onClick={() => { setNegativeBalanceWarning(null); onClose(); }} disabled={update.isPending}>Cancel</Button>
+          <Button onClick={() => handleSave()} disabled={update.isPending} data-testid="button-save-edit-entry">
             {update.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
             Save
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <AlertDialog open={negativeBalanceWarning != null} onOpenChange={(v) => { if (!v) setNegativeBalanceWarning(null); }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Push account balance negative?</AlertDialogTitle>
+          <AlertDialogDescription>
+            {negativeBalanceWarning} This usually means an earlier entry or opening balance was never
+            fully recorded. You can proceed and reconcile it later, or cancel and adjust the amount.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={update.isPending}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={(e) => { e.preventDefault(); handleSave(true); }}
+            disabled={update.isPending}
+            data-testid="button-confirm-negative-balance"
+          >
+            {update.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+            Proceed Anyway
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
 
