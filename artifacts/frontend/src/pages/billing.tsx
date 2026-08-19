@@ -22,6 +22,9 @@ import {
   getGetInvoiceQueryKey,
   getLookupEntityByMobileQueryKey,
   getListEntitiesQueryKey,
+  getGetEntityLedgerQueryKey,
+  getGetDashboardSummaryQueryKey,
+  getListKhatabookQueryKey,
   type PaymentInputMode,
 } from "@workspace/api-client-react";
 import { InvoiceTemplateRenderer } from "@/components/invoice-templates/InvoiceTemplateRenderer";
@@ -503,6 +506,11 @@ export default function Billing() {
     logPayment.mutate({
       data: {
         ...(customer?.id ? { customerId: customer.id } : {}),
+        // Without this, the payment only reduced the customer's overall
+        // balance — the invoice just saved above never had its own
+        // balanceDue/amountPaid touched, so it stayed "Not Paid" forever
+        // regardless of a payment being recorded right here for it.
+        ...(savedInvoice?.id ? { invoiceId: savedInvoice.id } : {}),
         amount: paymentAmount,
         mode: paymentMode as PaymentInputMode,
         ...(accountId ? { accountId } : {}),
@@ -516,6 +524,14 @@ export default function Billing() {
       onSuccess: (payment) => {
         queryClient.invalidateQueries({ queryKey: getListPaymentsQueryKey() });
         queryClient.invalidateQueries({ queryKey: getListAccountsQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
+        if (savedInvoice?.id) queryClient.invalidateQueries({ queryKey: getGetInvoiceQueryKey(savedInvoice.id) });
+        if (customer?.id) {
+          queryClient.invalidateQueries({ queryKey: getGetEntityLedgerQueryKey(customer.id) });
+          queryClient.invalidateQueries({ queryKey: getListEntitiesQueryKey() });
+        }
+        queryClient.invalidateQueries({ queryKey: getListKhatabookQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() });
         setSavedPayment(payment);
         setPaymentDone(true);
         toast({
@@ -770,6 +786,13 @@ export default function Billing() {
                       {savedPayment.status === "approved" ? " — debited from outstanding balance immediately." : " — will be applied once admin approves."}
                     </p>
                     {savedPayment.status === "pending" && <Badge variant="outline" className="mt-2 text-amber-500 border-amber-500 text-[10px]">Pending Admin Approval</Badge>}
+                    {savedPayment.status === "approved" && savedInvoice && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Invoice {savedInvoice.invoiceNo} is now {
+                          savedPayment.allocations?.[0]?.status === "paid" ? "marked Paid." : "Partially Paid."
+                        }
+                      </p>
+                    )}
                   </div>
                 </div>
               ) : (
