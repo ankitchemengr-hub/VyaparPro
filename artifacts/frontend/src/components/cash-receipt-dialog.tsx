@@ -119,10 +119,12 @@ export function CashReceiptDialog({
             </div>
           </div>
 
-          {isIn && customerBalanceBefore != null && (
-            <div className="text-xs flex items-center justify-between">
-              <span className="text-muted-foreground">Customer Balance</span>
-              <span className="font-medium">
+          {customerBalanceBefore != null && (
+            <div className="flex items-center justify-between rounded border bg-muted/40 px-3 py-2" data-testid="receipt-party-balance">
+              <span className="text-xs font-medium text-muted-foreground uppercase">
+                {txn.partyEntityId && txn.partyName ? `${txn.partyName}'s Balance` : isIn ? "Customer Balance" : "Vendor Balance"}
+              </span>
+              <span className="text-sm font-semibold tabular-nums">
                 {formatRs(customerBalanceBefore)}
                 {customerBalanceAfter != null && <> → {formatRs(customerBalanceAfter)}</>}
               </span>
