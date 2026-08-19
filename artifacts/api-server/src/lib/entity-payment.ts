@@ -33,6 +33,8 @@ export interface AllocatePaymentParams {
   receiptNo: string;
 }
 
+const NO_PAY_TYPES_SQL = NO_PAY_INVOICE_TYPES.map((t) => `'${t}'`).join(", ");
+
 // FIFO-allocates `amount` across a customer's outstanding invoices (oldest
 // invoice_date first, cancelled/quotation-like types excluded), optionally
 // starting with one pinned invoice. Persists one payment_allocations row per
@@ -50,24 +52,13 @@ export async function allocatePaymentAcrossInvoices(
   client: { query: (text: string, params?: any[]) => Promise<any> },
   { companyId, customerId, amount, startInvoiceId, receiptNo }: AllocatePaymentParams,
 ): Promise<PaymentAllocation[]> {
-  const candidates = await client.query(
-    `SELECT id, invoice_no, grand_total, amount_paid, balance_due
-     FROM invoices
-     WHERE company_id = $1 AND customer_id = $2 AND status != 'cancelled'
-       AND invoice_type NOT IN ('quotation', 'proforma_invoice', 'sale_order', 'delivery_challan')
-       AND balance_due > 0
-     ORDER BY (id = $3) DESC, invoice_date ASC, id ASC
-     FOR UPDATE`,
-    [companyId, customerId, startInvoiceId ?? 0],
-  );
-
   let remaining = amount;
   const allocations: PaymentAllocation[] = [];
-  for (const inv of candidates.rows) {
-    if (remaining <= 0.001) break;
+
+  async function allocateTo(inv: any): Promise<void> {
     const balanceDue = Number(inv.balance_due);
     const allocated = Math.min(remaining, balanceDue);
-    if (allocated <= 0) continue;
+    if (allocated <= 0) return;
     const previousPaid = Number(inv.amount_paid);
     const balanceAfter = Math.max(0, balanceDue - allocated);
 
@@ -94,6 +85,47 @@ export async function allocatePaymentAcrossInvoices(
       status: balanceAfter <= 0.001 ? "paid" : "partially_paid",
     });
     remaining -= allocated;
+  }
+
+  // A pinned invoice is allowed to be a walk-in one (customer_id IS NULL —
+  // billed with no specific customer entity selected) since the caller named
+  // it explicitly. That relaxation must NOT extend to the general FIFO pool
+  // below, though: every walk-in invoice across every customer shares
+  // customer_id NULL, so without this split a customer's ordinary payment
+  // could spill into and pay off a completely unrelated walk-in sale.
+  if (startInvoiceId != null && remaining > 0.001) {
+    const pinnedRes = await client.query(
+      `SELECT id, invoice_no, grand_total, amount_paid, balance_due
+       FROM invoices
+       WHERE id = $1 AND company_id = $2 AND (customer_id = $3 OR customer_id IS NULL)
+         AND status != 'cancelled' AND invoice_type NOT IN (${NO_PAY_TYPES_SQL}) AND balance_due > 0
+       FOR UPDATE`,
+      [startInvoiceId, companyId, customerId],
+    );
+    if (pinnedRes.rows[0]) await allocateTo(pinnedRes.rows[0]);
+  }
+
+  if (remaining > 0.001) {
+    const candidates = await client.query(
+      startInvoiceId != null
+        ? `SELECT id, invoice_no, grand_total, amount_paid, balance_due
+           FROM invoices
+           WHERE company_id = $1 AND customer_id = $2 AND id != $3
+             AND status != 'cancelled' AND invoice_type NOT IN (${NO_PAY_TYPES_SQL}) AND balance_due > 0
+           ORDER BY invoice_date ASC, id ASC
+           FOR UPDATE`
+        : `SELECT id, invoice_no, grand_total, amount_paid, balance_due
+           FROM invoices
+           WHERE company_id = $1 AND customer_id = $2
+             AND status != 'cancelled' AND invoice_type NOT IN (${NO_PAY_TYPES_SQL}) AND balance_due > 0
+           ORDER BY invoice_date ASC, id ASC
+           FOR UPDATE`,
+      startInvoiceId != null ? [companyId, customerId, startInvoiceId] : [companyId, customerId],
+    );
+    for (const inv of candidates.rows) {
+      if (remaining <= 0.001) break;
+      await allocateTo(inv);
+    }
   }
 
   return allocations;
