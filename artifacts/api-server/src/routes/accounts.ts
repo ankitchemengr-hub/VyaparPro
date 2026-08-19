@@ -386,8 +386,11 @@ router.post("/account-transactions", async (req, res): Promise<void> => {
     // which spills the amount to the customer's next oldest outstanding
     // invoice instead.
     if (invoiceId != null) {
+      // customer_id IS NULL is a walk-in invoice (billed with no specific
+      // customer entity selected) — still valid to link if the party this
+      // Cash Book entry is linked to is the customer it's actually for.
       const invRes = await client.query(
-        `SELECT id FROM invoices WHERE id = $1 AND company_id = $2 AND customer_id = $3 AND status != 'cancelled'`,
+        `SELECT id FROM invoices WHERE id = $1 AND company_id = $2 AND (customer_id = $3 OR customer_id IS NULL) AND status != 'cancelled'`,
         [invoiceId, companyId, partyEntityId],
       );
       if (invRes.rowCount === 0) {

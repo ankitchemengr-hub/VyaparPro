@@ -18,6 +18,13 @@ import { getCompanyId } from "../lib/tenant";
 import { generateSeriesNumber } from "../lib/number-series";
 import { applyEntityPayment } from "../lib/entity-payment";
 
+// Thrown for a bad request caught mid-transaction (needs the ROLLBACK the
+// surrounding try/catch already does) — kept distinct from a genuine
+// server/DB failure so the response is a real 400 with the actual reason
+// instead of a generic 500 that just says "failed", which is not
+// self-diagnosing when it happens again for a different edge case later.
+class PaymentValidationError extends Error {}
+
 // Shared by the receipt-lookup endpoint for both sources (payments and
 // account_transactions can each mint a receipt): the invoice-wise breakdown
 // this payment was FIFO-allocated against, persisted at the time it was
@@ -249,7 +256,7 @@ router.post("/payments", async (req, res): Promise<void> => {
           [parsed.data.amount, parsed.data.accountId, companyId]
         );
         if (upd.rowCount === 0) {
-          throw new Error(`Account ${parsed.data.accountId} not found or inactive`);
+          throw new PaymentValidationError(`Account ${parsed.data.accountId} not found or inactive`);
         }
         // Mirrors the balance update above into Cash Book's own transaction
         // log — without this, the account's total is right but the payment
@@ -282,12 +289,17 @@ router.post("/payments", async (req, res): Promise<void> => {
       // which spills the amount to the customer's next oldest outstanding
       // invoice instead.
       if (parsed.data.invoiceId) {
+        // customer_id IS NULL is a walk-in invoice (no specific customer
+        // entity selected when it was billed) — this payment always
+        // resolves to a real customerId (the shared Walk-in Customer entity
+        // when none was passed), so a strict equality check here would wrongly
+        // reject linking a walk-in payment to its own walk-in invoice.
         const invCheck = await client.query(
-          `SELECT id FROM invoices WHERE id = $1 AND company_id = $2 AND customer_id = $3 AND status != 'cancelled'`,
+          `SELECT id FROM invoices WHERE id = $1 AND company_id = $2 AND (customer_id = $3 OR customer_id IS NULL) AND status != 'cancelled'`,
           [parsed.data.invoiceId, companyId, customerId]
         );
         if (invCheck.rowCount === 0) {
-          throw new Error("Invoice not found, cancelled, or does not belong to this customer");
+          throw new PaymentValidationError("Invoice not found, cancelled, or does not belong to this customer");
         }
       }
 
@@ -306,6 +318,10 @@ router.post("/payments", async (req, res): Promise<void> => {
       res.status(201).json({ ...formatPayment(payment), allocations });
     } catch (err) {
       await client.query("ROLLBACK");
+      if (err instanceof PaymentValidationError) {
+        res.status(400).json({ error: err.message });
+        return;
+      }
       logger.error({ err }, "Failed to process payment");
       res.status(500).json({ error: "Failed to process payment" });
     } finally {
