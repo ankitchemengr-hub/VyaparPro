@@ -50,6 +50,21 @@ export function CashReceiptDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      {/* print:hidden/print:max-w-full on the dialog's own elements only
+          toggle THEIR display — they do nothing to hide whatever page this
+          dialog was opened over, so a bare window.print() printed that
+          entire page underneath too. Same isolation used elsewhere: hide
+          everything by default, then reveal only the receipt itself. */}
+      <style>{`
+        @media print {
+          body * { visibility: hidden !important; }
+          #cash-receipt-print, #cash-receipt-print * { visibility: visible !important; color: #000 !important; }
+          #cash-receipt-print {
+            position: fixed !important; inset: 0 !important; width: 100% !important; height: auto !important;
+            box-shadow: none !important; margin: 0 !important;
+          }
+        }
+      `}</style>
       <DialogContent className="max-w-md print:max-w-full print:shadow-none">
         <DialogHeader className="print:hidden">
           <DialogTitle>{isIn ? "Receipt" : "Payment Voucher"}</DialogTitle>

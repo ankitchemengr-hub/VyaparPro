@@ -216,6 +216,21 @@ export function RecordPaymentDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!logPayment.isPending) onOpenChange(o); }}>
+      {/* print:block on the receipt div alone only toggles ITS OWN display —
+          it does nothing to hide the page behind this dialog, so a bare
+          window.print() printed the whole Invoices list underneath (37
+          pages). Same isolation technique as Cash Book's print area: hide
+          everything by default, then reveal only this one element. */}
+      <style>{`
+        @media print {
+          body * { visibility: hidden !important; }
+          .payment-receipt-print-area, .payment-receipt-print-area * { visibility: visible !important; color: #000 !important; }
+          .payment-receipt-print-area {
+            position: fixed !important; inset: 0 !important; width: 100% !important; height: auto !important;
+            box-shadow: none !important; border: none !important; margin: 0 !important;
+          }
+        }
+      `}</style>
       <DialogContent className="sm:max-w-md">
         <DialogHeader className="print:hidden">
           <DialogTitle className="flex items-center gap-2">
@@ -257,7 +272,7 @@ export function RecordPaymentDialog({
             </div>
 
             {/* Printable receipt — hidden on screen, shown only for print/PDF */}
-            <div className="hidden print:block p-6 text-sm">
+            <div className="hidden print:block payment-receipt-print-area p-6 text-sm">
               <div className="flex items-center gap-3 mb-4">
                 {settings.logo && <img src={settings.logo} alt="" className="h-10 w-10 object-contain" />}
                 <div>
