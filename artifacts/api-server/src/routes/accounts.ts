@@ -15,7 +15,7 @@ import {
 import { logger } from "../lib/logger";
 import { getCompanyId } from "../lib/tenant";
 import { generateSeriesNumber } from "../lib/number-series";
-import { applyEntityPayment } from "../lib/entity-payment";
+import { applyEntityPayment, allocatePaymentAcrossInvoices, type PaymentAllocation } from "../lib/entity-payment";
 
 const router: IRouter = Router();
 
@@ -380,30 +380,21 @@ router.post("/account-transactions", async (req, res): Promise<void> => {
       return;
     }
 
-    let invoiceNo: string | null = null;
+    // If a specific invoice was pinned, make sure it's a real, still-open
+    // bill for the linked customer — an already-fully-paid pinned invoice is
+    // not an error here, it's simply skipped by the FIFO allocator below,
+    // which spills the amount to the customer's next oldest outstanding
+    // invoice instead.
     if (invoiceId != null) {
       const invRes = await client.query(
-        `SELECT invoice_no, customer_id, balance_due FROM invoices
-         WHERE id = $1 AND company_id = $2 AND status != 'cancelled' FOR UPDATE`,
-        [invoiceId, companyId],
+        `SELECT id FROM invoices WHERE id = $1 AND company_id = $2 AND customer_id = $3 AND status != 'cancelled'`,
+        [invoiceId, companyId, partyEntityId],
       );
-      const inv = invRes.rows[0];
-      if (!inv) {
+      if (invRes.rowCount === 0) {
         await client.query("ROLLBACK");
-        res.status(404).json({ error: "Invoice not found or cancelled" });
+        res.status(400).json({ error: "Invoice not found, cancelled, or does not belong to the linked customer" });
         return;
       }
-      if (inv.customer_id !== partyEntityId) {
-        await client.query("ROLLBACK");
-        res.status(400).json({ error: "That invoice does not belong to the linked customer" });
-        return;
-      }
-      if (Number(inv.balance_due) <= 0) {
-        await client.query("ROLLBACK");
-        res.status(400).json({ error: "Invoice is already fully paid" });
-        return;
-      }
-      invoiceNo = inv.invoice_no;
     }
 
     const receiptNo = await generateSeriesNumber(client, "payment_receipt", companyId);
@@ -447,6 +438,9 @@ router.post("/account-transactions", async (req, res): Promise<void> => {
     // touches the wrong side of a ledger, double-counts against the
     // dedicated Payments page, or fires for non-payable entities
     // (workers/salesmen) linked to a cash-book entry for other reasons.
+    let allocations: PaymentAllocation[] = [];
+    let customerBalanceBefore: number | null = null;
+    let customerBalanceAfter: number | null = null;
     if (partyEntityId && ((direction === "out") || (direction === "in"))) {
       const partyRes = await client.query(
         `SELECT id, type, name FROM entities WHERE company_id = $1 AND id = $2`,
@@ -456,16 +450,22 @@ router.post("/account-transactions", async (req, res): Promise<void> => {
       const isVendorPayout = direction === "out" && party?.type === "vendor";
       const isCustomerReceipt = direction === "in" && party?.type === "customer";
       if (isVendorPayout || isCustomerReceipt) {
-        await applyEntityPayment(client, {
+        const result = await applyEntityPayment(client, {
           companyId,
           entityId: party.id,
           amount,
           mode,
           receiptNo,
           referenceId: txn.id,
-          invoiceId: isCustomerReceipt ? (invoiceId ?? null) : null,
+          isCustomerReceipt,
+          startInvoiceId: isCustomerReceipt ? (invoiceId ?? null) : null,
           description: isVendorPayout ? `Payment made (${mode})` : `Payment received (${mode})`,
         });
+        allocations = result.allocations;
+        if (isCustomerReceipt) {
+          customerBalanceAfter = result.newBalance;
+          customerBalanceBefore = result.newBalance + amount;
+        }
       }
     }
 
@@ -483,7 +483,10 @@ router.post("/account-transactions", async (req, res): Promise<void> => {
       partyMobile: txn.party_mobile ?? null,
       partyEntityId: txn.party_entity_id ?? null,
       invoiceId: txn.invoice_id ?? null,
-      invoiceNo,
+      invoiceNo: allocations[0]?.invoiceNo ?? null,
+      allocations,
+      customerBalanceBefore,
+      customerBalanceAfter,
       notes: txn.notes ?? null,
       createdById: txn.created_by_id ?? null,
       createdByName: txn.created_by_name ?? null,
@@ -616,28 +619,67 @@ router.patch("/account-transactions/:id", async (req, res): Promise<void> => {
       }
     }
 
-    // If this entry was applied against a specific invoice (only ever true
-    // for a customer receipt, per the invoiceId validation on create),
-    // reverse what the old amount did to it and reapply the new amount —
-    // same clamped formula applyEntityPayment uses, so the invoice's
-    // balance_due can't go negative or amount_paid past the invoice total
-    // even if it's also been partly settled by some other payment.
-    if (delta !== 0 && existing.invoice_id) {
-      await client.query(
-        `UPDATE invoices
-         SET amount_paid = GREATEST(0, amount_paid - $1),
-             balance_due = LEAST(grand_total, balance_due + $1)
-         WHERE id = $2 AND company_id = $3`,
-        [oldAmount, existing.invoice_id, companyId],
+    // If this entry was FIFO-allocated against one or more invoices (only
+    // ever true for a customer receipt), reverse every one of those
+    // allocations using its own stored allocatedAmount — not the raw delta,
+    // since a receipt can span several invoices — then re-run FIFO fresh
+    // with the corrected amount. A plain oldest-first re-run rather than an
+    // attempt to reproduce the exact original split: this is a rare admin
+    // correction, not the common path, and re-deriving from whatever is
+    // currently outstanding is simpler and still correct.
+    let newAllocations: PaymentAllocation[] = [];
+    if (delta !== 0) {
+      const oldAllocRes = await client.query(
+        `SELECT invoice_id, allocated_amount FROM payment_allocations
+         WHERE company_id = $1 AND receipt_no = $2`,
+        [companyId, existing.receipt_no],
       );
-      await client.query(
-        `UPDATE invoices
-         SET amount_paid = amount_paid + LEAST($1, balance_due),
-             balance_due = GREATEST(0, balance_due - $1)
-         WHERE id = $2 AND company_id = $3`,
-        [newAmount, existing.invoice_id, companyId],
-      );
+      if (oldAllocRes.rows.length > 0) {
+        for (const row of oldAllocRes.rows) {
+          if (row.invoice_id == null) continue;
+          await client.query(`SELECT id FROM invoices WHERE id = $1 AND company_id = $2 FOR UPDATE`, [row.invoice_id, companyId]);
+          await client.query(
+            `UPDATE invoices
+             SET amount_paid = GREATEST(0, amount_paid - $1),
+                 balance_due = LEAST(grand_total, balance_due + $1)
+             WHERE id = $2 AND company_id = $3`,
+            [Number(row.allocated_amount), row.invoice_id, companyId],
+          );
+        }
+        await client.query(
+          `DELETE FROM payment_allocations WHERE company_id = $1 AND receipt_no = $2`,
+          [companyId, existing.receipt_no],
+        );
+        if (existing.party_entity_id) {
+          newAllocations = await allocatePaymentAcrossInvoices(client, {
+            companyId,
+            customerId: existing.party_entity_id,
+            amount: newAmount,
+            startInvoiceId: null,
+            receiptNo: existing.receipt_no,
+          });
+        }
+      }
     }
+
+    // Customer balance is only meaningful to surface for a customer receipt —
+    // read it fresh rather than threading it through the blocks above, since
+    // it may have moved for reasons unrelated to this correction (e.g. a
+    // FIFO re-run) and the entity/ledger block above only fires on delta!=0.
+    let customerBalanceAfter: number | null = null;
+    if (existing.direction === "in" && existing.party_entity_id) {
+      const partyTypeRes = await client.query(
+        `SELECT type, outstanding_balance FROM entities WHERE id = $1 AND company_id = $2`,
+        [existing.party_entity_id, companyId],
+      );
+      if (partyTypeRes.rows[0]?.type === "customer") {
+        customerBalanceAfter = Number(partyTypeRes.rows[0].outstanding_balance);
+      }
+    }
+    // outstanding_balance only actually moved by `delta` this request (see
+    // the entity/ledger block above: `outstanding_balance -= delta`), not by
+    // the full newAmount — so "before" undoes exactly that.
+    const customerBalanceBefore = customerBalanceAfter != null ? customerBalanceAfter + delta : null;
 
     await client.query("COMMIT");
     res.json({
@@ -652,6 +694,9 @@ router.patch("/account-transactions/:id", async (req, res): Promise<void> => {
       partyMobile: txn.party_mobile ?? null,
       partyEntityId: txn.party_entity_id ?? null,
       invoiceId: txn.invoice_id ?? null,
+      allocations: newAllocations,
+      customerBalanceBefore,
+      customerBalanceAfter,
       notes: txn.notes ?? null,
       createdById: txn.created_by_id ?? null,
       createdByName: txn.created_by_name ?? null,

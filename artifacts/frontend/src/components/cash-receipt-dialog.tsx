@@ -1,7 +1,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Printer, X } from "lucide-react";
-import type { AccountTransaction } from "@workspace/api-client-react";
+import { useGetPaymentReceipt, getGetPaymentReceiptQueryKey, type AccountTransaction } from "@workspace/api-client-react";
 
 const formatRs = (n: number) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(n);
@@ -22,6 +22,18 @@ export function CashReceiptDialog({
   onClose: () => void;
 }) {
   const open = txn !== null;
+
+  // The persisted, historically-accurate invoice allocation + customer
+  // balance for this receipt — same lookup a later reprint uses, so this
+  // view and any future reprint of the same receipt always agree, rather
+  // than each recomputing against whatever the invoices/balance look like
+  // right now. Called unconditionally (before the early return below) since
+  // hooks can't be called only when txn happens to be set.
+  const receiptNo = txn?.receiptNo ?? "";
+  const { data: receipt } = useGetPaymentReceipt(receiptNo, {
+    query: { queryKey: getGetPaymentReceiptQueryKey(receiptNo), enabled: !!receiptNo },
+  });
+
   if (!open || !txn) {
     return (
       <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -32,6 +44,9 @@ export function CashReceiptDialog({
 
   const isIn = txn.direction === "in";
   const handlePrint = () => window.print();
+  const allocations = receipt?.allocations ?? [];
+  const customerBalanceBefore = receipt?.customerBalanceBefore ?? null;
+  const customerBalanceAfter = receipt?.customerBalanceAfter ?? null;
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -88,6 +103,48 @@ export function CashReceiptDialog({
               {formatRs(Number(txn.amount))}
             </div>
           </div>
+
+          {isIn && customerBalanceBefore != null && (
+            <div className="text-xs flex items-center justify-between">
+              <span className="text-muted-foreground">Customer Balance</span>
+              <span className="font-medium">
+                {formatRs(customerBalanceBefore)}
+                {customerBalanceAfter != null && <> → {formatRs(customerBalanceAfter)}</>}
+              </span>
+            </div>
+          )}
+
+          {isIn && allocations.length > 0 && (
+            <div className="text-xs">
+              <div className="text-muted-foreground uppercase font-semibold mb-1">Adjusted Against</div>
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="border-b text-muted-foreground">
+                    <th className="text-left py-1 pr-1 font-normal">Invoice</th>
+                    <th className="text-right py-1 px-1 font-normal">Invoice Amt</th>
+                    <th className="text-right py-1 px-1 font-normal">Prev. Paid</th>
+                    <th className="text-right py-1 px-1 font-normal">Adjusted</th>
+                    <th className="text-right py-1 px-1 font-normal">Remaining</th>
+                    <th className="text-right py-1 pl-1 font-normal">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allocations.map((a) => (
+                    <tr key={a.invoiceId} className="border-b border-dashed">
+                      <td className="py-1 pr-1 font-mono">{a.invoiceNo}</td>
+                      <td className="text-right py-1 px-1">{formatRs(a.invoiceAmount)}</td>
+                      <td className="text-right py-1 px-1">{formatRs(a.previousPaid)}</td>
+                      <td className="text-right py-1 px-1">{formatRs(a.allocatedAmount)}</td>
+                      <td className="text-right py-1 px-1">{formatRs(a.balanceAfter)}</td>
+                      <td className={`text-right py-1 pl-1 font-medium ${a.status === "paid" ? "text-green-700" : "text-amber-700"}`}>
+                        {a.status === "paid" ? "PAID" : "PARTIAL"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {txn.notes && (
             <div className="text-xs">

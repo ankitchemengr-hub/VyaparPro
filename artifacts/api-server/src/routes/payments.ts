@@ -18,6 +18,54 @@ import { getCompanyId } from "../lib/tenant";
 import { generateSeriesNumber } from "../lib/number-series";
 import { applyEntityPayment } from "../lib/entity-payment";
 
+// Shared by the receipt-lookup endpoint for both sources (payments and
+// account_transactions can each mint a receipt): the invoice-wise breakdown
+// this payment was FIFO-allocated against, persisted at the time it was
+// applied — never recomputed against current invoice balances, so a reprint
+// stays accurate even after later payments have moved those invoices on —
+// plus the customer's outstanding balance immediately before/after, derived
+// from the one ledger_entries row every payment already writes (its stored
+// `balance` is the "after" figure; "before" is just balance + this credit).
+async function loadAllocationsAndBalance(
+  pool: { query: (text: string, params?: any[]) => Promise<any> },
+  companyId: number,
+  receiptNo: string,
+  entityId: number | null,
+) {
+  const allocRes = await pool.query(
+    `SELECT invoice_id, invoice_no, allocated_amount, invoice_amount_at_allocation,
+            previous_paid_at_allocation, balance_after_allocation
+     FROM payment_allocations WHERE company_id = $1 AND receipt_no = $2 ORDER BY id ASC`,
+    [companyId, receiptNo],
+  );
+  const allocations = allocRes.rows.map((a: any) => ({
+    invoiceId: a.invoice_id,
+    invoiceNo: a.invoice_no,
+    invoiceAmount: Number(a.invoice_amount_at_allocation),
+    previousPaid: Number(a.previous_paid_at_allocation),
+    allocatedAmount: Number(a.allocated_amount),
+    balanceAfter: Number(a.balance_after_allocation),
+    status: Number(a.balance_after_allocation) <= 0.001 ? "paid" : "partially_paid",
+  }));
+
+  let customerBalanceBefore: number | null = null;
+  let customerBalanceAfter: number | null = null;
+  if (entityId != null) {
+    const ledgerRes = await pool.query(
+      `SELECT credit, balance FROM ledger_entries
+       WHERE company_id = $1 AND entity_id = $2 AND reference_no = $3 AND type = 'payment'
+       ORDER BY id DESC LIMIT 1`,
+      [companyId, entityId, receiptNo],
+    );
+    if (ledgerRes.rows[0]) {
+      customerBalanceAfter = Number(ledgerRes.rows[0].balance);
+      customerBalanceBefore = customerBalanceAfter + Number(ledgerRes.rows[0].credit);
+    }
+  }
+
+  return { allocations, customerBalanceBefore, customerBalanceAfter };
+}
+
 const router: IRouter = Router();
 
 // GET /payments
@@ -59,7 +107,7 @@ router.get("/payment-receipts/:receiptNo", async (req, res): Promise<void> => {
   const { receiptNo } = params.data;
 
   const paymentRes = await pool.query(
-    `SELECT p.receipt_id, p.created_at, p.customer_name, p.mode, p.amount, p.status, i.invoice_no
+    `SELECT p.receipt_id, p.created_at, p.customer_id, p.customer_name, p.mode, p.amount, p.status, i.invoice_no
      FROM payments p
      LEFT JOIN invoices i ON i.id = p.invoice_id AND i.company_id = p.company_id
      WHERE p.receipt_id = $1 AND p.company_id = $2`,
@@ -67,6 +115,8 @@ router.get("/payment-receipts/:receiptNo", async (req, res): Promise<void> => {
   );
   if (paymentRes.rows[0]) {
     const r = paymentRes.rows[0];
+    const { allocations, customerBalanceBefore, customerBalanceAfter } =
+      await loadAllocationsAndBalance(pool, companyId, receiptNo, r.customer_id ?? null);
     res.json({
       receiptNo: r.receipt_id,
       date: r.created_at?.toISOString?.() ?? r.created_at,
@@ -77,17 +127,22 @@ router.get("/payment-receipts/:receiptNo", async (req, res): Promise<void> => {
       status: r.status,
       invoiceNo: r.invoice_no ?? null,
       source: "payment",
+      allocations,
+      customerBalanceBefore,
+      customerBalanceAfter,
     });
     return;
   }
 
   const txnRes = await pool.query(
-    `SELECT receipt_no, created_at, party_name, mode, amount, direction
+    `SELECT receipt_no, created_at, party_name, party_entity_id, mode, amount, direction
      FROM account_transactions WHERE receipt_no = $1 AND company_id = $2`,
     [receiptNo, companyId],
   );
   if (txnRes.rows[0]) {
     const r = txnRes.rows[0];
+    const { allocations, customerBalanceBefore, customerBalanceAfter } =
+      await loadAllocationsAndBalance(pool, companyId, receiptNo, r.party_entity_id ?? null);
     res.json({
       receiptNo: r.receipt_no,
       date: r.created_at?.toISOString?.() ?? r.created_at,
@@ -96,8 +151,11 @@ router.get("/payment-receipts/:receiptNo", async (req, res): Promise<void> => {
       amount: Number(r.amount),
       direction: r.direction,
       status: "completed",
-      invoiceNo: null,
+      invoiceNo: allocations[0]?.invoiceNo ?? null,
       source: "cashbook",
+      allocations,
+      customerBalanceBefore,
+      customerBalanceAfter,
     });
     return;
   }
@@ -218,34 +276,34 @@ router.post("/payments", async (req, res): Promise<void> => {
         );
       }
 
-      // If payment is tied to a specific invoice, validate it before applying —
-      // the actual balance_due/amount_paid reduction happens inside
-      // applyEntityPayment below, alongside the entity/ledger update.
+      // If a specific invoice was pinned, make sure it's a real, still-open
+      // bill for THIS customer — an already-fully-paid pinned invoice is not
+      // an error here, it's simply skipped by the FIFO allocator below,
+      // which spills the amount to the customer's next oldest outstanding
+      // invoice instead.
       if (parsed.data.invoiceId) {
         const invCheck = await client.query(
-          `SELECT id, balance_due FROM invoices WHERE id = $1 AND company_id = $2 AND status != 'cancelled'`,
-          [parsed.data.invoiceId, companyId]
+          `SELECT id FROM invoices WHERE id = $1 AND company_id = $2 AND customer_id = $3 AND status != 'cancelled'`,
+          [parsed.data.invoiceId, companyId, customerId]
         );
         if (invCheck.rowCount === 0) {
-          throw new Error("Invoice not found or cancelled");
-        }
-        if (Number(invCheck.rows[0].balance_due) <= 0) {
-          throw new Error("Invoice is already fully paid");
+          throw new Error("Invoice not found, cancelled, or does not belong to this customer");
         }
       }
 
-      await applyEntityPayment(client, {
+      const { allocations } = await applyEntityPayment(client, {
         companyId,
         entityId: customerId,
         amount: parsed.data.amount,
         mode: parsed.data.mode,
         receiptNo: receiptId,
         referenceId: payment.id,
-        invoiceId: parsed.data.invoiceId ?? null,
+        isCustomerReceipt: true,
+        startInvoiceId: parsed.data.invoiceId ?? null,
       });
 
       await client.query("COMMIT");
-      res.status(201).json(formatPayment(payment));
+      res.status(201).json({ ...formatPayment(payment), allocations });
     } catch (err) {
       await client.query("ROLLBACK");
       logger.error({ err }, "Failed to process payment");
@@ -346,14 +404,15 @@ router.post("/payments/:id/approve", async (req, res): Promise<void> => {
       );
     }
 
-    await applyEntityPayment(client, {
+    const { allocations } = await applyEntityPayment(client, {
       companyId,
       entityId: payment.customerId,
       amount: Number(payment.amount),
       mode: payment.mode,
       receiptNo: payment.receiptId,
       referenceId: payment.id,
-      invoiceId: payment.invoiceId ?? null,
+      isCustomerReceipt: true,
+      startInvoiceId: payment.invoiceId ?? null,
     });
 
     const [updated] = await db
@@ -370,7 +429,7 @@ router.post("/payments/:id/approve", async (req, res): Promise<void> => {
       .returning();
 
     await client.query("COMMIT");
-    res.json(formatPayment(updated));
+    res.json({ ...formatPayment(updated), allocations });
   } catch (err) {
     await client.query("ROLLBACK");
     logger.error({ err }, "Failed to approve payment");

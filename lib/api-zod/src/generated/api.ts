@@ -1753,7 +1753,16 @@ export const ListPaymentsResponseItem = zod.object({
   "approvedAt": zod.string().nullish(),
   "accountId": zod.number().nullish(),
   "accountName": zod.string().nullish(),
-  "collectedAt": zod.string().nullish()
+  "collectedAt": zod.string().nullish(),
+  "allocations": zod.array(zod.object({
+  "invoiceId": zod.number(),
+  "invoiceNo": zod.string(),
+  "invoiceAmount": zod.number().describe('The invoice\'s grand total, snapshotted at the time of this allocation.'),
+  "previousPaid": zod.number().describe('What was already paid on this invoice immediately before this allocation.'),
+  "allocatedAmount": zod.number().describe('How much of this payment was applied to this invoice.'),
+  "balanceAfter": zod.number().describe('This invoice\'s balance_due immediately after this allocation.'),
+  "status": zod.enum(['paid', 'partially_paid'])
+}).describe('One invoice a payment was FIFO-allocated against — persisted at the time of allocation, so a receipt reprint always shows this exact historical breakdown.')).optional().describe('Present on create\/approve responses — the invoice(s) this payment was FIFO-allocated against.')
 })
 export const ListPaymentsResponse = zod.array(ListPaymentsResponseItem)
 
@@ -1763,7 +1772,7 @@ export const ListPaymentsResponse = zod.array(ListPaymentsResponseItem)
  */
 export const LogPaymentBody = zod.object({
   "customerId": zod.number().optional().describe('Omit for walk-in \/ cash sales — server resolves to a Walk-in Customer entity.'),
-  "invoiceId": zod.number().optional().describe('If set, this payment also reduces that specific invoice\'s own balance_due (capped to it — any excess still reduces the customer\'s overall outstanding balance).'),
+  "invoiceId": zod.number().optional().describe('If set, this payment is applied to that specific invoice first; any remainder spills over FIFO to the customer\'s other oldest outstanding invoices (see the `allocations` field on the response for the full breakdown).'),
   "amount": zod.number(),
   "mode": zod.enum(['cash', 'cheque', 'upi', 'bank_transfer', 'other']),
   "notes": zod.string().optional(),
@@ -1786,7 +1795,16 @@ export const LogPaymentResponse = zod.object({
   "approvedAt": zod.string().nullish(),
   "accountId": zod.number().nullish(),
   "accountName": zod.string().nullish(),
-  "collectedAt": zod.string().nullish()
+  "collectedAt": zod.string().nullish(),
+  "allocations": zod.array(zod.object({
+  "invoiceId": zod.number(),
+  "invoiceNo": zod.string(),
+  "invoiceAmount": zod.number().describe('The invoice\'s grand total, snapshotted at the time of this allocation.'),
+  "previousPaid": zod.number().describe('What was already paid on this invoice immediately before this allocation.'),
+  "allocatedAmount": zod.number().describe('How much of this payment was applied to this invoice.'),
+  "balanceAfter": zod.number().describe('This invoice\'s balance_due immediately after this allocation.'),
+  "status": zod.enum(['paid', 'partially_paid'])
+}).describe('One invoice a payment was FIFO-allocated against — persisted at the time of allocation, so a receipt reprint always shows this exact historical breakdown.')).optional().describe('Present on create\/approve responses — the invoice(s) this payment was FIFO-allocated against.')
 })
 
 
@@ -1805,8 +1823,19 @@ export const GetPaymentReceiptResponse = zod.object({
   "amount": zod.number(),
   "direction": zod.enum(['in', 'out']),
   "status": zod.string().describe('approved\/pending\/rejected for a customer payment; \"completed\" for a Cash Book entry (no approval step).'),
-  "invoiceNo": zod.string().nullish(),
-  "source": zod.enum(['payment', 'cashbook'])
+  "invoiceNo": zod.string().nullish().describe('The first\/primary invoice this payment touched, if any — see `allocations` for the full breakdown.'),
+  "source": zod.enum(['payment', 'cashbook']),
+  "allocations": zod.array(zod.object({
+  "invoiceId": zod.number(),
+  "invoiceNo": zod.string(),
+  "invoiceAmount": zod.number().describe('The invoice\'s grand total, snapshotted at the time of this allocation.'),
+  "previousPaid": zod.number().describe('What was already paid on this invoice immediately before this allocation.'),
+  "allocatedAmount": zod.number().describe('How much of this payment was applied to this invoice.'),
+  "balanceAfter": zod.number().describe('This invoice\'s balance_due immediately after this allocation.'),
+  "status": zod.enum(['paid', 'partially_paid'])
+}).describe('One invoice a payment was FIFO-allocated against — persisted at the time of allocation, so a receipt reprint always shows this exact historical breakdown.')).optional(),
+  "customerBalanceBefore": zod.number().nullish(),
+  "customerBalanceAfter": zod.number().nullish()
 })
 
 
@@ -1833,7 +1862,16 @@ export const ApprovePaymentResponse = zod.object({
   "approvedAt": zod.string().nullish(),
   "accountId": zod.number().nullish(),
   "accountName": zod.string().nullish(),
-  "collectedAt": zod.string().nullish()
+  "collectedAt": zod.string().nullish(),
+  "allocations": zod.array(zod.object({
+  "invoiceId": zod.number(),
+  "invoiceNo": zod.string(),
+  "invoiceAmount": zod.number().describe('The invoice\'s grand total, snapshotted at the time of this allocation.'),
+  "previousPaid": zod.number().describe('What was already paid on this invoice immediately before this allocation.'),
+  "allocatedAmount": zod.number().describe('How much of this payment was applied to this invoice.'),
+  "balanceAfter": zod.number().describe('This invoice\'s balance_due immediately after this allocation.'),
+  "status": zod.enum(['paid', 'partially_paid'])
+}).describe('One invoice a payment was FIFO-allocated against — persisted at the time of allocation, so a receipt reprint always shows this exact historical breakdown.')).optional().describe('Present on create\/approve responses — the invoice(s) this payment was FIFO-allocated against.')
 })
 
 
@@ -1860,7 +1898,16 @@ export const RejectPaymentResponse = zod.object({
   "approvedAt": zod.string().nullish(),
   "accountId": zod.number().nullish(),
   "accountName": zod.string().nullish(),
-  "collectedAt": zod.string().nullish()
+  "collectedAt": zod.string().nullish(),
+  "allocations": zod.array(zod.object({
+  "invoiceId": zod.number(),
+  "invoiceNo": zod.string(),
+  "invoiceAmount": zod.number().describe('The invoice\'s grand total, snapshotted at the time of this allocation.'),
+  "previousPaid": zod.number().describe('What was already paid on this invoice immediately before this allocation.'),
+  "allocatedAmount": zod.number().describe('How much of this payment was applied to this invoice.'),
+  "balanceAfter": zod.number().describe('This invoice\'s balance_due immediately after this allocation.'),
+  "status": zod.enum(['paid', 'partially_paid'])
+}).describe('One invoice a payment was FIFO-allocated against — persisted at the time of allocation, so a receipt reprint always shows this exact historical breakdown.')).optional().describe('Present on create\/approve responses — the invoice(s) this payment was FIFO-allocated against.')
 })
 
 
@@ -1991,13 +2038,24 @@ export const ListAccountTransactionsResponseItem = zod.object({
   "partyName": zod.string().nullish(),
   "partyMobile": zod.string().nullish(),
   "partyEntityId": zod.number().nullish(),
-  "invoiceId": zod.number().nullish().describe('If this \"Payment In\" was applied against one specific invoice, that invoice\'s id.'),
-  "invoiceNo": zod.string().nullish(),
+  "invoiceId": zod.number().nullish().describe('The invoice this \"Payment In\" started allocation from, if one was pinned — see `allocations` for the full FIFO breakdown, which may span more than this one invoice.'),
+  "invoiceNo": zod.string().nullish().describe('The first\/primary invoice this payment touched, if any — see `allocations` for the full breakdown.'),
+  "allocations": zod.array(zod.object({
+  "invoiceId": zod.number(),
+  "invoiceNo": zod.string(),
+  "invoiceAmount": zod.number().describe('The invoice\'s grand total, snapshotted at the time of this allocation.'),
+  "previousPaid": zod.number().describe('What was already paid on this invoice immediately before this allocation.'),
+  "allocatedAmount": zod.number().describe('How much of this payment was applied to this invoice.'),
+  "balanceAfter": zod.number().describe('This invoice\'s balance_due immediately after this allocation.'),
+  "status": zod.enum(['paid', 'partially_paid'])
+}).describe('One invoice a payment was FIFO-allocated against — persisted at the time of allocation, so a receipt reprint always shows this exact historical breakdown.')).optional().describe('Present on create\/update responses for a customer \"Payment In\" — every invoice this entry was FIFO-allocated against.'),
   "notes": zod.string().nullish(),
   "createdById": zod.number().nullish(),
   "createdByName": zod.string().nullish(),
   "createdByRole": zod.string().nullish(),
-  "balanceAfter": zod.number().nullish(),
+  "balanceAfter": zod.number().nullish().describe('The Cash Book account\'s own balance after this entry — distinct from the linked customer\'s outstanding balance below.'),
+  "customerBalanceBefore": zod.number().nullish().describe('The linked customer\'s outstanding balance immediately before this entry (only set for a customer \"Payment In\").'),
+  "customerBalanceAfter": zod.number().nullish(),
   "createdAt": zod.string()
 })
 export const ListAccountTransactionsResponse = zod.array(ListAccountTransactionsResponseItem)
@@ -2018,7 +2076,7 @@ export const CreateAccountTransactionBody = zod.object({
   "partyName": zod.string().optional(),
   "partyMobile": zod.string().optional(),
   "partyEntityId": zod.number().optional(),
-  "invoiceId": zod.number().optional().describe('Optional — apply this \"Payment In\" against one specific outstanding invoice for the linked customer, reducing its balance_due directly (not just the customer\'s overall outstanding balance).'),
+  "invoiceId": zod.number().optional().describe('Optional — apply this \"Payment In\" against one specific outstanding invoice for the linked customer first; any remainder spills over FIFO to their other oldest outstanding invoices (see `allocations` on the response).'),
   "notes": zod.string().optional(),
   "allowNegative": zod.boolean().optional().describe('Admin-only override to let a \"Payment Out\" push the account balance negative instead of being blocked.')
 })
@@ -2034,13 +2092,24 @@ export const CreateAccountTransactionResponse = zod.object({
   "partyName": zod.string().nullish(),
   "partyMobile": zod.string().nullish(),
   "partyEntityId": zod.number().nullish(),
-  "invoiceId": zod.number().nullish().describe('If this \"Payment In\" was applied against one specific invoice, that invoice\'s id.'),
-  "invoiceNo": zod.string().nullish(),
+  "invoiceId": zod.number().nullish().describe('The invoice this \"Payment In\" started allocation from, if one was pinned — see `allocations` for the full FIFO breakdown, which may span more than this one invoice.'),
+  "invoiceNo": zod.string().nullish().describe('The first\/primary invoice this payment touched, if any — see `allocations` for the full breakdown.'),
+  "allocations": zod.array(zod.object({
+  "invoiceId": zod.number(),
+  "invoiceNo": zod.string(),
+  "invoiceAmount": zod.number().describe('The invoice\'s grand total, snapshotted at the time of this allocation.'),
+  "previousPaid": zod.number().describe('What was already paid on this invoice immediately before this allocation.'),
+  "allocatedAmount": zod.number().describe('How much of this payment was applied to this invoice.'),
+  "balanceAfter": zod.number().describe('This invoice\'s balance_due immediately after this allocation.'),
+  "status": zod.enum(['paid', 'partially_paid'])
+}).describe('One invoice a payment was FIFO-allocated against — persisted at the time of allocation, so a receipt reprint always shows this exact historical breakdown.')).optional().describe('Present on create\/update responses for a customer \"Payment In\" — every invoice this entry was FIFO-allocated against.'),
   "notes": zod.string().nullish(),
   "createdById": zod.number().nullish(),
   "createdByName": zod.string().nullish(),
   "createdByRole": zod.string().nullish(),
-  "balanceAfter": zod.number().nullish(),
+  "balanceAfter": zod.number().nullish().describe('The Cash Book account\'s own balance after this entry — distinct from the linked customer\'s outstanding balance below.'),
+  "customerBalanceBefore": zod.number().nullish().describe('The linked customer\'s outstanding balance immediately before this entry (only set for a customer \"Payment In\").'),
+  "customerBalanceAfter": zod.number().nullish(),
   "createdAt": zod.string()
 })
 
@@ -2076,13 +2145,24 @@ export const UpdateAccountTransactionResponse = zod.object({
   "partyName": zod.string().nullish(),
   "partyMobile": zod.string().nullish(),
   "partyEntityId": zod.number().nullish(),
-  "invoiceId": zod.number().nullish().describe('If this \"Payment In\" was applied against one specific invoice, that invoice\'s id.'),
-  "invoiceNo": zod.string().nullish(),
+  "invoiceId": zod.number().nullish().describe('The invoice this \"Payment In\" started allocation from, if one was pinned — see `allocations` for the full FIFO breakdown, which may span more than this one invoice.'),
+  "invoiceNo": zod.string().nullish().describe('The first\/primary invoice this payment touched, if any — see `allocations` for the full breakdown.'),
+  "allocations": zod.array(zod.object({
+  "invoiceId": zod.number(),
+  "invoiceNo": zod.string(),
+  "invoiceAmount": zod.number().describe('The invoice\'s grand total, snapshotted at the time of this allocation.'),
+  "previousPaid": zod.number().describe('What was already paid on this invoice immediately before this allocation.'),
+  "allocatedAmount": zod.number().describe('How much of this payment was applied to this invoice.'),
+  "balanceAfter": zod.number().describe('This invoice\'s balance_due immediately after this allocation.'),
+  "status": zod.enum(['paid', 'partially_paid'])
+}).describe('One invoice a payment was FIFO-allocated against — persisted at the time of allocation, so a receipt reprint always shows this exact historical breakdown.')).optional().describe('Present on create\/update responses for a customer \"Payment In\" — every invoice this entry was FIFO-allocated against.'),
   "notes": zod.string().nullish(),
   "createdById": zod.number().nullish(),
   "createdByName": zod.string().nullish(),
   "createdByRole": zod.string().nullish(),
-  "balanceAfter": zod.number().nullish(),
+  "balanceAfter": zod.number().nullish().describe('The Cash Book account\'s own balance after this entry — distinct from the linked customer\'s outstanding balance below.'),
+  "customerBalanceBefore": zod.number().nullish().describe('The linked customer\'s outstanding balance immediately before this entry (only set for a customer \"Payment In\").'),
+  "customerBalanceAfter": zod.number().nullish(),
   "createdAt": zod.string()
 })
 

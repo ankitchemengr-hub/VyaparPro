@@ -15,6 +15,7 @@ import {
   getListPaymentsQueryKey,
   getListAccountsQueryKey,
   getGetEntityQueryKey,
+  type PaymentAllocation,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -110,7 +111,9 @@ export function RecordPaymentDialog({
   const [notes, setNotes] = useState("");
   const [accountId, setAccountId] = useState<number | null>(null);
   const [accountError, setAccountError] = useState(false);
-  const [success, setSuccess] = useState<{ receiptId: string; approved: boolean } | null>(null);
+  const [success, setSuccess] = useState<{
+    receiptId: string; approved: boolean; allocations: PaymentAllocation[]; balanceBefore: number | null;
+  } | null>(null);
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
 
   const matchingAccounts = (accounts ?? []).filter(
@@ -174,11 +177,26 @@ export function RecordPaymentDialog({
       },
       {
         onSuccess: (payment) => {
-          if (invoiceId) queryClient.invalidateQueries({ queryKey: getGetInvoiceQueryKey(invoiceId) });
+          const allocations = payment.allocations ?? [];
+          // FIFO can spill across several invoices, not just the one pinned
+          // (if any) — invalidate every invoice this payment actually
+          // touched, plus the broad list for the Invoices page.
+          for (const a of allocations) {
+            queryClient.invalidateQueries({ queryKey: getGetInvoiceQueryKey(a.invoiceId) });
+          }
+          if (invoiceId && !allocations.some((a) => a.invoiceId === invoiceId)) {
+            queryClient.invalidateQueries({ queryKey: getGetInvoiceQueryKey(invoiceId) });
+          }
           queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
           queryClient.invalidateQueries({ queryKey: getListPaymentsQueryKey() });
           queryClient.invalidateQueries({ queryKey: getListAccountsQueryKey() });
-          setSuccess({ receiptId: payment.receiptId ?? "", approved: payment.status === "approved" });
+          if (entityId) queryClient.invalidateQueries({ queryKey: getGetEntityQueryKey(entityId) });
+          setSuccess({
+            receiptId: payment.receiptId ?? "",
+            approved: payment.status === "approved",
+            allocations,
+            balanceBefore: entity ? Number(entity.outstandingBalance) : null,
+          });
           toast({
             title: payment.status === "approved" ? "Payment recorded" : "Payment logged — pending approval",
             description: `Receipt ${payment.receiptId} • ₹${amount.toLocaleString()} via ${modeLabels[mode]}`,
@@ -223,6 +241,19 @@ export function RecordPaymentDialog({
                   Pending admin approval before the ledger is updated.
                 </p>
               )}
+              {success.allocations.length > 0 && (
+                <div className="w-full text-left border rounded-md divide-y text-xs">
+                  {success.allocations.map((a) => (
+                    <div key={a.invoiceId} className="flex items-center justify-between px-3 py-1.5 gap-2">
+                      <span className="font-mono">{a.invoiceNo}</span>
+                      <span>₹{a.allocatedAmount.toLocaleString()}</span>
+                      <span className={a.status === "paid" ? "text-green-600 font-medium" : "text-amber-600 font-medium"}>
+                        {a.status === "paid" ? "PAID" : "PARTIALLY PAID"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Printable receipt — hidden on screen, shown only for print/PDF */}
@@ -238,7 +269,9 @@ export function RecordPaymentDialog({
                 <div><span className="text-muted-foreground">Receipt No: </span>{success.receiptId}</div>
                 <div><span className="text-muted-foreground">Date: </span>{new Date().toLocaleDateString("en-IN")}</div>
                 <div><span className="text-muted-foreground">Received From: </span>{entityName ?? "—"}</div>
-                {invoiceNo && <div><span className="text-muted-foreground">Against Invoice: </span>{invoiceNo}</div>}
+                {success.balanceBefore != null && (
+                  <div><span className="text-muted-foreground">Balance Before: </span>₹{success.balanceBefore.toLocaleString()}</div>
+                )}
                 <div><span className="text-muted-foreground">Mode: </span>{modeLabels[mode]}</div>
                 {!success.approved && <div><span className="text-muted-foreground">Status: </span>Pending approval</div>}
               </div>
@@ -249,6 +282,41 @@ export function RecordPaymentDialog({
                 </div>
                 <div className="text-xs text-muted-foreground mt-1">{rupeesInWords(amount)}</div>
               </div>
+
+              {success.allocations.length > 0 && (
+                <div className="mb-3">
+                  <div className="font-semibold text-sm mb-1.5">Adjusted Against</div>
+                  <table className="w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-1 pr-2">Invoice</th>
+                        <th className="text-right py-1 px-2">Invoice Amt</th>
+                        <th className="text-right py-1 px-2">Prev. Paid</th>
+                        <th className="text-right py-1 px-2">This Payment</th>
+                        <th className="text-right py-1 px-2">Remaining</th>
+                        <th className="text-right py-1 pl-2">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {success.allocations.map((a) => (
+                        <tr key={a.invoiceId} className="border-b border-dashed">
+                          <td className="py-1 pr-2 font-mono">{a.invoiceNo}</td>
+                          <td className="text-right py-1 px-2">₹{a.invoiceAmount.toLocaleString()}</td>
+                          <td className="text-right py-1 px-2">₹{a.previousPaid.toLocaleString()}</td>
+                          <td className="text-right py-1 px-2">₹{a.allocatedAmount.toLocaleString()}</td>
+                          <td className="text-right py-1 px-2">₹{a.balanceAfter.toLocaleString()}</td>
+                          <td className="text-right py-1 pl-2 font-medium">{a.status === "paid" ? "PAID" : "PARTIALLY PAID"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {success.balanceBefore != null && (
+                <div className="text-xs text-muted-foreground">
+                  Customer balance: ₹{success.balanceBefore.toLocaleString()} → ₹{(success.balanceBefore - amount).toLocaleString()}
+                </div>
+              )}
             </div>
           </>
         ) : (
@@ -275,22 +343,19 @@ export function RecordPaymentDialog({
                 id="pay-amount"
                 type="number"
                 min={0}
-                max={maxAmount != null ? Number(maxAmount) : undefined}
                 step="any"
                 value={amount}
-                onChange={(e) => {
-                  const v = Number(e.target.value);
-                  setAmount(maxAmount != null ? Math.min(v, Number(maxAmount)) : v);
-                }}
+                onChange={(e) => setAmount(Number(e.target.value))}
                 data-testid="input-pay-amount"
               />
               {maxAmount != null ? (
                 <p className="text-xs text-muted-foreground">
                   Balance due: ₹{Number(maxAmount).toLocaleString()}{totalAmount != null ? ` of ₹${Number(totalAmount).toLocaleString()}` : ""}
+                  {" — paying more automatically applies the rest to this customer's next oldest outstanding invoice(s)."}
                 </p>
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  Not tied to a specific invoice — any amount beyond what's owed becomes advance credit.
+                  Not tied to a specific invoice — applies FIFO to this customer's oldest outstanding invoices first; any amount beyond what's owed becomes advance credit.
                 </p>
               )}
             </div>

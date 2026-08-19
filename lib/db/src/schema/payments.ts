@@ -36,3 +36,31 @@ export const paymentsTable = pgTable("payments", {
 export const insertPaymentSchema = createInsertSchema(paymentsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertPayment = z.infer<typeof insertPaymentSchema>;
 export type Payment = typeof paymentsTable.$inferSelect;
+
+// One row per invoice a payment (or Cash Book Payment In) was FIFO-allocated
+// against. Keyed by receiptNo rather than a payment/account_transaction id —
+// both tables already share the same receipt number for a given payment
+// event (see the comment on GET /payment-receipts/:receiptNo), so receiptNo
+// is already this codebase's established cross-table join key; reusing it
+// avoids a polymorphic sourceType/sourceId pair that could silently join to
+// the wrong row (payments.id and account_transactions.id are independent
+// sequences that can collide numerically).
+export const paymentAllocationsTable = pgTable("payment_allocations", {
+  id: serial("id").primaryKey(),
+  companyId: integer("company_id").notNull(),
+  receiptNo: text("receipt_no").notNull(),
+  // Loose reference (no FK) for the same reason as payments.invoiceId above.
+  invoiceId: integer("invoice_id"),
+  invoiceNo: text("invoice_no").notNull(),
+  allocatedAmount: numeric("allocated_amount", { precision: 12, scale: 2 }).notNull(),
+  invoiceAmountAtAllocation: numeric("invoice_amount_at_allocation", { precision: 12, scale: 2 }).notNull(),
+  previousPaidAtAllocation: numeric("previous_paid_at_allocation", { precision: 12, scale: 2 }).notNull(),
+  balanceAfterAllocation: numeric("balance_after_allocation", { precision: 12, scale: 2 }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("payment_allocations_company_idx").on(t.companyId),
+  index("payment_allocations_receipt_idx").on(t.companyId, t.receiptNo),
+  index("payment_allocations_invoice_idx").on(t.invoiceId),
+]);
+
+export type PaymentAllocation = typeof paymentAllocationsTable.$inferSelect;

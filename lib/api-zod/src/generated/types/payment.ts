@@ -5,6 +5,7 @@
  * Shradha Oil Center ERP API
  * OpenAPI spec version: 0.1.0
  */
+import type { PaymentAllocation } from './paymentAllocation';
 import type { PaymentMode } from './paymentMode';
 import type { PaymentStatus } from './paymentStatus';
 
@@ -34,4 +35,6 @@ export interface Payment {
   accountName?: string | null;
   /** @nullable */
   collectedAt?: string | null;
+  /** Present on create/approve responses — the invoice(s) this payment was FIFO-allocated against. */
+  allocations?: PaymentAllocation[];
 }

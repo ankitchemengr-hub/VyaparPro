@@ -1469,6 +1469,31 @@ export interface SalesReturn {
   items?: SalesReturnItem[];
 }
 
+export type PaymentAllocationStatus = typeof PaymentAllocationStatus[keyof typeof PaymentAllocationStatus];
+
+
+export const PaymentAllocationStatus = {
+  paid: 'paid',
+  partially_paid: 'partially_paid',
+} as const;
+
+/**
+ * One invoice a payment was FIFO-allocated against — persisted at the time of allocation, so a receipt reprint always shows this exact historical breakdown.
+ */
+export interface PaymentAllocation {
+  invoiceId: number;
+  invoiceNo: string;
+  /** The invoice's grand total, snapshotted at the time of this allocation. */
+  invoiceAmount: number;
+  /** What was already paid on this invoice immediately before this allocation. */
+  previousPaid: number;
+  /** How much of this payment was applied to this invoice. */
+  allocatedAmount: number;
+  /** This invoice's balance_due immediately after this allocation. */
+  balanceAfter: number;
+  status: PaymentAllocationStatus;
+}
+
 export type PaymentMode = typeof PaymentMode[keyof typeof PaymentMode];
 
 
@@ -1515,6 +1540,8 @@ export interface Payment {
   accountName?: string | null;
   /** @nullable */
   collectedAt?: string | null;
+  /** Present on create/approve responses — the invoice(s) this payment was FIFO-allocated against. */
+  allocations?: PaymentAllocation[];
 }
 
 export type PaymentReceiptDirection = typeof PaymentReceiptDirection[keyof typeof PaymentReceiptDirection];
@@ -1543,9 +1570,17 @@ export interface PaymentReceipt {
   direction: PaymentReceiptDirection;
   /** approved/pending/rejected for a customer payment; "completed" for a Cash Book entry (no approval step). */
   status: string;
-  /** @nullable */
+  /**
+     * The first/primary invoice this payment touched, if any — see `allocations` for the full breakdown.
+     * @nullable
+     */
   invoiceNo?: string | null;
   source: PaymentReceiptSource;
+  allocations?: PaymentAllocation[];
+  /** @nullable */
+  customerBalanceBefore?: number | null;
+  /** @nullable */
+  customerBalanceAfter?: number | null;
 }
 
 export type PaymentInputMode = typeof PaymentInputMode[keyof typeof PaymentInputMode];
@@ -1562,7 +1597,7 @@ export const PaymentInputMode = {
 export interface PaymentInput {
   /** Omit for walk-in / cash sales — server resolves to a Walk-in Customer entity. */
   customerId?: number;
-  /** If set, this payment also reduces that specific invoice's own balance_due (capped to it — any excess still reduces the customer's overall outstanding balance). */
+  /** If set, this payment is applied to that specific invoice first; any remainder spills over FIFO to the customer's other oldest outstanding invoices (see the `allocations` field on the response for the full breakdown). */
   invoiceId?: number;
   amount: number;
   mode: PaymentInputMode;
@@ -1667,12 +1702,17 @@ export interface AccountTransaction {
   /** @nullable */
   partyEntityId?: number | null;
   /**
-     * If this "Payment In" was applied against one specific invoice, that invoice's id.
+     * The invoice this "Payment In" started allocation from, if one was pinned — see `allocations` for the full FIFO breakdown, which may span more than this one invoice.
      * @nullable
      */
   invoiceId?: number | null;
-  /** @nullable */
+  /**
+     * The first/primary invoice this payment touched, if any — see `allocations` for the full breakdown.
+     * @nullable
+     */
   invoiceNo?: string | null;
+  /** Present on create/update responses for a customer "Payment In" — every invoice this entry was FIFO-allocated against. */
+  allocations?: PaymentAllocation[];
   /** @nullable */
   notes?: string | null;
   /** @nullable */
@@ -1681,8 +1721,18 @@ export interface AccountTransaction {
   createdByName?: string | null;
   /** @nullable */
   createdByRole?: string | null;
-  /** @nullable */
+  /**
+     * The Cash Book account's own balance after this entry — distinct from the linked customer's outstanding balance below.
+     * @nullable
+     */
   balanceAfter?: number | null;
+  /**
+     * The linked customer's outstanding balance immediately before this entry (only set for a customer "Payment In").
+     * @nullable
+     */
+  customerBalanceBefore?: number | null;
+  /** @nullable */
+  customerBalanceAfter?: number | null;
   createdAt: string;
 }
 
@@ -1714,7 +1764,7 @@ export interface AccountTransactionInput {
   partyName?: string;
   partyMobile?: string;
   partyEntityId?: number;
-  /** Optional — apply this "Payment In" against one specific outstanding invoice for the linked customer, reducing its balance_due directly (not just the customer's overall outstanding balance). */
+  /** Optional — apply this "Payment In" against one specific outstanding invoice for the linked customer first; any remainder spills over FIFO to their other oldest outstanding invoices (see `allocations` on the response). */
   invoiceId?: number;
   notes?: string;
   /** Admin-only override to let a "Payment Out" push the account balance negative instead of being blocked. */

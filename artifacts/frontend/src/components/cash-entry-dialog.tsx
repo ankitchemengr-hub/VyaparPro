@@ -370,11 +370,11 @@ export function CashEntryDialog({
 
             {isIn && partyEntityId && outstandingInvoices.length > 0 && (
               <div className="space-y-1.5">
-                <Label className="text-xs">Apply to Invoice <span className="font-normal text-muted-foreground">(optional)</span></Label>
+                <Label className="text-xs">Start With Invoice <span className="font-normal text-muted-foreground">(optional)</span></Label>
                 <Select value={invoiceId ? String(invoiceId) : "__none__"} onValueChange={(v) => setInvoiceId(v === "__none__" ? null : Number(v))}>
                   <SelectTrigger data-testid="select-entry-invoice"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__none__">None — general payment against balance</SelectItem>
+                    <SelectItem value="__none__">None — auto-apply oldest invoices first (FIFO)</SelectItem>
                     {outstandingInvoices.map((inv) => (
                       <SelectItem key={inv.id} value={String(inv.id)}>
                         {inv.invoiceNo} — due ₹{(inv.balanceDue ?? 0).toLocaleString("en-IN")}
@@ -383,7 +383,9 @@ export function CashEntryDialog({
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  Marks that specific invoice as paid (fully or partially) instead of only reducing the customer's overall balance.
+                  {invoiceId
+                    ? "Applied to this invoice first — any remaining amount spills over to the customer's next oldest outstanding invoices."
+                    : "Automatically applies oldest-invoice-first across this customer's outstanding invoices, splitting across several if needed."}
                 </p>
               </div>
             )}

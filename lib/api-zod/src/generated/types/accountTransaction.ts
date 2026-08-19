@@ -7,6 +7,7 @@
  */
 import type { AccountTransactionDirection } from './accountTransactionDirection';
 import type { AccountTransactionMode } from './accountTransactionMode';
+import type { PaymentAllocation } from './paymentAllocation';
 
 export interface AccountTransaction {
   id: number;
@@ -25,12 +26,17 @@ export interface AccountTransaction {
   /** @nullable */
   partyEntityId?: number | null;
   /**
-     * If this "Payment In" was applied against one specific invoice, that invoice's id.
+     * The invoice this "Payment In" started allocation from, if one was pinned — see `allocations` for the full FIFO breakdown, which may span more than this one invoice.
      * @nullable
      */
   invoiceId?: number | null;
-  /** @nullable */
+  /**
+     * The first/primary invoice this payment touched, if any — see `allocations` for the full breakdown.
+     * @nullable
+     */
   invoiceNo?: string | null;
+  /** Present on create/update responses for a customer "Payment In" — every invoice this entry was FIFO-allocated against. */
+  allocations?: PaymentAllocation[];
   /** @nullable */
   notes?: string | null;
   /** @nullable */
@@ -39,7 +45,17 @@ export interface AccountTransaction {
   createdByName?: string | null;
   /** @nullable */
   createdByRole?: string | null;
-  /** @nullable */
+  /**
+     * The Cash Book account's own balance after this entry — distinct from the linked customer's outstanding balance below.
+     * @nullable
+     */
   balanceAfter?: number | null;
+  /**
+     * The linked customer's outstanding balance immediately before this entry (only set for a customer "Payment In").
+     * @nullable
+     */
+  customerBalanceBefore?: number | null;
+  /** @nullable */
+  customerBalanceAfter?: number | null;
   createdAt: string;
 }

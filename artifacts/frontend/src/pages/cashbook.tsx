@@ -12,6 +12,8 @@ import {
   getGetEntityLedgerQueryKey,
   getGetDashboardSummaryQueryKey,
   getListKhatabookQueryKey,
+  getGetPaymentReceiptQueryKey,
+  getListInvoicesQueryKey,
   type SalesmanCashSummary,
   type Account,
   type AccountTransaction,
@@ -445,6 +447,13 @@ function EditCashEntryDialog({
           if (txn?.partyEntityId) {
             queryClient.invalidateQueries({ queryKey: getGetEntityLedgerQueryKey(txn.partyEntityId) });
           }
+          // An amount edit can reverse/re-run the FIFO invoice allocation
+          // entirely — the receipt's own allocation breakdown (and every
+          // invoice touched) may now be different.
+          if (txn?.receiptNo) {
+            queryClient.invalidateQueries({ queryKey: getGetPaymentReceiptQueryKey(txn.receiptNo) });
+          }
+          queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
           queryClient.invalidateQueries({ queryKey: getListEntitiesQueryKey() });
           queryClient.invalidateQueries({ queryKey: getListKhatabookQueryKey() });
           queryClient.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() });

@@ -182,6 +182,8 @@ export * from './numberSeriesUpdateResetRule';
 export * from './numberSeriesUpdateYearFormat';
 export * from './numberSeriesYearFormat';
 export * from './payment';
+export * from './paymentAllocation';
+export * from './paymentAllocationStatus';
 export * from './paymentInput';
 export * from './paymentInputMode';
 export * from './paymentMode';

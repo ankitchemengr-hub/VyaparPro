@@ -4812,6 +4812,31 @@ components:
           items:
             $ref: "#/components/schemas/SalesReturnItem"
 
+    PaymentAllocation:
+      type: object
+      required: [invoiceId, invoiceNo, invoiceAmount, previousPaid, allocatedAmount, balanceAfter, status]
+      description: One invoice a payment was FIFO-allocated against — persisted at the time of allocation, so a receipt reprint always shows this exact historical breakdown.
+      properties:
+        invoiceId:
+          type: integer
+        invoiceNo:
+          type: string
+        invoiceAmount:
+          type: number
+          description: The invoice's grand total, snapshotted at the time of this allocation.
+        previousPaid:
+          type: number
+          description: What was already paid on this invoice immediately before this allocation.
+        allocatedAmount:
+          type: number
+          description: How much of this payment was applied to this invoice.
+        balanceAfter:
+          type: number
+          description: This invoice's balance_due immediately after this allocation.
+        status:
+          type: string
+          enum: [paid, partially_paid]
+
     Payment:
       type: object
       required: [id, customerId, amount, mode, status, createdAt]
@@ -4850,6 +4875,11 @@ components:
           type: ["string", "null"]
         collectedAt:
           type: ["string", "null"]
+        allocations:
+          type: array
+          items:
+            $ref: "#/components/schemas/PaymentAllocation"
+          description: Present on create/approve responses — the invoice(s) this payment was FIFO-allocated against.
 
     PaymentReceipt:
       type: object
@@ -4873,9 +4903,18 @@ components:
           description: "approved/pending/rejected for a customer payment; \"completed\" for a Cash Book entry (no approval step)."
         invoiceNo:
           type: ["string", "null"]
+          description: The first/primary invoice this payment touched, if any — see `allocations` for the full breakdown.
         source:
           type: string
           enum: [payment, cashbook]
+        allocations:
+          type: array
+          items:
+            $ref: "#/components/schemas/PaymentAllocation"
+        customerBalanceBefore:
+          type: ["number", "null"]
+        customerBalanceAfter:
+          type: ["number", "null"]
 
     PaymentInput:
       type: object
@@ -4886,7 +4925,7 @@ components:
           description: Omit for walk-in / cash sales — server resolves to a Walk-in Customer entity.
         invoiceId:
           type: integer
-          description: If set, this payment also reduces that specific invoice's own balance_due (capped to it — any excess still reduces the customer's overall outstanding balance).
+          description: If set, this payment is applied to that specific invoice first; any remainder spills over FIFO to the customer's other oldest outstanding invoices (see the `allocations` field on the response for the full breakdown).
         amount:
           type: number
         mode:
@@ -5008,9 +5047,15 @@ components:
           type: ["integer", "null"]
         invoiceId:
           type: ["integer", "null"]
-          description: If this "Payment In" was applied against one specific invoice, that invoice's id.
+          description: The invoice this "Payment In" started allocation from, if one was pinned — see `allocations` for the full FIFO breakdown, which may span more than this one invoice.
         invoiceNo:
           type: ["string", "null"]
+          description: The first/primary invoice this payment touched, if any — see `allocations` for the full breakdown.
+        allocations:
+          type: array
+          items:
+            $ref: "#/components/schemas/PaymentAllocation"
+          description: Present on create/update responses for a customer "Payment In" — every invoice this entry was FIFO-allocated against.
         notes:
           type: ["string", "null"]
         createdById:
@@ -5020,6 +5065,12 @@ components:
         createdByRole:
           type: ["string", "null"]
         balanceAfter:
+          type: ["number", "null"]
+          description: The Cash Book account's own balance after this entry — distinct from the linked customer's outstanding balance below.
+        customerBalanceBefore:
+          type: ["number", "null"]
+          description: The linked customer's outstanding balance immediately before this entry (only set for a customer "Payment In").
+        customerBalanceAfter:
           type: ["number", "null"]
         createdAt:
           type: string
@@ -5047,7 +5098,7 @@ components:
           type: integer
         invoiceId:
           type: integer
-          description: Optional — apply this "Payment In" against one specific outstanding invoice for the linked customer, reducing its balance_due directly (not just the customer's overall outstanding balance).
+          description: Optional — apply this "Payment In" against one specific outstanding invoice for the linked customer first; any remainder spills over FIFO to their other oldest outstanding invoices (see `allocations` on the response).
         notes:
           type: string
         allowNegative:

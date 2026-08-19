@@ -5,6 +5,7 @@
  * Shradha Oil Center ERP API
  * OpenAPI spec version: 0.1.0
  */
+import type { PaymentAllocation } from './paymentAllocation';
 import type { PaymentReceiptDirection } from './paymentReceiptDirection';
 import type { PaymentReceiptSource } from './paymentReceiptSource';
 
@@ -18,7 +19,15 @@ export interface PaymentReceipt {
   direction: PaymentReceiptDirection;
   /** approved/pending/rejected for a customer payment; "completed" for a Cash Book entry (no approval step). */
   status: string;
-  /** @nullable */
+  /**
+     * The first/primary invoice this payment touched, if any — see `allocations` for the full breakdown.
+     * @nullable
+     */
   invoiceNo?: string | null;
   source: PaymentReceiptSource;
+  allocations?: PaymentAllocation[];
+  /** @nullable */
+  customerBalanceBefore?: number | null;
+  /** @nullable */
+  customerBalanceAfter?: number | null;
 }
