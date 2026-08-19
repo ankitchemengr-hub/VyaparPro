@@ -8,8 +8,6 @@ import {
   useCreateInvoice,
   useUpdateInvoice,
   useGetInvoice,
-  useLogPayment,
-  useListAccounts,
   useListEntities,
   useGetEntity,
   useGetPrintSettings,
@@ -17,15 +15,9 @@ import {
   useCreateEntity,
   useUpdateEntity,
   getListInvoicesQueryKey,
-  getListPaymentsQueryKey,
-  getListAccountsQueryKey,
   getGetInvoiceQueryKey,
   getLookupEntityByMobileQueryKey,
   getListEntitiesQueryKey,
-  getGetEntityLedgerQueryKey,
-  getGetDashboardSummaryQueryKey,
-  getListKhatabookQueryKey,
-  type PaymentInputMode,
 } from "@workspace/api-client-react";
 import { InvoiceTemplateRenderer } from "@/components/invoice-templates/InvoiceTemplateRenderer";
 import { useCompanyLogo } from "@/hooks/use-company-logo";
@@ -48,8 +40,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   Trash2, Printer, Save, CheckCircle, Loader2, User, Phone, MapPin,
-  ArrowLeft, Banknote, CreditCard, Building2, Smartphone, Clock, SkipForward,
-  Search, Plus, Pencil, UserPlus, Share2,
+  ArrowLeft, Search, Plus, Pencil, UserPlus, Share2,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -187,14 +178,6 @@ export default function Billing() {
   // and stomp the rates the user actually saved. This ref lets that sync
   // skip the one render caused by prefill.
   const skipRateSyncRef = useRef(false);
-  const [paymentAmount, setPaymentAmount] = useState(0);
-  const [paymentMode, setPaymentMode] = useState<"cash" | "upi" | "cheque" | "bank_transfer" | "credit">("cash");
-  const [paymentRef, setPaymentRef] = useState("");
-  const [paymentNotes, setPaymentNotes] = useState("");
-  const [paymentDone, setPaymentDone] = useState(false);
-  const [paymentSkipped, setPaymentSkipped] = useState(false);
-  const [savedPayment, setSavedPayment] = useState<any>(null);
-  const [accountId, setAccountId] = useState<number | null>(null);
   // Keyboard shortcuts call through this ref instead of `handleSave` directly
   // — `handleSave` isn't defined until after the early-return role guards
   // below, and hooks (this effect included) must run unconditionally before
@@ -211,13 +194,11 @@ export default function Billing() {
   const { data: existingCustomerEntity } = useGetEntity(existingInvoice?.customerId as number, {
     query: { enabled: isEditMode && !!existingInvoice?.customerId } as any,
   });
-  const { data: accounts } = useListAccounts();
   const { data: printSettingsData } = useGetPrintSettings();
   const logo = useCompanyLogo();
   const printSettings = { ...(printSettingsData ?? FALLBACK_PRINT_SETTINGS), logo };
   const createInvoice = useCreateInvoice();
   const updateInvoice = useUpdateInvoice();
-  const logPayment = useLogPayment();
 
   const invoiceType = docType === "invoice" ? invoiceSubtype : docType;
 
@@ -312,14 +293,6 @@ export default function Billing() {
   }, [products, params.cart]);
 
   useEffect(() => {
-    if (paymentMode === "credit") { setAccountId(null); return; }
-    const accountTypeForMode: Record<string, string> = { cash: "cash", upi: "upi", cheque: "bank", bank_transfer: "bank" };
-    const matching = (accounts ?? []).filter((a) => a.isActive && a.type === accountTypeForMode[paymentMode]);
-    if (matching.length === 0) { setAccountId(null); return; }
-    if (!accountId || !matching.some((a) => a.id === accountId)) setAccountId(matching[0].id);
-  }, [paymentMode, accounts]);
-
-  useEffect(() => {
     if (!searchOpen) return;
     const handler = (e: MouseEvent) => {
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) setSearchOpen(false);
@@ -372,11 +345,6 @@ export default function Billing() {
   }
 
   // ── Derived state ──
-  const accountTypeForMode: Record<string, string> = { cash: "cash", upi: "upi", cheque: "bank", bank_transfer: "bank" };
-  const matchingAccounts = (accounts ?? []).filter(
-    (a) => a.isActive && (paymentMode === "credit" ? false : a.type === accountTypeForMode[paymentMode]),
-  );
-
   const filteredProducts = productSearch.trim()
     ? (products ?? []).filter((p) => p.name.toLowerCase().includes(productSearch.toLowerCase().trim())).slice(0, 12)
     : (products ?? []).slice(0, 12);
@@ -485,8 +453,7 @@ export default function Billing() {
         setSaved(true);
         setSavedInvoice(invoice);
         if ((invoice.invoiceType as string) !== "quotation") {
-          setPaymentAmount(finalTotal);
-          toast({ title: `Invoice ${invoice.invoiceNo} saved`, description: "Now record payment received." });
+          toast({ title: `Invoice ${invoice.invoiceNo} saved` });
         } else {
           toast({ title: `Quotation ${invoice.invoiceNo} saved`, description: "No stock or payment changes made." });
         }
@@ -500,55 +467,6 @@ export default function Billing() {
   };
 
   handleSaveRef.current = handleSave;
-
-  const handleRecordPayment = () => {
-    const isWalkIn = !customer?.id;
-    logPayment.mutate({
-      data: {
-        ...(customer?.id ? { customerId: customer.id } : {}),
-        // Without this, the payment only reduced the customer's overall
-        // balance — the invoice just saved above never had its own
-        // balanceDue/amountPaid touched, so it stayed "Not Paid" forever
-        // regardless of a payment being recorded right here for it.
-        ...(savedInvoice?.id ? { invoiceId: savedInvoice.id } : {}),
-        amount: paymentAmount,
-        mode: paymentMode as PaymentInputMode,
-        ...(accountId ? { accountId } : {}),
-        notes: [
-          isWalkIn ? `Walk-in cash sale${savedInvoice?.invoiceNo ? ` (Invoice ${savedInvoice.invoiceNo})` : ""}` : "",
-          paymentRef ? `Ref: ${paymentRef}` : "",
-          paymentNotes,
-        ].filter(Boolean).join(" | ") || undefined,
-      },
-    }, {
-      onSuccess: (payment) => {
-        queryClient.invalidateQueries({ queryKey: getListPaymentsQueryKey() });
-        queryClient.invalidateQueries({ queryKey: getListAccountsQueryKey() });
-        queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
-        if (savedInvoice?.id) queryClient.invalidateQueries({ queryKey: getGetInvoiceQueryKey(savedInvoice.id) });
-        if (customer?.id) {
-          queryClient.invalidateQueries({ queryKey: getGetEntityLedgerQueryKey(customer.id) });
-          queryClient.invalidateQueries({ queryKey: getListEntitiesQueryKey() });
-        }
-        queryClient.invalidateQueries({ queryKey: getListKhatabookQueryKey() });
-        queryClient.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() });
-        setSavedPayment(payment);
-        setPaymentDone(true);
-        toast({
-          title: payment.status === "approved" ? "Payment recorded & approved" : "Payment logged — pending approval",
-          description: payment.status === "approved"
-            ? isWalkIn ? `₹${paymentAmount.toLocaleString()} recorded as walk-in ${paymentMode.toUpperCase()} sale.`
-              : `₹${paymentAmount.toLocaleString()} debited from ${customer.name}'s balance.`
-            : `₹${paymentAmount.toLocaleString()} logged. Admin approval required.`,
-        });
-      },
-      onError: async (err: any) => {
-        let desc = err?.message ?? "Server error";
-        try { const body = err?.response ? await err.response.json() : null; if (body?.error) desc = String(body.error).slice(0, 300); } catch {}
-        toast({ title: "Failed to record payment", description: desc, variant: "destructive" });
-      },
-    });
-  };
 
   const handleShareInvoice = async () => {
     if (!savedInvoice) return;
@@ -574,12 +492,6 @@ export default function Billing() {
     } finally {
       setSharing(false);
     }
-  };
-
-  const modeIcons: Record<string, React.ReactNode> = {
-    cash: <Banknote className="w-4 h-4" />, upi: <Smartphone className="w-4 h-4" />,
-    cheque: <CreditCard className="w-4 h-4" />, bank_transfer: <Building2 className="w-4 h-4" />,
-    credit: <Clock className="w-4 h-4" />,
   };
 
   if (saved && savedInvoice) {
@@ -636,7 +548,7 @@ export default function Billing() {
           </CardContent>
         </Card>
 
-        {savedInvoice.invoiceType === "quotation" ? (
+        {savedInvoice.invoiceType === "quotation" && (
           <Card className="border-blue-500/20 bg-blue-500/5">
             <CardContent className="pt-5 pb-4">
               <div className="flex items-center gap-3 text-muted-foreground">
@@ -646,161 +558,6 @@ export default function Billing() {
                   <p className="text-xs mt-0.5">Convert to a GST or Non-GST invoice when the order is confirmed.</p>
                 </div>
               </div>
-            </CardContent>
-          </Card>
-        ) : !paymentDone && !paymentSkipped ? (
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Banknote className="w-4 h-4 text-primary" /> Collect Payment
-              </CardTitle>
-              <CardDescription>
-                {customer
-                  ? `Record what ${customer.name} paid now. Admin payments are instantly credited to the ledger.`
-                  : "No customer account linked. Skip if this is a cash sale."}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label>Payment Mode</Label>
-                <div className="grid grid-cols-2 gap-3">
-                  {(["cash", "upi"] as const).map((mode) => (
-                    <button key={mode} type="button" onClick={() => setPaymentMode(mode)}
-                      className={`flex items-center gap-3 p-4 rounded-xl border-2 font-semibold transition-all
-                        ${paymentMode === mode ? "border-primary bg-primary/10 text-primary shadow-sm" : "border-border hover:border-primary/40 text-muted-foreground hover:text-foreground hover:bg-muted/40"}`}
-                      data-testid={`mode-${mode}`}>
-                      <span className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${paymentMode === mode ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
-                        {modeIcons[mode]}
-                      </span>
-                      <div className="text-left">
-                        <div className="text-base">{mode === "cash" ? "Cash" : "UPI"}</div>
-                        <div className="text-xs font-normal text-muted-foreground mt-0.5">
-                          {mode === "cash" ? "Instant — no reference needed" : "GPay / PhonePe / BHIM"}
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-                <div className="grid grid-cols-3 gap-2 mt-2">
-                  {(["cheque", "bank_transfer", "credit"] as const).map((mode) => (
-                    <button key={mode} type="button" onClick={() => setPaymentMode(mode)}
-                      className={`flex flex-col items-center gap-1.5 py-2.5 px-2 rounded-lg border text-xs font-medium text-center transition-all
-                        ${paymentMode === mode ? "border-primary bg-primary/10 text-primary" : "border-border hover:border-primary/40 text-muted-foreground hover:text-foreground"}`}
-                      data-testid={`mode-${mode}`}>
-                      {modeIcons[mode]}
-                      {mode === "bank_transfer" ? "Bank Transfer" : mode.charAt(0).toUpperCase() + mode.slice(1)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {paymentMode === "credit" ? (
-                <div className="rounded-lg bg-muted/50 p-4 text-sm text-muted-foreground flex items-start gap-3">
-                  <Clock className="w-4 h-4 mt-0.5 shrink-0 text-amber-500" />
-                  <div>
-                    <p className="font-medium text-foreground">Selling on Credit</p>
-                    <p>No payment collected now. ₹{finalTotal.toLocaleString()} will remain as outstanding balance for {customer?.name ?? "this customer"}.</p>
-                  </div>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="payment-amount">Amount Received (₹)</Label>
-                    <Input id="payment-amount" type="number" min={0} max={finalTotal} value={paymentAmount}
-                      onChange={(e) => setPaymentAmount(Number(e.target.value))} className="text-lg font-bold" data-testid="input-payment-amount" />
-                    {paymentAmount < finalTotal && paymentAmount > 0 && <p className="text-xs text-amber-500">Partial — ₹{(finalTotal - paymentAmount).toLocaleString()} outstanding</p>}
-                    {paymentAmount === finalTotal && <p className="text-xs text-green-600">Full payment</p>}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="payment-ref">
-                      {paymentMode === "upi" ? "UPI / Transaction ID" : paymentMode === "cheque" ? "Cheque No." : paymentMode === "bank_transfer" ? "UTR / Reference" : "Reference"}
-                    </Label>
-                    <Input id="payment-ref" value={paymentRef} onChange={(e) => setPaymentRef(e.target.value)} placeholder="Optional" data-testid="input-payment-ref" />
-                  </div>
-                </div>
-              )}
-
-              {paymentMode !== "credit" && (
-                <div className="space-y-2">
-                  <Label htmlFor="account-select" className="flex items-center gap-2">
-                    Deposit to Account
-                    <span className="text-xs text-muted-foreground font-normal">
-                      ({paymentMode === "cash" ? "Cash drawer" : paymentMode === "upi" ? "UPI account" : "Bank account"})
-                    </span>
-                  </Label>
-                  {matchingAccounts.length === 0 ? (
-                    <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-400">
-                      No active {accountTypeForMode[paymentMode]} account configured. Payment will still be recorded.
-                    </div>
-                  ) : (
-                    <Select value={accountId ? String(accountId) : ""} onValueChange={(v) => setAccountId(v ? Number(v) : null)}>
-                      <SelectTrigger id="account-select" data-testid="select-account"><SelectValue placeholder="Select an account" /></SelectTrigger>
-                      <SelectContent>
-                        {matchingAccounts.map((a) => (
-                          <SelectItem key={a.id} value={String(a.id)}>
-                            <span className="flex items-center gap-2 min-w-0">
-                              <span className="font-medium truncate">{a.name}</span>
-                              {a.identifier && <span className="text-xs text-muted-foreground shrink-0">({a.identifier})</span>}
-                              <span className="text-xs text-muted-foreground ml-auto shrink-0">Bal: ₹{Number(a.currentBalance).toLocaleString()}</span>
-                            </span>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
-              )}
-
-              <div className="space-y-2">
-                <Label htmlFor="payment-notes">Notes (optional)</Label>
-                <Textarea id="payment-notes" rows={2} value={paymentNotes} onChange={(e) => setPaymentNotes(e.target.value)} placeholder="Any remarks..." data-testid="input-payment-notes" />
-              </div>
-
-              <div className="flex gap-3 pt-1">
-                <Button className="flex-1"
-                  onClick={paymentMode === "credit" ? () => setPaymentSkipped(true) : handleRecordPayment}
-                  disabled={logPayment.isPending || (paymentMode !== "credit" && paymentAmount <= 0)}
-                  data-testid="button-record-payment">
-                  {logPayment.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : paymentMode === "credit" ? <Clock className="w-4 h-4 mr-2" /> : <CheckCircle className="w-4 h-4 mr-2" />}
-                  {paymentMode === "credit" ? "Confirm Credit Sale" : `Record ₹${paymentAmount.toLocaleString()} ${paymentMode.toUpperCase()}`}
-                </Button>
-                <Button variant="outline" onClick={() => setPaymentSkipped(true)} data-testid="button-skip-payment">
-                  <SkipForward className="w-4 h-4 mr-1.5" /> Skip
-                </Button>
-              </div>
-              {!customer?.id && paymentMode !== "credit" && (
-                <p className="text-xs text-muted-foreground text-center">Walk-in cash sale — payment recorded under shared Walk-in Customer account.</p>
-              )}
-            </CardContent>
-          </Card>
-        ) : (
-          <Card className={paymentDone ? "border-green-500/30 bg-green-500/5" : "border-muted"}>
-            <CardContent className="pt-5 pb-4">
-              {paymentDone && savedPayment ? (
-                <div className="flex items-start gap-3">
-                  <CheckCircle className="w-6 h-6 text-green-500 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-semibold">{savedPayment.status === "approved" ? "Payment Applied" : "Payment Logged — Pending Approval"}</p>
-                    <p className="text-sm text-muted-foreground mt-0.5">
-                      ₹{Number(savedPayment.amount).toLocaleString()} via {savedPayment.mode.toUpperCase()}
-                      {savedPayment.status === "approved" ? " — debited from outstanding balance immediately." : " — will be applied once admin approves."}
-                    </p>
-                    {savedPayment.status === "pending" && <Badge variant="outline" className="mt-2 text-amber-500 border-amber-500 text-[10px]">Pending Admin Approval</Badge>}
-                    {savedPayment.status === "approved" && savedInvoice && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Invoice {savedInvoice.invoiceNo} is now {
-                          savedPayment.allocations?.[0]?.status === "paid" ? "marked Paid." : "Partially Paid."
-                        }
-                      </p>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center gap-3 text-muted-foreground">
-                  <SkipForward className="w-5 h-5 shrink-0" />
-                  <p className="text-sm">Payment skipped. Outstanding balance updated on invoice.</p>
-                </div>
-              )}
             </CardContent>
           </Card>
         )}
