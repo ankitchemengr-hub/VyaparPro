@@ -25,6 +25,37 @@ import { applyEntityPayment } from "../lib/entity-payment";
 // self-diagnosing when it happens again for a different edge case later.
 class PaymentValidationError extends Error {}
 
+// Raw-SQL row → the same camelCase shape Drizzle would return, for the two
+// spots that write the payments row through the manually-managed `client`
+// transaction (see the comment on those call sites for why: `db.insert`/
+// `db.update` run on a separate, auto-committing connection from `client`,
+// so a later failure in the same request would roll back everything else
+// but leave that write permanently committed — an orphaned row that then
+// blocks every future receipt number from ever being reused again).
+function mapPaymentRow(r: any) {
+  return {
+    id: r.id,
+    companyId: r.company_id,
+    receiptId: r.receipt_id,
+    customerId: r.customer_id,
+    customerName: r.customer_name,
+    invoiceId: r.invoice_id,
+    salesmanId: r.salesman_id,
+    salesmanName: r.salesman_name,
+    amount: r.amount,
+    mode: r.mode,
+    status: r.status,
+    notes: r.notes,
+    approvedById: r.approved_by_id,
+    approvedAt: r.approved_at,
+    accountId: r.account_id,
+    collectedAt: r.collected_at,
+    collectedById: r.collected_by_id,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
+
 // Shared by the receipt-lookup endpoint for both sources (payments and
 // account_transactions can each mint a receipt): the invoice-wise breakdown
 // this payment was FIFO-allocated against, persisted at the time it was
@@ -229,24 +260,27 @@ router.post("/payments", async (req, res): Promise<void> => {
 
       const receiptId = await generateSeriesNumber(client, "payment_receipt", companyId);
 
-      const [payment] = await db.insert(paymentsTable).values({
-        companyId,
-        receiptId,
-        customerId,
-        customerName: customer.name,
-        invoiceId: parsed.data.invoiceId ?? null,
-        salesmanId: null,
-        salesmanName: null,
-        amount: String(parsed.data.amount),
-        mode: parsed.data.mode,
-        status: "approved",
-        notes: parsed.data.notes ?? null,
-        approvedById: session.userId,
-        approvedAt: new Date(),
-        accountId: parsed.data.accountId ?? null,
-        collectedAt: parsed.data.accountId ? new Date() : null,
-        collectedById: parsed.data.accountId ? session.userId : null,
-      }).returning();
+      // Raw SQL through `client`, not db.insert() — this write MUST be part
+      // of this same transaction. db.insert() runs on a separate,
+      // auto-committing connection: if anything below this point throws, the
+      // ROLLBACK undoes the receipt-number bump but not a Drizzle-inserted
+      // row, leaving an orphaned "approved" payment with a receipt number
+      // that then collides on every retry, forever (this actually happened —
+      // see payments row id 323, receipt REC/08/244, cleaned up manually).
+      const insertRes = await client.query(
+        `INSERT INTO payments
+           (company_id, receipt_id, customer_id, customer_name, invoice_id, salesman_id, salesman_name,
+            amount, mode, status, notes, approved_by_id, approved_at, account_id, collected_at, collected_by_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+         RETURNING *`,
+        [
+          companyId, receiptId, customerId, customer.name, parsed.data.invoiceId ?? null, null, null,
+          parsed.data.amount, parsed.data.mode, "approved", parsed.data.notes ?? null,
+          session.userId, new Date(), parsed.data.accountId ?? null,
+          parsed.data.accountId ? new Date() : null, parsed.data.accountId ? session.userId : null,
+        ],
+      );
+      const payment = mapPaymentRow(insertRes.rows[0]);
 
       if (parsed.data.accountId) {
         const upd = await client.query(
@@ -431,18 +465,24 @@ router.post("/payments/:id/approve", async (req, res): Promise<void> => {
       startInvoiceId: payment.invoiceId ?? null,
     });
 
-    const [updated] = await db
-      .update(paymentsTable)
-      .set({
-        status: "approved",
-        approvedById: session?.userId ?? null,
-        approvedAt: new Date(),
-        accountId: body.accountId ?? null,
-        collectedAt: body.accountId ? new Date() : null,
-        collectedById: body.accountId ? session?.userId : null,
-      })
-      .where(and(eq(paymentsTable.companyId, companyId), eq(paymentsTable.id, params.data.id)))
-      .returning();
+    // Raw SQL through `client` — same reason as the POST /payments insert:
+    // db.update() would run outside this transaction, so a later failure
+    // (there isn't one after this today, but that's exactly the kind of
+    // assumption that stops holding the next time this function changes)
+    // couldn't roll it back.
+    const updRes = await client.query(
+      `UPDATE payments
+       SET status = 'approved', approved_by_id = $1, approved_at = $2,
+           account_id = $3, collected_at = $4, collected_by_id = $5
+       WHERE company_id = $6 AND id = $7
+       RETURNING *`,
+      [
+        session?.userId ?? null, new Date(), body.accountId ?? null,
+        body.accountId ? new Date() : null, body.accountId ? session?.userId ?? null : null,
+        companyId, params.data.id,
+      ],
+    );
+    const updated = mapPaymentRow(updRes.rows[0]);
 
     await client.query("COMMIT");
     res.json({ ...formatPayment(updated), allocations });
