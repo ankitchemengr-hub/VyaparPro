@@ -53,16 +53,17 @@ export function CashReceiptDialog({
       {/* print:hidden/print:max-w-full on the dialog's own elements only
           toggle THEIR display — they do nothing to hide whatever page this
           dialog was opened over, so a bare window.print() printed that
-          entire page underneath too. Same isolation used elsewhere: hide
-          everything by default, then reveal only the receipt itself. */}
+          entire page underneath too. Hiding it via `visibility: hidden`
+          alone isn't reliable either: an invisible-but-still-laid-out long
+          transactions table still reserves its full page height, so the
+          receipt just gets reprinted across dozens of otherwise-blank
+          pages. Since this dialog's content is portaled outside #root by
+          Radix, collapsing #root's layout entirely removes the page behind
+          it instead of merely hiding its ink. */}
       <style>{`
         @media print {
-          body * { visibility: hidden !important; }
-          #cash-receipt-print, #cash-receipt-print * { visibility: visible !important; color: #000 !important; }
-          #cash-receipt-print {
-            position: fixed !important; inset: 0 !important; width: 100% !important; height: auto !important;
-            box-shadow: none !important; margin: 0 !important;
-          }
+          #root { display: none !important; }
+          #cash-receipt-print { color: #000 !important; }
         }
       `}</style>
       <DialogContent className="max-w-md print:max-w-full print:shadow-none">

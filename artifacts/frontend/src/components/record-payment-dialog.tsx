@@ -219,16 +219,17 @@ export function RecordPaymentDialog({
       {/* print:block on the receipt div alone only toggles ITS OWN display —
           it does nothing to hide the page behind this dialog, so a bare
           window.print() printed the whole Invoices list underneath (37
-          pages). Same isolation technique as Cash Book's print area: hide
-          everything by default, then reveal only this one element. */}
+          pages). Hiding that page via `visibility: hidden` alone isn't
+          enough either: an invisible-but-still-laid-out 453-row table still
+          reserves its full page height, so the fixed-position receipt just
+          got reprinted across dozens of otherwise-blank pages. Since this
+          dialog's content is portaled outside #root by Radix, collapsing
+          #root's layout entirely removes the invoices list from the
+          printed page count instead of merely hiding its ink. */}
       <style>{`
         @media print {
-          body * { visibility: hidden !important; }
-          .payment-receipt-print-area, .payment-receipt-print-area * { visibility: visible !important; color: #000 !important; }
-          .payment-receipt-print-area {
-            position: fixed !important; inset: 0 !important; width: 100% !important; height: auto !important;
-            box-shadow: none !important; border: none !important; margin: 0 !important;
-          }
+          #root { display: none !important; }
+          .payment-receipt-print-area { color: #000 !important; }
         }
       `}</style>
       <DialogContent className="sm:max-w-md">

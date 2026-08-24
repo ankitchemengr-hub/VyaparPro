@@ -223,6 +223,18 @@ function ReturnItemsDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!createReturn.isPending) onOpenChange(o); }}>
+      {/* print:hidden on this dialog's own elements only toggles their own
+          display — it does nothing to hide the Sales Return page behind it,
+          so a bare window.print() would print that whole page underneath.
+          This dialog's content is portaled outside #root by Radix, so
+          collapsing #root's layout removes the page behind it entirely
+          instead of just hiding its ink (which would still reserve page
+          height and print blank pages). */}
+      <style>{`
+        @media print {
+          #root { display: none !important; }
+        }
+      `}</style>
       <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
         <DialogHeader className="print:hidden">
           <DialogTitle className="flex items-center gap-2">
@@ -427,6 +439,13 @@ function ReturnDetailDialog({ id, onOpenChange }: { id: number | null; onOpenCha
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
+      {/* Same #root collapse as the New Return dialog above — otherwise the
+          Return History list behind this dialog prints too. */}
+      <style>{`
+        @media print {
+          #root { display: none !important; }
+        }
+      `}</style>
       <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
         <DialogHeader className="print:hidden">
           <DialogTitle className="flex items-center gap-2">
