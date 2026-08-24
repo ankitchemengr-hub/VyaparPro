@@ -1197,6 +1197,27 @@ paths:
               schema:
                 $ref: "#/components/schemas/ReturnableInvoice"
 
+  /invoices/{id}/payment-receipts:
+    get:
+      operationId: listInvoicePaymentReceipts
+      tags: [payments]
+      summary: Payment receipts allocated against this invoice (FIFO can spill one payment across several invoices, and an invoice can be paid off over several partial payments) — lets the Invoices list re-open/print the receipt for an already-paid invoice instead of only offering "Record Payment".
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Receipts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InvoicePaymentReceiptSummary"
+
   # SALES RETURNS
   /sales-returns:
     get:
@@ -4915,6 +4936,17 @@ components:
           type: ["number", "null"]
         customerBalanceAfter:
           type: ["number", "null"]
+
+    InvoicePaymentReceiptSummary:
+      type: object
+      required: [receiptNo, amount, createdAt]
+      properties:
+        receiptNo:
+          type: string
+        amount:
+          type: number
+        createdAt:
+          type: string
 
     PaymentInput:
       type: object

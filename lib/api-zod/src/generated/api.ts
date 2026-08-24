@@ -1615,6 +1615,21 @@ export const GetInvoiceReturnableItemsResponse = zod.object({
 
 
 /**
+ * @summary Payment receipts allocated against this invoice (FIFO can spill one payment across several invoices, and an invoice can be paid off over several partial payments) — lets the Invoices list re-open/print the receipt for an already-paid invoice instead of only offering "Record Payment".
+ */
+export const ListInvoicePaymentReceiptsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListInvoicePaymentReceiptsResponseItem = zod.object({
+  "receiptNo": zod.string(),
+  "amount": zod.number(),
+  "createdAt": zod.string()
+})
+export const ListInvoicePaymentReceiptsResponse = zod.array(ListInvoicePaymentReceiptsResponseItem)
+
+
+/**
  * @summary List sales returns
  */
 export const ListSalesReturnsQueryParams = zod.object({

@@ -1583,6 +1583,12 @@ export interface PaymentReceipt {
   customerBalanceAfter?: number | null;
 }
 
+export interface InvoicePaymentReceiptSummary {
+  receiptNo: string;
+  amount: number;
+  createdAt: string;
+}
+
 export type PaymentInputMode = typeof PaymentInputMode[keyof typeof PaymentInputMode];
 
 

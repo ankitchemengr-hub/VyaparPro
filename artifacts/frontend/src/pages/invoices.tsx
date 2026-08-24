@@ -10,6 +10,7 @@ import {
   getListUsersQueryKey,
 } from "@workspace/api-client-react";
 import { RecordPaymentDialog } from "@/components/record-payment-dialog";
+import { InvoiceReceiptDialog } from "@/components/invoice-receipt-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -110,6 +111,7 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
   const [payingInvoice, setPayingInvoice] = useState<{
     id: number; invoiceNo: string; customerId: number | null; balanceDue: number; grandTotal: number; customerName: string | null;
   } | null>(null);
+  const [viewingReceiptInvoiceId, setViewingReceiptInvoiceId] = useState<number | null>(null);
 
   const noPayTypes = new Set(["quotation", "proforma_invoice", "sale_order", "delivery_challan"]);
   const getPayStatus = (inv: any): string => {
@@ -388,18 +390,19 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
                             <Button
                               variant="ghost"
                               size="icon"
-                              className={`h-8 w-8 ${isPaid ? "text-green-600" : "text-muted-foreground hover:text-green-600"}`}
-                              onClick={() => setPayingInvoice({
-                                id: invoice.id,
-                                invoiceNo: invoice.invoiceNo,
-                                customerId: invoice.customerId ?? null,
-                                balanceDue: Number(invoice.balanceDue),
-                                grandTotal: Number(invoice.grandTotal),
-                                customerName: invoice.customerName ?? null,
-                              })}
-                              disabled={isPaid}
-                              title={isPaid ? "Fully paid" : "Record payment"}
-                              aria-label={isPaid ? "Fully paid" : "Record payment"}
+                              className={`h-8 w-8 ${isPaid ? "text-green-600 hover:text-green-700" : "text-muted-foreground hover:text-green-600"}`}
+                              onClick={() => isPaid
+                                ? setViewingReceiptInvoiceId(invoice.id)
+                                : setPayingInvoice({
+                                  id: invoice.id,
+                                  invoiceNo: invoice.invoiceNo,
+                                  customerId: invoice.customerId ?? null,
+                                  balanceDue: Number(invoice.balanceDue),
+                                  grandTotal: Number(invoice.grandTotal),
+                                  customerName: invoice.customerName ?? null,
+                                })}
+                              title={isPaid ? "View receipt" : "Record payment"}
+                              aria-label={isPaid ? "View receipt" : "Record payment"}
                               data-testid={`button-record-payment-${invoice.id}`}
                             >
                               <IndianRupee className={`h-4 w-4 ${isPaid ? "fill-green-600/20" : ""}`} />
@@ -459,6 +462,11 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
         invoiceNo={payingInvoice?.invoiceNo}
         maxAmount={payingInvoice?.balanceDue}
         totalAmount={payingInvoice?.grandTotal}
+      />
+
+      <InvoiceReceiptDialog
+        invoiceId={viewingReceiptInvoiceId}
+        onOpenChange={(o) => !o && setViewingReceiptInvoiceId(null)}
       />
 
       {/* Delete confirm */}

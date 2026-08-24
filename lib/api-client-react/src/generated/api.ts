@@ -88,6 +88,7 @@ import type {
   HealthStatus,
   Invoice,
   InvoiceInput,
+  InvoicePaymentReceiptSummary,
   InvoiceSummary,
   InvoiceUpdate,
   ItemRegisterReport,
@@ -4502,6 +4503,83 @@ export function useGetInvoiceReturnableItems<TData = Awaited<ReturnType<typeof g
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetInvoiceReturnableItemsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListInvoicePaymentReceiptsUrl = (id: number,) => {
+
+
+
+
+  return `/api/invoices/${id}/payment-receipts`
+}
+
+/**
+ * @summary Payment receipts allocated against this invoice (FIFO can spill one payment across several invoices, and an invoice can be paid off over several partial payments) — lets the Invoices list re-open/print the receipt for an already-paid invoice instead of only offering "Record Payment".
+ */
+export const listInvoicePaymentReceipts = async (id: number, options?: RequestInit): Promise<InvoicePaymentReceiptSummary[]> => {
+
+  return customFetch<InvoicePaymentReceiptSummary[]>(getListInvoicePaymentReceiptsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListInvoicePaymentReceiptsQueryKey = (id: number,) => {
+    return [
+    `/api/invoices/${id}/payment-receipts`
+    ] as const;
+    }
+
+
+export const getListInvoicePaymentReceiptsQueryOptions = <TData = Awaited<ReturnType<typeof listInvoicePaymentReceipts>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listInvoicePaymentReceipts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListInvoicePaymentReceiptsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listInvoicePaymentReceipts>>> = ({ signal }) => listInvoicePaymentReceipts(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listInvoicePaymentReceipts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListInvoicePaymentReceiptsQueryResult = NonNullable<Awaited<ReturnType<typeof listInvoicePaymentReceipts>>>
+export type ListInvoicePaymentReceiptsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Payment receipts allocated against this invoice (FIFO can spill one payment across several invoices, and an invoice can be paid off over several partial payments) — lets the Invoices list re-open/print the receipt for an already-paid invoice instead of only offering "Record Payment".
+ */
+
+export function useListInvoicePaymentReceipts<TData = Awaited<ReturnType<typeof listInvoicePaymentReceipts>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listInvoicePaymentReceipts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListInvoicePaymentReceiptsQueryOptions(id,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

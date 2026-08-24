@@ -126,6 +126,7 @@ export * from './invoiceInputInvoiceType';
 export * from './invoiceInvoiceType';
 export * from './invoiceItem';
 export * from './invoiceItemInput';
+export * from './invoicePaymentReceiptSummary';
 export * from './invoiceStatus';
 export * from './invoiceSummary';
 export * from './invoiceUpdate';

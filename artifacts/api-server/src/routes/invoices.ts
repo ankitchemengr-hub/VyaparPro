@@ -20,6 +20,7 @@ import {
   UpdateInvoiceParams,
   UpdateInvoiceBody,
   DeleteInvoiceParams,
+  ListInvoicePaymentReceiptsParams,
 } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
 import { generateSeriesNumber, type SeriesType } from "../lib/number-series";
@@ -483,6 +484,53 @@ router.get("/invoices/:id", async (req, res): Promise<void> => {
   const customerBalance = await getCustomerBalanceSnapshot(companyId, inv.id, inv.customerId ?? null);
   const customerMobile = await getCustomerMobile(companyId, inv.customerId ?? null);
   res.json(formatInvoice(inv, items, createdByName, customerBalance, customerMobile));
+});
+
+// GET /invoices/:id/payment-receipts — the receipt number(s) this invoice's
+// balance was paid off with, so the Invoices list can re-open/print a
+// receipt for an already-paid invoice (the ₹ action there otherwise has
+// nothing to do once balanceDue hits 0). An invoice can appear more than
+// once here: FIFO can spill one payment across several invoices, and an
+// invoice can be paid off over several partial payments over time.
+router.get("/invoices/:id/payment-receipts", async (req, res): Promise<void> => {
+  const params = ListInvoicePaymentReceiptsParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const companyId = getCompanyId(req);
+  const [inv] = await db.select({ id: invoicesTable.id, salesmanId: invoicesTable.salesmanId, createdByUserId: invoicesTable.createdByUserId })
+    .from(invoicesTable)
+    .where(and(eq(invoicesTable.companyId, companyId), eq(invoicesTable.id, params.data.id)));
+  if (!inv) {
+    res.status(404).json({ error: "Invoice not found" });
+    return;
+  }
+
+  const session = (req as any).session;
+  if (session?.role === "salesman") {
+    if (!session.entityId || inv.salesmanId !== session.entityId) {
+      res.status(404).json({ error: "Invoice not found" });
+      return;
+    }
+  } else if (session?.role === "store") {
+    if (inv.createdByUserId !== session.userId) {
+      res.status(404).json({ error: "Invoice not found" });
+      return;
+    }
+  }
+
+  const rows = await pool.query(
+    `SELECT receipt_no, allocated_amount, created_at FROM payment_allocations
+     WHERE company_id = $1 AND invoice_id = $2 ORDER BY created_at ASC`,
+    [companyId, params.data.id],
+  );
+  res.json(rows.rows.map((r: any) => ({
+    receiptNo: r.receipt_no,
+    amount: Number(r.allocated_amount),
+    createdAt: r.created_at?.toISOString?.() ?? r.created_at,
+  })));
 });
 
 // PATCH /invoices/:id  — admin only
