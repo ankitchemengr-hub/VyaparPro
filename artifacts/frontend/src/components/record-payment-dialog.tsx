@@ -392,7 +392,7 @@ export function RecordPaymentDialog({
               {maxAmount != null ? (
                 <p className="text-xs text-muted-foreground">
                   Balance due: ₹{Number(maxAmount).toLocaleString()}{totalAmount != null ? ` of ₹${Number(totalAmount).toLocaleString()}` : ""}
-                  {" — paying more automatically applies the rest to this customer's next oldest outstanding invoice(s)."}
+                  {" — payment settles this customer's oldest outstanding bills first; whatever's left then applies to this invoice."}
                 </p>
               ) : (
                 <p className="text-xs text-muted-foreground">

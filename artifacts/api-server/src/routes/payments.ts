@@ -317,11 +317,10 @@ router.post("/payments", async (req, res): Promise<void> => {
         );
       }
 
-      // If a specific invoice was pinned, make sure it's a real, still-open
-      // bill for THIS customer — an already-fully-paid pinned invoice is not
-      // an error here, it's simply skipped by the FIFO allocator below,
-      // which spills the amount to the customer's next oldest outstanding
-      // invoice instead.
+      // If the payment names the invoice it was started from, make sure it's
+      // a real, still-open bill for THIS customer. Note it does NOT get paid
+      // first — the FIFO allocator below always clears the customer's older
+      // outstanding bills ahead of it, and only the remainder lands on it.
       if (parsed.data.invoiceId) {
         // customer_id IS NULL is a walk-in invoice (no specific customer
         // entity selected when it was billed) — this payment always

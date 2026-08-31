@@ -26,18 +26,33 @@ export interface AllocatePaymentParams {
   companyId: number;
   customerId: number;
   amount: number;
-  /** Optional invoice to apply first (e.g. a manually-picked one) — any
-   *  remainder still spills FIFO into the customer's other oldest
-   *  outstanding invoices, same as if none had been picked. */
+  /** The invoice the payment was started from, if any. By default it does
+   *  NOT jump the queue: the customer's older outstanding bills are cleared
+   *  first and this invoice is settled in its natural oldest-first position
+   *  along with the rest (this is what the ₹ "Record Payment" button wants —
+   *  an old due should always be knocked down before the latest bill). A
+   *  walk-in invoice (customer_id IS NULL) is always applied to directly
+   *  regardless — it isn't part of any customer's FIFO pool. */
   startInvoiceId?: number | null;
+  /** Set true only when the caller explicitly asked to settle startInvoiceId
+   *  ahead of older bills (Cash Book's "Start With Invoice" picker). Ignored
+   *  when startInvoiceId is a walk-in invoice (always applied directly). */
+  pinStartInvoice?: boolean;
   receiptNo: string;
 }
 
 const NO_PAY_TYPES_SQL = NO_PAY_INVOICE_TYPES.map((t) => `'${t}'`).join(", ");
 
 // FIFO-allocates `amount` across a customer's outstanding invoices (oldest
-// invoice_date first, cancelled/quotation-like types excluded), optionally
-// starting with one pinned invoice. Persists one payment_allocations row per
+// invoice_date first, cancelled/quotation-like types excluded). The invoice
+// the payment was started from (startInvoiceId) is NOT given priority by
+// default — an older outstanding bill is always cleared before a newer one,
+// so a payment recorded from the latest bill still settles the customer's
+// earlier dues first and only the remainder lands on that latest bill. Two
+// exceptions apply startInvoiceId first: a walk-in invoice (customer_id IS
+// NULL, never in any customer's FIFO pool), and pinStartInvoice = true (the
+// caller explicitly asked to — Cash Book's "Start With Invoice" picker).
+// Persists one payment_allocations row per
 // invoice touched — keyed by receiptNo, this codebase's existing cross-table
 // join key for a payment event (see GET /payment-receipts/:receiptNo) —
 // rather than a polymorphic source id, so a reprint or a later correction
@@ -50,7 +65,7 @@ const NO_PAY_TYPES_SQL = NO_PAY_INVOICE_TYPES.map((t) => `'${t}'`).join(", ");
 // applyEntityPayment always allowed).
 export async function allocatePaymentAcrossInvoices(
   client: { query: (text: string, params?: any[]) => Promise<any> },
-  { companyId, customerId, amount, startInvoiceId, receiptNo }: AllocatePaymentParams,
+  { companyId, customerId, amount, startInvoiceId, pinStartInvoice, receiptNo }: AllocatePaymentParams,
 ): Promise<PaymentAllocation[]> {
   let remaining = amount;
   const allocations: PaymentAllocation[] = [];
@@ -87,40 +102,45 @@ export async function allocatePaymentAcrossInvoices(
     remaining -= allocated;
   }
 
-  // A pinned invoice is allowed to be a walk-in one (customer_id IS NULL —
-  // billed with no specific customer entity selected) since the caller named
-  // it explicitly. That relaxation must NOT extend to the general FIFO pool
-  // below, though: every walk-in invoice across every customer shares
-  // customer_id NULL, so without this split a customer's ordinary payment
-  // could spill into and pay off a completely unrelated walk-in sale.
+  // startInvoiceId is settled before the oldest-first pass in two cases:
+  //  1. It's a walk-in invoice (customer_id IS NULL — billed with no specific
+  //     customer). Walk-in bills aren't in any customer's FIFO pool, so
+  //     there's nothing older to clear first; the caller named it explicitly.
+  //  2. pinStartInvoice is true — the caller (Cash Book's "Start With
+  //     Invoice" picker) deliberately asked to knock this one down first.
+  // Otherwise it stays in the pool and waits its turn in date order, so a
+  // customer's earlier dues are always settled ahead of their latest bill.
+  // The walk-in match must never leak into the FIFO pool: every walk-in
+  // invoice shares customer_id NULL, so without the customer_id = $2 filter
+  // there a customer's ordinary payment could spill into an unrelated
+  // walk-in sale.
+  let preAllocatedId: number | null = null;
   if (startInvoiceId != null && remaining > 0.001) {
     const pinnedRes = await client.query(
       `SELECT id, invoice_no, grand_total, amount_paid, balance_due
        FROM invoices
-       WHERE id = $1 AND company_id = $2 AND (customer_id = $3 OR customer_id IS NULL)
+       WHERE id = $1 AND company_id = $2
+         AND (customer_id IS NULL${pinStartInvoice ? " OR customer_id = $3" : ""})
          AND status != 'cancelled' AND invoice_type NOT IN (${NO_PAY_TYPES_SQL}) AND balance_due > 0
        FOR UPDATE`,
-      [startInvoiceId, companyId, customerId],
+      pinStartInvoice ? [startInvoiceId, companyId, customerId] : [startInvoiceId, companyId],
     );
-    if (pinnedRes.rows[0]) await allocateTo(pinnedRes.rows[0]);
+    if (pinnedRes.rows[0]) {
+      preAllocatedId = pinnedRes.rows[0].id;
+      await allocateTo(pinnedRes.rows[0]);
+    }
   }
 
   if (remaining > 0.001) {
     const candidates = await client.query(
-      startInvoiceId != null
-        ? `SELECT id, invoice_no, grand_total, amount_paid, balance_due
-           FROM invoices
-           WHERE company_id = $1 AND customer_id = $2 AND id != $3
-             AND status != 'cancelled' AND invoice_type NOT IN (${NO_PAY_TYPES_SQL}) AND balance_due > 0
-           ORDER BY invoice_date ASC, id ASC
-           FOR UPDATE`
-        : `SELECT id, invoice_no, grand_total, amount_paid, balance_due
-           FROM invoices
-           WHERE company_id = $1 AND customer_id = $2
-             AND status != 'cancelled' AND invoice_type NOT IN (${NO_PAY_TYPES_SQL}) AND balance_due > 0
-           ORDER BY invoice_date ASC, id ASC
-           FOR UPDATE`,
-      startInvoiceId != null ? [companyId, customerId, startInvoiceId] : [companyId, customerId],
+      `SELECT id, invoice_no, grand_total, amount_paid, balance_due
+       FROM invoices
+       WHERE company_id = $1 AND customer_id = $2
+         AND ($3::int IS NULL OR id != $3)
+         AND status != 'cancelled' AND invoice_type NOT IN (${NO_PAY_TYPES_SQL}) AND balance_due > 0
+       ORDER BY invoice_date ASC, id ASC
+       FOR UPDATE`,
+      [companyId, customerId, preAllocatedId],
     );
     for (const inv of candidates.rows) {
       if (remaining <= 0.001) break;
@@ -142,15 +162,20 @@ export interface ApplyEntityPaymentParams {
    *  allocatePaymentAcrossInvoices). False/omitted for a vendor payout or an
    *  unlinked payment, which never touch invoices. */
   isCustomerReceipt?: boolean;
-  /** Optional invoice to apply first when isCustomerReceipt — ignored otherwise. */
+  /** The invoice the receipt was started from, when isCustomerReceipt —
+   *  ignored otherwise. Does not get payment priority unless pinStartInvoice;
+   *  older bills first. See allocatePaymentAcrossInvoices. */
   startInvoiceId?: number | null;
+  /** Settle startInvoiceId ahead of older bills (Cash Book "Start With
+   *  Invoice"). Omit for the default oldest-first behaviour. */
+  pinStartInvoice?: boolean;
   /** Defaults to "Payment received (<mode>)". Pass e.g. "Payment made (<mode>)" for a vendor payout. */
   description?: string;
 }
 
 export async function applyEntityPayment(
   client: { query: (text: string, params?: any[]) => Promise<any> },
-  { companyId, entityId, amount, mode, receiptNo, referenceId, isCustomerReceipt, startInvoiceId, description }: ApplyEntityPaymentParams,
+  { companyId, entityId, amount, mode, receiptNo, referenceId, isCustomerReceipt, startInvoiceId, pinStartInvoice, description }: ApplyEntityPaymentParams,
 ): Promise<{ newBalance: number; allocations: PaymentAllocation[] }> {
   await client.query(
     `UPDATE entities SET outstanding_balance = outstanding_balance - $1 WHERE id = $2 AND company_id = $3`,
@@ -172,7 +197,7 @@ export async function applyEntityPayment(
   let allocations: PaymentAllocation[] = [];
   if (isCustomerReceipt) {
     allocations = await allocatePaymentAcrossInvoices(client, {
-      companyId, customerId: entityId, amount, startInvoiceId, receiptNo,
+      companyId, customerId: entityId, amount, startInvoiceId, pinStartInvoice, receiptNo,
     });
   }
 

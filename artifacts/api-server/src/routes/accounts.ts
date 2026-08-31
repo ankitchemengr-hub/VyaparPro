@@ -462,6 +462,10 @@ router.post("/account-transactions", async (req, res): Promise<void> => {
           referenceId: txn.id,
           isCustomerReceipt,
           startInvoiceId: isCustomerReceipt ? (invoiceId ?? null) : null,
+          // Cash Book's "Start With Invoice" picker is an explicit choice to
+          // settle that bill ahead of older ones — honour it here (the ₹
+          // Record Payment button, by contrast, wants oldest-first).
+          pinStartInvoice: isCustomerReceipt && invoiceId != null,
           description: isVendorPayout ? `Payment made (${mode})` : `Payment received (${mode})`,
         });
         allocations = result.allocations;
