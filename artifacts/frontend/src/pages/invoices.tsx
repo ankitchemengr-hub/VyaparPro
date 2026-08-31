@@ -306,14 +306,14 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
             <TableHeader>
               <TableRow>
                 <TableHead>Invoice No</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Type</TableHead>
+                <TableHead className="hidden sm:table-cell">Date</TableHead>
+                <TableHead className="hidden md:table-cell">Type</TableHead>
                 <TableHead>Customer</TableHead>
-                {isAdmin && <TableHead>Created By</TableHead>}
-                {isAdmin && <TableHead>Salesman</TableHead>}
+                {isAdmin && <TableHead className="hidden lg:table-cell">Created By</TableHead>}
+                {isAdmin && <TableHead className="hidden lg:table-cell">Salesman</TableHead>}
                 <TableHead className="text-right">Total</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right w-32">Actions</TableHead>
+                <TableHead className="text-right w-24 sm:w-32">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -337,18 +337,18 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
                     <TableCell className={bySalesman ? "font-mono font-semibold italic text-amber-900 dark:text-amber-200" : "font-medium"}>
                       {invoice.invoiceNo}
                     </TableCell>
-                    <TableCell>{format(new Date(invoice.invoiceDate), "MMM dd, yyyy")}</TableCell>
-                    <TableCell>
+                    <TableCell className="hidden sm:table-cell">{format(new Date(invoice.invoiceDate), "MMM dd, yyyy")}</TableCell>
+                    <TableCell className="hidden md:table-cell">
                       <Badge variant="outline">{TYPE_LABELS[invoice.invoiceType] ?? invoice.invoiceType}</Badge>
                     </TableCell>
                     <TableCell>{invoice.customerName || "Cash Sale"}</TableCell>
                     {isAdmin && (
-                      <TableCell data-testid={`cell-created-by-${invoice.id}`}>
+                      <TableCell className="hidden lg:table-cell" data-testid={`cell-created-by-${invoice.id}`}>
                         {invoice.createdByName ?? <span className="text-xs text-muted-foreground">—</span>}
                       </TableCell>
                     )}
                     {isAdmin && (
-                      <TableCell data-testid={`cell-salesman-${invoice.id}`}>
+                      <TableCell className="hidden lg:table-cell" data-testid={`cell-salesman-${invoice.id}`}>
                         {invoice.salesmanName ? (
                           <span className="inline-flex items-center gap-1.5 font-semibold italic text-amber-700 dark:text-amber-300">
                             <UserCircle2 className="h-3.5 w-3.5" />
@@ -359,7 +359,7 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
                         )}
                       </TableCell>
                     )}
-                    <TableCell className="text-right font-bold">₹{invoice.grandTotal.toLocaleString()}</TableCell>
+                    <TableCell className="text-right font-bold whitespace-nowrap">₹{invoice.grandTotal.toLocaleString()}</TableCell>
                     <TableCell>
                       {(() => {
                         const ps = getPayStatus(invoice);
@@ -426,7 +426,7 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8 text-destructive hover:text-destructive"
+                              className="hidden sm:inline-flex h-8 w-8 text-destructive hover:text-destructive"
                               disabled={invoice.status === "cancelled"}
                               onClick={() =>
                                 setDeleting({
