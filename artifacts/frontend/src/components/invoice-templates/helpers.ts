@@ -125,6 +125,66 @@ export function getPrintCss(
 ): string {
   const paper = paperOverride && paperOverride !== "auto" ? paperOverride : meta.paper;
   const orientation = orientationOverride && orientationOverride !== "auto" ? orientationOverride : meta.orientation;
+
+  // Legacy landscape cash-memo. It was authored at ~A5-landscape and the old
+  // print CSS pinned it there (200mm wide, 9px type) — which on the A4 paper
+  // every customer actually loads printed a shrunken half-page block in the
+  // corner, visibly smaller and denser than what's on screen. Lay it out to
+  // FILL the sheet instead: `width: 100%` of the printable area (so it fills
+  // whatever page/orientation the driver ends up using, even when it ignores
+  // the @page size), on-screen 12px type, at A4 landscape by default.
+  if (meta.id === "a5-compact") {
+    const legacyPaper = paperOverride && paperOverride !== "auto" ? paperOverride : "A4";
+    const [lw, lh] = legacyPaper === "A5" ? [210, 148] : [297, 210]; // landscape
+    return `
+    @page { size: ${lw}mm ${lh}mm; margin: 7mm; }
+    @media print {
+      html, body {
+        background: #fff !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      body * { visibility: hidden !important; }
+      .invoice-print-area, .invoice-print-area * { visibility: visible !important; }
+      .invoice-print-area {
+        position: absolute !important;
+        left: 0 !important; top: 0 !important;
+        width: 100% !important;
+        transform: none !important;
+        box-shadow: none !important;
+        display: block !important;
+      }
+      .invoice-scale-wrapper {
+        width: auto !important;
+        height: auto !important;
+        overflow: visible !important;
+        transform: none !important;
+      }
+      .invoice-print-area .invoice-sheet {
+        width: 100% !important;
+        min-height: 192mm !important;
+        font-size: 12px !important;
+        line-height: 1.35 !important;
+        color: #000 !important;
+        background: #fff !important;
+        border: 1.5px solid #000 !important;
+        transform: none !important;
+        margin: 0 !important;
+        box-shadow: none !important;
+      }
+      .invoice-print-area .invoice-sheet table { width: 100% !important; }
+      .invoice-print-area .invoice-sheet td,
+      .invoice-print-area .invoice-sheet th {
+        padding: 3px 6px !important;
+        border-color: #000 !important;
+      }
+      .sidebar, .topbar, .no-print, button, nav { display: none !important; }
+    }
+  `;
+  }
+
   // `size: A4 landscape` is valid CSS, but several browser/print-driver
   // combinations only honor the paper-size keyword and silently ignore the
   // portrait/landscape keyword next to it — the page prints in the same
@@ -137,23 +197,6 @@ export function getPrintCss(
   };
   const [w, h] = PAGE_DIMENSIONS_MM[paper as "A4" | "A5"] ?? PAGE_DIMENSIONS_MM.A4;
   const sizeRule = orientation === "landscape" ? `${h}mm ${w}mm` : `${w}mm ${h}mm`;
-  // The legacy a5-compact bill must print byte-identically to the original
-  // hardcoded sheet, so reproduce its exact width/font/padding overrides.
-  const legacy =
-    meta.id === "a5-compact"
-      ? `
-      .invoice-print-area .invoice-sheet {
-        width: 200mm !important;
-        min-height: 138mm !important;
-        font-size: 9px !important;
-        line-height: 1.25 !important;
-        color: #000 !important;
-        background: #fff !important;
-        border: 1px solid #000 !important;
-      }
-      .invoice-print-area .invoice-sheet td,
-      .invoice-print-area .invoice-sheet th { padding: 2px 4px !important; }`
-      : "";
   // The other four templates (Modern/Professional/Classic/Minimal) are the
   // same component for both their -a4 and -a5 registry entries — nothing
   // about their own markup/CSS actually shrinks for A5. Left alone, printing
@@ -199,7 +242,6 @@ export function getPrintCss(
         overflow: visible !important;
       }
       .sidebar, .topbar, .no-print, button, nav { display: none !important; }
-      ${legacy}
       ${a5Shrink}
     }
   `;

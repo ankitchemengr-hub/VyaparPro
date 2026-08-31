@@ -16,6 +16,7 @@
 // for the actual printed/PDF output so nothing about the paper document changes.
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { getTemplate } from "./registry";
 import { computeTotals, getPrintCss, getWatermarkCss } from "./helpers";
 import type { ProductMaps, PrintSettings } from "./types";
@@ -38,6 +39,29 @@ function ScreenFitInvoiceSheet({
   const containerRef = useRef<HTMLDivElement>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
   const [dims, setDims] = useState<{ scale: number; width?: number; height?: number }>({ scale: 1 });
+  // The on-screen fit-to-container scale must be OFF for print/PDF — the sheet
+  // has to go to paper at its true size. A print stylesheet's
+  // `transform: none !important` is meant to handle this, but a stray recalc
+  // fired by the print-media reflow can re-stamp a fresh inline
+  // `transform: scale(x)` mid-print, so the sheet lands shrunken in a corner.
+  // Drop the transform in React itself, synchronously, before the browser
+  // snapshots for print, and restore it afterwards.
+  const [isPrinting, setIsPrinting] = useState(false);
+
+  useEffect(() => {
+    const before = () => flushSync(() => setIsPrinting(true));
+    const after = () => setIsPrinting(false);
+    window.addEventListener("beforeprint", before);
+    window.addEventListener("afterprint", after);
+    const mql = window.matchMedia?.("print");
+    const onMedia = (e: MediaQueryListEvent) => flushSync(() => setIsPrinting(e.matches));
+    mql?.addEventListener?.("change", onMedia);
+    return () => {
+      window.removeEventListener("beforeprint", before);
+      window.removeEventListener("afterprint", after);
+      mql?.removeEventListener?.("change", onMedia);
+    };
+  }, []);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -79,12 +103,20 @@ function ScreenFitInvoiceSheet({
           unscaled (full-size) layout box, which transform leaves behind. */}
       <div
         className="invoice-scale-wrapper"
-        style={{ width: dims.width, height: dims.height, overflow: dims.width ? "hidden" : "visible" }}
+        style={
+          isPrinting
+            ? { width: "auto", height: "auto", overflow: "visible" }
+            : { width: dims.width, height: dims.height, overflow: dims.width ? "hidden" : "visible" }
+        }
       >
         <div
           ref={sheetRef}
           className={`${className} inline-block align-top`}
-          style={{ transform: `scale(${dims.scale})`, transformOrigin: "top left" }}
+          style={
+            isPrinting
+              ? { transform: "none" }
+              : { transform: `scale(${dims.scale})`, transformOrigin: "top left" }
+          }
         >
           {children}
         </div>
