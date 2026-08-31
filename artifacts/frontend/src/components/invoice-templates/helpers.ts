@@ -126,18 +126,14 @@ export function getPrintCss(
   const paper = paperOverride && paperOverride !== "auto" ? paperOverride : meta.paper;
   const orientation = orientationOverride && orientationOverride !== "auto" ? orientationOverride : meta.orientation;
 
-  // Legacy landscape cash-memo. It was authored at ~A5-landscape and the old
-  // print CSS pinned it there (200mm wide, 9px type) — which on the A4 paper
-  // every customer actually loads printed a shrunken half-page block in the
-  // corner, visibly smaller and denser than what's on screen. Lay it out to
-  // FILL the sheet instead: `width: 100%` of the printable area (so it fills
-  // whatever page/orientation the driver ends up using, even when it ignores
-  // the @page size), on-screen 12px type, at A4 landscape by default.
+  // Legacy A5-landscape cash-memo, printed on the A4 paper every shop loads.
+  // An A5-landscape sheet (~210 x 148mm) is exactly the top half of an A4
+  // portrait page, so lay it out there at its natural on-screen size — the
+  // classic tear-off bill-book format, bottom half left blank. Screen 12px
+  // type (not the old 9px squeeze) and a full border box.
   if (meta.id === "a5-compact") {
-    const legacyPaper = paperOverride && paperOverride !== "auto" ? paperOverride : "A4";
-    const [lw, lh] = legacyPaper === "A5" ? [210, 148] : [297, 210]; // landscape
     return `
-    @page { size: ${lw}mm ${lh}mm; margin: 7mm; }
+    @page { size: 210mm 297mm; margin: 6mm; }
     @media print {
       html, body {
         background: #fff !important;
@@ -164,9 +160,9 @@ export function getPrintCss(
       }
       .invoice-print-area .invoice-sheet {
         width: 100% !important;
-        min-height: 192mm !important;
+        min-height: 132mm !important;
         font-size: 12px !important;
-        line-height: 1.35 !important;
+        line-height: 1.3 !important;
         color: #000 !important;
         background: #fff !important;
         border: 1.5px solid #000 !important;
@@ -177,7 +173,7 @@ export function getPrintCss(
       .invoice-print-area .invoice-sheet table { width: 100% !important; }
       .invoice-print-area .invoice-sheet td,
       .invoice-print-area .invoice-sheet th {
-        padding: 3px 6px !important;
+        padding: 2px 5px !important;
         border-color: #000 !important;
       }
       .sidebar, .topbar, .no-print, button, nav { display: none !important; }
