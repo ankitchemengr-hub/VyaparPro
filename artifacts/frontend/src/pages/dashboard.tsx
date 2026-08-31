@@ -1,5 +1,5 @@
 import React from "react";
-import { Redirect, useLocation } from "wouter";
+import { Redirect } from "wouter";
 import { useAuth } from "@/contexts/use-auth";
 import { homePathForRole } from "@/lib/nav-items";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,17 +26,17 @@ import {
   Factory,
   Droplets,
   ChevronDown,
-  ChevronRight,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 export default function Dashboard() {
   const { user, hasRole } = useAuth();
-  const [, setLocation] = useLocation();
 
   const isAdmin = hasRole(["admin"]);
   const [showCapitalDetails, setShowCapitalDetails] = React.useState(false);
   const [showGrowthDetails, setShowGrowthDetails] = React.useState(false);
+  const [showWorkload, setShowWorkload] = React.useState(false);
+  const [showLowStock, setShowLowStock] = React.useState(false);
 
   if (!isAdmin) {
     // Dashboard is admin only. Anyone else landing on "/" (direct URL,
@@ -389,20 +389,15 @@ export default function Dashboard() {
               </p>
             </CardContent>
           </Card>
-          <Card
-            className="cursor-pointer select-none transition-colors hover:bg-muted/40"
-            onClick={() => setLocation("/inventory?stock=low")}
-            role="link"
-            data-testid="card-low-stock"
-          >
+          <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Low Stock Alerts</CardTitle>
               <AlertTriangle className="h-4 w-4 text-amber-500" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{summary.lowStockCount}</div>
-              <p className="text-xs text-muted-foreground flex items-center gap-0.5">
-                Products below minimum threshold <ChevronRight className="h-3 w-3" />
+              <p className="text-xs text-muted-foreground">
+                Products below minimum threshold
               </p>
             </CardContent>
           </Card>
@@ -421,42 +416,56 @@ export default function Dashboard() {
         </div>
       ) : null}
 
-      {/* Workload + low-stock are summary tiles only — a tap opens the full
-          list on its own page rather than expanding a long list inline. */}
+      {/* Workload + low-stock stay on the dashboard — collapsed to a count,
+          a tap expands the list inline (no navigating away). */}
       <div className="grid gap-4 sm:grid-cols-2">
         <Card
           className="cursor-pointer select-none transition-colors hover:bg-muted/40"
-          onClick={() => setLocation("/manufacturing")}
-          role="link"
+          onClick={() => setShowWorkload((v) => !v)}
           data-testid="card-manufacturing-workload"
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <Factory className="h-4 w-4 text-primary" /> Manufacturing Workload
             </CardTitle>
-            <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+            <ChevronDown className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform ${showWorkload ? "rotate-180" : ""}`} />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold" data-testid="text-workload-count">{assembledItems.length}</div>
             <p className="text-xs text-muted-foreground">
               {assembledItems.length === 0
                 ? "All production up to date"
-                : `item${assembledItems.length === 1 ? "" : "s"} pending production — tap to open`}
+                : `item${assembledItems.length === 1 ? "" : "s"} to manufacture — tap to ${showWorkload ? "hide" : "view"}`}
             </p>
+            {showWorkload && assembledItems.length > 0 && (
+              <div
+                className="mt-3 divide-y rounded-lg border overflow-hidden max-h-72 overflow-y-auto"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {assembledItems.map((c) => (
+                  <div key={c.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm" data-testid={`workload-item-${c.id}`}>
+                    <span className="font-medium truncate">{c.productName}</span>
+                    <span className="flex items-center gap-2 shrink-0">
+                      <span className="text-[11px] uppercase text-muted-foreground">{c.status}</span>
+                      <span className="text-xs font-mono">{c.required.toLocaleString()} {c.unit}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 
         <Card
           className="cursor-pointer select-none transition-colors hover:bg-muted/40"
-          onClick={() => setLocation("/inventory?stock=low")}
-          role="link"
+          onClick={() => setShowLowStock((v) => !v)}
           data-testid="card-low-stock-detail"
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-amber-500" /> Low Stock Alerts
             </CardTitle>
-            <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+            <ChevronDown className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform ${showLowStock ? "rotate-180" : ""}`} />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold" data-testid="text-low-stock-total">
@@ -465,8 +474,23 @@ export default function Dashboard() {
             <p className="text-xs text-muted-foreground">
               {productLowStockAlerts.length} product{productLowStockAlerts.length === 1 ? "" : "s"}
               {" · "}
-              {rawMaterialLowStockAlerts.length} raw material — tap to open
+              {rawMaterialLowStockAlerts.length} raw material — tap to {showLowStock ? "hide" : "view"}
             </p>
+            {showLowStock && (productLowStockAlerts.length + rawMaterialLowStockAlerts.length) > 0 && (
+              <div
+                className="mt-3 divide-y rounded-lg border overflow-hidden max-h-72 overflow-y-auto"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {[...productLowStockAlerts, ...rawMaterialLowStockAlerts].map((a: any) => (
+                  <div key={a.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm" data-testid={`low-stock-item-${a.id}`}>
+                    <span className="font-medium truncate">{a.name}</span>
+                    <span className="text-xs font-mono shrink-0 text-destructive">
+                      {a.currentStock} / {a.minStockThreshold} {a.unit}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
