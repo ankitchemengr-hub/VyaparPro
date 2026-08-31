@@ -226,7 +226,7 @@ router.get("/dashboard/low-stock", async (req, res): Promise<void> => {
       )
     )
     .orderBy(productsTable.currentStock)
-    .limit(20);
+    .limit(100);
 
   res.json(products.map((p) => ({
     id: p.id,
@@ -234,6 +234,10 @@ router.get("/dashboard/low-stock", async (req, res): Promise<void> => {
     currentStock: Number(p.currentStock),
     minStockThreshold: Number(p.minStockThreshold),
     unit: p.unit,
+    // Lets the dashboard split this list into finished products vs raw
+    // materials (packaging, base oils) without a second /products round-trip.
+    notForSale: p.notForSale,
+    addForManufacturing: p.addForManufacturing,
   })));
 });
 

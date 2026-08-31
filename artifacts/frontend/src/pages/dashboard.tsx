@@ -11,7 +11,6 @@ import {
   useGetLitersSold,
   getGetLitersSoldQueryKey,
   useListWorkloadCards,
-  useListProducts,
   useGetProfitLossReport,
   getGetProfitLossReportQueryKey,
 } from "@workspace/api-client-react";
@@ -97,14 +96,12 @@ export default function Dashboard() {
   });
 
   const { data: workloadCards } = useListWorkloadCards();
-  const { data: manufacturingProducts } = useListProducts();
 
   // Mirrors Manufacturing > Workload's own list: every product flagged "Add
   // for Manufacturing" that's currently below its minimum stock threshold —
   // not just ones that already happen to have a workload_cards row, since a
   // low-stock item with no card yet is still production demand the admin
   // needs to see here.
-  const productById = new Map((manufacturingProducts ?? []).map((p: any) => [p.id, p]));
   const activeCardByProduct = new Map<number, any>();
   (workloadCards ?? [])
     .filter((c: any) => c.status === "pending" || c.status === "processing")
@@ -113,14 +110,15 @@ export default function Dashboard() {
       if (!prev || new Date(c.createdAt) > new Date(prev.createdAt)) activeCardByProduct.set(c.productId, c);
     });
   // Raw materials (packaging, base oils, etc.) are never sold directly —
-  // notForSale is what actually distinguishes them from a finished product
-  // that also happens to be manufactured in-house (addForManufacturing is
-  // true for both, so it can't be used to split this list).
-  const productLowStockAlerts = (lowStockAlerts ?? []).filter((a: any) => !productById.get(a.id)?.notForSale);
-  const rawMaterialLowStockAlerts = (lowStockAlerts ?? []).filter((a: any) => productById.get(a.id)?.notForSale);
+  // notForSale is what distinguishes them from a finished product that also
+  // happens to be manufactured in-house. Both flags now come straight from
+  // the low-stock response, so the split no longer depends on a separate
+  // (and previously incomplete) /products fetch.
+  const productLowStockAlerts = (lowStockAlerts ?? []).filter((a: any) => !a.notForSale);
+  const rawMaterialLowStockAlerts = (lowStockAlerts ?? []).filter((a: any) => a.notForSale);
 
   const assembledItems = (lowStockAlerts ?? [])
-    .filter((a: any) => productById.get(a.id)?.addForManufacturing)
+    .filter((a: any) => a.addForManufacturing)
     .map((a: any) => {
       const available = Number(a.currentStock);
       const card = activeCardByProduct.get(a.id);

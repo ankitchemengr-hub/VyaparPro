@@ -4167,6 +4167,18 @@ components:
           type: number
         date:
           type: string
+        qty:
+          type: number
+          nullable: true
+          description: Quantity on that sale/purchase line
+        unit:
+          type: string
+          nullable: true
+          description: Unit of measure for that line
+        party:
+          type: string
+          nullable: true
+          description: Customer (for sales) or vendor (for purchases) on that line
 
     ProductRecentPrices:
       type: object
@@ -5766,6 +5778,10 @@ components:
           type: number
         unit:
           type: string
+        notForSale:
+          type: boolean
+        addForManufacturing:
+          type: boolean
 
     TopProduct:
       type: object

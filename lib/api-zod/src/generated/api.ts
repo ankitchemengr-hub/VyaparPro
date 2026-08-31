@@ -764,11 +764,17 @@ export const GetProductRecentPricesParams = zod.object({
 export const GetProductRecentPricesResponse = zod.object({
   "lastSalePrices": zod.array(zod.object({
   "rate": zod.number(),
-  "date": zod.string()
+  "date": zod.string(),
+  "qty": zod.number().nullish().describe('Quantity on that sale\/purchase line'),
+  "unit": zod.string().nullish().describe('Unit of measure for that line'),
+  "party": zod.string().nullish().describe('Customer (for sales) or vendor (for purchases) on that line')
 })),
   "lastPurchasePrices": zod.array(zod.object({
   "rate": zod.number(),
-  "date": zod.string()
+  "date": zod.string(),
+  "qty": zod.number().nullish().describe('Quantity on that sale\/purchase line'),
+  "unit": zod.string().nullish().describe('Unit of measure for that line'),
+  "party": zod.string().nullish().describe('Customer (for sales) or vendor (for purchases) on that line')
 }))
 })
 
@@ -3203,7 +3209,9 @@ export const GetLowStockAlertsResponseItem = zod.object({
   "name": zod.string(),
   "currentStock": zod.number(),
   "minStockThreshold": zod.number(),
-  "unit": zod.string().optional()
+  "unit": zod.string().optional(),
+  "notForSale": zod.boolean().optional(),
+  "addForManufacturing": zod.boolean().optional()
 })
 export const GetLowStockAlertsResponse = zod.array(GetLowStockAlertsResponseItem)
 

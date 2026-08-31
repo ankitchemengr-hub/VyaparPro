@@ -12,4 +12,6 @@ export interface LowStockAlert {
   currentStock: number;
   minStockThreshold: number;
   unit?: string;
+  notForSale?: boolean;
+  addForManufacturing?: boolean;
 }
