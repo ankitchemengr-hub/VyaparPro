@@ -127,13 +127,16 @@ export function getPrintCss(
   const orientation = orientationOverride && orientationOverride !== "auto" ? orientationOverride : meta.orientation;
 
   // Legacy A5-landscape cash-memo, printed on the A4 paper every shop loads.
-  // An A5-landscape sheet (~210 x 148mm) is exactly the top half of an A4
-  // portrait page, so lay it out there at its natural on-screen size — the
-  // classic tear-off bill-book format, bottom half left blank. Screen 12px
-  // type (not the old 9px squeeze) and a full border box.
+  // An A5-landscape sheet (~210 x 148mm) is exactly the TOP HALF of an A4
+  // portrait page, so lay it out there full-width, bottom half left blank —
+  // the classic tear-off bill-book format. The on-screen sheet has generous
+  // padding + decorative blank filler rows that push a normal bill past
+  // ~200mm (onto a 2nd page); print clamps all of that vertical air right
+  // down so a typical bill lands inside the top ~half. Kept at a readable
+  // ~10.5px (not the old 9px squeeze) with a full border box.
   if (meta.id === "a5-compact") {
     return `
-    @page { size: 210mm 297mm; margin: 6mm; }
+    @page { size: 210mm 297mm; margin: 5mm; }
     @media print {
       html, body {
         background: #fff !important;
@@ -160,9 +163,9 @@ export function getPrintCss(
       }
       .invoice-print-area .invoice-sheet {
         width: 100% !important;
-        min-height: 132mm !important;
-        font-size: 12px !important;
-        line-height: 1.3 !important;
+        min-height: 120mm !important;
+        font-size: 10.5px !important;
+        line-height: 1.18 !important;
         color: #000 !important;
         background: #fff !important;
         border: 1.5px solid #000 !important;
@@ -170,10 +173,27 @@ export function getPrintCss(
         margin: 0 !important;
         box-shadow: none !important;
       }
+      /* Squeeze the roomy on-screen spacing for print so the bill lands in
+         the top ~half of the A4 sheet instead of overflowing to page 2. */
+      .invoice-print-area .invoice-sheet [class~="p-3"] { padding: 3px 7px !important; }
+      .invoice-print-area .invoice-sheet [class~="p-2"] { padding: 3px 5px !important; }
+      .invoice-print-area .invoice-sheet [class~="px-3"] { padding-left: 7px !important; padding-right: 7px !important; }
+      .invoice-print-area .invoice-sheet [class~="pt-10"] { padding-top: 10px !important; }
+      .invoice-print-area .invoice-sheet [class~="pt-4"] { padding-top: 3px !important; }
+      .invoice-print-area .invoice-sheet [class~="mt-3"],
+      .invoice-print-area .invoice-sheet [class~="mt-2"] { margin-top: 2px !important; }
+      .invoice-print-area .invoice-sheet [class~="gap-y-2"] { row-gap: 2px !important; }
+      .invoice-print-area .invoice-sheet [class~="space-y-3"] > * + * { margin-top: 2px !important; }
+      .invoice-print-area .invoice-sheet [class~="space-y-1"] > * + * { margin-top: 1px !important; }
+      /* Decorative blank filler rows + all table cells: hairline vertical
+         padding (they otherwise eat ~25mm on a 3-line bill). */
+      .invoice-print-area .invoice-sheet [class~="py-3"],
+      .invoice-print-area .invoice-sheet [class~="py-2"],
+      .invoice-print-area .invoice-sheet [class~="py-1.5"] { padding-top: 1px !important; padding-bottom: 1px !important; }
       .invoice-print-area .invoice-sheet table { width: 100% !important; }
       .invoice-print-area .invoice-sheet td,
       .invoice-print-area .invoice-sheet th {
-        padding: 2px 5px !important;
+        padding: 1px 5px !important;
         border-color: #000 !important;
       }
       .sidebar, .topbar, .no-print, button, nav { display: none !important; }
