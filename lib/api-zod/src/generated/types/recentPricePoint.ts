@@ -9,4 +9,10 @@
 export interface RecentPricePoint {
   rate: number;
   date: string;
+  /** Quantity on that sale/purchase line */
+  qty?: number | null;
+  /** Unit of measure for that line */
+  unit?: string | null;
+  /** Customer (for sales) or vendor (for purchases) on that line */
+  party?: string | null;
 }

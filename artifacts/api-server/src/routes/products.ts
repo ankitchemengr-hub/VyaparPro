@@ -376,28 +376,36 @@ router.get("/products/:id/recent-prices", async (req, res): Promise<void> => {
 
   const [salesRes, purchasesRes] = await Promise.all([
     pool.query(
-      `SELECT ii.rate, i.invoice_date AS date
+      `SELECT ii.rate, ii.qty, ii.unit, i.invoice_date AS date, i.customer_name AS party
        FROM invoice_items ii
        JOIN invoices i ON i.id = ii.invoice_id AND i.company_id = ii.company_id
        WHERE ii.company_id = $1 AND ii.product_id = $2 AND i.status = 'saved'
        ORDER BY i.invoice_date DESC, i.id DESC
-       LIMIT 3`,
+       LIMIT 5`,
       [companyId, productId],
     ),
     pool.query(
-      `SELECT pi.rate, p.bill_date AS date
+      `SELECT pi.rate, pi.qty, pi.unit, p.bill_date AS date, p.vendor_name AS party
        FROM purchase_items pi
        JOIN purchases p ON p.id = pi.purchase_id AND p.company_id = pi.company_id
        WHERE pi.company_id = $1 AND pi.product_id = $2 AND p.status != 'cancelled'
        ORDER BY p.bill_date DESC, p.id DESC
-       LIMIT 3`,
+       LIMIT 5`,
       [companyId, productId],
     ),
   ]);
 
+  const toPoint = (r: any) => ({
+    rate: Number(r.rate),
+    date: new Date(r.date).toISOString(),
+    qty: r.qty == null ? null : Number(r.qty),
+    unit: r.unit ?? null,
+    party: r.party ?? null,
+  });
+
   res.json({
-    lastSalePrices: salesRes.rows.map((r) => ({ rate: Number(r.rate), date: new Date(r.date).toISOString() })),
-    lastPurchasePrices: purchasesRes.rows.map((r) => ({ rate: Number(r.rate), date: new Date(r.date).toISOString() })),
+    lastSalePrices: salesRes.rows.map(toPoint),
+    lastPurchasePrices: purchasesRes.rows.map(toPoint),
   });
 });
 

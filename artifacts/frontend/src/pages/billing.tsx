@@ -40,8 +40,9 @@ import {
 } from "@/components/ui/dialog";
 import {
   Trash2, Printer, Save, CheckCircle, Loader2, User, Phone, MapPin,
-  ArrowLeft, Search, Plus, Pencil, UserPlus, Share2,
+  ArrowLeft, Search, Plus, Pencil, UserPlus, Share2, History,
 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { shareInvoiceImage } from "@/lib/share-invoice";
@@ -110,20 +111,87 @@ function lineLiters(i: { qty: number; qtyMode: QtyMode; unit: string; unitsPerBo
   return 0;
 }
 
-// Small hint shown under the Rate input while billing so the last few prices
-// this product actually sold/bought at are visible without leaving the row —
-// separate cached query per product, so switching a row's product doesn't
-// wait on every other row's history.
-function RecentPriceHint({ productId }: { productId: number }) {
+const fmtHistDate = (iso: string) => {
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? "—" : d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" });
+};
+
+// Shown under the Rate input while billing: the last few prices this product
+// actually sold/bought at, and — behind a "history" button — the full
+// date / party / qty / rate breakdown, mirroring the reference lookup in
+// Hitech. Clicking a row copies that rate into the line. Separate cached
+// query per product so switching a row's product doesn't wait on every
+// other row's history.
+function RecentPriceHint({ productId, onPickRate }: { productId: number; onPickRate?: (rate: number) => void }) {
   const { data } = useGetProductRecentPrices(productId, {
     query: { queryKey: getGetProductRecentPricesQueryKey(productId), enabled: !!productId, staleTime: 5 * 60 * 1000 },
   });
   if (!data) return null;
-  const sold = data.lastSalePrices.map((p) => `₹${Number(p.rate).toLocaleString()}`).join(", ");
-  const bought = data.lastPurchasePrices.map((p) => `₹${Number(p.rate).toLocaleString()}`).join(", ");
+  const sales = data.lastSalePrices ?? [];
+  const purchases = data.lastPurchasePrices ?? [];
+  const sold = sales.map((p) => `₹${Number(p.rate).toLocaleString()}`).join(", ");
+  const bought = purchases.map((p) => `₹${Number(p.rate).toLocaleString()}`).join(", ");
   if (!sold && !bought) return null;
+
+  const renderHist = (rows: typeof sales, kind: "Sale" | "Purchase") => {
+    if (rows.length === 0) return null;
+    return (
+      <div key={kind}>
+        <div className="px-2 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Recent {kind}s
+        </div>
+        <table className="w-full text-[11px]">
+          <thead>
+            <tr className="border-b text-muted-foreground">
+              <th className="text-left font-normal px-2 py-1">Date</th>
+              <th className="text-left font-normal px-2 py-1">{kind === "Sale" ? "Customer" : "Vendor"}</th>
+              <th className="text-right font-normal px-2 py-1">Qty</th>
+              <th className="text-right font-normal px-2 py-1">Rate</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr
+                key={i}
+                className={`border-b border-dashed last:border-0 ${onPickRate ? "hover:bg-accent cursor-pointer" : ""}`}
+                onClick={onPickRate ? () => onPickRate(Number(r.rate)) : undefined}
+                title={onPickRate ? "Use this rate" : undefined}
+              >
+                <td className="px-2 py-1 whitespace-nowrap">{fmtHistDate(r.date)}</td>
+                <td className="px-2 py-1 max-w-[130px] truncate">{r.party ?? "—"}</td>
+                <td className="px-2 py-1 text-right whitespace-nowrap">
+                  {r.qty != null ? Number(r.qty).toLocaleString() : "—"}
+                  {r.unit ? ` ${r.unit}` : ""}
+                </td>
+                <td className="px-2 py-1 text-right font-medium tabular-nums">₹{Number(r.rate).toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
   return (
     <div className="text-[9px] leading-tight text-muted-foreground">
+      <Popover>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className="inline-flex items-center gap-0.5 text-[9px] text-primary hover:underline"
+            data-testid={`button-price-history-${productId}`}
+          >
+            <History className="w-2.5 h-2.5" /> Price history
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align="end" className="w-72 p-0 max-h-[300px] overflow-y-auto">
+          {renderHist(sales, "Sale")}
+          {renderHist(purchases, "Purchase")}
+          {onPickRate && (
+            <div className="px-2 py-1.5 text-[10px] text-muted-foreground border-t">Click a row to use that rate.</div>
+          )}
+        </PopoverContent>
+      </Popover>
       {sold && <div>Sold: {sold}</div>}
       {bought && <div>Bought: {bought}</div>}
     </div>
@@ -797,7 +865,10 @@ export default function Billing() {
                             className="w-24 text-right h-7 text-sm disabled:opacity-100 disabled:cursor-not-allowed"
                             data-testid={`input-rate-${idx}`} disabled={user?.role !== "admin"}
                             title={user?.role !== "admin" ? "Only admin can edit rate" : undefined} />
-                          <RecentPriceHint productId={item.productId} />
+                          <RecentPriceHint
+                            productId={item.productId}
+                            onPickRate={user?.role === "admin" ? (r) => updateItem(idx, "rate", r) : undefined}
+                          />
                         </TableCell>
                         {isGstInvoiceType(invoiceType) && (
                           <TableCell className="text-right">
@@ -868,7 +939,10 @@ export default function Billing() {
                           className="h-8 text-sm disabled:opacity-100 disabled:cursor-not-allowed"
                           data-testid={`input-rate-mobile-${idx}`} disabled={user?.role !== "admin"}
                           title={user?.role !== "admin" ? "Only admin can edit rate" : undefined} />
-                        <RecentPriceHint productId={item.productId} />
+                        <RecentPriceHint
+                          productId={item.productId}
+                          onPickRate={user?.role === "admin" ? (r) => updateItem(idx, "rate", r) : undefined}
+                        />
                       </div>
                     </div>
 
