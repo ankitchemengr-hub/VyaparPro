@@ -45,6 +45,7 @@ export interface NavItem {
 export const topNavItems: NavItem[] = [
   { name: "Platform Console", href: "/subscriptions", icon: BadgeIndianRupee, roles: ["super_admin"] },
   { name: "Dashboard", href: "/", icon: LayoutDashboard, roles: ["admin"] },
+  { name: "Invoices", href: "/invoices", icon: FileText, roles: ["admin", "salesman", "accountant", "store"] },
   { name: "Menu", href: "/menu", icon: LayoutGrid, roles: ["admin", "salesman", "store", "manufacturing", "accountant", "customer", "counter"] },
   { name: "Catalog", href: "/catalog", icon: ShoppingCart, roles: ["admin", "salesman", "store", "manufacturing", "customer", "counter"] },
   { name: "My Statement", href: "/my-statement", icon: FileText, roles: ["customer"] },
