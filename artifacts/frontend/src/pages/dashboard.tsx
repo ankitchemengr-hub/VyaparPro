@@ -2,7 +2,7 @@ import React from "react";
 import { Redirect, useLocation } from "wouter";
 import { useAuth } from "@/contexts/use-auth";
 import { homePathForRole } from "@/lib/nav-items";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   useGetDashboardSummary,
   useGetLowStockAlerts,
@@ -19,7 +19,6 @@ import {
   IndianRupee,
   AlertTriangle,
   CreditCard,
-  PackageOpen,
   TrendingUp,
   Wallet,
   ArrowUpRight,
@@ -29,7 +28,6 @@ import {
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 export default function Dashboard() {
@@ -423,128 +421,55 @@ export default function Dashboard() {
         </div>
       ) : null}
 
-      <Card
-        className="cursor-pointer select-none transition-colors hover:border-primary/40"
-        onClick={() => setLocation("/manufacturing")}
-        role="link"
-        data-testid="card-manufacturing-workload"
-      >
-        <CardHeader>
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <Factory className="h-5 w-5 text-primary" />
-              <CardTitle>Manufacturing Workload</CardTitle>
-            </div>
-            <span className="flex items-center gap-0.5 text-xs font-medium text-muted-foreground shrink-0">
-              View all <ChevronRight className="h-3.5 w-3.5" />
-            </span>
-          </div>
-          <CardDescription>Items pending production.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {assembledItems.length === 0 ? (
-            <div className="py-8 text-center text-muted-foreground text-sm">No pending items. All production is up to date.</div>
-          ) : (
-            <div className="divide-y rounded-lg border overflow-hidden">
-              {assembledItems.slice(0, 10).map((c) => (
-                <div
-                  key={c.id}
-                  className="flex flex-col gap-1.5 px-3 py-2.5 bg-card hover:bg-muted/40 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <PackageOpen className="w-4 h-4 text-amber-500 shrink-0" />
-                    <span className="text-sm font-medium truncate">{c.productName}</span>
-                  </div>
-                  <div className="flex items-center gap-2 pl-6 shrink-0 sm:pl-0">
-                    <Badge
-                      variant={c.status === "processing" ? "default" : "secondary"}
-                      className="text-xs capitalize"
-                    >
-                      {c.status}
-                    </Badge>
-                    <Badge variant="outline" className="text-xs font-mono">
-                      {c.required.toLocaleString()} {c.unit}
-                    </Badge>
-                  </div>
-                </div>
-              ))}
-              {assembledItems.length > 10 && (
-                <div className="px-3 py-2 text-xs text-muted-foreground bg-muted/20">
-                  + {assembledItems.length - 10} more
-                </div>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between gap-2">
-            <CardTitle>Low Stock Alerts</CardTitle>
-            <button
-              type="button"
-              onClick={() => setLocation("/inventory?stock=low")}
-              className="flex items-center gap-0.5 text-xs font-medium text-muted-foreground hover:text-foreground shrink-0"
-              data-testid="link-low-stock-list"
-            >
-              View all <ChevronRight className="h-3.5 w-3.5" />
-            </button>
-          </div>
-          <CardDescription>Products requiring immediate attention.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Tabs defaultValue="products">
-            <TabsList>
-              <TabsTrigger value="products">
-                Products{productLowStockAlerts.length > 0 ? ` (${productLowStockAlerts.length})` : ""}
-              </TabsTrigger>
-              <TabsTrigger value="raw-material">
-                Raw Material{rawMaterialLowStockAlerts.length > 0 ? ` (${rawMaterialLowStockAlerts.length})` : ""}
-              </TabsTrigger>
-            </TabsList>
-            <TabsContent value="products">
-              <LowStockAlertList alerts={productLowStockAlerts} />
-            </TabsContent>
-            <TabsContent value="raw-material">
-              <LowStockAlertList alerts={rawMaterialLowStockAlerts} />
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-function LowStockAlertList({ alerts }: { alerts: { id: number; name: string; currentStock: number; minStockThreshold: number; unit?: string }[] }) {
-  if (alerts.length === 0) {
-    return (
-      <div className="h-[200px] flex items-center justify-center text-muted-foreground">
-        <div className="flex flex-col items-center">
-          <PackageOpen className="h-8 w-8 mb-2 opacity-20" />
-          <p>Inventory levels are healthy.</p>
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className="space-y-4 pt-4">
-      {alerts.slice(0, 8).map((alert) => (
-        <div key={alert.id} className="flex items-center justify-between">
-          <div className="space-y-1">
-            <p className="text-sm font-medium leading-none">{alert.name}</p>
+      {/* Workload + low-stock are summary tiles only — a tap opens the full
+          list on its own page rather than expanding a long list inline. */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Card
+          className="cursor-pointer select-none transition-colors hover:bg-muted/40"
+          onClick={() => setLocation("/manufacturing")}
+          role="link"
+          data-testid="card-manufacturing-workload"
+        >
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Factory className="h-4 w-4 text-primary" /> Manufacturing Workload
+            </CardTitle>
+            <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold" data-testid="text-workload-count">{assembledItems.length}</div>
             <p className="text-xs text-muted-foreground">
-              Min: {alert.minStockThreshold} {alert.unit}
+              {assembledItems.length === 0
+                ? "All production up to date"
+                : `item${assembledItems.length === 1 ? "" : "s"} pending production — tap to open`}
             </p>
-          </div>
-          <Badge variant="destructive">
-            {alert.currentStock} {alert.unit} left
-          </Badge>
-        </div>
-      ))}
-      {alerts.length > 8 && (
-        <p className="text-xs text-muted-foreground">+ {alerts.length - 8} more</p>
-      )}
+          </CardContent>
+        </Card>
+
+        <Card
+          className="cursor-pointer select-none transition-colors hover:bg-muted/40"
+          onClick={() => setLocation("/inventory?stock=low")}
+          role="link"
+          data-testid="card-low-stock-detail"
+        >
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-500" /> Low Stock Alerts
+            </CardTitle>
+            <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold" data-testid="text-low-stock-total">
+              {productLowStockAlerts.length + rawMaterialLowStockAlerts.length}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {productLowStockAlerts.length} product{productLowStockAlerts.length === 1 ? "" : "s"}
+              {" · "}
+              {rawMaterialLowStockAlerts.length} raw material — tap to open
+            </p>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
