@@ -129,10 +129,12 @@ export function getPrintCss(
   // Legacy landscape cash-memo. It was authored at ~A5-landscape and the old
   // print CSS pinned it there (200mm wide, 9px type) — which on the A4 paper
   // every customer actually loads printed a shrunken half-page block in the
-  // corner, visibly smaller and denser than what's on screen. Lay it out to
-  // FILL the sheet instead: `width: 100%` of the printable area (so it fills
-  // whatever page/orientation the driver ends up using, even when it ignores
-  // the @page size), on-screen 12px type, at A4 landscape by default.
+  // corner, smaller and denser than what's on screen. Lay it out to FILL the
+  // sheet instead: `width: 100%` of the printable area so it fills whatever
+  // page the driver ends up using (even when it ignores the @page size), a
+  // per-orientation `min-height` so the border box reaches the bottom edge
+  // either way, and a flex column whose items table grows to fill the slack
+  // so the ruled area spans the page instead of leaving a tall blank tail.
   if (meta.id === "a5-compact") {
     const legacyPaper = paperOverride && paperOverride !== "auto" ? paperOverride : "A4";
     const [lw, lh] = legacyPaper === "A5" ? [210, 148] : [297, 210]; // landscape
@@ -164,7 +166,6 @@ export function getPrintCss(
       }
       .invoice-print-area .invoice-sheet {
         width: 100% !important;
-        min-height: 192mm !important;
         font-size: 12px !important;
         line-height: 1.35 !important;
         color: #000 !important;
@@ -173,7 +174,13 @@ export function getPrintCss(
         transform: none !important;
         margin: 0 !important;
         box-shadow: none !important;
+        display: flex !important;
+        flex-direction: column !important;
       }
+      /* Let the items table absorb the leftover page height so the totals +
+         footer ride the bottom edge and the ruled area spans the sheet,
+         instead of everything bunching at the top with a blank tail. */
+      .invoice-print-area .invoice-sheet > table { flex: 1 1 auto !important; }
       .invoice-print-area .invoice-sheet table { width: 100% !important; }
       .invoice-print-area .invoice-sheet td,
       .invoice-print-area .invoice-sheet th {
@@ -181,6 +188,15 @@ export function getPrintCss(
         border-color: #000 !important;
       }
       .sidebar, .topbar, .no-print, button, nav { display: none !important; }
+    }
+    /* Whatever orientation the driver actually applies, make the bordered
+       sheet reach the bottom of that page (A4 landscape ~196mm printable,
+       A4 portrait ~283mm) so it fills the paper either way. */
+    @media print and (orientation: landscape) {
+      .invoice-print-area .invoice-sheet { min-height: 195mm !important; }
+    }
+    @media print and (orientation: portrait) {
+      .invoice-print-area .invoice-sheet { min-height: 281mm !important; }
     }
   `;
   }
