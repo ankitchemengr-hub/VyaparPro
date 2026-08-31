@@ -18,6 +18,7 @@ import { Loader2, Printer, Hash, ChevronLeft } from "lucide-react";
 import { FALLBACK_PRINT_SETTINGS } from "@/components/invoice-templates/defaults";
 import { useCompanyLogo } from "@/hooks/use-company-logo";
 import { rupeesInWords } from "@/components/invoice-templates/helpers";
+import { printWithTitle } from "@/lib/print-with-title";
 
 const MODE_LABELS: Record<string, string> = {
   cash: "Cash",
@@ -197,7 +198,7 @@ export function InvoiceReceiptDialog({ invoiceId, onOpenChange }: InvoiceReceipt
             </Button>
           )}
           {selected && receipt && (
-            <Button variant="outline" onClick={() => window.print()} data-testid="button-print-invoice-receipt">
+            <Button variant="outline" onClick={() => printWithTitle(receipt.receiptNo)} data-testid="button-print-invoice-receipt">
               <Printer className="w-4 h-4 mr-2" /> Print / Save as PDF
             </Button>
           )}

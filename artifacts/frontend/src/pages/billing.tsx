@@ -45,6 +45,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { shareInvoiceImage } from "@/lib/share-invoice";
+import { usePrintTitle } from "@/lib/print-with-title";
 
 type QtyMode = "unit" | "box";
 
@@ -194,6 +195,15 @@ export default function Billing() {
   const { data: existingCustomerEntity } = useGetEntity(existingInvoice?.customerId as number, {
     query: { enabled: isEditMode && !!existingInvoice?.customerId } as any,
   });
+
+  // Print / "Save as PDF" names the file after document.title — pin it to the
+  // invoice no. whenever a printable invoice is on screen (just-saved screen,
+  // or the edit view's Print button).
+  usePrintTitle(
+    savedInvoice ? String(savedInvoice.invoiceNo)
+      : existingInvoice ? String(existingInvoice.invoiceNo)
+      : null,
+  );
   const { data: printSettingsData } = useGetPrintSettings();
   const logo = useCompanyLogo();
   const printSettings = { ...(printSettingsData ?? FALLBACK_PRINT_SETTINGS), logo };

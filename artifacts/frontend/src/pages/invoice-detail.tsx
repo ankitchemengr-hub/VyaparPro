@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { ArrowLeft, Printer, Loader2, LayoutTemplate, IndianRupee, MessageCircle, Share2 } from "lucide-react";
 import { shareInvoiceImage } from "@/lib/share-invoice";
+import { usePrintTitle } from "@/lib/print-with-title";
 import { useAuth } from "@/contexts/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { InvoiceTemplateRenderer } from "@/components/invoice-templates/InvoiceTemplateRenderer";
@@ -47,6 +48,11 @@ export default function InvoiceDetail() {
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [sharing, setSharing] = useState(false);
   const sheetContainerRef = useRef<HTMLDivElement>(null);
+
+  // Print / "Save as PDF" takes its default filename from document.title, so
+  // while an invoice is on screen pin the title to its number — both the
+  // Print button and the browser's own Ctrl+P then save as "<invoiceNo>.pdf".
+  usePrintTitle(invoice ? String(invoice.invoiceNo) : null);
 
   const handleShareInvoice = async () => {
     if (!invoice) return;

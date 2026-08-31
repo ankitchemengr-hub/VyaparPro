@@ -2,6 +2,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Printer, X } from "lucide-react";
 import { useGetPaymentReceipt, getGetPaymentReceiptQueryKey, type AccountTransaction } from "@workspace/api-client-react";
+import { printWithTitle } from "@/lib/print-with-title";
 
 const formatRs = (n: number) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(n);
@@ -43,7 +44,8 @@ export function CashReceiptDialog({
   }
 
   const isIn = txn.direction === "in";
-  const handlePrint = () => window.print();
+  const handlePrint = () =>
+    printWithTitle(txn.receiptNo ?? `${isIn ? "Receipt" : "Payment-Voucher"}-${txn.id}`);
   const allocations = receipt?.allocations ?? [];
   const customerBalanceBefore = receipt?.customerBalanceBefore ?? null;
   const customerBalanceAfter = receipt?.customerBalanceAfter ?? null;

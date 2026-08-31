@@ -24,6 +24,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { printWithTitle } from "@/lib/print-with-title";
 import {
   Loader2, IndianRupee, Banknote, Smartphone, CreditCard, Building2,
   CheckCircle2, Hash, Printer,
@@ -478,7 +479,7 @@ export function RecordPaymentDialog({
         <DialogFooter className="print:hidden">
           {success ? (
             <>
-              <Button variant="outline" onClick={() => window.print()} data-testid="button-print-receipt">
+              <Button variant="outline" onClick={() => printWithTitle(success.receiptId)} data-testid="button-print-receipt">
                 <Printer className="w-4 h-4 mr-2" /> Print / Save as PDF
               </Button>
               <Button onClick={() => onOpenChange(false)}>Done</Button>
