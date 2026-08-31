@@ -1,5 +1,5 @@
 import React from "react";
-import { Redirect } from "wouter";
+import { Redirect, useLocation } from "wouter";
 import { useAuth } from "@/contexts/use-auth";
 import { homePathForRole } from "@/lib/nav-items";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -27,12 +27,14 @@ import {
   Factory,
   Droplets,
   ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 export default function Dashboard() {
   const { user, hasRole } = useAuth();
+  const [, setLocation] = useLocation();
 
   const isAdmin = hasRole(["admin"]);
   const [showCapitalDetails, setShowCapitalDetails] = React.useState(false);
@@ -389,15 +391,20 @@ export default function Dashboard() {
               </p>
             </CardContent>
           </Card>
-          <Card>
+          <Card
+            className="cursor-pointer select-none transition-colors hover:bg-muted/40"
+            onClick={() => setLocation("/inventory?stock=low")}
+            role="link"
+            data-testid="card-low-stock"
+          >
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Low Stock Alerts</CardTitle>
               <AlertTriangle className="h-4 w-4 text-amber-500" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{summary.lowStockCount}</div>
-              <p className="text-xs text-muted-foreground">
-                Products below minimum threshold
+              <p className="text-xs text-muted-foreground flex items-center gap-0.5">
+                Products below minimum threshold <ChevronRight className="h-3 w-3" />
               </p>
             </CardContent>
           </Card>
@@ -416,11 +423,21 @@ export default function Dashboard() {
         </div>
       ) : null}
 
-      <Card>
+      <Card
+        className="cursor-pointer select-none transition-colors hover:border-primary/40"
+        onClick={() => setLocation("/manufacturing")}
+        role="link"
+        data-testid="card-manufacturing-workload"
+      >
         <CardHeader>
-          <div className="flex items-center gap-2">
-            <Factory className="h-5 w-5 text-primary" />
-            <CardTitle>Manufacturing Workload</CardTitle>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Factory className="h-5 w-5 text-primary" />
+              <CardTitle>Manufacturing Workload</CardTitle>
+            </div>
+            <span className="flex items-center gap-0.5 text-xs font-medium text-muted-foreground shrink-0">
+              View all <ChevronRight className="h-3.5 w-3.5" />
+            </span>
           </div>
           <CardDescription>Items pending production.</CardDescription>
         </CardHeader>
@@ -463,7 +480,17 @@ export default function Dashboard() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Low Stock Alerts</CardTitle>
+          <div className="flex items-center justify-between gap-2">
+            <CardTitle>Low Stock Alerts</CardTitle>
+            <button
+              type="button"
+              onClick={() => setLocation("/inventory?stock=low")}
+              className="flex items-center gap-0.5 text-xs font-medium text-muted-foreground hover:text-foreground shrink-0"
+              data-testid="link-low-stock-list"
+            >
+              View all <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
           <CardDescription>Products requiring immediate attention.</CardDescription>
         </CardHeader>
         <CardContent>

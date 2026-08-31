@@ -212,6 +212,11 @@ export default function Inventory() {
   const isAdmin = hasRole(["admin"]);
   const [search, setSearch] = useState("");
   const [brandFilter, setBrandFilter] = useState<string>("");
+  // Deep-link target for the Dashboard's "Low Stock Alerts" cards — opens
+  // Inventory pre-filtered to items at or below their minimum threshold.
+  const [lowStockOnly, setLowStockOnly] = useState(
+    () => new URLSearchParams(window.location.search).get("stock") === "low",
+  );
   const [addOpen, setAddOpen] = useState(false);
   const [editProduct, setEditProduct] = useState<any | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
@@ -240,6 +245,12 @@ export default function Inventory() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const deleteProduct = useDeleteProduct();
+
+  const visibleProducts = lowStockOnly
+    ? (products ?? []).filter(
+        (p) => Number(p.currentStock ?? 0) <= Number(p.minStockThreshold ?? 0),
+      )
+    : products;
 
   const confirmDelete = () => {
     if (!deleteTarget) return;
@@ -320,6 +331,18 @@ export default function Inventory() {
             ))}
           </SelectContent>
         </Select>
+        {lowStockOnly && (
+          <Button
+            variant="secondary"
+            size="sm"
+            className="gap-1 border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/30 dark:text-amber-300"
+            onClick={() => setLowStockOnly(false)}
+            data-testid="button-clear-low-stock-filter"
+          >
+            Low stock only
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        )}
       </div>
 
       <Card>
@@ -344,12 +367,14 @@ export default function Inventory() {
                     <Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" />
                   </TableCell>
                 </TableRow>
-              ) : products?.length === 0 ? (
+              ) : visibleProducts?.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No products found.</TableCell>
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    {lowStockOnly ? "No products are below their minimum threshold." : "No products found."}
+                  </TableCell>
                 </TableRow>
               ) : (
-                products?.map((product) => (
+                visibleProducts?.map((product) => (
                   <TableRow key={product.id} data-testid={`row-product-${product.id}`}>
                     <TableCell>
                       {product.imageUrl ? (
