@@ -61,12 +61,31 @@ export function InvoiceReceiptDialog({ invoiceId, onOpenChange }: InvoiceReceipt
       {/* This dialog's content is portaled outside #root by Radix, so
           collapsing #root's layout for print removes the Invoices list
           behind it entirely instead of just hiding its ink (which would
-          still reserve page height and print blank pages). */}
-      <style>{`
-        @media print {
-          #root { display: none !important; }
-        }
-      `}</style>
+          still reserve page height and print blank pages). The subtree
+          rule below additionally re-asserts visibility in case a host page
+          print-hides everything with `body * { visibility: hidden }`.
+
+          CRITICAL: this <style> is a child of Radix <Dialog> Root, which
+          renders its children even while closed. It MUST be gated on `open`
+          — an always-present `#root { display: none }` rule blanks every
+          other print flow on the host page. */}
+      {open && (
+        <style>{`
+          @media print {
+            #root { display: none !important; }
+            .invoice-receipt-print-area, .invoice-receipt-print-area * {
+              visibility: visible !important;
+              color: #000 !important;
+            }
+            .invoice-receipt-print-area {
+              position: absolute !important;
+              left: 0 !important;
+              top: 0 !important;
+              width: 100% !important;
+            }
+          }
+        `}</style>
+      )}
       <DialogContent className="sm:max-w-md">
         <DialogHeader className="print:hidden">
           <DialogTitle>Payment Receipt</DialogTitle>
@@ -106,7 +125,7 @@ export function InvoiceReceiptDialog({ invoiceId, onOpenChange }: InvoiceReceipt
             <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <div className="border rounded-md p-5 text-sm space-y-3" data-testid="invoice-receipt-view">
+          <div className="invoice-receipt-print-area border rounded-md p-5 text-sm space-y-3" data-testid="invoice-receipt-view">
             <div className="flex items-center gap-3 pb-3 border-b">
               {settings.logo && <img src={settings.logo} alt="" className="h-10 w-10 object-contain" />}
               <div>

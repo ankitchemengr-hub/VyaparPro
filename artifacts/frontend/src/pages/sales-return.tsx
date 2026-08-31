@@ -229,12 +229,19 @@ function ReturnItemsDialog({
           This dialog's content is portaled outside #root by Radix, so
           collapsing #root's layout removes the page behind it entirely
           instead of just hiding its ink (which would still reserve page
-          height and print blank pages). */}
-      <style>{`
-        @media print {
-          #root { display: none !important; }
-        }
-      `}</style>
+          height and print blank pages).
+
+          CRITICAL: this <style> is a child of Radix <Dialog> Root, which
+          renders its children even while closed. It MUST be gated on `open`
+          — an always-present `#root { display: none }` rule blanks every
+          other print flow on the host page. */}
+      {open && (
+        <style>{`
+          @media print {
+            #root { display: none !important; }
+          }
+        `}</style>
+      )}
       <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
         <DialogHeader className="print:hidden">
           <DialogTitle className="flex items-center gap-2">
@@ -440,12 +447,17 @@ function ReturnDetailDialog({ id, onOpenChange }: { id: number | null; onOpenCha
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/* Same #root collapse as the New Return dialog above — otherwise the
-          Return History list behind this dialog prints too. */}
-      <style>{`
-        @media print {
-          #root { display: none !important; }
-        }
-      `}</style>
+          Return History list behind this dialog prints too. Gated on `open`:
+          this <style> is a child of Radix <Dialog> Root, which renders even
+          while closed, and an always-present `#root { display: none }` rule
+          blanks every other print flow on the host page. */}
+      {open && (
+        <style>{`
+          @media print {
+            #root { display: none !important; }
+          }
+        `}</style>
+      )}
       <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
         <DialogHeader className="print:hidden">
           <DialogTitle className="flex items-center gap-2">

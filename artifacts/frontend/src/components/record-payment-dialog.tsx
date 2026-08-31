@@ -225,13 +225,37 @@ export function RecordPaymentDialog({
           got reprinted across dozens of otherwise-blank pages. Since this
           dialog's content is portaled outside #root by Radix, collapsing
           #root's layout entirely removes the invoices list from the
-          printed page count instead of merely hiding its ink. */}
-      <style>{`
-        @media print {
-          #root { display: none !important; }
-          .payment-receipt-print-area { color: #000 !important; }
-        }
-      `}</style>
+          printed page count instead of merely hiding its ink.
+
+          On invoice pages the mounted invoice-template renderer carries its
+          own `@media print { body * { visibility: hidden } }` rule. This
+          receipt is portaled to <body>, outside that renderer's print area,
+          so #root:display-none alone leaves it visibility:hidden and the
+          sheet prints blank — re-assert visibility for its own subtree and
+          pin it to the top of the page.
+
+          CRITICAL: this <style> is a child of Radix <Dialog> Root, which
+          renders its children even while closed. It MUST be gated on `open`
+          — an always-present `#root { display: none }` rule blanks every
+          OTHER print flow on the host page (e.g. printing the invoice
+          itself from Invoice Detail, where this dialog is always mounted). */}
+      {open && (
+        <style>{`
+          @media print {
+            #root { display: none !important; }
+            .payment-receipt-print-area, .payment-receipt-print-area * {
+              visibility: visible !important;
+              color: #000 !important;
+            }
+            .payment-receipt-print-area {
+              position: absolute !important;
+              left: 0 !important;
+              top: 0 !important;
+              width: 100% !important;
+            }
+          }
+        `}</style>
+      )}
       <DialogContent className="sm:max-w-md">
         <DialogHeader className="print:hidden">
           <DialogTitle className="flex items-center gap-2">

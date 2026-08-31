@@ -60,10 +60,27 @@ export function CashReceiptDialog({
           pages. Since this dialog's content is portaled outside #root by
           Radix, collapsing #root's layout entirely removes the page behind
           it instead of merely hiding its ink. */}
+      {/* The host page this dialog is opened over may itself carry an
+          @media print rule that hides everything with
+          `body * { visibility: hidden }` and reveals only its own print
+          area (Cash Book's recent-entries table; the invoice templates on
+          invoice pages). This receipt is portaled to <body>, outside that
+          area, so #root:display-none alone leaves it visibility:hidden and
+          the sheet prints blank — re-assert visibility for its own subtree
+          and pin it to the top of the page. */}
       <style>{`
         @media print {
           #root { display: none !important; }
-          #cash-receipt-print { color: #000 !important; }
+          #cash-receipt-print, #cash-receipt-print * {
+            visibility: visible !important;
+            color: #000 !important;
+          }
+          #cash-receipt-print {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+          }
         }
       `}</style>
       <DialogContent className="max-w-md print:max-w-full print:shadow-none">
