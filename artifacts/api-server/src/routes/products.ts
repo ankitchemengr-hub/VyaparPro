@@ -362,7 +362,7 @@ router.get("/products/:id/image", async (req, res): Promise<void> => {
   res.send(decoded.bytes);
 });
 
-// GET /products/:id/recent-prices — last 3 sale and purchase prices, so
+// GET /products/:id/recent-prices — last few sale and purchase prices, so
 // billing/purchase entry can show what this product last went for instead of
 // relying solely on the (possibly stale) static price fields on the product.
 router.get("/products/:id/recent-prices", async (req, res): Promise<void> => {
@@ -406,6 +406,49 @@ router.get("/products/:id/recent-prices", async (req, res): Promise<void> => {
   res.json({
     lastSalePrices: salesRes.rows.map(toPoint),
     lastPurchasePrices: purchasesRes.rows.map(toPoint),
+  });
+});
+
+// GET /products/:id/billed-rate/:customerId — the rate billing should
+// pre-fill for this product on a new line: the rate THIS customer was last
+// billed for it (partyRate), falling back to the most recent billed sale
+// rate to anyone (lastSaleRate). Both null ⇒ caller keeps the static price.
+// Two path params (not ?customerId=) so the generated zod client doesn't
+// collide a query-params type with the path-params schema of the same name.
+router.get("/products/:id/billed-rate/:customerId", async (req, res): Promise<void> => {
+  const productId = Number(req.params.id);
+  const customerId = Number(req.params.customerId);
+  if (!Number.isFinite(productId) || !Number.isFinite(customerId)) {
+    res.status(400).json({ error: "productId and customerId must be numbers" });
+    return;
+  }
+  const companyId = getCompanyId(req);
+
+  const [partyRes, anyRes] = await Promise.all([
+    pool.query(
+      `SELECT ii.rate
+       FROM invoice_items ii
+       JOIN invoices i ON i.id = ii.invoice_id AND i.company_id = ii.company_id
+       WHERE ii.company_id = $1 AND ii.product_id = $2 AND i.status = 'saved'
+         AND i.customer_id = $3
+       ORDER BY i.invoice_date DESC, i.id DESC
+       LIMIT 1`,
+      [companyId, productId, customerId],
+    ),
+    pool.query(
+      `SELECT ii.rate
+       FROM invoice_items ii
+       JOIN invoices i ON i.id = ii.invoice_id AND i.company_id = ii.company_id
+       WHERE ii.company_id = $1 AND ii.product_id = $2 AND i.status = 'saved'
+       ORDER BY i.invoice_date DESC, i.id DESC
+       LIMIT 1`,
+      [companyId, productId],
+    ),
+  ]);
+
+  res.json({
+    partyRate: partyRes.rows[0] ? Number(partyRes.rows[0].rate) : null,
+    lastSaleRate: anyRes.rows[0] ? Number(anyRes.rows[0].rate) : null,
   });
 });
 

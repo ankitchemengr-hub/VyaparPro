@@ -490,7 +490,7 @@ router.get("/invoices/:id", async (req, res): Promise<void> => {
 // balance was paid off with, so the Invoices list can re-open/print a
 // receipt for an already-paid invoice (the ₹ action there otherwise has
 // nothing to do once balanceDue hits 0). An invoice can appear more than
-// once here: FIFO can spill one payment across several invoices, and an
+// once here: one payment can spill across several invoices, and an
 // invoice can be paid off over several partial payments over time.
 router.get("/invoices/:id/payment-receipts", async (req, res): Promise<void> => {
   const params = ListInvoicePaymentReceiptsParams.safeParse(req.params);

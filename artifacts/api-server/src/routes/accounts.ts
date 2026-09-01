@@ -382,9 +382,9 @@ router.post("/account-transactions", async (req, res): Promise<void> => {
 
     // If a specific invoice was pinned, make sure it's a real, still-open
     // bill for the linked customer — an already-fully-paid pinned invoice is
-    // not an error here, it's simply skipped by the FIFO allocator below,
-    // which spills the amount to the customer's next oldest outstanding
-    // invoice instead.
+    // not an error here, it's simply skipped by the allocator below, which
+    // spills the amount to the customer's next outstanding invoice
+    // (latest first) instead.
     if (invoiceId != null) {
       // customer_id IS NULL is a walk-in invoice (billed with no specific
       // customer entity selected) — still valid to link if the party this
@@ -463,8 +463,8 @@ router.post("/account-transactions", async (req, res): Promise<void> => {
           isCustomerReceipt,
           startInvoiceId: isCustomerReceipt ? (invoiceId ?? null) : null,
           // Cash Book's "Start With Invoice" picker is an explicit choice to
-          // settle that bill ahead of older ones — honour it here (the ₹
-          // Record Payment button, by contrast, wants oldest-first).
+          // settle that bill first — honour it here (the ₹ Record Payment
+          // button, by contrast, just wants newest-invoice-first).
           pinStartInvoice: isCustomerReceipt && invoiceId != null,
           description: isVendorPayout ? `Payment made (${mode})` : `Payment received (${mode})`,
         });
@@ -626,11 +626,11 @@ router.patch("/account-transactions/:id", async (req, res): Promise<void> => {
       }
     }
 
-    // If this entry was FIFO-allocated against one or more invoices (only
-    // ever true for a customer receipt), reverse every one of those
-    // allocations using its own stored allocatedAmount — not the raw delta,
-    // since a receipt can span several invoices — then re-run FIFO fresh
-    // with the corrected amount. A plain oldest-first re-run rather than an
+    // If this entry was allocated against one or more invoices (only ever
+    // true for a customer receipt), reverse every one of those allocations
+    // using its own stored allocatedAmount — not the raw delta, since a
+    // receipt can span several invoices — then re-run allocation fresh with
+    // the corrected amount. A plain newest-first re-run rather than an
     // attempt to reproduce the exact original split: this is a rare admin
     // correction, not the common path, and re-deriving from whatever is
     // currently outstanding is simpler and still correct.
@@ -671,8 +671,8 @@ router.patch("/account-transactions/:id", async (req, res): Promise<void> => {
 
     // Customer balance is only meaningful to surface for a customer receipt —
     // read it fresh rather than threading it through the blocks above, since
-    // it may have moved for reasons unrelated to this correction (e.g. a
-    // FIFO re-run) and the entity/ledger block above only fires on delta!=0.
+    // it may have moved for reasons unrelated to this correction (e.g. an
+    // allocation re-run) and the entity/ledger block above only fires on delta!=0.
     let customerBalanceAfter: number | null = null;
     if (existing.direction === "in" && existing.party_entity_id) {
       const partyTypeRes = await client.query(

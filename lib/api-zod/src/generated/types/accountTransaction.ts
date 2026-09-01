@@ -26,7 +26,7 @@ export interface AccountTransaction {
   /** @nullable */
   partyEntityId?: number | null;
   /**
-     * The invoice this "Payment In" started allocation from, if one was pinned — see `allocations` for the full FIFO breakdown, which may span more than this one invoice.
+     * The invoice this "Payment In" started allocation from, if one was pinned — see `allocations` for the full breakdown, which may span more than this one invoice.
      * @nullable
      */
   invoiceId?: number | null;
@@ -35,7 +35,7 @@ export interface AccountTransaction {
      * @nullable
      */
   invoiceNo?: string | null;
-  /** Present on create/update responses for a customer "Payment In" — every invoice this entry was FIFO-allocated against. */
+  /** Present on create/update responses for a customer "Payment In" — every invoice this entry was allocated against. */
   allocations?: PaymentAllocation[];
   /** @nullable */
   notes?: string | null;

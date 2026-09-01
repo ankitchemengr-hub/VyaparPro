@@ -143,6 +143,10 @@ export default function PriceList() {
   const [edits, setEdits] = useState<Record<number, Partial<EditedRow>>>({});
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // Price cells directly typed into (rather than driven by a Margin % edit)
+  // are tracked here as "id:field" keys so they stop being recomputed from
+  // margins until their matching % cell is touched again.
+  const [manualPrice, setManualPrice] = useState<Set<string>>(new Set());
 
   if (!hasRole(["admin"])) return <Redirect to="/" />;
 
@@ -167,6 +171,7 @@ export default function PriceList() {
       queryClient.invalidateQueries({ queryKey: ["products"] });
       setEdits({});
       setSelected(new Set());
+      setManualPrice(new Set());
       toast({ title: `Saved ${data.updated} product${data.updated !== 1 ? "s" : ""}`, description: "Prices updated successfully." });
     },
     onError: (e: Error) => {
@@ -198,36 +203,80 @@ export default function PriceList() {
   // recomputes Wholesale ₹ for that row from its current Purchase ₹, using
   // the margin just typed. Still only stages the value (highlighted,
   // unsaved) until Save is clicked.
-  const MARGIN_TO_PRICE_FIELD: Record<string, keyof EditedRow> = {
+  const MARGIN_TO_PRICE_FIELD: Record<string, "nonGstPrice" | "retailPrice" | "wholesalePrice"> = {
     nonGstMarginPct: "nonGstPrice",
     retailMarginPct: "retailPrice",
     wholesaleMarginPct: "wholesalePrice",
   };
+  type MarginField = "nonGstMarginPct" | "retailMarginPct" | "wholesaleMarginPct";
+  const PRICE_TO_MARGIN_FIELD: Record<"nonGstPrice" | "retailPrice" | "wholesalePrice", MarginField> = {
+    nonGstPrice: "nonGstMarginPct",
+    retailPrice: "retailMarginPct",
+    wholesalePrice: "wholesaleMarginPct",
+  };
+  const MARGIN_DEFAULT: Record<MarginField, number> = {
+    nonGstMarginPct: DEFAULT_NON_GST_MARGIN,
+    retailMarginPct: DEFAULT_RETAIL_MARGIN,
+    wholesaleMarginPct: DEFAULT_WHOLESALE_MARGIN,
+  };
+
+  // Single source of truth for "what should this price cell show right now",
+  // given a specific row's staged edits (purchase price / that column's
+  // margin %). Recomputed fresh every time it's called — nothing here is
+  // ever read from a value stashed away at some earlier keystroke, so the
+  // price can't go stale relative to whatever margin % is on screen.
+  const derivePriceField = useCallback((
+    rowEdits: Partial<EditedRow> | undefined,
+    id: number,
+    field: "nonGstPrice" | "retailPrice" | "wholesalePrice",
+  ): string | undefined => {
+    const original = products.find((p) => p.id === id);
+    if (!original) return undefined;
+    const stagedPurchase = rowEdits?.purchasePrice;
+    const purchasePrice = stagedPurchase !== undefined
+      ? numOrNull(stagedPurchase)
+      : (original.manufacturingCost ?? original.purchasePrice);
+    if (purchasePrice == null || !(purchasePrice > 0)) return undefined;
+
+    const marginField = PRICE_TO_MARGIN_FIELD[field];
+    const stagedMargin = rowEdits?.[marginField];
+    const marginPct = stagedMargin !== undefined
+      ? numOrNull(stagedMargin)
+      : (original[marginField] ?? undefined);
+    const effectiveMargin = marginPct ?? MARGIN_DEFAULT[marginField];
+
+    const margins = {
+      nonGstMarginPct: marginField === "nonGstMarginPct" ? effectiveMargin : DEFAULT_NON_GST_MARGIN,
+      retailMarginPct: marginField === "retailMarginPct" ? effectiveMargin : DEFAULT_RETAIL_MARGIN,
+      wholesaleMarginPct: marginField === "wholesaleMarginPct" ? effectiveMargin : DEFAULT_WHOLESALE_MARGIN,
+    };
+    return marginedPrices(purchasePrice, original.taxRate, margins)[field].toFixed(2);
+  }, [products]);
+
+  const PRICE_FIELDS = new Set<keyof EditedRow>(["nonGstPrice", "retailPrice", "wholesalePrice"]);
 
   const setCell = useCallback((id: number, field: keyof EditedRow, value: string) => {
     setEdits((prev) => {
       const rowEdits: Partial<EditedRow> = { ...(prev[id] ?? {}), [field]: value };
       const priceField = MARGIN_TO_PRICE_FIELD[field];
       if (priceField) {
-        const original = products.find((p) => p.id === id);
-        const stagedPurchase = rowEdits.purchasePrice;
-        const purchasePrice = stagedPurchase !== undefined
-          ? numOrNull(stagedPurchase)
-          : (original?.manufacturingCost ?? original?.purchasePrice);
-        const marginPct = numOrNull(value);
-        if (purchasePrice != null && purchasePrice > 0 && marginPct != null) {
-          const { nonGstPrice, retailPrice, wholesalePrice } = marginedPrices(purchasePrice, original?.taxRate ?? null, {
-            nonGstMarginPct: field === "nonGstMarginPct" ? marginPct : DEFAULT_NON_GST_MARGIN,
-            retailMarginPct: field === "retailMarginPct" ? marginPct : DEFAULT_RETAIL_MARGIN,
-            wholesaleMarginPct: field === "wholesaleMarginPct" ? marginPct : DEFAULT_WHOLESALE_MARGIN,
-          });
-          const computed = { nonGstPrice, retailPrice, wholesalePrice }[priceField as "nonGstPrice" | "retailPrice" | "wholesalePrice"];
-          rowEdits[priceField] = computed.toFixed(2);
-        }
+        const computed = derivePriceField(rowEdits, id, priceField);
+        if (computed !== undefined) rowEdits[priceField] = computed;
       }
       return { ...prev, [id]: rowEdits };
     });
-  }, [products]);
+
+    const priceField = MARGIN_TO_PRICE_FIELD[field];
+    if (priceField) {
+      // Typing a Margin % re-links its price cell to the formula, discarding
+      // any earlier manual override of that specific ₹ box.
+      const key = `${id}:${priceField}`;
+      setManualPrice((prev) => (prev.has(key) ? new Set([...prev].filter((k) => k !== key)) : prev));
+    } else if (PRICE_FIELDS.has(field)) {
+      const key = `${id}:${field}`;
+      setManualPrice((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
+    }
+  }, [derivePriceField]);
 
   const allFilteredSelected = filtered.length > 0 && filtered.every((p) => selected.has(p.id));
 
@@ -257,15 +306,27 @@ export default function PriceList() {
     });
   };
 
+  // What actually gets saved for a margin-linked ₹ field: the live formula
+  // result (never a possibly-stale staged string), unless the user typed
+  // directly into that ₹ box, in which case their exact entry is saved.
+  const priceForSave = (id: number, field: "nonGstPrice" | "retailPrice" | "wholesalePrice"): string | undefined => {
+    const staged = edits[id]?.[field];
+    if (staged === undefined) return undefined;
+    return manualPrice.has(`${id}:${field}`) ? staged : (derivePriceField(edits[id], id, field) ?? staged);
+  };
+
   const handleSaveConfirm = () => {
     const updates = dirtyIds.map((id) => {
       const e = edits[id];
+      const wholesaleVal = priceForSave(id, "wholesalePrice");
+      const retailVal = priceForSave(id, "retailPrice");
+      const nonGstVal = priceForSave(id, "nonGstPrice");
       return {
         id,
         purchasePrice: e?.purchasePrice !== undefined ? numOrNull(e.purchasePrice) : undefined,
-        wholesalePrice: e?.wholesalePrice !== undefined ? numOrNull(e.wholesalePrice) : undefined,
-        retailPrice: e?.retailPrice !== undefined ? numOrNull(e.retailPrice) : undefined,
-        nonGstPrice: e?.nonGstPrice !== undefined ? (e.nonGstPrice.trim() === "" ? null : numOrNull(e.nonGstPrice)) : undefined,
+        wholesalePrice: wholesaleVal !== undefined ? numOrNull(wholesaleVal) : undefined,
+        retailPrice: retailVal !== undefined ? numOrNull(retailVal) : undefined,
+        nonGstPrice: nonGstVal !== undefined ? (nonGstVal.trim() === "" ? null : numOrNull(nonGstVal)) : undefined,
         nonGstMarginPct: e?.nonGstMarginPct !== undefined ? (e.nonGstMarginPct.trim() === "" ? null : numOrNull(e.nonGstMarginPct)) : undefined,
         retailMarginPct: e?.retailMarginPct !== undefined ? (e.retailMarginPct.trim() === "" ? null : numOrNull(e.retailMarginPct)) : undefined,
         wholesaleMarginPct: e?.wholesaleMarginPct !== undefined ? (e.wholesaleMarginPct.trim() === "" ? null : numOrNull(e.wholesaleMarginPct)) : undefined,
@@ -289,6 +350,7 @@ export default function PriceList() {
   const clearEdits = () => {
     setEdits({});
     setSelected(new Set());
+    setManualPrice(new Set());
   };
 
   // Stages Non-GST/Retail/Wholesale for the selected rows (or every filtered
@@ -303,42 +365,47 @@ export default function PriceList() {
     setEdits((prev) => {
       const next = { ...prev };
       targets.forEach((p) => {
-        const stagedPurchase = prev[p.id]?.purchasePrice;
-        const purchasePrice = stagedPurchase !== undefined ? numOrNull(stagedPurchase) : (p.manufacturingCost ?? p.purchasePrice);
-        if (purchasePrice == null || !(purchasePrice > 0)) return;
-
-        const marginOrDefault = (field: "nonGstMarginPct" | "retailMarginPct" | "wholesaleMarginPct", def: number) => {
-          const staged = prev[p.id]?.[field];
-          const val = staged !== undefined ? numOrNull(staged) : (p[field] ?? undefined);
-          return val ?? def;
-        };
-        const margins = {
-          nonGstMarginPct: marginOrDefault("nonGstMarginPct", DEFAULT_NON_GST_MARGIN),
-          retailMarginPct: marginOrDefault("retailMarginPct", DEFAULT_RETAIL_MARGIN),
-          wholesaleMarginPct: marginOrDefault("wholesaleMarginPct", DEFAULT_WHOLESALE_MARGIN),
-        };
-        const { nonGstPrice, retailPrice, wholesalePrice } = marginedPrices(purchasePrice, p.taxRate, margins);
+        const rowEdits = prev[p.id];
+        const nonGstPrice = derivePriceField(rowEdits, p.id, "nonGstPrice");
+        const retailPrice = derivePriceField(rowEdits, p.id, "retailPrice");
+        const wholesalePrice = derivePriceField(rowEdits, p.id, "wholesalePrice");
+        if (nonGstPrice === undefined && retailPrice === undefined && wholesalePrice === undefined) return;
         next[p.id] = {
           ...(next[p.id] ?? {}),
-          nonGstPrice: nonGstPrice.toFixed(2),
-          retailPrice: retailPrice.toFixed(2),
-          wholesalePrice: wholesalePrice.toFixed(2),
+          ...(nonGstPrice !== undefined && { nonGstPrice }),
+          ...(retailPrice !== undefined && { retailPrice }),
+          ...(wholesalePrice !== undefined && { wholesalePrice }),
         };
+      });
+      return next;
+    });
+    // Apply Margin always recomputes straight from the margins — any earlier
+    // manual ₹ overrides on these rows are discarded in favor of the formula.
+    setManualPrice((prev) => {
+      const next = new Set(prev);
+      targets.forEach((p) => {
+        (["nonGstPrice", "retailPrice", "wholesalePrice"] as const).forEach((f) => next.delete(`${p.id}:${f}`));
       });
       return next;
     });
     toast({ title: `Margins applied to ${targets.length} product${targets.length !== 1 ? "s" : ""}`, description: "Review the highlighted prices, then Save." });
   };
 
-  const numericCell = (id: number, field: keyof EditedRow, fallback: number | null, prefix = "₹") => {
+  const numericCell = (
+    id: number,
+    field: keyof EditedRow,
+    fallback: number | null,
+    resolveCurrent?: (staged: string) => string,
+  ) => {
     const original = products.find((p) => p.id === id);
     const origVal = String(original?.[field as keyof Product] ?? fallback ?? "");
-    const current = getVal(id, field, fallback);
-    const isDirty = edits[id]?.[field] !== undefined && current !== origVal;
+    const staged = edits[id]?.[field];
+    const current = staged === undefined ? String(fallback ?? "") : (resolveCurrent ? resolveCurrent(staged) : staged);
+    const isDirty = staged !== undefined && current !== origVal;
 
     return (
       <div className="relative">
-        <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">{prefix}</span>
+        <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">₹</span>
         <Input
           type="number"
           step="0.01"
@@ -350,6 +417,13 @@ export default function PriceList() {
       </div>
     );
   };
+
+  // For a margin-linked ₹ column: once staged, always show the live formula
+  // result rather than whatever string happened to be written at the last
+  // keystroke — unless the user typed directly into that ₹ box, in which
+  // case their manual value sticks until they touch the % cell again.
+  const resolveMarginPrice = (id: number, field: "nonGstPrice" | "retailPrice" | "wholesalePrice") =>
+    (staged: string) => (manualPrice.has(`${id}:${field}`) ? staged : (derivePriceField(edits[id], id, field) ?? staged));
 
   const percentCell = (id: number, field: keyof EditedRow, defaultValue: number) => {
     const original = products.find((p) => p.id === id);
@@ -569,9 +643,9 @@ export default function PriceList() {
                       </div>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-right">{numericCell(p.id, "wholesalePrice", p.wholesalePrice)}</td>
-                  <td className="px-3 py-2 text-right">{numericCell(p.id, "retailPrice", p.retailPrice)}</td>
-                  <td className="px-3 py-2 text-right">{numericCell(p.id, "nonGstPrice", p.nonGstPrice)}</td>
+                  <td className="px-3 py-2 text-right">{numericCell(p.id, "wholesalePrice", p.wholesalePrice, resolveMarginPrice(p.id, "wholesalePrice"))}</td>
+                  <td className="px-3 py-2 text-right">{numericCell(p.id, "retailPrice", p.retailPrice, resolveMarginPrice(p.id, "retailPrice"))}</td>
+                  <td className="px-3 py-2 text-right">{numericCell(p.id, "nonGstPrice", p.nonGstPrice, resolveMarginPrice(p.id, "nonGstPrice"))}</td>
                   <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">
                     {p.updatedAt || p.createdAt
                       ? format(new Date(p.updatedAt ?? p.createdAt!), "dd MMM yyyy")

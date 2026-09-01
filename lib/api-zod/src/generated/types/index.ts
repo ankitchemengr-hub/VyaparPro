@@ -204,6 +204,7 @@ export * from './printSettingsUpdateOrientation';
 export * from './printSettingsUpdatePaperSize';
 export * from './printSettingsUpdateThermalWidth';
 export * from './product';
+export * from './productBilledRate';
 export * from './productInput';
 export * from './productInputPricingBasis';
 export * from './productionReport';

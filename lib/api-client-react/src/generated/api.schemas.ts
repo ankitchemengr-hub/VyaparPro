@@ -936,6 +936,13 @@ export interface ProductRecentPrices {
   lastPurchasePrices: RecentPricePoint[];
 }
 
+export interface ProductBilledRate {
+  /** Rate this customer was last billed for this product */
+  partyRate: number | null;
+  /** Most recent billed sale rate for this product to any customer */
+  lastSaleRate: number | null;
+}
+
 export type StockMovementType = typeof StockMovementType[keyof typeof StockMovementType];
 
 
@@ -1484,7 +1491,7 @@ export const PaymentAllocationStatus = {
 } as const;
 
 /**
- * One invoice a payment was FIFO-allocated against — persisted at the time of allocation, so a receipt reprint always shows this exact historical breakdown.
+ * One invoice a payment was allocated against — persisted at the time of allocation, so a receipt reprint always shows this exact historical breakdown.
  */
 export interface PaymentAllocation {
   invoiceId: number;
@@ -1546,7 +1553,7 @@ export interface Payment {
   accountName?: string | null;
   /** @nullable */
   collectedAt?: string | null;
-  /** Present on create/approve responses — the invoice(s) this payment was FIFO-allocated against. */
+  /** Present on create/approve responses — the invoice(s) this payment was allocated against. */
   allocations?: PaymentAllocation[];
 }
 
@@ -1609,7 +1616,7 @@ export const PaymentInputMode = {
 export interface PaymentInput {
   /** Omit for walk-in / cash sales — server resolves to a Walk-in Customer entity. */
   customerId?: number;
-  /** If set, this payment is applied to that specific invoice first; any remainder spills over FIFO to the customer's other oldest outstanding invoices (see the `allocations` field on the response for the full breakdown). */
+  /** If set, this payment starts from that specific invoice; it gets no priority unless the caller pins it, so the amount is normally applied to the customer's latest outstanding invoice first and works back through older ones (see the `allocations` field on the response for the full breakdown). */
   invoiceId?: number;
   amount: number;
   mode: PaymentInputMode;
@@ -1714,7 +1721,7 @@ export interface AccountTransaction {
   /** @nullable */
   partyEntityId?: number | null;
   /**
-     * The invoice this "Payment In" started allocation from, if one was pinned — see `allocations` for the full FIFO breakdown, which may span more than this one invoice.
+     * The invoice this "Payment In" started allocation from, if one was pinned — see `allocations` for the full breakdown, which may span more than this one invoice.
      * @nullable
      */
   invoiceId?: number | null;
@@ -1723,7 +1730,7 @@ export interface AccountTransaction {
      * @nullable
      */
   invoiceNo?: string | null;
-  /** Present on create/update responses for a customer "Payment In" — every invoice this entry was FIFO-allocated against. */
+  /** Present on create/update responses for a customer "Payment In" — every invoice this entry was allocated against. */
   allocations?: PaymentAllocation[];
   /** @nullable */
   notes?: string | null;
@@ -1776,7 +1783,7 @@ export interface AccountTransactionInput {
   partyName?: string;
   partyMobile?: string;
   partyEntityId?: number;
-  /** Optional — apply this "Payment In" against one specific outstanding invoice for the linked customer first; any remainder spills over FIFO to their other oldest outstanding invoices (see `allocations` on the response). */
+  /** Optional — apply this "Payment In" against one specific outstanding invoice for the linked customer first; any remainder spills over to their other outstanding invoices, latest first (see `allocations` on the response). */
   invoiceId?: number;
   notes?: string;
   /** Admin-only override to let a "Payment Out" push the account balance negative instead of being blocked. */

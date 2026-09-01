@@ -374,7 +374,7 @@ export function CashEntryDialog({
                 <Select value={invoiceId ? String(invoiceId) : "__none__"} onValueChange={(v) => setInvoiceId(v === "__none__" ? null : Number(v))}>
                   <SelectTrigger data-testid="select-entry-invoice"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__none__">None — auto-apply oldest invoices first (FIFO)</SelectItem>
+                    <SelectItem value="__none__">None — auto-apply latest invoices first</SelectItem>
                     {outstandingInvoices.map((inv) => (
                       <SelectItem key={inv.id} value={String(inv.id)}>
                         {inv.invoiceNo} — due ₹{(inv.balanceDue ?? 0).toLocaleString("en-IN")}
@@ -384,8 +384,8 @@ export function CashEntryDialog({
                 </Select>
                 <p className="text-xs text-muted-foreground">
                   {invoiceId
-                    ? "Applied to this invoice first — any remaining amount spills over to the customer's next oldest outstanding invoices."
-                    : "Automatically applies oldest-invoice-first across this customer's outstanding invoices, splitting across several if needed."}
+                    ? "Applied to this invoice first — any remaining amount spills over to the customer's other outstanding invoices, latest first."
+                    : "Automatically applies latest-invoice-first across this customer's outstanding invoices, splitting across several if needed."}
                 </p>
               </div>
             )}

@@ -35,6 +35,6 @@ export interface Payment {
   accountName?: string | null;
   /** @nullable */
   collectedAt?: string | null;
-  /** Present on create/approve responses — the invoice(s) this payment was FIFO-allocated against. */
+  /** Present on create/approve responses — the invoice(s) this payment was allocated against. */
   allocations?: PaymentAllocation[];
 }

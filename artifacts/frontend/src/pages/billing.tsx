@@ -5,6 +5,8 @@ import {
   useListProducts,
   useGetProductRecentPrices,
   getGetProductRecentPricesQueryKey,
+  useGetProductBilledRate,
+  getGetProductBilledRateQueryKey,
   useCreateInvoice,
   useUpdateInvoice,
   useGetInvoice,
@@ -89,6 +91,10 @@ type BillingItem = {
   amount: number;
   litersPerBox: number;
   packagingUnit: string;
+  // Set once the user types in the Rate field — stops the history auto-fill
+  // (this customer's last billed rate, else the last sale rate) from
+  // overwriting a rate they chose by hand.
+  rateEdited?: boolean;
 };
 
 function resolvePack(p: any): number {
@@ -196,6 +202,49 @@ function RecentPriceHint({ productId, onPickRate }: { productId: number; onPickR
       {bought && <div>Bought: {bought}</div>}
     </div>
   );
+}
+
+// Renders nothing — pre-fills a billing line's Rate from history: the rate
+// this customer was last billed for the product (partyRate), else the last
+// billed sale rate to anyone (lastSaleRate). Fires at most once per
+// (product, customer) pair and never once the user has hand-typed a rate on
+// the line (item.rateEdited), so it can't stomp a deliberate choice. Its own
+// component so the per-product query obeys the rules of hooks even as lines
+// are added and removed.
+function BilledRateAutofill({
+  productId,
+  customerId,
+  rateEdited,
+  onRate,
+}: {
+  productId: number;
+  customerId: number | null | undefined;
+  rateEdited: boolean;
+  onRate: (rate: number) => void;
+}) {
+  const enabled = !!productId && !!customerId && !rateEdited;
+  const { data } = useGetProductBilledRate(productId, customerId as number, {
+    query: {
+      queryKey: getGetProductBilledRateQueryKey(productId, customerId as number),
+      enabled,
+      staleTime: 5 * 60 * 1000,
+    },
+  });
+  const appliedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!enabled || !data) return;
+    const key = `${productId}:${customerId}`;
+    if (appliedRef.current === key) return;
+    const rate = data.partyRate ?? data.lastSaleRate;
+    if (rate != null && rate > 0) {
+      appliedRef.current = key;
+      onRate(Number(rate));
+    }
+    // onRate is a fresh closure each render; the appliedRef guard already
+    // stops repeat fires, so it's deliberately left out of the deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, data, productId, customerId]);
+  return null;
 }
 
 function parseSearch(search: string) {
@@ -337,6 +386,9 @@ export default function Billing() {
         productId: it.productId, name: it.productName, unit: it.unit,
         qty: Number(it.qty), qtyMode: "unit" as QtyMode, unitsPerBox: resolvePack(prod),
         rate: Number(it.rate), mrp: Number(it.mrp), taxPct: Number(it.taxPct),
+        // Editing a saved invoice — keep its recorded rates; the history
+        // auto-fill must not silently reprice existing lines.
+        rateEdited: true,
         discountPct: Number(it.discountPct), discountAmt: Number(it.discountAmt),
         amount: Number(it.amount), litersPerBox: Number(prod?.litersPerBox ?? 0) || 0,
         packagingUnit: prod?.packagingUnit?.trim() || "Box",
@@ -427,10 +479,10 @@ export default function Billing() {
     ? (products ?? []).filter((p) => p.name.toLowerCase().includes(productSearch.toLowerCase().trim())).slice(0, 12)
     : (products ?? []).slice(0, 12);
 
-  const updateItem = (idx: number, field: keyof BillingItem, value: any) => {
+  const updateItem = (idx: number, field: keyof BillingItem, value: any, extra?: Partial<BillingItem>) => {
     setItems((prev) => {
       const updated = [...prev];
-      const item = { ...updated[idx], [field]: value };
+      const item = { ...updated[idx], [field]: value, ...extra };
       const base = billedUnits(item) * item.rate;
       const discAmt = item.discountAmt > 0 ? item.discountAmt : (base * item.discountPct / 100);
       const taxable = base - discAmt;
@@ -814,6 +866,18 @@ export default function Billing() {
               )}
             </div>
             <CardContent className="p-0">
+              {/* Pre-fills each line's Rate from this customer's billing
+                  history — headless, one per product so the query respects
+                  the rules of hooks. */}
+              {items.map((item, idx) => (
+                <BilledRateAutofill
+                  key={item.productId}
+                  productId={item.productId}
+                  customerId={customer?.id}
+                  rateEdited={!!item.rateEdited}
+                  onRate={(r) => updateItem(idx, "rate", r)}
+                />
+              ))}
               {/* Desktop / tablet: dense table */}
               <div className="hidden md:block overflow-x-auto max-h-[400px] overflow-y-auto">
                 <Table>
@@ -861,13 +925,14 @@ export default function Billing() {
                           {(() => { const ltr = lineLiters(item); return ltr > 0 ? ltr.toLocaleString(undefined, { maximumFractionDigits: 3 }) : "—"; })()}
                         </TableCell>
                         <TableCell className="text-right">
-                          <Input type="number" min={0} value={item.rate} onChange={(e) => updateItem(idx, "rate", Number(e.target.value))}
+                          <Input type="number" min={0} value={item.rate}
+                            onChange={(e) => updateItem(idx, "rate", Number(e.target.value), { rateEdited: true })}
                             className="w-24 text-right h-7 text-sm disabled:opacity-100 disabled:cursor-not-allowed"
                             data-testid={`input-rate-${idx}`} disabled={user?.role !== "admin"}
                             title={user?.role !== "admin" ? "Only admin can edit rate" : undefined} />
                           <RecentPriceHint
                             productId={item.productId}
-                            onPickRate={user?.role === "admin" ? (r) => updateItem(idx, "rate", r) : undefined}
+                            onPickRate={user?.role === "admin" ? (r) => updateItem(idx, "rate", r, { rateEdited: true }) : undefined}
                           />
                         </TableCell>
                         {isGstInvoiceType(invoiceType) && (
@@ -935,13 +1000,14 @@ export default function Billing() {
                       </div>
                       <div className="space-y-1">
                         <Label className="text-[11px] text-muted-foreground">Rate (₹)</Label>
-                        <Input type="number" min={0} value={item.rate} onChange={(e) => updateItem(idx, "rate", Number(e.target.value))}
+                        <Input type="number" min={0} value={item.rate}
+                          onChange={(e) => updateItem(idx, "rate", Number(e.target.value), { rateEdited: true })}
                           className="h-8 text-sm disabled:opacity-100 disabled:cursor-not-allowed"
                           data-testid={`input-rate-mobile-${idx}`} disabled={user?.role !== "admin"}
                           title={user?.role !== "admin" ? "Only admin can edit rate" : undefined} />
                         <RecentPriceHint
                           productId={item.productId}
-                          onPickRate={user?.role === "admin" ? (r) => updateItem(idx, "rate", r) : undefined}
+                          onPickRate={user?.role === "admin" ? (r) => updateItem(idx, "rate", r, { rateEdited: true }) : undefined}
                         />
                       </div>
                     </div>

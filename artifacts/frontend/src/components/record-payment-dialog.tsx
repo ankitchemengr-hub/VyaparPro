@@ -179,8 +179,8 @@ export function RecordPaymentDialog({
       {
         onSuccess: (payment) => {
           const allocations = payment.allocations ?? [];
-          // FIFO can spill across several invoices, not just the one pinned
-          // (if any) — invalidate every invoice this payment actually
+          // Allocation can spill across several invoices, not just the one
+          // pinned (if any) — invalidate every invoice this payment actually
           // touched, plus the broad list for the Invoices page.
           for (const a of allocations) {
             queryClient.invalidateQueries({ queryKey: getGetInvoiceQueryKey(a.invoiceId) });
@@ -392,11 +392,11 @@ export function RecordPaymentDialog({
               {maxAmount != null ? (
                 <p className="text-xs text-muted-foreground">
                   Balance due: ₹{Number(maxAmount).toLocaleString()}{totalAmount != null ? ` of ₹${Number(totalAmount).toLocaleString()}` : ""}
-                  {" — payment settles this customer's oldest outstanding bills first; whatever's left then applies to this invoice."}
+                  {" — payment settles this customer's latest outstanding bill first, then works back through older ones."}
                 </p>
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  Not tied to a specific invoice — applies FIFO to this customer's oldest outstanding invoices first; any amount beyond what's owed becomes advance credit.
+                  Not tied to a specific invoice — applies to this customer's latest outstanding invoice first, then older ones; any amount beyond what's owed becomes advance credit.
                 </p>
               )}
             </div>

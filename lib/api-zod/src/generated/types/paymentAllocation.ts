@@ -8,7 +8,7 @@
 import type { PaymentAllocationStatus } from './paymentAllocationStatus';
 
 /**
- * One invoice a payment was FIFO-allocated against — persisted at the time of allocation, so a receipt reprint always shows this exact historical breakdown.
+ * One invoice a payment was allocated against — persisted at the time of allocation, so a receipt reprint always shows this exact historical breakdown.
  */
 export interface PaymentAllocation {
   invoiceId: number;

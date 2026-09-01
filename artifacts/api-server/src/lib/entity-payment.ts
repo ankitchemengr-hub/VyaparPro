@@ -27,15 +27,16 @@ export interface AllocatePaymentParams {
   customerId: number;
   amount: number;
   /** The invoice the payment was started from, if any. By default it does
-   *  NOT jump the queue: the customer's older outstanding bills are cleared
-   *  first and this invoice is settled in its natural oldest-first position
+   *  NOT jump the queue: the customer's bills are cleared newest-invoice
+   *  first and this invoice is settled in its natural newest-first position
    *  along with the rest (this is what the ₹ "Record Payment" button wants —
-   *  an old due should always be knocked down before the latest bill). A
-   *  walk-in invoice (customer_id IS NULL) is always applied to directly
-   *  regardless — it isn't part of any customer's FIFO pool. */
+   *  the latest bill is knocked down first, the remainder rolls back to
+   *  older dues). A walk-in invoice (customer_id IS NULL) is always applied
+   *  to directly regardless — it isn't part of any customer's allocation
+   *  pool. */
   startInvoiceId?: number | null;
   /** Set true only when the caller explicitly asked to settle startInvoiceId
-   *  ahead of older bills (Cash Book's "Start With Invoice" picker). Ignored
+   *  ahead of the rest (Cash Book's "Start With Invoice" picker). Ignored
    *  when startInvoiceId is a walk-in invoice (always applied directly). */
   pinStartInvoice?: boolean;
   receiptNo: string;
@@ -43,15 +44,16 @@ export interface AllocatePaymentParams {
 
 const NO_PAY_TYPES_SQL = NO_PAY_INVOICE_TYPES.map((t) => `'${t}'`).join(", ");
 
-// FIFO-allocates `amount` across a customer's outstanding invoices (oldest
-// invoice_date first, cancelled/quotation-like types excluded). The invoice
-// the payment was started from (startInvoiceId) is NOT given priority by
-// default — an older outstanding bill is always cleared before a newer one,
-// so a payment recorded from the latest bill still settles the customer's
-// earlier dues first and only the remainder lands on that latest bill. Two
-// exceptions apply startInvoiceId first: a walk-in invoice (customer_id IS
-// NULL, never in any customer's FIFO pool), and pinStartInvoice = true (the
-// caller explicitly asked to — Cash Book's "Start With Invoice" picker).
+// Allocates `amount` across a customer's outstanding invoices, newest
+// invoice_date first (cancelled/quotation-like types excluded). A payment
+// always settles the customer's most recent bill before older ones, so
+// whatever they hand over lands on the latest invoice and only the
+// remainder rolls back to earlier dues. The invoice the payment was started
+// from (startInvoiceId) is NOT given priority by default — it just takes its
+// place in newest-first order with the rest. Two exceptions apply
+// startInvoiceId first: a walk-in invoice (customer_id IS NULL, never in any
+// customer's allocation pool), and pinStartInvoice = true (the caller
+// explicitly asked to — Cash Book's "Start With Invoice" picker).
 // Persists one payment_allocations row per
 // invoice touched — keyed by receiptNo, this codebase's existing cross-table
 // join key for a payment event (see GET /payment-receipts/:receiptNo) —
@@ -102,15 +104,16 @@ export async function allocatePaymentAcrossInvoices(
     remaining -= allocated;
   }
 
-  // startInvoiceId is settled before the oldest-first pass in two cases:
+  // startInvoiceId is settled before the newest-first pass in two cases:
   //  1. It's a walk-in invoice (customer_id IS NULL — billed with no specific
-  //     customer). Walk-in bills aren't in any customer's FIFO pool, so
-  //     there's nothing older to clear first; the caller named it explicitly.
+  //     customer). Walk-in bills aren't in any customer's allocation pool, so
+  //     the caller named it explicitly and it's applied directly.
   //  2. pinStartInvoice is true — the caller (Cash Book's "Start With
   //     Invoice" picker) deliberately asked to knock this one down first.
-  // Otherwise it stays in the pool and waits its turn in date order, so a
-  // customer's earlier dues are always settled ahead of their latest bill.
-  // The walk-in match must never leak into the FIFO pool: every walk-in
+  // Otherwise it stays in the pool and waits its turn in date order, i.e.
+  // the customer's latest bill is settled first and this one only when its
+  // date comes up.
+  // The walk-in match must never leak into the pool: every walk-in
   // invoice shares customer_id NULL, so without the customer_id = $2 filter
   // there a customer's ordinary payment could spill into an unrelated
   // walk-in sale.
@@ -138,7 +141,7 @@ export async function allocatePaymentAcrossInvoices(
        WHERE company_id = $1 AND customer_id = $2
          AND ($3::int IS NULL OR id != $3)
          AND status != 'cancelled' AND invoice_type NOT IN (${NO_PAY_TYPES_SQL}) AND balance_due > 0
-       ORDER BY invoice_date ASC, id ASC
+       ORDER BY invoice_date DESC, id DESC
        FOR UPDATE`,
       [companyId, customerId, preAllocatedId],
     );
@@ -158,16 +161,16 @@ export interface ApplyEntityPaymentParams {
   mode: string;
   receiptNo: string;
   referenceId: number;
-  /** True for a customer receipt — triggers FIFO invoice allocation (see
-   *  allocatePaymentAcrossInvoices). False/omitted for a vendor payout or an
-   *  unlinked payment, which never touch invoices. */
+  /** True for a customer receipt — triggers newest-first invoice allocation
+   *  (see allocatePaymentAcrossInvoices). False/omitted for a vendor payout
+   *  or an unlinked payment, which never touch invoices. */
   isCustomerReceipt?: boolean;
   /** The invoice the receipt was started from, when isCustomerReceipt —
    *  ignored otherwise. Does not get payment priority unless pinStartInvoice;
-   *  older bills first. See allocatePaymentAcrossInvoices. */
+   *  latest bill first. See allocatePaymentAcrossInvoices. */
   startInvoiceId?: number | null;
-  /** Settle startInvoiceId ahead of older bills (Cash Book "Start With
-   *  Invoice"). Omit for the default oldest-first behaviour. */
+  /** Settle startInvoiceId ahead of the rest (Cash Book "Start With
+   *  Invoice"). Omit for the default newest-first behaviour. */
   pinStartInvoice?: boolean;
   /** Defaults to "Payment received (<mode>)". Pass e.g. "Payment made (<mode>)" for a vendor payout. */
   description?: string;

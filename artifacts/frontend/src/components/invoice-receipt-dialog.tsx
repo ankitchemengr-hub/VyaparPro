@@ -1,8 +1,8 @@
 // Re-opens the receipt(s) an already-paid invoice was settled with — the
 // Invoices list's ₹ action has nothing left to *record* once an invoice is
 // fully paid, but the user still needs to reprint what was already
-// collected. FIFO allocation means an invoice can be paid off across more
-// than one receipt, so this shows a picker when there's more than one.
+// collected. Payment allocation means an invoice can be paid off across
+// more than one receipt, so this shows a picker when there's more than one.
 
 import { useEffect, useState } from "react";
 import {

@@ -10,7 +10,7 @@ import type { PaymentInputMode } from './paymentInputMode';
 export interface PaymentInput {
   /** Omit for walk-in / cash sales — server resolves to a Walk-in Customer entity. */
   customerId?: number;
-  /** If set, this payment is applied to that specific invoice first; any remainder spills over FIFO to the customer's other oldest outstanding invoices (see the `allocations` field on the response for the full breakdown). */
+  /** If set, this payment starts from that specific invoice; it gets no priority unless the caller pins it, so the amount is normally applied to the customer's latest outstanding invoice first and works back through older ones (see the `allocations` field on the response for the full breakdown). */
   invoiceId?: number;
   amount: number;
   mode: PaymentInputMode;

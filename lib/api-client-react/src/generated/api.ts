@@ -128,6 +128,7 @@ import type {
   PrintSettings,
   PrintSettingsUpdate,
   Product,
+  ProductBilledRate,
   ProductInput,
   ProductRecentPrices,
   ProductUpdate,
@@ -2507,6 +2508,88 @@ export function useGetProductRecentPrices<TData = Awaited<ReturnType<typeof getP
 
 
 
+export const getGetProductBilledRateUrl = (id: number,
+    customerId: number,) => {
+
+
+
+
+  return `/api/products/${id}/billed-rate/${customerId}`
+}
+
+/**
+ * @summary Rate billing should pre-fill for this product and customer
+ */
+export const getProductBilledRate = async (id: number,
+    customerId: number, options?: RequestInit): Promise<ProductBilledRate> => {
+
+  return customFetch<ProductBilledRate>(getGetProductBilledRateUrl(id,customerId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetProductBilledRateQueryKey = (id: number,
+    customerId: number,) => {
+    return [
+    `/api/products/${id}/billed-rate/${customerId}`
+    ] as const;
+    }
+
+
+export const getGetProductBilledRateQueryOptions = <TData = Awaited<ReturnType<typeof getProductBilledRate>>, TError = ErrorType<unknown>>(id: number,
+    customerId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProductBilledRate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetProductBilledRateQueryKey(id,customerId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getProductBilledRate>>> = ({ signal }) => getProductBilledRate(id,customerId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined && customerId !== null && customerId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getProductBilledRate>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetProductBilledRateQueryResult = NonNullable<Awaited<ReturnType<typeof getProductBilledRate>>>
+export type GetProductBilledRateQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Rate billing should pre-fill for this product and customer
+ */
+
+export function useGetProductBilledRate<TData = Awaited<ReturnType<typeof getProductBilledRate>>, TError = ErrorType<unknown>>(
+ id: number,
+    customerId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProductBilledRate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetProductBilledRateQueryOptions(id,customerId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getGetProductStockMovementsUrl = (id: number,) => {
 
 
@@ -4524,7 +4607,7 @@ export const getListInvoicePaymentReceiptsUrl = (id: number,) => {
 }
 
 /**
- * @summary Payment receipts allocated against this invoice (FIFO can spill one payment across several invoices, and an invoice can be paid off over several partial payments) — lets the Invoices list re-open/print the receipt for an already-paid invoice instead of only offering "Record Payment".
+ * @summary Payment receipts allocated against this invoice (one payment can spill across several invoices, and an invoice can be paid off over several partial payments) — lets the Invoices list re-open/print the receipt for an already-paid invoice instead of only offering "Record Payment".
  */
 export const listInvoicePaymentReceipts = async (id: number, options?: RequestInit): Promise<InvoicePaymentReceiptSummary[]> => {
 
@@ -4571,7 +4654,7 @@ export type ListInvoicePaymentReceiptsQueryError = ErrorType<unknown>
 
 
 /**
- * @summary Payment receipts allocated against this invoice (FIFO can spill one payment across several invoices, and an invoice can be paid off over several partial payments) — lets the Invoices list re-open/print the receipt for an already-paid invoice instead of only offering "Record Payment".
+ * @summary Payment receipts allocated against this invoice (one payment can spill across several invoices, and an invoice can be paid off over several partial payments) — lets the Invoices list re-open/print the receipt for an already-paid invoice instead of only offering "Record Payment".
  */
 
 export function useListInvoicePaymentReceipts<TData = Awaited<ReturnType<typeof listInvoicePaymentReceipts>>, TError = ErrorType<unknown>>(

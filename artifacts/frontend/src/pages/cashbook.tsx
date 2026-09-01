@@ -447,7 +447,7 @@ function EditCashEntryDialog({
           if (txn?.partyEntityId) {
             queryClient.invalidateQueries({ queryKey: getGetEntityLedgerQueryKey(txn.partyEntityId) });
           }
-          // An amount edit can reverse/re-run the FIFO invoice allocation
+          // An amount edit can reverse/re-run the invoice allocation
           // entirely — the receipt's own allocation breakdown (and every
           // invoice touched) may now be different.
           if (txn?.receiptNo) {

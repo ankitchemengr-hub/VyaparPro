@@ -1,4 +1,4 @@
-// Standalone verification script for FIFO invoice payment allocation.
+// Standalone verification script for newest-invoice-first payment allocation.
 // Run with: pnpm --filter @workspace/scripts run verify-payment-allocation
 //
 // Exercises the real allocatePaymentAcrossInvoices/applyEntityPayment
@@ -13,6 +13,9 @@
 // covers scenarios 1, 2, 3, 5, 6 and 8 as one continuous narrative, plus a
 // 5th invoice added specifically for scenario 4 (overpay a pinned invoice),
 // and a final reprint check for scenario 7.
+//
+// Invoice A is the NEWEST bill and E the oldest, so newest-first allocation
+// walks A → B → C → D → E — the order the scenario assertions below expect.
 
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -49,7 +52,7 @@ async function main() {
     const [{ id: customerId }] = (
       await client.query(
         `INSERT INTO entities (company_id, type, name, mobile, pricing_tier)
-         VALUES ($1, 'customer', 'TEST FIFO Customer', '9999999999', 'retail') RETURNING id`,
+         VALUES ($1, 'customer', 'TEST Alloc Customer', '9999999999', 'retail') RETURNING id`,
         [TEST_COMPANY_ID],
       )
     ).rows;
@@ -59,7 +62,7 @@ async function main() {
         `INSERT INTO invoices
            (company_id, invoice_no, invoice_type, invoice_date, customer_id, customer_name,
             subtotal, grand_total, amount_paid, balance_due, status)
-         VALUES ($1,$2,'gst', NOW() - ($3 || ' days')::interval, $4, 'TEST FIFO Customer',
+         VALUES ($1,$2,'gst', NOW() - ($3 || ' days')::interval, $4, 'TEST Alloc Customer',
                  $5, $5, 0, $5, 'saved')
          RETURNING id`,
         [TEST_COMPANY_ID, no, String(daysAgo), customerId, amount],
@@ -67,11 +70,13 @@ async function main() {
       return res.rows[0].id;
     }
 
-    const invA = await makeInvoice("TEST-INV-A", 20000, 5);
-    const invB = await makeInvoice("TEST-INV-B", 25000, 4);
+    // daysAgo ascending A→E, so A is the newest bill and E the oldest;
+    // newest-first allocation therefore consumes them A → B → C → D → E.
+    const invA = await makeInvoice("TEST-INV-A", 20000, 1);
+    const invB = await makeInvoice("TEST-INV-B", 25000, 2);
     const invC = await makeInvoice("TEST-INV-C", 30000, 3);
-    const invD = await makeInvoice("TEST-INV-D", 25000, 2);
-    const invE = await makeInvoice("TEST-INV-E", 10000, 1); // used only for scenario 4 (overpay spillover)
+    const invD = await makeInvoice("TEST-INV-D", 25000, 4);
+    const invE = await makeInvoice("TEST-INV-E", 10000, 5); // used only for scenario 4 (overpay spillover)
 
     const getInvoice = async (id: number) =>
       (await client.query(`SELECT amount_paid, balance_due FROM invoices WHERE id = $1`, [id])).rows[0];
@@ -195,7 +200,7 @@ async function main() {
 
     // ---- Bonus (not one of the 8, but exercises real code written this
     // session): editing an amount reverses the old allocation(s) and
-    // re-runs FIFO fresh with the corrected amount. ----
+    // re-runs allocation fresh with the corrected amount. ----
     console.log("\nBonus — correcting a multi-invoice payment's amount reverses + re-derives its allocations");
     // Reverse TEST-004's old allocations exactly like the PATCH route does,
     // then re-run with a smaller corrected amount (30000 instead of 45000).

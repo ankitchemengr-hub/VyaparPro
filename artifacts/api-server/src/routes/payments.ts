@@ -58,7 +58,7 @@ function mapPaymentRow(r: any) {
 
 // Shared by the receipt-lookup endpoint for both sources (payments and
 // account_transactions can each mint a receipt): the invoice-wise breakdown
-// this payment was FIFO-allocated against, persisted at the time it was
+// this payment was allocated against, persisted at the time it was
 // applied — never recomputed against current invoice balances, so a reprint
 // stays accurate even after later payments have moved those invoices on —
 // plus the customer's outstanding balance immediately before/after, derived
@@ -318,9 +318,10 @@ router.post("/payments", async (req, res): Promise<void> => {
       }
 
       // If the payment names the invoice it was started from, make sure it's
-      // a real, still-open bill for THIS customer. Note it does NOT get paid
-      // first — the FIFO allocator below always clears the customer's older
-      // outstanding bills ahead of it, and only the remainder lands on it.
+      // a real, still-open bill for THIS customer. Note it gets no special
+      // priority — the allocator below settles the customer's newest bill
+      // first and works back through older ones, so this invoice is paid
+      // only when its date comes up in that order.
       if (parsed.data.invoiceId) {
         // customer_id IS NULL is a walk-in invoice (no specific customer
         // entity selected when it was billed) — this payment always

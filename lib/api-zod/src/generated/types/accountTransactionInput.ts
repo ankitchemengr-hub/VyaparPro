@@ -17,7 +17,7 @@ export interface AccountTransactionInput {
   partyName?: string;
   partyMobile?: string;
   partyEntityId?: number;
-  /** Optional — apply this "Payment In" against one specific outstanding invoice for the linked customer first; any remainder spills over FIFO to their other oldest outstanding invoices (see `allocations` on the response). */
+  /** Optional — apply this "Payment In" against one specific outstanding invoice for the linked customer first; any remainder spills over to their other outstanding invoices, latest first (see `allocations` on the response). */
   invoiceId?: number;
   notes?: string;
   /** Admin-only override to let a "Payment Out" push the account balance negative instead of being blocked. */
