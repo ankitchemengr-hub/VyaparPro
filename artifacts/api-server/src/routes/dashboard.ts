@@ -333,6 +333,42 @@ router.get("/dashboard/liters-sold", async (req, res): Promise<void> => {
   });
 });
 
+// GET /dashboard/liters-balance (admin only) — all-time liters bought vs
+// sold, for the dashboard's purchased-vs-sold ring. Purchased liters aren't
+// stored on purchase_items, so they're derived the same way sales are:
+// qty x liters-per-unit (products.liters_per_box, despite the name).
+router.get("/dashboard/liters-balance", async (req, res): Promise<void> => {
+  const role = (req as any).session?.role;
+  if (role !== "admin") {
+    res.status(403).json({ error: "Admin only" });
+    return;
+  }
+
+  const companyId = getCompanyId(req);
+  const [soldRow, purchasedRow] = await Promise.all([
+    queryOne(
+      `SELECT COALESCE(SUM(ii.total_liters), 0) AS liters
+       FROM invoice_items ii
+       JOIN invoices i ON i.id = ii.invoice_id
+       WHERE i.company_id = $1 AND i.status = 'saved'`,
+      [companyId]
+    ),
+    queryOne(
+      `SELECT COALESCE(SUM(pi.qty * COALESCE(p.liters_per_box, 0)), 0) AS liters
+       FROM purchase_items pi
+       JOIN purchases pu ON pu.id = pi.purchase_id
+       JOIN products p ON p.id = pi.product_id
+       WHERE pi.company_id = $1 AND pu.status <> 'cancelled'`,
+      [companyId]
+    ),
+  ]);
+
+  res.json({
+    purchased: Number(purchasedRow.liters ?? 0),
+    sold: Number(soldRow.liters ?? 0),
+  });
+});
+
 // GET /reports/ledger
 router.get("/reports/ledger", async (req, res): Promise<void> => {
   const role = (req as any).session?.role;
