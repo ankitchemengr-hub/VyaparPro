@@ -192,6 +192,22 @@ export default function Dashboard() {
     })
     .sort((a, b) => b.required - a.required);
 
+  const renderLowStockList = (items: any[], emptyMsg: string) =>
+    items.length === 0 ? (
+      <p className="text-xs text-muted-foreground py-3 text-center">{emptyMsg}</p>
+    ) : (
+      <div className="divide-y rounded-lg border overflow-hidden max-h-72 overflow-y-auto">
+        {items.map((a: any) => (
+          <div key={a.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm" data-testid={`low-stock-item-${a.id}`}>
+            <span className="font-medium truncate">{a.name}</span>
+            <span className="text-xs font-mono shrink-0 text-destructive">
+              {a.currentStock} / {a.minStockThreshold} {a.unit}
+            </span>
+          </div>
+        ))}
+      </div>
+    );
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -550,18 +566,23 @@ export default function Dashboard() {
               {rawMaterialLowStockAlerts.length} raw material — tap to {showLowStock ? "hide" : "view"}
             </p>
             {showLowStock && (productLowStockAlerts.length + rawMaterialLowStockAlerts.length) > 0 && (
-              <div
-                className="mt-3 divide-y rounded-lg border overflow-hidden max-h-72 overflow-y-auto"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {[...productLowStockAlerts, ...rawMaterialLowStockAlerts].map((a: any) => (
-                  <div key={a.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm" data-testid={`low-stock-item-${a.id}`}>
-                    <span className="font-medium truncate">{a.name}</span>
-                    <span className="text-xs font-mono shrink-0 text-destructive">
-                      {a.currentStock} / {a.minStockThreshold} {a.unit}
-                    </span>
-                  </div>
-                ))}
+              <div className="mt-3" onClick={(e) => e.stopPropagation()}>
+                <Tabs defaultValue={productLowStockAlerts.length === 0 ? "raw" : "products"}>
+                  <TabsList className="h-7">
+                    <TabsTrigger value="products" className="text-xs px-2 py-0.5" data-testid="tab-low-stock-products">
+                      Products ({productLowStockAlerts.length})
+                    </TabsTrigger>
+                    <TabsTrigger value="raw" className="text-xs px-2 py-0.5" data-testid="tab-low-stock-raw">
+                      Raw Materials ({rawMaterialLowStockAlerts.length})
+                    </TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="products" className="mt-2">
+                    {renderLowStockList(productLowStockAlerts, "No finished products below threshold")}
+                  </TabsContent>
+                  <TabsContent value="raw" className="mt-2">
+                    {renderLowStockList(rawMaterialLowStockAlerts, "No raw materials below threshold")}
+                  </TabsContent>
+                </Tabs>
               </div>
             )}
           </CardContent>
