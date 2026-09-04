@@ -315,7 +315,7 @@ function ExpenseReportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[92dvh] overflow-y-auto">
+      <DialogContent className="max-w-4xl w-[calc(100vw-1.5rem)] sm:w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-6">
         <DialogHeader className="print:hidden">
           <DialogTitle className="flex items-center gap-2"><FileBarChart className="w-5 h-5" /> Expense Report</DialogTitle>
           <DialogDescription>Filter by date range and category, then print if needed.</DialogDescription>
@@ -329,19 +329,19 @@ function ExpenseReportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           </p>
         </div>
 
-        <div className="flex flex-wrap items-end gap-3 print:hidden">
-          <div>
+        <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-end print:hidden">
+          <div className="space-y-1">
             <Label className="text-xs">From</Label>
-            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-40" data-testid="filter-from" />
+            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-full sm:w-40" data-testid="filter-from" />
           </div>
-          <div>
+          <div className="space-y-1">
             <Label className="text-xs">To</Label>
-            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-40" data-testid="filter-to" />
+            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-full sm:w-40" data-testid="filter-to" />
           </div>
-          <div>
+          <div className="col-span-2 space-y-1">
             <Label className="text-xs">Category</Label>
             <Select value={categoryId} onValueChange={setCategoryId}>
-              <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-48"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All categories</SelectItem>
                 {activeCats.map((c) => (
@@ -350,14 +350,14 @@ function ExpenseReportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
               </SelectContent>
             </Select>
           </div>
-          <Button variant="outline" size="sm" className="ml-auto" onClick={() => window.print()} data-testid="button-print-expense-report">
+          <Button variant="outline" size="sm" className="col-span-2 w-full sm:w-auto sm:ml-auto" onClick={() => window.print()} data-testid="button-print-expense-report">
             <Printer className="w-4 h-4 mr-1.5" /> Print
           </Button>
         </div>
 
         <div className="flex items-center justify-between text-sm border-b pb-2">
           <span className="text-muted-foreground">Total in range</span>
-          <span className="text-xl font-bold font-mono">{formatRs(list?.total ?? 0)}</span>
+          <span className="text-lg sm:text-xl font-bold font-mono">{formatRs(list?.total ?? 0)}</span>
         </div>
 
         <div className="grid gap-4 lg:grid-cols-3">
@@ -371,40 +371,68 @@ function ExpenseReportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
               ) : (list?.items ?? []).length === 0 ? (
                 <div className="p-12 text-center text-muted-foreground">No expenses in this range.</div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead>Paid To</TableHead>
-                      <TableHead>Mode</TableHead>
-                      <TableHead>Notes</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
-                      <TableHead className="print:hidden"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+                <>
+                  {/* Mobile: stacked cards — the 7-column table doesn't fit a phone */}
+                  <ul className="divide-y sm:hidden print:hidden">
                     {(list?.items ?? []).map((e) => (
-                      <TableRow key={e.id} data-testid={`row-expense-${e.id}`}>
-                        <TableCell className="text-xs">{e.date}</TableCell>
-                        <TableCell>
+                      <li key={e.id} className="p-3 space-y-1.5" data-testid={`row-expense-${e.id}`}>
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="font-mono font-semibold">{formatRs(e.amount)}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">{e.date}</span>
+                            <Button size="icon" variant="ghost" className="h-7 w-7 -mr-1" onClick={() => handleDelete(e.id)} data-testid={`button-delete-expense-${e.id}`}>
+                              <Trash2 className="w-4 h-4 text-destructive" />
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5">
                           <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30">{e.categoryName}</Badge>
-                        </TableCell>
-                        <TableCell className="text-sm">{e.paidTo || "—"}</TableCell>
-                        <TableCell>
                           <Badge variant="outline" className={MODE_TONE[e.paymentMode]}>{MODE_LABEL[e.paymentMode]}</Badge>
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">{e.notes || "—"}</TableCell>
-                        <TableCell className="text-right font-mono font-medium">{formatRs(e.amount)}</TableCell>
-                        <TableCell className="print:hidden">
-                          <Button size="sm" variant="ghost" onClick={() => handleDelete(e.id)} data-testid={`button-delete-expense-${e.id}`}>
-                            <Trash2 className="w-4 h-4 text-destructive" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
+                          {e.paidTo && <span className="text-xs text-muted-foreground">→ {e.paidTo}</span>}
+                        </div>
+                        {e.notes && <p className="text-xs text-muted-foreground">{e.notes}</p>}
+                      </li>
                     ))}
-                  </TableBody>
-                </Table>
+                  </ul>
+
+                  {/* Tablet/desktop + print: full table */}
+                  <div className="hidden sm:block print:block overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Category</TableHead>
+                          <TableHead>Paid To</TableHead>
+                          <TableHead>Mode</TableHead>
+                          <TableHead>Notes</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                          <TableHead className="print:hidden"></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {(list?.items ?? []).map((e) => (
+                          <TableRow key={e.id} data-testid={`row-expense-desktop-${e.id}`}>
+                            <TableCell className="text-xs whitespace-nowrap">{e.date}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30">{e.categoryName}</Badge>
+                            </TableCell>
+                            <TableCell className="text-sm">{e.paidTo || "—"}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className={MODE_TONE[e.paymentMode]}>{MODE_LABEL[e.paymentMode]}</Badge>
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">{e.notes || "—"}</TableCell>
+                            <TableCell className="text-right font-mono font-medium whitespace-nowrap">{formatRs(e.amount)}</TableCell>
+                            <TableCell className="print:hidden">
+                              <Button size="sm" variant="ghost" onClick={() => handleDelete(e.id)} data-testid={`button-delete-expense-desktop-${e.id}`}>
+                                <Trash2 className="w-4 h-4 text-destructive" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
