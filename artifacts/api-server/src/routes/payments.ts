@@ -25,6 +25,18 @@ import { applyEntityPayment } from "../lib/entity-payment";
 // self-diagnosing when it happens again for a different edge case later.
 class PaymentValidationError extends Error {}
 
+// Approving/rejecting a pending payment moves money and the customer ledger —
+// restrict it to the admin (or a platform super_admin acting inside a company).
+// The SPA already hides these buttons from other roles; this closes the API.
+function requirePaymentApprover(req: any, res: any): boolean {
+  const role = (req as any).session?.role;
+  if (role !== "admin" && role !== "super_admin") {
+    res.status(403).json({ error: "Forbidden — admin only" });
+    return false;
+  }
+  return true;
+}
+
 // Raw-SQL row → the same camelCase shape Drizzle would return, for the two
 // spots that write the payments row through the manually-managed `client`
 // transaction (see the comment on those call sites for why: `db.insert`/
@@ -48,6 +60,7 @@ function mapPaymentRow(r: any) {
     notes: r.notes,
     approvedById: r.approved_by_id,
     approvedAt: r.approved_at,
+    createdByRole: r.created_by_role,
     accountId: r.account_id,
     collectedAt: r.collected_at,
     collectedById: r.collected_by_id,
@@ -270,14 +283,15 @@ router.post("/payments", async (req, res): Promise<void> => {
       const insertRes = await client.query(
         `INSERT INTO payments
            (company_id, receipt_id, customer_id, customer_name, invoice_id, salesman_id, salesman_name,
-            amount, mode, status, notes, approved_by_id, approved_at, account_id, collected_at, collected_by_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+            amount, mode, status, notes, approved_by_id, approved_at, account_id, collected_at, collected_by_id, created_by_role)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
          RETURNING *`,
         [
           companyId, receiptId, customerId, customer.name, parsed.data.invoiceId ?? null, null, null,
           parsed.data.amount, parsed.data.mode, "approved", parsed.data.notes ?? null,
           session.userId, new Date(), parsed.data.accountId ?? null,
           parsed.data.accountId ? new Date() : null, parsed.data.accountId ? session.userId : null,
+          session.role ?? null,
         ],
       );
       const payment = mapPaymentRow(insertRes.rows[0]);
@@ -388,6 +402,7 @@ router.post("/payments", async (req, res): Promise<void> => {
       mode: parsed.data.mode,
       status: "pending",
       notes: parsed.data.notes ?? null,
+      createdByRole: session?.role ?? null,
     }).returning();
 
     res.status(201).json(formatPayment(payment));
@@ -396,6 +411,7 @@ router.post("/payments", async (req, res): Promise<void> => {
 
 // POST /payments/:id/approve
 router.post("/payments/:id/approve", async (req, res): Promise<void> => {
+  if (!requirePaymentApprover(req, res)) return;
   const params = ApprovePaymentParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -497,6 +513,7 @@ router.post("/payments/:id/approve", async (req, res): Promise<void> => {
 
 // POST /payments/:id/reject
 router.post("/payments/:id/reject", async (req, res): Promise<void> => {
+  if (!requirePaymentApprover(req, res)) return;
   const params = RejectPaymentParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -531,6 +548,7 @@ function formatPayment(p: any) {
     mode: p.mode,
     status: p.status,
     notes: p.notes ?? null,
+    createdByRole: p.createdByRole ?? null,
     createdAt: p.createdAt?.toISOString(),
     approvedAt: p.approvedAt ? p.approvedAt.toISOString() : null,
     accountId: p.accountId ?? null,

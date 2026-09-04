@@ -76,6 +76,7 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
 
   const isSalesman = user?.role === "salesman";
   const isAdmin = user?.role === "admin";
+  const isStore = user?.role === "store";
 
   const { data: staffUsers } = useListUsers({ query: { enabled: isAdmin, queryKey: getListUsersQueryKey() } });
 
@@ -383,7 +384,7 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
-                        {(isAdmin || isSalesman) && invoice.status !== "cancelled" && (() => {
+                        {(isAdmin || isSalesman || isStore) && invoice.status !== "cancelled" && (() => {
                           const ps = getPayStatus(invoice);
                           const isPaid = ps === "paid";
                           return (

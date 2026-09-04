@@ -305,6 +305,11 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
     // Nullable so older rows (created before this column existed) don't
     // break — backfillExpenseAccounts() below fills them in once.
     `ALTER TABLE expenses ADD COLUMN IF NOT EXISTS account_id INTEGER`,
+
+    // ── Payments: role of the user who logged the payment ─────────────────
+    // Distinguishes store-user payments (accepted by the admin from the Cash
+    // Book) from salesman payments (approved on the Payments page).
+    `ALTER TABLE payments ADD COLUMN IF NOT EXISTS created_by_role TEXT`,
   ];
 
   for (const sql of patches) {

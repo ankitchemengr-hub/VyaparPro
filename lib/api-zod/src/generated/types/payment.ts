@@ -26,6 +26,11 @@ export interface Payment {
   status: PaymentStatus;
   /** @nullable */
   notes?: string | null;
+  /**
+     * Role of the user who logged the payment (e.g. "salesman", "store", "admin"). Store-user payments are accepted by the admin from the Cash Book.
+     * @nullable
+     */
+  createdByRole?: string | null;
   createdAt: string;
   /** @nullable */
   approvedAt?: string | null;

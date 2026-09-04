@@ -167,6 +167,7 @@ export * from './listWorkerAttendanceParams';
 export * from './listWorkersParams';
 export * from './listWorkloadCardsParams';
 export * from './listWorkloadCardsStatus';
+export * from './litersBalance';
 export * from './litersSold';
 export * from './loginInput';
 export * from './lookupEntityByMobileParams';

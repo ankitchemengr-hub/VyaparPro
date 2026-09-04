@@ -2321,6 +2321,21 @@ paths:
         "403":
           description: Forbidden
 
+  /dashboard/liters-balance:
+    get:
+      operationId: getLitersBalance
+      tags: [dashboard]
+      summary: Admin-only all-time liters purchased vs sold
+      responses:
+        "200":
+          description: All-time liters purchased and sold
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LitersBalance"
+        "403":
+          description: Forbidden
+
   # REPORTS
   /reports/ledger:
     get:
@@ -4935,6 +4950,9 @@ components:
           enum: [pending, approved, rejected]
         notes:
           type: ["string", "null"]
+        createdByRole:
+          type: ["string", "null"]
+          description: Role of the user who logged the payment (e.g. "salesman", "store", "admin"). Store-user payments are accepted by the admin from the Cash Book.
         createdAt:
           type: string
         approvedAt:
@@ -6095,6 +6113,17 @@ components:
         lastMonth:
           type: number
           description: Total liters sold last calendar month (saved invoices only), for month-over-month growth
+
+    LitersBalance:
+      type: object
+      required: [purchased, sold]
+      properties:
+        purchased:
+          type: number
+          description: All-time liters purchased (non-cancelled purchases), derived as qty x liters-per-unit
+        sold:
+          type: number
+          description: All-time liters sold (saved invoices only)
 
     SalesTrendPoint:
       type: object

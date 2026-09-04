@@ -112,6 +112,7 @@ import type {
   ListWorkerAttendanceParams,
   ListWorkersParams,
   ListWorkloadCardsParams,
+  LitersBalance,
   LitersSold,
   LoginInput,
   LookupEntityByMobileParams,
@@ -8684,6 +8685,83 @@ export function useGetLitersSold<TData = Awaited<ReturnType<typeof getLitersSold
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetLitersSoldQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetLitersBalanceUrl = () => {
+
+
+
+
+  return `/api/dashboard/liters-balance`
+}
+
+/**
+ * @summary Admin-only all-time liters purchased vs sold
+ */
+export const getLitersBalance = async ( options?: RequestInit): Promise<LitersBalance> => {
+
+  return customFetch<LitersBalance>(getGetLitersBalanceUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetLitersBalanceQueryKey = () => {
+    return [
+    `/api/dashboard/liters-balance`
+    ] as const;
+    }
+
+
+export const getGetLitersBalanceQueryOptions = <TData = Awaited<ReturnType<typeof getLitersBalance>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLitersBalance>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetLitersBalanceQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLitersBalance>>> = ({ signal }) => getLitersBalance({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getLitersBalance>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetLitersBalanceQueryResult = NonNullable<Awaited<ReturnType<typeof getLitersBalance>>>
+export type GetLitersBalanceQueryError = ErrorType<void>
+
+
+/**
+ * @summary Admin-only all-time liters purchased vs sold
+ */
+
+export function useGetLitersBalance<TData = Awaited<ReturnType<typeof getLitersBalance>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLitersBalance>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetLitersBalanceQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

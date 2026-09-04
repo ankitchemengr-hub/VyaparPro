@@ -15,6 +15,11 @@ export const paymentsTable = pgTable("payments", {
   invoiceId: integer("invoice_id"),
   salesmanId: integer("salesman_id"),
   salesmanName: text("salesman_name"),
+  // Role of the user who logged this payment (e.g. "salesman", "store",
+  // "admin"). Store-user payments wait for admin acceptance in the Cash Book;
+  // salesman payments keep going through the Payments page approval flow — this
+  // is how the two pending queues are told apart.
+  createdByRole: text("created_by_role"),
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
   mode: text("mode").notNull().default("cash"), // cash, cheque, upi, bank_transfer, other
   status: text("status").notNull().default("pending"), // pending, approved, rejected

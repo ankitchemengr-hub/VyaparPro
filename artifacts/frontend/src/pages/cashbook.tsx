@@ -4,6 +4,9 @@ import {
   useCollectCashFromSalesman,
   useListAccountTransactions,
   useUpdateAccountTransaction,
+  useListPayments,
+  useApprovePayment,
+  useRejectPayment,
   getGetCashbookQueryKey,
   getListPaymentsQueryKey,
   getListAccountsQueryKey,
@@ -14,9 +17,11 @@ import {
   getListKhatabookQueryKey,
   getGetPaymentReceiptQueryKey,
   getListInvoicesQueryKey,
+  getGetInvoiceQueryKey,
   type SalesmanCashSummary,
   type Account,
   type AccountTransaction,
+  type Payment,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -42,6 +47,7 @@ import {
 import {
   Wallet, Smartphone, Landmark, HandCoins, Loader2, ArrowRight, Users,
   ArrowDownCircle, ArrowUpCircle, Printer, BookOpen, Pencil, Search,
+  Clock, CheckCircle2, XCircle,
 } from "lucide-react";
 import { CashEntryDialog } from "@/components/cash-entry-dialog";
 import { CashReceiptDialog } from "@/components/cash-receipt-dialog";
@@ -137,6 +143,8 @@ export default function CashBookPage() {
           </CardContent>
         </Card>
       </div>
+
+      <PendingStorePayments />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
@@ -384,6 +392,166 @@ export default function CashBookPage() {
         onClose={() => setEditTxn(null)}
       />
     </div>
+  );
+}
+
+// Payments a Store user logged from one of their invoices. They sit as
+// "pending" until the admin accepts them here — acceptance applies the
+// customer ledger / invoice balance and hands the cash to the "Cash Pending
+// Collection" queue above, where it's deposited into an account in the normal
+// collect step. Salesman-logged payments are intentionally excluded — those
+// keep going through the Payments page approval flow.
+function PendingStorePayments() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin" || user?.role === "super_admin";
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { data: payments = [], isLoading } = useListPayments(
+    { status: "pending" },
+    { query: { enabled: isAdmin, queryKey: getListPaymentsQueryKey({ status: "pending" }) } },
+  );
+  const approve = useApprovePayment();
+  const reject = useRejectPayment();
+  const [rejecting, setRejecting] = useState<Payment | null>(null);
+
+  const storePending = payments.filter((p) => p.createdByRole === "store");
+
+  const refresh = (p: Payment) => {
+    queryClient.invalidateQueries({ queryKey: getListPaymentsQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getGetCashbookQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getListEntitiesQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() });
+    if (p.invoiceId) queryClient.invalidateQueries({ queryKey: getGetInvoiceQueryKey(p.invoiceId) });
+    if (p.customerId) queryClient.invalidateQueries({ queryKey: getGetEntityLedgerQueryKey(p.customerId) });
+  };
+
+  const handleAccept = (p: Payment) => {
+    approve.mutate({ id: p.id }, {
+      onSuccess: () => {
+        refresh(p);
+        toast({
+          title: "Payment accepted",
+          description: `${formatRs(Number(p.amount))} from ${p.customerName ?? "customer"} — now pending collection into an account.`,
+        });
+      },
+      onError: async (err: any) => {
+        let desc = err?.message ?? "Server error";
+        try {
+          const body = err?.response ? await err.response.json() : null;
+          if (body?.error) desc = String(body.error).slice(0, 300);
+        } catch {}
+        toast({ title: "Could not accept payment", description: desc, variant: "destructive" });
+      },
+    });
+  };
+
+  const handleReject = (p: Payment) => {
+    reject.mutate({ id: p.id }, {
+      onSuccess: () => {
+        refresh(p);
+        setRejecting(null);
+        toast({ title: "Payment rejected", description: `${formatRs(Number(p.amount))} from ${p.customerName ?? "customer"} was not accepted.` });
+      },
+      onError: (err: any) => {
+        toast({ title: "Could not reject payment", description: err?.message ?? "Server error", variant: "destructive" });
+      },
+    });
+  };
+
+  if (!isAdmin) return null;
+  if (!isLoading && storePending.length === 0) return null;
+
+  return (
+    <>
+      <Card className="border-amber-200">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Clock className="w-4 h-4 text-amber-600" /> Store Payments to Accept
+            {storePending.length > 0 && (
+              <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">{storePending.length}</Badge>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {isLoading ? (
+            <div className="p-12 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto text-muted-foreground" /></div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Receipt</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Customer</TableHead>
+                  <TableHead>Logged By</TableHead>
+                  <TableHead>Mode</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead className="text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {storePending.map((p) => (
+                  <TableRow key={p.id} data-testid={`row-store-payment-${p.id}`}>
+                    <TableCell className="font-mono text-xs">{p.receiptId || `REC-${p.id}`}</TableCell>
+                    <TableCell className="text-xs">{new Date(p.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</TableCell>
+                    <TableCell className="font-medium">{p.customerName ?? "—"}</TableCell>
+                    <TableCell className="text-sm">{p.salesmanName ?? "—"}</TableCell>
+                    <TableCell className="text-xs capitalize">{p.mode.replace("_", " ")}</TableCell>
+                    <TableCell className="text-right font-semibold tabular-nums text-green-700">{formatRs(Number(p.amount))}</TableCell>
+                    <TableCell>
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          size="sm"
+                          className="bg-green-600 hover:bg-green-700"
+                          disabled={approve.isPending || reject.isPending}
+                          onClick={() => handleAccept(p)}
+                          data-testid={`button-accept-payment-${p.id}`}
+                        >
+                          <CheckCircle2 className="w-4 h-4 mr-1" /> Accept
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-destructive border-destructive hover:bg-destructive/10"
+                          disabled={approve.isPending || reject.isPending}
+                          onClick={() => setRejecting(p)}
+                          data-testid={`button-reject-payment-${p.id}`}
+                        >
+                          <XCircle className="w-4 h-4 mr-1" /> Reject
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <AlertDialog open={rejecting != null} onOpenChange={(v) => { if (!v && !reject.isPending) setRejecting(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reject this payment?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {rejecting && `${formatRs(Number(rejecting.amount))} from ${rejecting.customerName ?? "the customer"} will be marked rejected. `}
+              The customer's balance and the invoice are left untouched. This can't be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={reject.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); if (rejecting) handleReject(rejecting); }}
+              disabled={reject.isPending}
+              data-testid="button-confirm-reject-payment"
+            >
+              {reject.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Reject Payment
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 

@@ -1784,6 +1784,7 @@ export const ListPaymentsResponseItem = zod.object({
   "mode": zod.enum(['cash', 'cheque', 'upi', 'bank_transfer', 'other']),
   "status": zod.enum(['pending', 'approved', 'rejected']),
   "notes": zod.string().nullish(),
+  "createdByRole": zod.string().nullish().describe('Role of the user who logged the payment (e.g. \"salesman\", \"store\", \"admin\"). Store-user payments are accepted by the admin from the Cash Book.'),
   "createdAt": zod.string(),
   "approvedAt": zod.string().nullish(),
   "accountId": zod.number().nullish(),
@@ -1826,6 +1827,7 @@ export const LogPaymentResponse = zod.object({
   "mode": zod.enum(['cash', 'cheque', 'upi', 'bank_transfer', 'other']),
   "status": zod.enum(['pending', 'approved', 'rejected']),
   "notes": zod.string().nullish(),
+  "createdByRole": zod.string().nullish().describe('Role of the user who logged the payment (e.g. \"salesman\", \"store\", \"admin\"). Store-user payments are accepted by the admin from the Cash Book.'),
   "createdAt": zod.string(),
   "approvedAt": zod.string().nullish(),
   "accountId": zod.number().nullish(),
@@ -1893,6 +1895,7 @@ export const ApprovePaymentResponse = zod.object({
   "mode": zod.enum(['cash', 'cheque', 'upi', 'bank_transfer', 'other']),
   "status": zod.enum(['pending', 'approved', 'rejected']),
   "notes": zod.string().nullish(),
+  "createdByRole": zod.string().nullish().describe('Role of the user who logged the payment (e.g. \"salesman\", \"store\", \"admin\"). Store-user payments are accepted by the admin from the Cash Book.'),
   "createdAt": zod.string(),
   "approvedAt": zod.string().nullish(),
   "accountId": zod.number().nullish(),
@@ -1929,6 +1932,7 @@ export const RejectPaymentResponse = zod.object({
   "mode": zod.enum(['cash', 'cheque', 'upi', 'bank_transfer', 'other']),
   "status": zod.enum(['pending', 'approved', 'rejected']),
   "notes": zod.string().nullish(),
+  "createdByRole": zod.string().nullish().describe('Role of the user who logged the payment (e.g. \"salesman\", \"store\", \"admin\"). Store-user payments are accepted by the admin from the Cash Book.'),
   "createdAt": zod.string(),
   "approvedAt": zod.string().nullish(),
   "accountId": zod.number().nullish(),
@@ -3287,6 +3291,15 @@ export const GetLitersSoldResponse = zod.object({
   "today": zod.number().describe('Total liters sold today (saved invoices only)'),
   "thisMonth": zod.number().describe('Total liters sold this calendar month (saved invoices only)'),
   "lastMonth": zod.number().describe('Total liters sold last calendar month (saved invoices only), for month-over-month growth')
+})
+
+
+/**
+ * @summary Admin-only all-time liters purchased vs sold
+ */
+export const GetLitersBalanceResponse = zod.object({
+  "purchased": zod.number().describe('All-time liters purchased (non-cancelled purchases), derived as qty x liters-per-unit'),
+  "sold": zod.number().describe('All-time liters sold (saved invoices only)')
 })
 
 

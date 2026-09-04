@@ -1544,6 +1544,11 @@ export interface Payment {
   status: PaymentStatus;
   /** @nullable */
   notes?: string | null;
+  /**
+     * Role of the user who logged the payment (e.g. "salesman", "store", "admin"). Store-user payments are accepted by the admin from the Cash Book.
+     * @nullable
+     */
+  createdByRole?: string | null;
   createdAt: string;
   /** @nullable */
   approvedAt?: string | null;
@@ -2522,6 +2527,13 @@ export interface LitersSold {
   thisMonth: number;
   /** Total liters sold last calendar month (saved invoices only), for month-over-month growth */
   lastMonth: number;
+}
+
+export interface LitersBalance {
+  /** All-time liters purchased (non-cancelled purchases), derived as qty x liters-per-unit */
+  purchased: number;
+  /** All-time liters sold (saved invoices only) */
+  sold: number;
 }
 
 export interface SalesTrendPoint {
