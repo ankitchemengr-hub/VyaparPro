@@ -10,6 +10,8 @@ import {
   getGetCapitalSnapshotQueryKey,
   useGetLitersSold,
   getGetLitersSoldQueryKey,
+  useGetLitersBalance,
+  getGetLitersBalanceQueryKey,
   useListWorkloadCards,
   useGetProfitLossReport,
   getGetProfitLossReportQueryKey,
@@ -27,6 +29,60 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+
+// All-time liters flow as a ring: the whole circle is what's been purchased,
+// the blue arc is the share still on hand (purchased − sold), and the empty
+// gap is the share already sold. Figures are shown in thousands of liters.
+function LitersRing({ purchased, sold }: { purchased: number; sold: number }) {
+  const size = 116;
+  const stroke = 12;
+  const r = (size - stroke) / 2;
+  const circ = 2 * Math.PI * r;
+  const onHand = Math.max(0, purchased - sold);
+  const onHandFrac = purchased > 0 ? Math.min(1, onHand / purchased) : 0;
+  const dash = onHandFrac * circ;
+  const k = (n: number) => (n / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 });
+
+  return (
+    <div className="flex items-center gap-5">
+      <div className="relative shrink-0" style={{ width: size, height: size }}>
+        <svg width={size} height={size} className="-rotate-90" role="img" aria-label="Liters purchased versus sold">
+          <circle
+            cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={stroke}
+            stroke="currentColor" className="text-muted-foreground/20"
+          />
+          <circle
+            cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={stroke} strokeLinecap="round"
+            stroke="currentColor"
+            className="text-blue-500 transition-[stroke-dasharray] duration-500"
+            strokeDasharray={`${dash} ${circ - dash}`}
+          />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center leading-none">
+          <span className="text-lg font-bold tabular-nums" data-testid="text-liters-onhand">{k(onHand)}</span>
+          <span className="text-[10px] text-muted-foreground mt-0.5">k L on hand</span>
+        </div>
+      </div>
+      <div className="space-y-2 text-sm">
+        <div className="flex items-center gap-2">
+          <span className="h-2.5 w-2.5 rounded-full bg-blue-500 shrink-0" />
+          <span className="text-muted-foreground">Purchased</span>
+          <span className="ml-auto font-semibold tabular-nums" data-testid="text-liters-purchased">{k(purchased)}k L</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/30 shrink-0" />
+          <span className="text-muted-foreground">Sold</span>
+          <span className="ml-auto font-semibold tabular-nums" data-testid="text-liters-sold-total">{k(sold)}k L</span>
+        </div>
+        <div className="pt-1 text-xs text-muted-foreground border-t">
+          {purchased > 0
+            ? `${Math.round((Math.min(sold, purchased) / purchased) * 100)}% of purchased volume sold`
+            : "No purchase history yet"}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const { user, hasRole } = useAuth();
@@ -51,6 +107,9 @@ export default function Dashboard() {
   });
   const { data: litersSold, isLoading: isLoadingLiters } = useGetLitersSold({
     query: { queryKey: getGetLitersSoldQueryKey(), enabled: isAdmin },
+  });
+  const { data: litersBalance, isLoading: isLoadingLitersBalance } = useGetLitersBalance({
+    query: { queryKey: getGetLitersBalanceQueryKey(), enabled: isAdmin },
   });
 
   // Formats a Date using ITS OWN local fields (year/month/day), not
@@ -344,6 +403,22 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {isAdmin && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Liters Purchased vs Sold</CardTitle>
+            <Droplets className="h-4 w-4 text-blue-500" />
+          </CardHeader>
+          <CardContent>
+            {isLoadingLitersBalance || !litersBalance ? (
+              <div className="h-28 w-full bg-muted rounded animate-pulse" />
+            ) : (
+              <LitersRing purchased={litersBalance.purchased} sold={litersBalance.sold} />
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {isLoadingSummary ? (
