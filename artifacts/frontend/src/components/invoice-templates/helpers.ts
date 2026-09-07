@@ -126,14 +126,12 @@ export function getPrintCss(
   const paper = paperOverride && paperOverride !== "auto" ? paperOverride : meta.paper;
   const orientation = orientationOverride && orientationOverride !== "auto" ? orientationOverride : meta.orientation;
 
-  // Legacy A5-landscape cash-memo, printed on the A4 paper every shop loads.
-  // An A5-landscape sheet (~210 x 148mm) is exactly the TOP HALF of an A4
-  // portrait page, so lay it out there full-width, bottom half left blank —
-  // the classic tear-off bill-book format. The on-screen sheet has generous
-  // padding + decorative blank filler rows that push a normal bill past
-  // ~200mm (onto a 2nd page); print clamps all of that vertical air right
-  // down so a typical bill lands inside the top ~half. Kept at a readable
-  // ~10.5px (not the old 9px squeeze) with a full border box.
+  // Legacy landscape cash-memo, printed full-width on the A4 paper every shop
+  // loads. The horizontal padding is squeezed hard for print so text wraps as
+  // designed, but the sheet now stretches down most of the page
+  // (min-height 235mm) with ~14 real-height blank item rows — a full-page
+  // bill with room to write a large order, not a top-half stub. Kept at a
+  // readable ~10.5px with a full border box.
   if (meta.id === "a5-compact") {
     return `
     @page { size: 210mm 297mm; margin: 5mm; }
@@ -163,7 +161,7 @@ export function getPrintCss(
       }
       .invoice-print-area .invoice-sheet {
         width: 100% !important;
-        min-height: 120mm !important;
+        min-height: 235mm !important;
         font-size: 10.5px !important;
         line-height: 1.18 !important;
         color: #000 !important;
@@ -195,6 +193,13 @@ export function getPrintCss(
       .invoice-print-area .invoice-sheet th {
         padding: 1px 5px !important;
         border-color: #000 !important;
+      }
+      /* Blank filler rows keep real height in print (exempt from the
+         vertical squeeze above) so a short bill still prints ~14 writable
+         item lines instead of a cramped stub. */
+      .invoice-print-area .invoice-sheet tr.invoice-filler-row td {
+        padding-top: 5.5px !important;
+        padding-bottom: 5.5px !important;
       }
       .sidebar, .topbar, .no-print, button, nav { display: none !important; }
     }
