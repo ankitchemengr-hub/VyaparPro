@@ -203,7 +203,7 @@ export function A5CompactTemplate({ invoice, maps, settings, computed }: Templat
             );
           })}
           {settings.fillerRows &&
-            Array.from({ length: Math.max(0, 14 - items.length) }).map((_, i) => (
+            Array.from({ length: Math.max(0, 10 - items.length) }).map((_, i) => (
               <tr key={`pad-${i}`} className="invoice-filler-row">
                 <td className="border-r border-black px-2 py-3">&nbsp;</td>
                 <td className="border-r border-black px-2 py-3"></td>

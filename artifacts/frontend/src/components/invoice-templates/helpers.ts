@@ -126,15 +126,15 @@ export function getPrintCss(
   const paper = paperOverride && paperOverride !== "auto" ? paperOverride : meta.paper;
   const orientation = orientationOverride && orientationOverride !== "auto" ? orientationOverride : meta.orientation;
 
-  // Legacy landscape cash-memo, printed full-width on the A4 paper every shop
-  // loads. The horizontal padding is squeezed hard for print so text wraps as
-  // designed, but the sheet now stretches down most of the page
-  // (min-height 235mm) with ~14 real-height blank item rows — a full-page
-  // bill with room to write a large order, not a top-half stub. Kept at a
-  // readable ~10.5px with a full border box.
+  // Legacy landscape cash-memo sized to one A5 sheet (210 x 148mm) — prints
+  // actual-size whether the tray holds A5 or A4 (on A4 it lands in the top
+  // strip, the classic tear-off bill format). Horizontal padding is squeezed
+  // hard so text wraps as designed; ~10 real-height blank item rows fill the
+  // page for a short bill. A bill with more items than fit simply flows onto
+  // a second A5 page. Kept at a readable ~10.5px with a full border box.
   if (meta.id === "a5-compact") {
     return `
-    @page { size: 210mm 297mm; margin: 5mm; }
+    @page { size: 210mm 148mm; margin: 5mm; }
     @media print {
       html, body {
         background: #fff !important;
@@ -161,9 +161,9 @@ export function getPrintCss(
       }
       .invoice-print-area .invoice-sheet {
         width: 100% !important;
-        min-height: 235mm !important;
+        min-height: 132mm !important;
         font-size: 10.5px !important;
-        line-height: 1.18 !important;
+        line-height: 1.15 !important;
         color: #000 !important;
         background: #fff !important;
         border: 1.5px solid #000 !important;
@@ -194,12 +194,12 @@ export function getPrintCss(
         padding: 1px 5px !important;
         border-color: #000 !important;
       }
-      /* Blank filler rows keep real height in print (exempt from the
-         vertical squeeze above) so a short bill still prints ~14 writable
-         item lines instead of a cramped stub. */
+      /* Blank filler rows keep a small real height in print (exempt from the
+         vertical squeeze above) so a short bill fills the A5 page with a few
+         writable lines instead of leaving a big gap. */
       .invoice-print-area .invoice-sheet tr.invoice-filler-row td {
-        padding-top: 5.5px !important;
-        padding-bottom: 5.5px !important;
+        padding-top: 3.5px !important;
+        padding-bottom: 3.5px !important;
       }
       .sidebar, .topbar, .no-print, button, nav { display: none !important; }
     }
