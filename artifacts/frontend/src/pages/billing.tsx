@@ -287,6 +287,9 @@ export default function Billing() {
   const [salesmanId, setSalesmanId] = useState<number | null>(null);
   const [productSearch, setProductSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  // Which product row in the search dropdown is keyboard-highlighted; Enter
+  // adds it. Reset to the top whenever the query or open state changes.
+  const [searchActiveIdx, setSearchActiveIdx] = useState(0);
   const searchRef = useRef<HTMLDivElement>(null);
   const [savedInvoice, setSavedInvoice] = useState<any>(null);
   const [sharing, setSharing] = useState(false);
@@ -433,10 +436,15 @@ export default function Billing() {
     return () => document.removeEventListener("mousedown", handler);
   }, [searchOpen]);
 
-  // Desktop-only keyboard shortcuts (Ctrl/Cmd+S save, "/" focus product
-  // search, Esc close it) — gated on the same md breakpoint the rest of
-  // this page already uses to distinguish desktop from mobile, so touch
-  // devices never see a "/" keypress hijacked from a text field.
+  const focusProductSearch = () => {
+    setSearchOpen(true);
+    searchRef.current?.querySelector("input")?.focus();
+  };
+
+  // Desktop-only keyboard shortcuts (Ctrl/Cmd+S save; "/" or Alt+N focus the
+  // product search; Alt+C change customer; Esc close the search) — gated on
+  // the same md breakpoint the rest of this page uses, so touch devices never
+  // see a "/" keypress hijacked from a text field.
   useEffect(() => {
     const isDesktop = () => window.matchMedia("(min-width: 768px)").matches;
     const handler = (e: KeyboardEvent) => {
@@ -453,15 +461,33 @@ export default function Billing() {
         setSearchOpen(false);
         return;
       }
+      if (e.altKey && !e.ctrlKey && !e.metaKey && e.code === "KeyN") {
+        e.preventDefault();
+        focusProductSearch();
+        return;
+      }
+      if (e.altKey && !e.ctrlKey && !e.metaKey && e.code === "KeyC") {
+        e.preventDefault();
+        setShowCustomerSearch(true);
+        return;
+      }
       if (e.key === "/" && !isEditable) {
         e.preventDefault();
-        setSearchOpen(true);
-        searchRef.current?.querySelector("input")?.focus();
+        focusProductSearch();
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, []);
+
+  // Keep the dropdown highlight on the first match as the query changes.
+  useEffect(() => { setSearchActiveIdx(0); }, [productSearch, searchOpen]);
+
+  // Keep the keyboard-highlighted product row scrolled into view.
+  useEffect(() => {
+    if (!searchOpen) return;
+    searchRef.current?.querySelector('[data-active="true"]')?.scrollIntoView({ block: "nearest" });
+  }, [searchActiveIdx, searchOpen]);
 
   // ── Guard — after ALL hooks ──
   // Store can create invoices directly (no catalog/order detour), same as
@@ -516,6 +542,34 @@ export default function Billing() {
     }
     setProductSearch("");
     setSearchOpen(false);
+  };
+
+  // Enter in a line-item field jumps to the next editable field (qty → rate →
+  // tax → disc), then the next row, then back to the product search — so a
+  // whole invoice can be typed without touching the mouse. Alt+Delete removes
+  // the row the cursor is in.
+  const lineItemKeyDown = (e: React.KeyboardEvent, rowIdx: number, field: "qty" | "rate" | "tax" | "discount") => {
+    if (e.altKey && e.key === "Delete") {
+      e.preventDefault();
+      removeItem(rowIdx);
+      requestAnimationFrame(() => {
+        const prev = document.querySelector<HTMLInputElement>(`[data-testid="input-qty-${Math.max(0, rowIdx - 1)}"]`);
+        if (rowIdx > 0 && prev) prev.focus();
+        else focusProductSearch();
+      });
+      return;
+    }
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const fields: Array<"qty" | "rate" | "tax" | "discount"> = ["qty", "rate", "tax", "discount"];
+    for (let r = rowIdx; r < items.length; r++) {
+      for (const f of fields) {
+        if (r === rowIdx && fields.indexOf(f) <= fields.indexOf(field)) continue;
+        const el = document.querySelector<HTMLInputElement>(`[data-testid="input-${f}-${r}"]`);
+        if (el && !el.disabled) { el.focus(); el.select(); return; }
+      }
+    }
+    focusProductSearch();
   };
 
   const subtotal = items.reduce((s, i) => {
@@ -837,18 +891,36 @@ export default function Billing() {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                 <Input value={productSearch} onChange={(e) => { setProductSearch(e.target.value); setSearchOpen(true); }}
-                  onFocus={() => setSearchOpen(true)} placeholder="Search product to add..." className="pl-9 pr-14 h-9" data-testid="input-product-search" />
+                  onFocus={() => setSearchOpen(true)} placeholder="Search product to add..." className="pl-9 pr-14 h-9" data-testid="input-product-search"
+                  role="combobox" aria-expanded={searchOpen} aria-controls="product-search-listbox" aria-autocomplete="list"
+                  aria-activedescendant={searchOpen && filteredProducts[searchActiveIdx] ? `product-opt-${searchActiveIdx}` : undefined}
+                  onKeyDown={(e) => {
+                    if (e.key === "ArrowDown") {
+                      e.preventDefault(); setSearchOpen(true);
+                      setSearchActiveIdx((i) => Math.min(i + 1, filteredProducts.length - 1));
+                    } else if (e.key === "ArrowUp") {
+                      e.preventDefault();
+                      setSearchActiveIdx((i) => Math.max(i - 1, 0));
+                    } else if (e.key === "Enter") {
+                      const pick = filteredProducts[searchActiveIdx];
+                      if (pick) { e.preventDefault(); addProduct(pick); setSearchOpen(true); }
+                    }
+                  }} />
                 <kbd className="hidden md:inline-flex absolute right-2.5 top-1/2 -translate-y-1/2 items-center rounded border px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground pointer-events-none">/</kbd>
               </div>
               {searchOpen && (
-                <div className="absolute z-50 left-5 right-5 top-full mt-1 max-h-64 overflow-y-auto rounded-md border bg-popover shadow-lg">
+                <div id="product-search-listbox" role="listbox" className="absolute z-50 left-5 right-5 top-full mt-1 max-h-64 overflow-y-auto rounded-md border bg-popover shadow-lg">
                   {filteredProducts.length === 0 ? (
                     <div className="p-3 text-sm text-muted-foreground">No products found.</div>
-                  ) : filteredProducts.map((p) => {
+                  ) : filteredProducts.map((p, idx) => {
                     const alreadyAdded = items.some((i) => i.productId === p.id);
+                    const active = idx === searchActiveIdx;
                     return (
-                      <button key={p.id} type="button" onClick={() => addProduct(p)}
-                        className="w-full text-left px-3 py-2 hover:bg-accent flex items-center justify-between gap-3 text-sm border-b last:border-0"
+                      <button key={p.id} type="button" id={`product-opt-${idx}`} role="option" aria-selected={active}
+                        data-active={active}
+                        onClick={() => addProduct(p)}
+                        onMouseEnter={() => setSearchActiveIdx(idx)}
+                        className={`w-full text-left px-3 py-2 flex items-center justify-between gap-3 text-sm border-b last:border-0 ${active ? "bg-accent" : "hover:bg-accent"}`}
                         data-testid={`product-option-${p.id}`}>
                         <div className="min-w-0 flex-1">
                           <div className="font-medium truncate">{p.name}</div>
@@ -909,6 +981,7 @@ export default function Billing() {
                             <div className="flex items-center gap-1">
                               <NumberInput min={1} step="any" value={item.qty}
                                 onChange={(v) => updateItem(idx, "qty", v)}
+                                onKeyDown={(e) => lineItemKeyDown(e, idx, "qty")}
                                 className="w-14 text-right h-7 text-sm" data-testid={`input-qty-${idx}`} />
                               <Select value={item.qtyMode} onValueChange={(v) => updateItem(idx, "qtyMode", v as QtyMode)}>
                                 <SelectTrigger className="h-7 w-[58px] px-2 text-xs" data-testid={`select-qty-mode-${idx}`}><SelectValue /></SelectTrigger>
@@ -929,6 +1002,7 @@ export default function Billing() {
                         <TableCell className="text-right">
                           <NumberInput min={0} value={item.rate}
                             onChange={(v) => updateItem(idx, "rate", v, { rateEdited: true })}
+                            onKeyDown={(e) => lineItemKeyDown(e, idx, "rate")}
                             className="w-24 text-right h-7 text-sm disabled:opacity-100 disabled:cursor-not-allowed"
                             data-testid={`input-rate-${idx}`} disabled={user?.role !== "admin"}
                             title={user?.role !== "admin" ? "Only admin can edit rate" : undefined} />
@@ -941,12 +1015,14 @@ export default function Billing() {
                           <TableCell className="text-right">
                             <NumberInput min={0} max={28} value={item.taxPct}
                               onChange={(v) => updateItem(idx, "taxPct", v)}
+                              onKeyDown={(e) => lineItemKeyDown(e, idx, "tax")}
                               className="w-16 text-right h-7 text-sm" data-testid={`input-tax-${idx}`} />
                           </TableCell>
                         )}
                         <TableCell className="text-right">
                           <NumberInput min={0} max={100} value={item.discountPct}
                             onChange={(v) => updateItem(idx, "discountPct", v)}
+                            onKeyDown={(e) => lineItemKeyDown(e, idx, "discount")}
                             className="w-20 text-right h-7 text-sm" data-testid={`input-discount-${idx}`} />
                         </TableCell>
                         <TableCell className="text-right font-bold text-sm">₹{item.amount.toLocaleString()}</TableCell>
@@ -1206,6 +1282,14 @@ function CustomerSearchDialog({
     },
   });
 
+  // Keyboard highlight for the name-results list (Arrow keys + Enter).
+  const [custActiveIdx, setCustActiveIdx] = useState(0);
+  const nameListRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { setCustActiveIdx(0); }, [debouncedName, nameMatches.length]);
+  useEffect(() => {
+    nameListRef.current?.querySelector('[data-active="true"]')?.scrollIntoView({ block: "nearest" });
+  }, [custActiveIdx]);
+
   const createEntity = useCreateEntity();
   const queryClient = useQueryClient();
 
@@ -1278,8 +1362,23 @@ function CustomerSearchDialog({
                   onChange={(e) => setNameInput(e.target.value)}
                   autoComplete="off"
                   data-testid="input-customer-search-name"
+                  role="combobox"
+                  aria-expanded={nameMatches.length > 0}
+                  aria-activedescendant={nameMatches[custActiveIdx] ? `option-customer-${nameMatches[custActiveIdx].id}` : undefined}
+                  onKeyDown={(e) => {
+                    if (e.key === "ArrowDown") {
+                      e.preventDefault();
+                      setCustActiveIdx((i) => Math.min(i + 1, nameMatches.length - 1));
+                    } else if (e.key === "ArrowUp") {
+                      e.preventDefault();
+                      setCustActiveIdx((i) => Math.max(i - 1, 0));
+                    } else if (e.key === "Enter") {
+                      const pick = nameMatches[custActiveIdx];
+                      if (pick) { e.preventDefault(); onSelect(pick); reset(); }
+                    }
+                  }}
                 />
-                <div className="max-h-60 overflow-y-auto space-y-1">
+                <div ref={nameListRef} className="max-h-60 overflow-y-auto space-y-1" role="listbox">
                   {isNameSearching ? (
                     <div className="p-3 text-sm text-muted-foreground flex items-center gap-2">
                       <Loader2 className="w-4 h-4 animate-spin" /> Searching...
@@ -1289,18 +1388,26 @@ function CustomerSearchDialog({
                   ) : nameMatches.length === 0 ? (
                     <div className="p-3 text-sm text-muted-foreground">No matching customer.</div>
                   ) : (
-                    nameMatches.map((c: any) => (
-                      <button
-                        type="button"
-                        key={c.id}
-                        onClick={() => { onSelect(c); reset(); }}
-                        className="w-full text-left px-3 py-2 rounded-md border hover:bg-accent text-sm"
-                        data-testid={`option-customer-${c.id}`}
-                      >
-                        <div className="font-medium">{c.name}</div>
-                        <div className="text-xs text-muted-foreground">{c.mobile}</div>
-                      </button>
-                    ))
+                    nameMatches.map((c: any, idx: number) => {
+                      const active = idx === custActiveIdx;
+                      return (
+                        <button
+                          type="button"
+                          key={c.id}
+                          id={`option-customer-${c.id}`}
+                          role="option"
+                          aria-selected={active}
+                          data-active={active}
+                          onClick={() => { onSelect(c); reset(); }}
+                          onMouseEnter={() => setCustActiveIdx(idx)}
+                          className={`w-full text-left px-3 py-2 rounded-md border text-sm ${active ? "bg-accent border-accent-foreground/20" : "hover:bg-accent"}`}
+                          data-testid={`option-customer-${c.id}`}
+                        >
+                          <div className="font-medium">{c.name}</div>
+                          <div className="text-xs text-muted-foreground">{c.mobile}</div>
+                        </button>
+                      );
+                    })
                   )}
                 </div>
               </div>

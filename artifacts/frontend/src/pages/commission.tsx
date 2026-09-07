@@ -265,8 +265,23 @@ export default function Commission() {
                       const breakdown = r.productBreakdown ?? [];
                       return (
                         <Fragment key={r.salesmanId}>
-                          <TableRow className="cursor-pointer" onClick={() => toggle(r.salesmanId)}>
-                            <TableCell>{breakdown.length > 0 && (isOpen ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />)}</TableCell>
+                          <TableRow
+                            className={breakdown.length > 0 ? "cursor-pointer" : ""}
+                            onClick={breakdown.length > 0 ? () => toggle(r.salesmanId) : undefined}
+                          >
+                            <TableCell>
+                              {breakdown.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); toggle(r.salesmanId); }}
+                                  aria-expanded={isOpen}
+                                  aria-label={isOpen ? `Hide ${r.salesmanName} product breakdown` : `Show ${r.salesmanName} product breakdown`}
+                                  className="inline-flex rounded"
+                                >
+                                  {isOpen ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
+                                </button>
+                              )}
+                            </TableCell>
                             <TableCell className="font-medium">{r.salesmanName}</TableCell>
                             <TableCell className="text-right tabular-nums">{fmtQty(r.liters)}</TableCell>
                             <TableCell className="text-right tabular-nums font-semibold">{fmt(r.commission)}</TableCell>

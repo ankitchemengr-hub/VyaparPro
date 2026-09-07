@@ -1282,7 +1282,13 @@ function ProductDialog({ open, onOpenChange, product, isAdmin }: { open: boolean
                     <p className="text-sm font-medium">Click to upload or drag &amp; drop</p>
                     <p className="text-xs text-muted-foreground mt-0.5">PNG, JPG, WEBP — max 2MB</p>
                   </div>
-                  <Button type="button" size="sm" variant="outline" tabIndex={-1}>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
+                    data-testid="button-browse-image"
+                  >
                     <Upload className="w-3.5 h-3.5 mr-1.5" />
                     Browse File
                   </Button>

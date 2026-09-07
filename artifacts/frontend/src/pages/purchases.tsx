@@ -925,6 +925,24 @@ function NewPurchaseTab({
     }
   };
 
+  // Desktop keyboard shortcuts: Ctrl/Cmd+S saves the bill, Alt+N adds a line.
+  const saveShortcutRef = useRef<() => void>(() => {});
+  saveShortcutRef.current = () => { if (!submitting) onSubmit(); };
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (!window.matchMedia("(min-width: 768px)").matches) return;
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        saveShortcutRef.current();
+      } else if (e.altKey && !e.ctrlKey && !e.metaKey && e.code === "KeyN") {
+        e.preventDefault();
+        setLines((p) => [...p, emptyLine()]);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
   return (
     <div className="space-y-4 max-w-5xl">
       {/* ── Bill Details ── */}

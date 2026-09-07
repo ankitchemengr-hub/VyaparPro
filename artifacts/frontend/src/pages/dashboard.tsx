@@ -3,6 +3,7 @@ import { Redirect } from "wouter";
 import { useAuth } from "@/contexts/use-auth";
 import { homePathForRole } from "@/lib/nav-items";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { clickableProps } from "@/components/ui/clickable";
 import {
   useGetDashboardSummary,
   useGetLowStockAlerts,
@@ -221,7 +222,8 @@ export default function Dashboard() {
         <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
           <Card
             className="border-amber-200 bg-gradient-to-br from-amber-50 to-white dark:from-amber-950/30 dark:to-transparent cursor-pointer select-none"
-            onClick={() => setShowCapitalDetails((v) => !v)}
+            {...clickableProps(() => setShowCapitalDetails((v) => !v))}
+            aria-expanded={showCapitalDetails}
             data-testid="card-capital"
           >
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -268,7 +270,9 @@ export default function Dashboard() {
           </Card>
           <Card
             className={capital?.growthBreakdown ? "cursor-pointer select-none" : ""}
-            onClick={() => capital?.growthBreakdown && setShowGrowthDetails((v) => !v)}
+            {...(capital?.growthBreakdown
+              ? { ...clickableProps(() => setShowGrowthDetails((v) => !v)), "aria-expanded": showGrowthDetails }
+              : {})}
             data-testid="card-growth"
           >
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -510,7 +514,8 @@ export default function Dashboard() {
       <div className="grid gap-4 sm:grid-cols-2">
         <Card
           className="cursor-pointer select-none transition-colors hover:bg-muted/40"
-          onClick={() => setShowWorkload((v) => !v)}
+          {...clickableProps(() => setShowWorkload((v) => !v))}
+          aria-expanded={showWorkload}
           data-testid="card-manufacturing-workload"
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -547,7 +552,8 @@ export default function Dashboard() {
 
         <Card
           className="cursor-pointer select-none transition-colors hover:bg-muted/40"
-          onClick={() => setShowLowStock((v) => !v)}
+          {...clickableProps(() => setShowLowStock((v) => !v))}
+          aria-expanded={showLowStock}
           data-testid="card-low-stock-detail"
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
