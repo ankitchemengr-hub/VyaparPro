@@ -3,8 +3,11 @@ import { Sidebar } from "./sidebar";
 import { CompanySwitcher } from "./company-switcher";
 import { useAuth } from "@/contexts/use-auth";
 import { Redirect, useLocation } from "wouter";
-import { Menu, X } from "lucide-react";
+import { Menu, X, Search, Keyboard } from "lucide-react";
 import { NewActivityWatcher } from "../new-activity-watcher";
+import { CommandPalette } from "../command-palette";
+import { ShortcutsHelpDialog } from "../shortcuts-help-dialog";
+import { useGlobalShortcuts } from "@/lib/keyboard/use-global-shortcuts";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -18,7 +21,14 @@ function getInitialOpen() {
 export function AppLayout({ children }: AppLayoutProps) {
   const { isAuthenticated, isLoading, user } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(getInitialOpen);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [location] = useLocation();
+
+  useGlobalShortcuts({
+    onTogglePalette: () => setPaletteOpen((v) => !v),
+    onOpenHelp: () => setHelpOpen(true),
+  });
 
   // Close drawer on route change (mobile UX)
   useEffect(() => {
@@ -26,6 +36,16 @@ export function AppLayout({ children }: AppLayoutProps) {
       setSidebarOpen(false);
     }
   }, [location]);
+
+  // Esc closes the mobile drawer (desktop keeps it pinned open).
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && window.innerWidth < 1024) setSidebarOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [sidebarOpen]);
 
   if (isLoading) {
     return <div className="h-screen w-full flex items-center justify-center bg-background">Loading...</div>;
@@ -64,7 +84,28 @@ export function AppLayout({ children }: AppLayoutProps) {
             {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
           <div className="font-semibold tracking-tight text-sm sm:text-base">VIPRO ERP</div>
-          <div className="ml-auto flex items-center gap-3">
+          <div className="ml-auto flex items-center gap-2 sm:gap-3">
+            <button
+              type="button"
+              onClick={() => setPaletteOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs text-muted-foreground hover:bg-muted transition-colors"
+              data-testid="button-command-palette"
+              aria-label="Open command palette"
+            >
+              <Search className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Search</span>
+              <kbd className="hidden sm:inline rounded border bg-background px-1 font-mono text-[10px] leading-none">Ctrl K</kbd>
+            </button>
+            <button
+              type="button"
+              onClick={() => setHelpOpen(true)}
+              className="hidden sm:inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted transition-colors"
+              data-testid="button-shortcuts-help"
+              aria-label="Keyboard shortcuts"
+              title="Keyboard shortcuts (?)"
+            >
+              <Keyboard className="w-4 h-4" />
+            </button>
             <CompanySwitcher />
             <div className="text-xs text-muted-foreground hidden sm:block">
               {user?.name} · <span className="capitalize">{user?.role}</span>
@@ -72,10 +113,13 @@ export function AppLayout({ children }: AppLayoutProps) {
           </div>
         </header>
 
-        <main className="flex-1 p-6 overflow-x-hidden">
+        <main id="main-content" tabIndex={-1} className="flex-1 p-6 overflow-x-hidden outline-none">
           {children}
         </main>
       </div>
+
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+      <ShortcutsHelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
     </div>
   );
 }
