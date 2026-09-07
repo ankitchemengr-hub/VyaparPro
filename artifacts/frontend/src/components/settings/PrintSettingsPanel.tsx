@@ -14,6 +14,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -175,13 +176,13 @@ export function PrintSettingsPanel() {
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="copies">Copies</Label>
-                  <Input
+                  <NumberInput
                     id="copies"
-                    type="number"
                     min={1}
                     max={5}
+                    emptyValue={1}
                     value={form.copies}
-                    onChange={(e) => set("copies", Math.max(1, Number(e.target.value) || 1))}
+                    onChange={(v) => set("copies", Math.max(1, v || 1))}
                     data-testid="input-copies"
                   />
                 </div>

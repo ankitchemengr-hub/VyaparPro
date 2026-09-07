@@ -27,6 +27,7 @@ import { FALLBACK_PRINT_SETTINGS } from "@/components/invoice-templates/defaults
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -45,6 +46,7 @@ import {
   ArrowLeft, Search, Plus, Pencil, UserPlus, Share2, History,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { clickableProps } from "@/components/ui/clickable";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { shareInvoiceImage } from "@/lib/share-invoice";
@@ -160,7 +162,7 @@ function RecentPriceHint({ productId, onPickRate }: { productId: number; onPickR
               <tr
                 key={i}
                 className={`border-b border-dashed last:border-0 ${onPickRate ? "hover:bg-accent cursor-pointer" : ""}`}
-                onClick={onPickRate ? () => onPickRate(Number(r.rate)) : undefined}
+                {...(onPickRate ? clickableProps(() => onPickRate(Number(r.rate))) : {})}
                 title={onPickRate ? "Use this rate" : undefined}
               >
                 <td className="px-2 py-1 whitespace-nowrap">{fmtHistDate(r.date)}</td>
@@ -808,7 +810,7 @@ export default function Billing() {
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Freight (₹)</Label>
-                  <Input type="number" min={0} value={freight} onChange={(e) => setFreight(Number(e.target.value))} data-testid="input-freight" />
+                  <NumberInput min={0} value={freight} onChange={(v) => setFreight(v)} data-testid="input-freight" />
                 </div>
                 {user?.role === "admin" && (
                   <div className="space-y-1">
@@ -905,8 +907,8 @@ export default function Billing() {
                         <TableCell className="text-right">
                           <div className="flex flex-col items-end gap-1">
                             <div className="flex items-center gap-1">
-                              <Input type="number" min={1} step="any" value={item.qty}
-                                onChange={(e) => updateItem(idx, "qty", Number(e.target.value))}
+                              <NumberInput min={1} step="any" value={item.qty}
+                                onChange={(v) => updateItem(idx, "qty", v)}
                                 className="w-14 text-right h-7 text-sm" data-testid={`input-qty-${idx}`} />
                               <Select value={item.qtyMode} onValueChange={(v) => updateItem(idx, "qtyMode", v as QtyMode)}>
                                 <SelectTrigger className="h-7 w-[58px] px-2 text-xs" data-testid={`select-qty-mode-${idx}`}><SelectValue /></SelectTrigger>
@@ -925,8 +927,8 @@ export default function Billing() {
                           {(() => { const ltr = lineLiters(item); return ltr > 0 ? ltr.toLocaleString(undefined, { maximumFractionDigits: 3 }) : "—"; })()}
                         </TableCell>
                         <TableCell className="text-right">
-                          <Input type="number" min={0} value={item.rate}
-                            onChange={(e) => updateItem(idx, "rate", Number(e.target.value), { rateEdited: true })}
+                          <NumberInput min={0} value={item.rate}
+                            onChange={(v) => updateItem(idx, "rate", v, { rateEdited: true })}
                             className="w-24 text-right h-7 text-sm disabled:opacity-100 disabled:cursor-not-allowed"
                             data-testid={`input-rate-${idx}`} disabled={user?.role !== "admin"}
                             title={user?.role !== "admin" ? "Only admin can edit rate" : undefined} />
@@ -937,14 +939,14 @@ export default function Billing() {
                         </TableCell>
                         {isGstInvoiceType(invoiceType) && (
                           <TableCell className="text-right">
-                            <Input type="number" min={0} max={28} value={item.taxPct}
-                              onChange={(e) => updateItem(idx, "taxPct", Number(e.target.value))}
+                            <NumberInput min={0} max={28} value={item.taxPct}
+                              onChange={(v) => updateItem(idx, "taxPct", v)}
                               className="w-16 text-right h-7 text-sm" data-testid={`input-tax-${idx}`} />
                           </TableCell>
                         )}
                         <TableCell className="text-right">
-                          <Input type="number" min={0} max={100} value={item.discountPct}
-                            onChange={(e) => updateItem(idx, "discountPct", Number(e.target.value))}
+                          <NumberInput min={0} max={100} value={item.discountPct}
+                            onChange={(v) => updateItem(idx, "discountPct", v)}
                             className="w-20 text-right h-7 text-sm" data-testid={`input-discount-${idx}`} />
                         </TableCell>
                         <TableCell className="text-right font-bold text-sm">₹{item.amount.toLocaleString()}</TableCell>
@@ -983,8 +985,8 @@ export default function Billing() {
                       <div className="space-y-1">
                         <Label className="text-[11px] text-muted-foreground">Qty</Label>
                         <div className="flex items-center gap-1">
-                          <Input type="number" min={1} step="any" value={item.qty}
-                            onChange={(e) => updateItem(idx, "qty", Number(e.target.value))}
+                          <NumberInput min={1} step="any" value={item.qty}
+                            onChange={(v) => updateItem(idx, "qty", v)}
                             className="h-8 text-sm" data-testid={`input-qty-mobile-${idx}`} />
                           <Select value={item.qtyMode} onValueChange={(v) => updateItem(idx, "qtyMode", v as QtyMode)}>
                             <SelectTrigger className="h-8 w-[62px] px-2 text-xs shrink-0" data-testid={`select-qty-mode-mobile-${idx}`}><SelectValue /></SelectTrigger>
@@ -1000,8 +1002,8 @@ export default function Billing() {
                       </div>
                       <div className="space-y-1">
                         <Label className="text-[11px] text-muted-foreground">Rate (₹)</Label>
-                        <Input type="number" min={0} value={item.rate}
-                          onChange={(e) => updateItem(idx, "rate", Number(e.target.value), { rateEdited: true })}
+                        <NumberInput min={0} value={item.rate}
+                          onChange={(v) => updateItem(idx, "rate", v, { rateEdited: true })}
                           className="h-8 text-sm disabled:opacity-100 disabled:cursor-not-allowed"
                           data-testid={`input-rate-mobile-${idx}`} disabled={user?.role !== "admin"}
                           title={user?.role !== "admin" ? "Only admin can edit rate" : undefined} />
@@ -1016,15 +1018,15 @@ export default function Billing() {
                       {isGstInvoiceType(invoiceType) && (
                         <div className="space-y-1">
                           <Label className="text-[11px] text-muted-foreground">Tax%</Label>
-                          <Input type="number" min={0} max={28} value={item.taxPct}
-                            onChange={(e) => updateItem(idx, "taxPct", Number(e.target.value))}
+                          <NumberInput min={0} max={28} value={item.taxPct}
+                            onChange={(v) => updateItem(idx, "taxPct", v)}
                             className="h-8 text-sm" data-testid={`input-tax-mobile-${idx}`} />
                         </div>
                       )}
                       <div className="space-y-1">
                         <Label className="text-[11px] text-muted-foreground">Disc%</Label>
-                        <Input type="number" min={0} max={100} value={item.discountPct}
-                          onChange={(e) => updateItem(idx, "discountPct", Number(e.target.value))}
+                        <NumberInput min={0} max={100} value={item.discountPct}
+                          onChange={(v) => updateItem(idx, "discountPct", v)}
                           className="h-8 text-sm" data-testid={`input-discount-mobile-${idx}`} />
                       </div>
                       <div className="space-y-1">

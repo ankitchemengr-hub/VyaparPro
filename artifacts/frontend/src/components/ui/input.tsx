@@ -3,7 +3,8 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 
 const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
-  ({ className, type, ...props }, ref) => {
+  ({ className, type, onFocus, onWheel, ...props }, ref) => {
+    const isNumber = type === "number"
     return (
       <input
         type={type}
@@ -12,6 +13,21 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
           className
         )}
         ref={ref}
+        onFocus={(e) => {
+          // Number fields: select the current contents so the first keypress
+          // replaces the value instead of appending to a leftover "0" that
+          // otherwise can only be cleared with arrow keys + backspace.
+          if (isNumber) e.currentTarget.select()
+          onFocus?.(e)
+        }}
+        onWheel={(e) => {
+          // Stop the mouse wheel from silently changing a focused number field
+          // while the user is only trying to scroll the page.
+          if (isNumber && document.activeElement === e.currentTarget) {
+            e.currentTarget.blur()
+          }
+          onWheel?.(e)
+        }}
         {...props}
       />
     )

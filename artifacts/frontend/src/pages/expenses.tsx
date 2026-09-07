@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -201,7 +202,7 @@ function ExpenseDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b
             </div>
             <div>
               <Label>Amount (₹) *</Label>
-              <Input type="number" min="0" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: Number(e.target.value) })} data-testid="input-expense-amount" />
+              <NumberInput min="0" step="0.01" value={form.amount} onChange={(v) => setForm({ ...form, amount: v })} data-testid="input-expense-amount" />
             </div>
           </div>
           <div>

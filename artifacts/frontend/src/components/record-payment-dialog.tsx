@@ -20,6 +20,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -380,13 +381,12 @@ export function RecordPaymentDialog({
 
             <div className="space-y-1.5">
               <Label htmlFor="pay-amount">Amount Received (₹)</Label>
-              <Input
+              <NumberInput
                 id="pay-amount"
-                type="number"
                 min={0}
                 step="any"
                 value={amount}
-                onChange={(e) => setAmount(Number(e.target.value))}
+                onChange={(v) => setAmount(v)}
                 data-testid="input-pay-amount"
               />
               {maxAmount != null ? (

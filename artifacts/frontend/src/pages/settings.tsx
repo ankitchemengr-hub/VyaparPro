@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -190,12 +191,11 @@ function SequencesTab() {
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Next Number</Label>
-                  <Input
-                    type="number"
+                  <NumberInput
                     min={1}
                     className="h-8 w-28"
                     value={edit.nextNumber}
-                    onChange={(e) => handleChange(s.seriesType, "nextNumber", Number(e.target.value))}
+                    onChange={(v) => handleChange(s.seriesType, "nextNumber", v)}
                   />
                 </div>
                 <div className="flex items-center justify-between">

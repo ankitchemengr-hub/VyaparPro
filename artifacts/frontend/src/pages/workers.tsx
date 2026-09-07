@@ -19,6 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -270,7 +271,7 @@ function WorkerDialog({ open, onOpenChange, worker }: { open: boolean; onOpenCha
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>Daily Wage (₹) *</Label>
-              <Input type="number" min="0" step="1" value={form.dailyWage} onChange={(e) => setForm({ ...form, dailyWage: Number(e.target.value) })} data-testid="input-daily-wage" />
+              <NumberInput min="0" step="1" value={form.dailyWage} onChange={(v) => setForm({ ...form, dailyWage: v })} data-testid="input-daily-wage" />
             </div>
             <div>
               <Label>Joined On</Label>
@@ -486,7 +487,7 @@ function LedgerDialog({ worker, onClose }: { worker: Worker | null; onClose: () 
               <div className="grid grid-cols-12 gap-2 items-end">
                 <div className="col-span-3">
                   <Label className="text-xs">Amount</Label>
-                  <Input type="number" min="0" value={payAmount} onChange={(e) => setPayAmount(Number(e.target.value))} data-testid="input-pay-amount" />
+                  <NumberInput min="0" value={payAmount} onChange={(v) => setPayAmount(v)} data-testid="input-pay-amount" />
                 </div>
                 <div className="col-span-3">
                   <Label className="text-xs">Paid On</Label>
