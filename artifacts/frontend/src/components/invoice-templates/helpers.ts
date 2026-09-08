@@ -209,7 +209,7 @@ export function getPrintCss(
         border-color: #000 !important;
       }
       /* Blank filler rows keep a small real height in print (exempt from the
-         vertical squeeze above) so a short bill fills the A5 page with a few
+         vertical squeeze above) so a short bill fills the sheet with a few
          writable lines instead of leaving a big gap. */
       .invoice-print-area .invoice-sheet tr.invoice-filler-row td {
         padding-top: 3.5px !important;
