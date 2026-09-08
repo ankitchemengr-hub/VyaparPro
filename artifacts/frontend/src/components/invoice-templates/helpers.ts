@@ -133,7 +133,7 @@ export function getPrintCss(
   // padding + decorative blank filler rows that push a normal bill past
   // ~200mm (onto a 2nd page); print clamps all of that vertical air right
   // down so a typical bill lands inside the top ~half. Kept at a readable
-  // ~10.5px (not the old 9px squeeze) with a full border box.
+  // 12px with a full border box.
   if (meta.id === "a5-compact") {
     return `
     @page { size: 210mm 297mm; margin: 5mm; }
@@ -163,9 +163,9 @@ export function getPrintCss(
       }
       .invoice-print-area .invoice-sheet {
         width: 100% !important;
-        min-height: 120mm !important;
-        font-size: 10.5px !important;
-        line-height: 1.18 !important;
+        min-height: 145mm !important;
+        font-size: 12px !important;
+        line-height: 1.25 !important;
         color: #000 !important;
         background: #fff !important;
         border: 1.5px solid #000 !important;
