@@ -71,11 +71,11 @@ export function ItemsTable({ computed, settings, maps, theme, grandTotal }: Item
           <th className={`${cell} w-10`}>#</th>
           <th className={cell}>PARTICULARS</th>
           {showHsn && <th className={`${cell} w-20`}>HSN</th>}
-          <th className={`${cell} w-14 text-right`}>QTY</th>
           <th className={`${cell} w-12`}>UNIT</th>
+          <th className={`${cell} w-14 text-right`}>QTY</th>
+          <th className={`${cell} w-20 text-right`}>RATE</th>
           {showLtr && <th className={`${cell} w-16 text-right`}>LTR/KGS</th>}
           {showBox && <th className={`${cell} w-16 text-right`}>BOX</th>}
-          <th className={`${cell} w-20 text-right`}>RATE</th>
           {hasAnyDisc && <th className={`${cell} w-16 text-right`}>DISC.</th>}
           {isGst && <th className={`${cell} w-12 text-right`}>GST</th>}
           <th className={`${cell} w-24 text-right`}>AMOUNT</th>
@@ -97,11 +97,11 @@ export function ItemsTable({ computed, settings, maps, theme, grandTotal }: Item
               <td className={`${cell} align-top`}>{idx + 1}</td>
               <td className={`${cell} align-top font-medium`}>{item.productName}</td>
               {showHsn && <td className={`${cell} align-top font-mono`}>{item.hsnCode ?? ""}</td>}
-              <td className={`${cell} align-top text-right`}>{num(item.qty, 0)}</td>
               <td className={`${cell} align-top uppercase`}>{item.unit}</td>
+              <td className={`${cell} align-top text-right`}>{num(item.qty, 0)}</td>
+              <td className={`${cell} align-top text-right`}>₹ {inr(item.rate)}</td>
               {showLtr && <td className={`${cell} align-top text-right`}>{ltr > 0 ? num(ltr, 3) : ""}</td>}
               {showBox && <td className={`${cell} align-top text-right`}>{boxCount > 0 ? num(boxCount, 2) : ""}</td>}
-              <td className={`${cell} align-top text-right`}>₹ {inr(item.rate)}</td>
               {hasAnyDisc && <td className={`${cell} align-top text-right`}>{disc}</td>}
               {isGst && <td className={`${cell} align-top text-right`}>{Number(item.taxPct) || 0}%</td>}
               <td className={`${cell} align-top text-right font-semibold`}>₹ {inr(item.amount)}</td>
@@ -127,11 +127,11 @@ export function ItemsTable({ computed, settings, maps, theme, grandTotal }: Item
           <td className={cell}></td>
           <td className={`${cell} text-right`}>Total</td>
           {showHsn && <td className={cell}></td>}
+          <td className={cell}></td>
           <td className={`${cell} text-right`} data-testid="text-total-qty">{num(totalQty, 0)}</td>
           <td className={cell}></td>
           {showLtr && <td className={`${cell} text-right`} data-testid="text-total-ltr">{totalLtr > 0 ? num(totalLtr, 3) : ""}</td>}
           {showBox && <td className={`${cell} text-right`} data-testid="text-total-box">{totalBox > 0 ? num(totalBox, 2) : ""}</td>}
-          <td className={cell}></td>
           {hasAnyDisc && <td className={cell}></td>}
           {isGst && <td className={cell}></td>}
           <td className={`${cell} text-right`}>₹ {inr(grandTotal)}</td>

@@ -135,11 +135,11 @@ export function A5CompactTemplate({ invoice, maps, settings, computed }: Templat
             <th className="border-r border-black px-2 py-1 text-left w-10">SNo</th>
             <th className="border-r border-black px-2 py-1 text-left">PARTICULARS</th>
             {isGst && <th className="border-r border-black px-2 py-1 text-left w-20">HSN</th>}
-            <th className="border-r border-black px-2 py-1 text-right w-14">QTY</th>
             <th className="border-r border-black px-2 py-1 text-left w-12">Unit</th>
+            <th className="border-r border-black px-2 py-1 text-right w-14">QTY</th>
+            <th className="border-r border-black px-2 py-1 text-right w-20">RATE</th>
             <th className="border-r border-black px-2 py-1 text-right w-16">LTR/KGS</th>
             <th className="border-r border-black px-2 py-1 text-right w-16">BOX</th>
-            <th className="border-r border-black px-2 py-1 text-right w-20">RATE</th>
             {hasAnyDisc && <th className="border-r border-black px-2 py-1 text-right w-16">DISC.</th>}
             {isGst && <th className="border-r border-black px-2 py-1 text-right w-12">GST</th>}
             <th className="px-2 py-1 text-right w-24">AMOUNT</th>
@@ -175,18 +175,18 @@ export function A5CompactTemplate({ invoice, maps, settings, computed }: Templat
                     {item.hsnCode ?? ""}
                   </td>
                 )}
+                <td className="border-r border-black px-2 py-1 align-top uppercase">{item.unit}</td>
                 <td className="border-r border-black px-2 py-1 text-right align-top">
                   {num(item.qty, 0)}
                 </td>
-                <td className="border-r border-black px-2 py-1 align-top uppercase">{item.unit}</td>
+                <td className="border-r border-black px-2 py-1 text-right align-top">
+                  ₹ {inr(item.rate)}
+                </td>
                 <td className="border-r border-black px-2 py-1 text-right align-top">
                   {ltr > 0 ? num(ltr, 3) : ""}
                 </td>
                 <td className="border-r border-black px-2 py-1 text-right align-top">
                   {boxCount > 0 ? num(boxCount, 2) : ""}
-                </td>
-                <td className="border-r border-black px-2 py-1 text-right align-top">
-                  ₹ {inr(item.rate)}
                 </td>
                 {hasAnyDisc && (
                   <td className="border-r border-black px-2 py-1 text-right align-top">{disc}</td>
@@ -223,6 +223,7 @@ export function A5CompactTemplate({ invoice, maps, settings, computed }: Templat
             <td className="border-r border-black px-2 py-1"></td>
             <td className="border-r border-black px-2 py-1 text-right">Total</td>
             {isGst && <td className="border-r border-black px-2 py-1"></td>}
+            <td className="border-r border-black px-2 py-1"></td>
             <td className="border-r border-black px-2 py-1 text-right" data-testid="text-total-qty">
               {num(totalQty, 0)}
             </td>
@@ -233,7 +234,6 @@ export function A5CompactTemplate({ invoice, maps, settings, computed }: Templat
             <td className="border-r border-black px-2 py-1 text-right" data-testid="text-total-box">
               {totalBox > 0 ? num(totalBox, 2) : ""}
             </td>
-            <td className="border-r border-black px-2 py-1"></td>
             {hasAnyDisc && <td className="border-r border-black px-2 py-1"></td>}
             {isGst && <td className="border-r border-black px-2 py-1"></td>}
             <td className="px-2 py-1 text-right">₹ {inr(invoice.grandTotal)}</td>
