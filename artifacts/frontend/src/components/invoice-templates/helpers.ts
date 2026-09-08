@@ -126,24 +126,28 @@ export function getPrintCss(
   const paper = paperOverride && paperOverride !== "auto" ? paperOverride : meta.paper;
   const orientation = orientationOverride && orientationOverride !== "auto" ? orientationOverride : meta.orientation;
 
-  // Legacy dense cash-memo. Its columns are laid out for a wide (~200mm)
-  // sheet, so it prints one of two ways depending on the resolved
-  // orientation (Print Settings can override the template's own default):
-  //   • landscape → the sheet fills a 210 x 148mm A5 page at natural width.
-  //   • portrait  → lay the same wide sheet out at 200mm, then `zoom` the
-  //     whole thing down to fit a 148 x 210mm A5 page. `zoom` (unlike
+  // Legacy dense cash-memo, printed on the shop's own 146 x 208mm invoice
+  // stationery (a trimmed-A5 sheet). The PAGE is that exact size so the print
+  // lands 1:1 on the pre-cut paper with nothing clipped or shrunk by the
+  // driver's "fit to page". Its columns are laid out for a wide (~200mm)
+  // sheet, so it renders one of two ways depending on the resolved orientation
+  // (Print Settings can override the template default):
+  //   • portrait (146 x 208mm) → the wide sheet is laid out at 200mm then
+  //     `zoom`ed to ~0.69 so it fits the ~138mm usable width. `zoom` (unlike
   //     `transform`) reflows and is honoured for print pagination, so a long
   //     bill still flows cleanly onto a second page.
+  //   • landscape (208 x 146mm) → the sheet spans the full width at natural
+  //     size, the classic wide tear-off bill.
   // Horizontal padding is squeezed hard so text wraps as designed; blank
-  // filler rows pad a short bill so it fills the page with writable lines.
+  // filler rows pad a short bill so it fills the sheet with writable lines.
   if (meta.id === "a5-compact") {
     const landscape = orientation === "landscape";
-    const pageSize = landscape ? "210mm 148mm" : "148mm 210mm";
+    const pageSize = landscape ? "208mm 146mm" : "146mm 208mm";
     const sheetWidth = landscape ? "100%" : "200mm";
-    const sheetZoom = landscape ? "" : "zoom: 0.685;";
-    const minHeight = landscape ? "132mm" : "285mm";
+    const sheetZoom = landscape ? "" : "zoom: 0.69;";
+    const minHeight = landscape ? "132mm" : "288mm";
     return `
-    @page { size: ${pageSize}; margin: 5mm; }
+    @page { size: ${pageSize}; margin: 4mm; }
     @media print {
       html, body {
         background: #fff !important;
@@ -181,8 +185,8 @@ export function getPrintCss(
         margin: 0 !important;
         box-shadow: none !important;
       }
-      /* Squeeze the roomy on-screen spacing for print so the bill lands in
-         the top ~half of the A4 sheet instead of overflowing to page 2. */
+      /* Squeeze the roomy on-screen spacing for print so a short bill fits
+         one 146 x 208mm sheet instead of overflowing to page 2. */
       .invoice-print-area .invoice-sheet [class~="p-3"] { padding: 3px 7px !important; }
       .invoice-print-area .invoice-sheet [class~="p-2"] { padding: 3px 5px !important; }
       .invoice-print-area .invoice-sheet [class~="px-3"] { padding-left: 7px !important; padding-right: 7px !important; }
