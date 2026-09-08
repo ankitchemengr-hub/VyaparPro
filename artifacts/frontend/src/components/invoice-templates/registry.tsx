@@ -12,9 +12,9 @@ export const TEMPLATES: TemplateMeta[] = [
   {
     id: "a5-compact",
     name: "A5 Compact (Legacy)",
-    description: "Original landscape bill — dense, fits an A5 sheet.",
+    description: "Dense legacy bill — fits one portrait A5 sheet. Set Orientation to Landscape in Print Settings for the old wide layout.",
     paper: "A5",
-    orientation: "landscape",
+    orientation: "portrait",
     component: A5CompactTemplate,
   },
   {

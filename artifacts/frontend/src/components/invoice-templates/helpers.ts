@@ -126,15 +126,24 @@ export function getPrintCss(
   const paper = paperOverride && paperOverride !== "auto" ? paperOverride : meta.paper;
   const orientation = orientationOverride && orientationOverride !== "auto" ? orientationOverride : meta.orientation;
 
-  // Legacy landscape cash-memo sized to one A5 sheet (210 x 148mm) — prints
-  // actual-size whether the tray holds A5 or A4 (on A4 it lands in the top
-  // strip, the classic tear-off bill format). Horizontal padding is squeezed
-  // hard so text wraps as designed; ~10 real-height blank item rows fill the
-  // page for a short bill. A bill with more items than fit simply flows onto
-  // a second A5 page. Kept at a readable ~10.5px with a full border box.
+  // Legacy dense cash-memo. Its columns are laid out for a wide (~200mm)
+  // sheet, so it prints one of two ways depending on the resolved
+  // orientation (Print Settings can override the template's own default):
+  //   • landscape → the sheet fills a 210 x 148mm A5 page at natural width.
+  //   • portrait  → lay the same wide sheet out at 200mm, then `zoom` the
+  //     whole thing down to fit a 148 x 210mm A5 page. `zoom` (unlike
+  //     `transform`) reflows and is honoured for print pagination, so a long
+  //     bill still flows cleanly onto a second page.
+  // Horizontal padding is squeezed hard so text wraps as designed; blank
+  // filler rows pad a short bill so it fills the page with writable lines.
   if (meta.id === "a5-compact") {
+    const landscape = orientation === "landscape";
+    const pageSize = landscape ? "210mm 148mm" : "148mm 210mm";
+    const sheetWidth = landscape ? "100%" : "200mm";
+    const sheetZoom = landscape ? "" : "zoom: 0.685;";
+    const minHeight = landscape ? "132mm" : "285mm";
     return `
-    @page { size: 210mm 148mm; margin: 5mm; }
+    @page { size: ${pageSize}; margin: 5mm; }
     @media print {
       html, body {
         background: #fff !important;
@@ -160,8 +169,9 @@ export function getPrintCss(
         transform: none !important;
       }
       .invoice-print-area .invoice-sheet {
-        width: 100% !important;
-        min-height: 132mm !important;
+        width: ${sheetWidth} !important;
+        ${sheetZoom}
+        min-height: ${minHeight} !important;
         font-size: 10.5px !important;
         line-height: 1.15 !important;
         color: #000 !important;
