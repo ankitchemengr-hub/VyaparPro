@@ -126,28 +126,17 @@ export function getPrintCss(
   const paper = paperOverride && paperOverride !== "auto" ? paperOverride : meta.paper;
   const orientation = orientationOverride && orientationOverride !== "auto" ? orientationOverride : meta.orientation;
 
-  // Legacy dense cash-memo, printed on the shop's own 146 x 208mm invoice
-  // stationery (a trimmed-A5 sheet). The PAGE is that exact size so the print
-  // lands 1:1 on the pre-cut paper with nothing clipped or shrunk by the
-  // driver's "fit to page". Its columns are laid out for a wide (~200mm)
-  // sheet, so it renders one of two ways depending on the resolved orientation
-  // (Print Settings can override the template default):
-  //   • portrait (146 x 208mm) → the wide sheet is laid out at 200mm then
-  //     `zoom`ed to ~0.69 so it fits the ~138mm usable width. `zoom` (unlike
-  //     `transform`) reflows and is honoured for print pagination, so a long
-  //     bill still flows cleanly onto a second page.
-  //   • landscape (208 x 146mm) → the sheet spans the full width at natural
-  //     size, the classic wide tear-off bill.
-  // Horizontal padding is squeezed hard so text wraps as designed; blank
-  // filler rows pad a short bill so it fills the sheet with writable lines.
+  // Legacy A5-landscape cash-memo, printed on the A4 paper every shop loads.
+  // An A5-landscape sheet (~210 x 148mm) is exactly the TOP HALF of an A4
+  // portrait page, so lay it out there full-width, bottom half left blank —
+  // the classic tear-off bill-book format. The on-screen sheet has generous
+  // padding + decorative blank filler rows that push a normal bill past
+  // ~200mm (onto a 2nd page); print clamps all of that vertical air right
+  // down so a typical bill lands inside the top ~half. Kept at a readable
+  // ~10.5px (not the old 9px squeeze) with a full border box.
   if (meta.id === "a5-compact") {
-    const landscape = orientation === "landscape";
-    const pageSize = landscape ? "208mm 146mm" : "146mm 208mm";
-    const sheetWidth = landscape ? "100%" : "200mm";
-    const sheetZoom = landscape ? "" : "zoom: 0.69;";
-    const minHeight = landscape ? "132mm" : "288mm";
     return `
-    @page { size: ${pageSize}; margin: 4mm; }
+    @page { size: 210mm 297mm; margin: 5mm; }
     @media print {
       html, body {
         background: #fff !important;
@@ -173,11 +162,10 @@ export function getPrintCss(
         transform: none !important;
       }
       .invoice-print-area .invoice-sheet {
-        width: ${sheetWidth} !important;
-        ${sheetZoom}
-        min-height: ${minHeight} !important;
+        width: 100% !important;
+        min-height: 120mm !important;
         font-size: 10.5px !important;
-        line-height: 1.15 !important;
+        line-height: 1.18 !important;
         color: #000 !important;
         background: #fff !important;
         border: 1.5px solid #000 !important;
@@ -185,8 +173,8 @@ export function getPrintCss(
         margin: 0 !important;
         box-shadow: none !important;
       }
-      /* Squeeze the roomy on-screen spacing for print so a short bill fits
-         one 146 x 208mm sheet instead of overflowing to page 2. */
+      /* Squeeze the roomy on-screen spacing for print so the bill lands in
+         the top ~half of the A4 sheet instead of overflowing to page 2. */
       .invoice-print-area .invoice-sheet [class~="p-3"] { padding: 3px 7px !important; }
       .invoice-print-area .invoice-sheet [class~="p-2"] { padding: 3px 5px !important; }
       .invoice-print-area .invoice-sheet [class~="px-3"] { padding-left: 7px !important; padding-right: 7px !important; }
@@ -207,13 +195,6 @@ export function getPrintCss(
       .invoice-print-area .invoice-sheet th {
         padding: 1px 5px !important;
         border-color: #000 !important;
-      }
-      /* Blank filler rows keep a small real height in print (exempt from the
-         vertical squeeze above) so a short bill fills the A5 page with a few
-         writable lines instead of leaving a big gap. */
-      .invoice-print-area .invoice-sheet tr.invoice-filler-row td {
-        padding-top: 3.5px !important;
-        padding-bottom: 3.5px !important;
       }
       .sidebar, .topbar, .no-print, button, nav { display: none !important; }
     }
