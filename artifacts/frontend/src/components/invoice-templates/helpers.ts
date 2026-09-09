@@ -159,20 +159,18 @@ export function getPrintCss(
     }
   `;
 
-  // Legacy dense cash-memo. Its columns are laid out for a wide (~200mm) sheet,
-  // printed on the shop's own 146 x 208mm invoice stationery.
-  //   • portrait (146 x 208mm) → lay the wide sheet out at 200mm then `zoom` it
-  //     to ~0.685 so it fits the ~138mm usable width. `zoom` (unlike
-  //     `transform`) reflows and is honoured for print pagination, so a long
-  //     bill flows cleanly onto a second sheet.
-  //   • landscape (208 x 146mm) → the sheet spans the full width at natural
-  //     size, the classic wide tear-off bill.
+  // Legacy dense cash-memo — its columns are laid out for a wide (~200mm)
+  // sheet, so it always prints as A5 LANDSCAPE (210 x 148mm) at natural size,
+  // never scaled or zoomed: the print output matches the on-screen preview
+  // 1:1. On A5 paper it fills the sheet; on A4 paper (print dialog left at
+  // Default / 100% scale) it keeps its true size in the top strip. min-height
+  // fills the page so a short bill has no big blank gap.
   if (meta.id === "a5-compact") {
-    const landscape = orientation === "landscape";
-    const pageRule = landscape ? "size: 208mm 146mm; margin: 4mm;" : "size: 146mm 208mm; margin: 4mm;";
-    const sheetRules = landscape
-      ? `width: 100% !important; min-height: 132mm !important; font-size: 10.5px !important; line-height: 1.2 !important; border: 1.5px solid #000 !important;`
-      : `width: 200mm !important; min-height: 284mm !important; zoom: 0.685; font-size: 10.5px !important; line-height: 1.2 !important; border: 1.5px solid #000 !important;`;
+    const pageRule = "size: 210mm 148mm; margin: 5mm;";
+    const sheetRules =
+      `width: 100% !important; min-height: 136mm !important; ` +
+      `font-size: 10.5px !important; line-height: 1.2 !important; ` +
+      `border: 1.5px solid #000 !important;`;
     const squeeze = `
       /* Squeeze the roomy on-screen spacing so a short bill still fills one
          sheet with a few writable lines instead of a big blank gap. */
