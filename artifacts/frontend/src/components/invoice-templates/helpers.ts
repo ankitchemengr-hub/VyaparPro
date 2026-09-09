@@ -159,41 +159,30 @@ export function getPrintCss(
     }
   `;
 
-  // Legacy dense cash-memo. Its columns are laid out for a wide (~200mm) sheet,
-  // printed on the shop's own 146 x 208mm invoice stationery.
-  //   • portrait (146 x 208mm) → lay the wide sheet out at 200mm then `zoom` it
-  //     to ~0.685 so it fits the ~138mm usable width. `zoom` (unlike
-  //     `transform`) reflows and is honoured for print pagination, so a long
-  //     bill flows cleanly onto a second sheet.
-  //   • landscape (208 x 146mm) → the sheet spans the full width at natural
-  //     size, the classic wide tear-off bill.
+  // Legacy cash-memo, re-laid out as a genuine A5 PORTRAIT page (148 x 210mm)
+  // with a 4mm print-safe margin — no transform:scale / zoom. Printed on A5
+  // paper it lands 1:1; printed on A4 (print dialog left at Default / 100%
+  // scale) it keeps its true A5 size in a corner of the sheet. The 4mm margin
+  // keeps the border off every printer's unprintable edge.
   if (meta.id === "a5-compact") {
-    const landscape = orientation === "landscape";
-    const pageRule = landscape ? "size: 208mm 146mm; margin: 4mm;" : "size: 146mm 208mm; margin: 4mm;";
-    const sheetRules = landscape
-      ? `width: 100% !important; min-height: 132mm !important; font-size: 10.5px !important; line-height: 1.2 !important; border: 1.5px solid #000 !important;`
-      : `width: 200mm !important; min-height: 284mm !important; zoom: 0.685; font-size: 10.5px !important; line-height: 1.2 !important; border: 1.5px solid #000 !important;`;
-    const squeeze = `
-      /* Squeeze the roomy on-screen spacing so a short bill still fills one
-         sheet with a few writable lines instead of a big blank gap. */
-      .invoice-print-portal .invoice-sheet [class~="p-3"] { padding: 3px 7px !important; }
-      .invoice-print-portal .invoice-sheet [class~="p-2"] { padding: 3px 5px !important; }
-      .invoice-print-portal .invoice-sheet [class~="px-3"] { padding-left: 7px !important; padding-right: 7px !important; }
-      .invoice-print-portal .invoice-sheet [class~="pt-10"] { padding-top: 10px !important; }
-      .invoice-print-portal .invoice-sheet [class~="pt-4"] { padding-top: 3px !important; }
-      .invoice-print-portal .invoice-sheet [class~="mt-3"],
-      .invoice-print-portal .invoice-sheet [class~="mt-2"] { margin-top: 2px !important; }
-      .invoice-print-portal .invoice-sheet [class~="gap-y-2"] { row-gap: 2px !important; }
-      .invoice-print-portal .invoice-sheet [class~="space-y-3"] > * + * { margin-top: 2px !important; }
-      .invoice-print-portal .invoice-sheet [class~="space-y-1"] > * + * { margin-top: 1px !important; }
-      .invoice-print-portal .invoice-sheet [class~="py-3"],
-      .invoice-print-portal .invoice-sheet [class~="py-2"],
-      .invoice-print-portal .invoice-sheet [class~="py-1.5"] { padding-top: 1px !important; padding-bottom: 1px !important; }
-      .invoice-print-portal .invoice-sheet table { width: 100% !important; }
+    const pageRule = "size: 148mm 210mm; margin: 4mm;";
+    const sheetRules =
+      `width: 100% !important; min-height: 202mm !important; ` +
+      `display: flex !important; flex-direction: column !important; ` +
+      `font-size: 8px !important; line-height: 1.2 !important; ` +
+      `border: 1.5px solid #000 !important;`;
+    const a5 = `
+      /* The item grid takes all the height left between the customer block
+         and the footer; its growing spacer row absorbs the slack so a short
+         bill's Total row + footer still land at the bottom of the page. */
+      .invoice-print-portal .a5c-items { flex: 1 1 auto !important; }
+      .invoice-print-portal .a5c-grow td { height: 100% !important; padding: 0 !important; }
+      .invoice-print-portal .a5c-fill td,
+      .invoice-print-portal .a5c-fill .a5c-fill-cell { height: 4.4mm !important; padding: 0 3px !important; }
       .invoice-print-portal .invoice-sheet td,
-      .invoice-print-portal .invoice-sheet th { padding: 1px 5px !important; border-color: #000 !important; }
+      .invoice-print-portal .invoice-sheet th { border-color: #000 !important; }
     `;
-    return shell(pageRule, sheetRules, squeeze);
+    return shell(pageRule, sheetRules, a5);
   }
 
   // The other templates (Modern/Professional/Classic/Minimal) are one

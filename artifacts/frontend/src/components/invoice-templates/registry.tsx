@@ -12,7 +12,7 @@ export const TEMPLATES: TemplateMeta[] = [
   {
     id: "a5-compact",
     name: "A5 Compact (Legacy)",
-    description: "Dense legacy bill — prints 1:1 on a 146 x 208mm portrait sheet. Set Orientation to Landscape in Print Settings for the old wide layout.",
+    description: "Dense legacy cash-memo — prints 1:1 on a true A5 portrait page (148 × 210 mm).",
     paper: "A5",
     orientation: "portrait",
     component: A5CompactTemplate,
