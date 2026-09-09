@@ -348,10 +348,18 @@ export default function Billing() {
     }
   }, [customer?.id]);
 
+  // Auto-reprice line items from the current price list when the invoice type
+  // (GST ↔ non-GST) or the customer's pricing tier changes — a NEW-invoice
+  // convenience. It must never touch a rate the user set by hand or a rate
+  // loaded from a saved invoice: both are flagged `rateEdited` (prefill stamps
+  // every loaded line, the Rate field + history-pick stamp manual edits), so
+  // those lines are passed through untouched. `skipRateSyncRef` additionally
+  // swallows the first firing during the prefill state batch.
   useEffect(() => {
   if (!products || items.length === 0) return;
   if (skipRateSyncRef.current) { skipRateSyncRef.current = false; return; }
   setItems((prev) => prev.map((item) => {
+    if (item.rateEdited) return item;
     const p = products.find((x: any) => x.id === item.productId);
     if (!p) return item;
     const newRate = getBaseRate(p, customer, invoiceType);
