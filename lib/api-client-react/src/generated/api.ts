@@ -28,6 +28,7 @@ import type {
   AdjustReadyMaterialBatchInput,
   AppSettings,
   AppSettingsUpdate,
+  ApplyCogsRecomputeParams,
   ApplyPriceRecalculation200,
   AssembleItem409,
   AssembleItemInput,
@@ -47,6 +48,7 @@ import type {
   CapitalSnapshot,
   CashbookSummary,
   ChangePlanInput,
+  CogsRecomputeResult,
   CollectCashFromSalesman200,
   CollectCashInput,
   CommissionReport,
@@ -73,6 +75,7 @@ import type {
   ExpenseInput,
   ExpenseList,
   GetBillWiseProfitReportParams,
+  GetCogsRecomputePreviewParams,
   GetCommissionReportParams,
   GetCustomerWiseSalesReportParams,
   GetExpiringSubscriptionsParams,
@@ -9526,6 +9529,167 @@ export function useGetBillWiseProfitReport<TData = Awaited<ReturnType<typeof get
 
 
 
+
+export const getGetCogsRecomputePreviewUrl = (params?: GetCogsRecomputePreviewParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reports/cogs-recompute-preview?${stringifiedParams}` : `/api/reports/cogs-recompute-preview`
+}
+
+/**
+ * @summary Admin-only dry run — how many saved invoice lines in the range have a stale cost snapshot, and the COGS total before vs after re-deriving each from the purchase-bill / BOM cost in effect on its invoice date. Writes nothing.
+ */
+export const getCogsRecomputePreview = async (params?: GetCogsRecomputePreviewParams, options?: RequestInit): Promise<CogsRecomputeResult> => {
+
+  return customFetch<CogsRecomputeResult>(getGetCogsRecomputePreviewUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCogsRecomputePreviewQueryKey = (params?: GetCogsRecomputePreviewParams,) => {
+    return [
+    `/api/reports/cogs-recompute-preview`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetCogsRecomputePreviewQueryOptions = <TData = Awaited<ReturnType<typeof getCogsRecomputePreview>>, TError = ErrorType<unknown>>(params?: GetCogsRecomputePreviewParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCogsRecomputePreview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCogsRecomputePreviewQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCogsRecomputePreview>>> = ({ signal }) => getCogsRecomputePreview(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCogsRecomputePreview>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCogsRecomputePreviewQueryResult = NonNullable<Awaited<ReturnType<typeof getCogsRecomputePreview>>>
+export type GetCogsRecomputePreviewQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Admin-only dry run — how many saved invoice lines in the range have a stale cost snapshot, and the COGS total before vs after re-deriving each from the purchase-bill / BOM cost in effect on its invoice date. Writes nothing.
+ */
+
+export function useGetCogsRecomputePreview<TData = Awaited<ReturnType<typeof getCogsRecomputePreview>>, TError = ErrorType<unknown>>(
+ params?: GetCogsRecomputePreviewParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCogsRecomputePreview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCogsRecomputePreviewQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getApplyCogsRecomputeUrl = (params?: ApplyCogsRecomputeParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reports/cogs-recompute?${stringifiedParams}` : `/api/reports/cogs-recompute`
+}
+
+/**
+ * @summary Admin-only — re-derives invoice_items.cost_price for every saved invoice line in the range from the date-effective purchase / BOM cost, correcting margins skewed by late-entered or back-dated purchase bills.
+ */
+export const applyCogsRecompute = async (params?: ApplyCogsRecomputeParams, options?: RequestInit): Promise<CogsRecomputeResult> => {
+
+  return customFetch<CogsRecomputeResult>(getApplyCogsRecomputeUrl(params),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getApplyCogsRecomputeMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applyCogsRecompute>>, TError,{params?: ApplyCogsRecomputeParams}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof applyCogsRecompute>>, TError,{params?: ApplyCogsRecomputeParams}, TContext> => {
+
+const mutationKey = ['applyCogsRecompute'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof applyCogsRecompute>>, {params?: ApplyCogsRecomputeParams}> = (props) => {
+          const {params} = props ?? {};
+
+          return  applyCogsRecompute(params,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApplyCogsRecomputeMutationResult = NonNullable<Awaited<ReturnType<typeof applyCogsRecompute>>>
+
+    export type ApplyCogsRecomputeMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Admin-only — re-derives invoice_items.cost_price for every saved invoice line in the range from the date-effective purchase / BOM cost, correcting margins skewed by late-entered or back-dated purchase bills.
+ */
+export const useApplyCogsRecompute = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applyCogsRecompute>>, TError,{params?: ApplyCogsRecomputeParams}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof applyCogsRecompute>>,
+        TError,
+        {params?: ApplyCogsRecomputeParams},
+        TContext
+      > => {
+      return useMutation(getApplyCogsRecomputeMutationOptions(options));
+    }
 
 export const getGetCommissionReportUrl = (params?: GetCommissionReportParams,) => {
   const normalizedParams = new URLSearchParams();

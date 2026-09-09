@@ -2969,6 +2969,17 @@ export interface BillWiseProfitReport {
   totals: BillWiseProfitReportTotals;
 }
 
+export interface CogsRecomputeResult {
+  /** Invoices with at least one line whose cost snapshot would change / changed. */
+  invoicesTouched: number;
+  /** Individual invoice lines whose cost snapshot would change / changed. */
+  itemsChanged: number;
+  /** Total COGS over the range using the existing snapshots. */
+  oldCogs: number;
+  /** Total COGS over the range using the re-derived date-effective cost. */
+  newCogs: number;
+}
+
 export type LookupGstinParams = {
 gstin: string;
 };
@@ -3238,6 +3249,16 @@ export const GetBillWiseProfitReportType = {
   gst: 'gst',
   non_gst: 'non_gst',
 } as const;
+
+export type GetCogsRecomputePreviewParams = {
+from?: string;
+to?: string;
+};
+
+export type ApplyCogsRecomputeParams = {
+from?: string;
+to?: string;
+};
 
 export type GetCommissionReportParams = {
 from?: string;

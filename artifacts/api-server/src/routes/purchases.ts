@@ -19,9 +19,28 @@ import {
 import { logger } from "../lib/logger";
 import { getCompanyId } from "../lib/tenant";
 import { computeMarginedPrices } from "../lib/margin-pricing";
+import { recomputeCogs, expandToBomParents } from "../lib/recompute-cogs";
 import multer from "multer";
 
 const router: IRouter = Router();
+
+// After a purchase bill lands, any sale of the affected products (or of a
+// finished good whose recipe uses them) dated on/after this bill's date now
+// has a stale cost snapshot — re-derive those invoices' COGS. Best-effort:
+// failure here must not fail the purchase save.
+async function healCogsForPurchase(
+  companyId: number,
+  billDate: Date,
+  productIds: number[],
+): Promise<void> {
+  try {
+    if (productIds.length === 0) return;
+    const scope = await expandToBomParents(companyId, productIds);
+    await recomputeCogs(companyId, billDate, null, { apply: true, productIds: scope });
+  } catch (err) {
+    logger.error({ err }, "Post-purchase COGS reconcile failed (non-fatal)");
+  }
+}
 
 const PURCHASE_READ_ROLES = new Set(["admin", "accountant", "store"]);
 const PURCHASE_WRITE_ROLES = new Set(["admin", "accountant", "store"]);
@@ -491,6 +510,12 @@ router.post("/purchases", async (req, res): Promise<void> => {
 
     await client.query("COMMIT");
 
+    await healCogsForPurchase(
+      companyId,
+      new Date(billRow.bill_date),
+      [...new Set(processed.map((p) => p.productId))],
+    );
+
     const [full] = await db.select().from(purchasesTable).where(and(eq(purchasesTable.companyId, companyId), eq(purchasesTable.id, billRow.id)));
     const items = await db.select().from(purchaseItemsTable).where(and(eq(purchaseItemsTable.companyId, companyId), eq(purchaseItemsTable.purchaseId, billRow.id)));
     res.status(201).json(formatPurchase(full, items, priceChanges));
@@ -769,6 +794,19 @@ router.put("/purchases/:id", async (req, res): Promise<void> => {
 
     await client.query("COMMIT");
 
+    // Earliest of the old and new bill dates — an edit that moves the bill
+    // earlier, or drops a line, can invalidate cost snapshots from that point.
+    const oldBillDate = new Date(old.bill_date);
+    const newBillDate = new Date(data.billDate ?? old.bill_date);
+    await healCogsForPurchase(
+      companyId,
+      oldBillDate < newBillDate ? oldBillDate : newBillDate,
+      [...new Set([
+        ...oldItemsRes.rows.map((r: any) => r.product_id as number),
+        ...processed.map((p) => p.productId),
+      ])],
+    );
+
     const [full] = await db.select().from(purchasesTable).where(
       and(eq(purchasesTable.companyId, companyId), eq(purchasesTable.id, purchaseId))
     );
@@ -868,6 +906,14 @@ router.delete("/purchases/:id", async (req, res): Promise<void> => {
     );
 
     await client.query("COMMIT");
+
+    // The cancelled bill no longer counts toward any product's date-effective
+    // cost — re-derive COGS for sales from its bill_date onward.
+    await healCogsForPurchase(
+      companyId,
+      new Date(old.bill_date),
+      [...new Set(oldItemsRes.rows.map((r: any) => r.product_id as number))],
+    );
 
     const items = await db.select().from(purchaseItemsTable).where(
       and(eq(purchaseItemsTable.companyId, companyId), eq(purchaseItemsTable.purchaseId, purchaseId))

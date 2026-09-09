@@ -2507,6 +2507,38 @@ paths:
               schema:
                 $ref: "#/components/schemas/BillWiseProfitReport"
 
+  /reports/cogs-recompute-preview:
+    get:
+      operationId: getCogsRecomputePreview
+      tags: [reports]
+      summary: Admin-only dry run — how many saved invoice lines in the range have a stale cost snapshot, and the COGS total before vs after re-deriving each from the purchase-bill / BOM cost in effect on its invoice date. Writes nothing.
+      parameters:
+        - { name: from, in: query, schema: { type: string } }
+        - { name: to, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Preview of the COGS recompute
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CogsRecomputeResult"
+
+  /reports/cogs-recompute:
+    post:
+      operationId: applyCogsRecompute
+      tags: [reports]
+      summary: Admin-only — re-derives invoice_items.cost_price for every saved invoice line in the range from the date-effective purchase / BOM cost, correcting margins skewed by late-entered or back-dated purchase bills.
+      parameters:
+        - { name: from, in: query, schema: { type: string } }
+        - { name: to, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Result of the COGS recompute
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CogsRecomputeResult"
+
   /reports/commission:
     get:
       operationId: getCommissionReport
@@ -6669,3 +6701,12 @@ components:
             profit: { type: number }
             marginPct: { type: number }
             count: { type: integer }
+
+    CogsRecomputeResult:
+      type: object
+      required: [invoicesTouched, itemsChanged, oldCogs, newCogs]
+      properties:
+        invoicesTouched: { type: integer, description: Invoices with at least one line whose cost snapshot would change / changed. }
+        itemsChanged: { type: integer, description: Individual invoice lines whose cost snapshot would change / changed. }
+        oldCogs: { type: number, description: Total COGS over the range using the existing snapshots. }
+        newCogs: { type: number, description: Total COGS over the range using the re-derived date-effective cost. }

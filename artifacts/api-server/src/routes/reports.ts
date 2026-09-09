@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { pool } from "@workspace/db";
 import { getCompanyId } from "../lib/tenant";
+import { recomputeCogs } from "../lib/recompute-cogs";
 
 const router: IRouter = Router();
 
@@ -468,6 +469,36 @@ router.get("/reports/bill-wise-profit", async (req, res): Promise<void> => {
     items,
     totals: { ...totals, marginPct: totals.revenue > 0 ? (totals.profit / totals.revenue) * 100 : 0 },
   });
+});
+
+// ── COGS recompute ─────────────────────────────────────────────────
+// Re-derives the cost snapshot on every saved invoice line in the range from
+// the purchase-bill / BOM cost that was in effect on that invoice's date.
+// Needed when purchase bills are entered late or back-dated, or a BOM's
+// material rates changed after the sale — the line's original snapshot is then
+// stale and its margin wrong. Preview (GET) computes without writing; apply
+// (POST) writes the corrected cost_price values.
+function cogsRecomputeRange(req: any): { from: Date | null; to: Date | null } {
+  const from = req.query.from ? new Date(String(req.query.from)) : null;
+  const to = req.query.to ? new Date(String(req.query.to)) : null;
+  if (to) to.setHours(23, 59, 59, 999);
+  return { from, to };
+}
+
+router.get("/reports/cogs-recompute-preview", async (req, res): Promise<void> => {
+  if (!requireAdmin(req, res)) return;
+  const companyId = getCompanyId(req);
+  const { from, to } = cogsRecomputeRange(req);
+  const result = await recomputeCogs(companyId, from, to, { apply: false });
+  res.json(result);
+});
+
+router.post("/reports/cogs-recompute", async (req, res): Promise<void> => {
+  if (!requireAdmin(req, res)) return;
+  const companyId = getCompanyId(req);
+  const { from, to } = cogsRecomputeRange(req);
+  const result = await recomputeCogs(companyId, from, to, { apply: true });
+  res.json(result);
 });
 
 // ── GET /reports/commission ─────────────────────────────────────────

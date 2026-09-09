@@ -25,6 +25,7 @@ import {
 import { logger } from "../lib/logger";
 import { generateSeriesNumber, type SeriesType } from "../lib/number-series";
 import { getCompanyId } from "../lib/tenant";
+import { costForDate } from "../lib/date-effective-cost";
 
 const router: IRouter = Router();
 
@@ -192,6 +193,17 @@ router.post("/invoices", async (req, res): Promise<void> => {
       : [];
     const productById = new Map(productRows.map((p) => [p.id, p]));
 
+    // costPrice snapshots what each line actually cost *as of this invoice's
+    // date* — the most recent purchase-bill rate on/before invoiceDate, or the
+    // rolled-up recipe cost (priced at that date's material rates) for a
+    // manufactured item — so P&L/COGS reflects the real cost of this sale and
+    // a later or back-dated purchase bill doesn't retroactively skew it. A
+    // failure here must not block invoicing — fall back to the live price.
+    const costAsOf = await costForDate(companyId, new Date(data.invoiceDate)).catch((err) => {
+      logger.error({ err }, "cost-as-of lookup failed on invoice create; using live purchase_price");
+      return new Map<number, number>();
+    });
+
     const processedItems = data.items.map((item) => {
       const qty = Number(item.qty);
       const rate = Number(item.rate);
@@ -225,10 +237,10 @@ router.post("/invoices", async (req, res): Promise<void> => {
       // QTY"). This feeds the commission calculation, so it must not depend
       // on qtyBoxes/box-mode being set.
       const litersPerBox = productById.get(item.productId)?.litersPerBox;
-      // costPrice snapshots the product's purchase price at sale time, so
-      // P&L/COGS reporting reflects what this sale actually cost rather than
-      // whatever the purchase price happens to be whenever the report runs.
-      const costPrice = productById.get(item.productId)?.purchasePrice;
+      const costRaw = costAsOf.get(item.productId);
+      const costPrice = costRaw != null
+        ? Math.round(costRaw * 100) / 100
+        : productById.get(item.productId)?.purchasePrice;
       return {
         ...item,
         qty: String(qty),
@@ -673,6 +685,13 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
       : [];
     const productById = new Map(productRows.map((p) => [p.id, p]));
 
+    // Re-snapshot each line's cost as of the (possibly edited) invoice date —
+    // see the create route for the rationale.
+    const costAsOf = await costForDate(companyId, new Date(data.invoiceDate ?? existing.invoice_date)).catch((err) => {
+      logger.error({ err }, "cost-as-of lookup failed on invoice edit; using live purchase_price");
+      return new Map<number, number>();
+    });
+
     const processedItems = data.items.map((item) => {
       const qty = Number(item.qty);
       const rate = Number(item.rate);
@@ -694,7 +713,10 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
       const litersPerBoxVal = productById.get(item.productId)?.litersPerBox;
       // total_liters = qty × liters-per-unit. Feeds the commission calculation.
       const totalLiters = litersPerBoxVal != null ? qty * Number(litersPerBoxVal) : null;
-      const costPriceVal = productById.get(item.productId)?.purchasePrice;
+      const costRaw = costAsOf.get(item.productId);
+      const costPriceVal = costRaw != null
+        ? Math.round(costRaw * 100) / 100
+        : productById.get(item.productId)?.purchasePrice;
       return {
         ...item,
         qty: String(qty), rate: String(rate), mrp: String(item.mrp),

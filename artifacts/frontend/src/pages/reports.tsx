@@ -33,7 +33,8 @@ import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { format } from "date-fns";
-import { Download, Search, FileSpreadsheet, FileText, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { Download, Search, FileSpreadsheet, FileText, ArrowUp, ArrowDown, ArrowUpDown, Calculator } from "lucide-react";
+import { RecomputeCogsDialog } from "@/components/recompute-cogs-dialog";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -742,6 +743,7 @@ function TaxTab() {
 function PnLTab() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [recomputeOpen, setRecomputeOpen] = useState(false);
 
   const params = { from: from || undefined, to: to || undefined };
   const { data, isLoading } = useGetProfitLossReport(params, { query: { queryKey: getGetProfitLossReportQueryKey(params) } });
@@ -755,7 +757,12 @@ function PnLTab() {
       <CardContent>
         <div className="flex flex-wrap gap-3 items-end mb-4">
           <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
+          <Button variant="outline" size="sm" className="ml-auto" onClick={() => setRecomputeOpen(true)}>
+            <Calculator className="w-4 h-4 mr-2" /> Recompute COGS
+          </Button>
         </div>
+
+        <RecomputeCogsDialog open={recomputeOpen} onOpenChange={setRecomputeOpen} from={from} to={to} />
 
         {isLoading || !data ? (
           <p className="text-sm text-muted-foreground py-6 text-center">Loading…</p>
@@ -838,6 +845,7 @@ function BillWiseProfitTab() {
   const [to, setTo] = useState("");
   const [type, setType] = useState("all");
   const [search, setSearch] = useState("");
+  const [recomputeOpen, setRecomputeOpen] = useState(false);
 
   const params: any = { from: from || undefined, to: to || undefined, type, search: search || undefined };
   const { data, isLoading } = useGetBillWiseProfitReport(params, { query: { queryKey: getGetBillWiseProfitReportQueryKey(params) } });
@@ -874,10 +882,15 @@ function BillWiseProfitTab() {
             </Select>
           </div>
           <SearchBox value={search} onChange={setSearch} placeholder="Invoice / customer…" />
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setRecomputeOpen(true)}>
+              <Calculator className="w-4 h-4 mr-2" /> Recompute COGS
+            </Button>
             <ExportMenu disabled={!items.length} baseName={`bill-wise-profit-${Date.now()}`} sheetName="Bill-wise Profit" title="Bill-wise Profit Margin" rows={exportRows} />
           </div>
         </div>
+
+        <RecomputeCogsDialog open={recomputeOpen} onOpenChange={setRecomputeOpen} from={from} to={to} />
 
         {t && items.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">

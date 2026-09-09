@@ -3596,6 +3596,38 @@ export const GetBillWiseProfitReportResponse = zod.object({
 
 
 /**
+ * @summary Admin-only dry run — how many saved invoice lines in the range have a stale cost snapshot, and the COGS total before vs after re-deriving each from the purchase-bill / BOM cost in effect on its invoice date. Writes nothing.
+ */
+export const GetCogsRecomputePreviewQueryParams = zod.object({
+  "from": zod.coerce.string().optional(),
+  "to": zod.coerce.string().optional()
+})
+
+export const GetCogsRecomputePreviewResponse = zod.object({
+  "invoicesTouched": zod.number().describe('Invoices with at least one line whose cost snapshot would change \/ changed.'),
+  "itemsChanged": zod.number().describe('Individual invoice lines whose cost snapshot would change \/ changed.'),
+  "oldCogs": zod.number().describe('Total COGS over the range using the existing snapshots.'),
+  "newCogs": zod.number().describe('Total COGS over the range using the re-derived date-effective cost.')
+})
+
+
+/**
+ * @summary Admin-only — re-derives invoice_items.cost_price for every saved invoice line in the range from the date-effective purchase / BOM cost, correcting margins skewed by late-entered or back-dated purchase bills.
+ */
+export const ApplyCogsRecomputeQueryParams = zod.object({
+  "from": zod.coerce.string().optional(),
+  "to": zod.coerce.string().optional()
+})
+
+export const ApplyCogsRecomputeResponse = zod.object({
+  "invoicesTouched": zod.number().describe('Invoices with at least one line whose cost snapshot would change \/ changed.'),
+  "itemsChanged": zod.number().describe('Individual invoice lines whose cost snapshot would change \/ changed.'),
+  "oldCogs": zod.number().describe('Total COGS over the range using the existing snapshots.'),
+  "newCogs": zod.number().describe('Total COGS over the range using the re-derived date-effective cost.')
+})
+
+
+/**
  * Admin sees all salesmen; a salesman sees only their own commission.
  * Commission accrues on delivered sales = invoice line liters * product commissionPerLiter.
  * @summary Salesman commission report (liters sold x per-liter commission)
