@@ -159,16 +159,15 @@ export function getPrintCss(
     }
   `;
 
-  // Legacy dense cash-memo — its columns are laid out for a wide (~200mm)
-  // sheet, so it always prints as A5 LANDSCAPE (210 x 148mm) at natural size,
-  // never scaled or zoomed: the print output matches the on-screen preview
-  // 1:1. On A5 paper it fills the sheet; on A4 paper (print dialog left at
-  // Default / 100% scale) it keeps its true size in the top strip. min-height
-  // fills the page so a short bill has no big blank gap.
+  // Legacy dense cash-memo, printed tear-off style: the PAGE is A4 portrait
+  // (the paper every shop actually loads, so Chrome never centres or clamps
+  // it), and the wide (~200mm) bill fills the TOP band of that sheet at
+  // natural size — no scale/zoom, print matches the on-screen preview 1:1.
+  // The bottom of the A4 is left blank to tear off / write notes on.
   if (meta.id === "a5-compact") {
-    const pageRule = "size: 210mm 148mm; margin: 5mm;";
+    const pageRule = "size: 210mm 297mm; margin: 6mm;";
     const sheetRules =
-      `width: 100% !important; min-height: 136mm !important; ` +
+      `width: 100% !important; min-height: 115mm !important; ` +
       `font-size: 10.5px !important; line-height: 1.2 !important; ` +
       `border: 1.5px solid #000 !important;`;
     const squeeze = `

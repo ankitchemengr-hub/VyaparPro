@@ -12,9 +12,9 @@ export const TEMPLATES: TemplateMeta[] = [
   {
     id: "a5-compact",
     name: "A5 Compact (Legacy)",
-    description: "Dense legacy cash-memo — prints 1:1 as A5 landscape (210 × 148 mm).",
+    description: "Dense legacy cash-memo — prints tear-off style in the top band of an A4 sheet.",
     paper: "A5",
-    orientation: "landscape",
+    orientation: "portrait",
     component: A5CompactTemplate,
   },
   {
