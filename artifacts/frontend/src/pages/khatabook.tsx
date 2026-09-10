@@ -356,8 +356,12 @@ function KhatabookDetailDialog({
                       )}
                       {entry.referenceNo && <div className="text-[10px] text-muted-foreground font-mono truncate">{entry.referenceNo}</div>}
                     </TableCell>
-                    <TableCell className="text-right font-mono text-sm whitespace-nowrap">{entry.debit > 0 ? formatRs(entry.debit) : "—"}</TableCell>
-                    <TableCell className="text-right font-mono text-sm whitespace-nowrap">{entry.credit > 0 ? formatRs(entry.credit) : "—"}</TableCell>
+                    <TableCell className="text-right font-mono text-sm whitespace-nowrap">
+                      {entry.debit > 0 ? <span className="text-red-600 dark:text-red-400">{formatRs(entry.debit)}</span> : <span className="text-muted-foreground">—</span>}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-sm whitespace-nowrap">
+                      {entry.credit > 0 ? <span className="text-emerald-600 dark:text-emerald-400">{formatRs(entry.credit)}</span> : <span className="text-muted-foreground">—</span>}
+                    </TableCell>
                     <TableCell className="text-right font-mono text-sm font-medium whitespace-nowrap">{formatRs(entry.balance)}</TableCell>
                   </TableRow>
                 ))}

@@ -6,6 +6,8 @@
   "scripts": {
     "hello": "tsx ./src/hello.ts",
     "verify-payment-allocation": "tsx ./src/verify-payment-allocation.ts",
+    "verify-vendor-payment-ledger-side": "tsx ./src/verify-vendor-payment-ledger-side.ts",
+    "backfill-vendor-payment-ledger-side": "tsx ./src/backfill-vendor-payment-ledger-side.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

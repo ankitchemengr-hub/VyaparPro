@@ -172,13 +172,18 @@ export interface ApplyEntityPaymentParams {
   /** Settle startInvoiceId ahead of the rest (Cash Book "Start With
    *  Invoice"). Omit for the default newest-first behaviour. */
   pinStartInvoice?: boolean;
+  /** True when paying a vendor: the ledger entry lands on the DEBIT side of
+   *  the vendor's account (paying down a payable), mirroring how a purchase
+   *  credits it. Omitted/false = a customer receipt, which lands on CREDIT
+   *  (paying down a receivable). */
+  isVendorPayout?: boolean;
   /** Defaults to "Payment received (<mode>)". Pass e.g. "Payment made (<mode>)" for a vendor payout. */
   description?: string;
 }
 
 export async function applyEntityPayment(
   client: { query: (text: string, params?: any[]) => Promise<any> },
-  { companyId, entityId, amount, mode, receiptNo, referenceId, isCustomerReceipt, startInvoiceId, pinStartInvoice, description }: ApplyEntityPaymentParams,
+  { companyId, entityId, amount, mode, receiptNo, referenceId, isCustomerReceipt, isVendorPayout, startInvoiceId, pinStartInvoice, description }: ApplyEntityPaymentParams,
 ): Promise<{ newBalance: number; allocations: PaymentAllocation[] }> {
   await client.query(
     `UPDATE entities SET outstanding_balance = outstanding_balance - $1 WHERE id = $2 AND company_id = $3`,
@@ -191,10 +196,18 @@ export async function applyEntityPayment(
   );
   const newBalance = Number(balRes.rows[0]?.outstanding_balance ?? 0);
 
+  // Which side of the party's ledger the payment lands on:
+  //   vendor payout   -> DEBIT  (pays down what we owe them; a purchase is the
+  //                       matching CREDIT)
+  //   customer receipt -> CREDIT (pays down what they owe us; an invoice is the
+  //                       matching DEBIT)
+  const payDebit = isVendorPayout ? amount : 0;
+  const payCredit = isVendorPayout ? 0 : amount;
+
   await client.query(
     `INSERT INTO ledger_entries (company_id, entity_id, date, description, debit, credit, balance, type, reference_id, reference_no)
-     VALUES ($1, $2, NOW(), $3, 0, $4, $5, 'payment', $6, $7)`,
-    [companyId, entityId, description ?? `Payment received (${mode})`, amount, newBalance, referenceId, receiptNo],
+     VALUES ($1, $2, NOW(), $3, $4, $5, $6, 'payment', $7, $8)`,
+    [companyId, entityId, description ?? `Payment received (${mode})`, payDebit, payCredit, newBalance, referenceId, receiptNo],
   );
 
   let allocations: PaymentAllocation[] = [];

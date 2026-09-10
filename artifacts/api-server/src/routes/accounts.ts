@@ -461,6 +461,7 @@ router.post("/account-transactions", async (req, res): Promise<void> => {
           receiptNo,
           referenceId: txn.id,
           isCustomerReceipt,
+          isVendorPayout,
           startInvoiceId: isCustomerReceipt ? (invoiceId ?? null) : null,
           // Cash Book's "Start With Invoice" picker is an explicit choice to
           // settle that bill first — honour it here (the ₹ Record Payment
