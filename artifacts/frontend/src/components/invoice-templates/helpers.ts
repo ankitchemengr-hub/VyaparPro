@@ -165,7 +165,12 @@ export function getPrintCss(
   // natural size — no scale/zoom, print matches the on-screen preview 1:1.
   // The bottom of the A4 is left blank to tear off / write notes on.
   if (meta.id === "a5-compact") {
-    const pageRule = "size: 210mm 297mm; margin: 6mm;";
+    // `size: A4 portrait` (the page-size + orientation keyword form), not
+    // `size: 210mm 297mm`. Plain width/height lets some browsers/print
+    // drivers fall back to whatever Layout (Portrait/Landscape) was last
+    // selected in the print dialog instead of resetting it — this keyword
+    // form is what actually pins the dialog to Portrait on every print.
+    const pageRule = "size: A4 portrait; margin: 6mm;";
     const sheetRules =
       `width: 100% !important; min-height: 115mm !important; ` +
       `font-size: 10.5px !important; line-height: 1.2 !important; ` +
