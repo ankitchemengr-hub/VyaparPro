@@ -133,6 +133,18 @@ export default function InvoiceDetail() {
 
   const openPayDialog = () => setPayDialogOpen(true);
 
+  // Esc goes back to the invoice list — but only when no dialog is open,
+  // so Esc closes those first instead of jumping away underneath them.
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (waOpen || payDialogOpen || selectorOpen) return;
+      setLocation("/invoices");
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [waOpen, payDialogOpen, selectorOpen, setLocation]);
+
   const lpbByProduct = new Map<number, number>(
     (products ?? []).map((p: any) => [p.id, Number(p.litersPerBox ?? 0) || 0]),
   );

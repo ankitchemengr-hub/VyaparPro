@@ -38,6 +38,15 @@ export function useGlobalShortcuts({ onTogglePalette, onOpenHelp }: Options) {
         return;
       }
 
+      if (e.key === "F1" && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+        const billing = NAV_SHORTCUTS.find((s) => s.path === "/billing");
+        if (billing && (!billing.roles || hasRole(billing.roles as any))) {
+          e.preventDefault();
+          setLocation("/billing");
+        }
+        return;
+      }
+
       if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
         const match = NAV_SHORTCUTS.find((s) => s.code === e.code);
         if (match && (!match.roles || hasRole(match.roles as any))) {

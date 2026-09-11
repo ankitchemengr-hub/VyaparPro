@@ -43,6 +43,7 @@ export const SHORTCUTS: ShortcutDoc[] = [
   { keys: ["Ctrl", "K"], label: "Open the command palette", group: "Global" },
   { keys: ["?"], label: "Show this shortcuts list", group: "Global" },
   { keys: ["Esc"], label: "Close a dialog or dropdown", group: "Global" },
+  { keys: ["F1"], label: "Go to Billing", group: "Global" },
 
   ...NAV_SHORTCUTS.map((n): ShortcutDoc => ({
     keys: ["Alt", n.keyLabel],

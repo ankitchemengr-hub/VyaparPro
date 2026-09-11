@@ -45,7 +45,7 @@ function LitersRing({ purchased, sold }: { purchased: number; sold: number }) {
   const k = (n: number) => (n / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 });
 
   return (
-    <div className="flex items-center gap-5">
+    <div className="flex items-center gap-3 sm:gap-5">
       <div className="relative shrink-0" style={{ width: size, height: size }}>
         <svg width={size} height={size} className="-rotate-90" role="img" aria-label="Liters purchased versus sold">
           <circle
