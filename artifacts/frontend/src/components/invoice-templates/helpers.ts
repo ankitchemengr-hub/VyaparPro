@@ -113,28 +113,30 @@ export function computeTotals(invoice: any, maps: ProductMaps): Computed {
   return { items, isGst, isInterstate, placeOfSupply, totalQty, totalLtr, totalBox, hasAnyDisc, roundOff };
 }
 
-// Print stylesheet for the invoice sheet.
-//
-// InvoiceTemplateRenderer portals a copy of the sheet (`.invoice-print-portal`)
-// straight to <body>; during @media print this CSS hides `#root` (the whole
-// app — sidebar, header, on-screen preview, every closed dialog's still-mounted
-// markup) so nothing reserves page height or leaves the sheet hidden, and the
-// portal copy prints on its own. `.invoice-print-portal` is display:none on
-// screen. `paperOverride`/`orientationOverride` let Print Settings force a
-// different paper size/orientation than the template's own default.
+// Print stylesheet tailored to a template's paper size + orientation. Isolates
+// the `.invoice-print-area` so only the sheet prints, hiding all app chrome.
+// `paperOverride`/`orientationOverride` let Print Settings force a different
+// paper size/orientation than the template's own default (e.g. print a
+// portrait template landscape) without needing a per-template redesign.
 export function getPrintCss(
   meta: TemplateMeta,
   paperOverride?: "auto" | "A4" | "A5" | null,
   orientationOverride?: "auto" | "portrait" | "landscape" | null,
 ): string {
   const paper = paperOverride && paperOverride !== "auto" ? paperOverride : meta.paper;
-  const orientation =
-    orientationOverride && orientationOverride !== "auto" ? orientationOverride : meta.orientation;
+  const orientation = orientationOverride && orientationOverride !== "auto" ? orientationOverride : meta.orientation;
 
-  // The shared print shell: drop the app, show only the portaled sheet.
-  const shell = (pageRule: string, sheetRules: string, extra = "") => `
-    .invoice-print-portal { display: none; }
-    @page { ${pageRule} }
+  // Legacy A5-landscape cash-memo, printed on the A4 paper every shop loads.
+  // An A5-landscape sheet (~210 x 148mm) is exactly the TOP HALF of an A4
+  // portrait page, so lay it out there full-width, bottom half left blank —
+  // the classic tear-off bill-book format. The on-screen sheet has generous
+  // padding + decorative blank filler rows that push a normal bill past
+  // ~200mm (onto a 2nd page); print clamps all of that vertical air right
+  // down so a typical bill lands inside the top ~half. Kept at a readable
+  // ~10.5px (not the old 9px squeeze) with a full border box.
+  if (meta.id === "a5-compact") {
+    return `
+    @page { size: 210mm 297mm; margin: 5mm; }
     @media print {
       html, body {
         background: #fff !important;
@@ -143,74 +145,122 @@ export function getPrintCss(
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
       }
-      /* Drop the whole app plus any open dialog / toast portal — only the
-         sheet below (a direct child of <body>) survives. */
-      #root { display: none !important; }
-      body > *:not(.invoice-print-portal) { display: none !important; }
-      .invoice-print-portal { display: block !important; }
-      .invoice-print-portal .invoice-sheet {
+      body * { visibility: hidden !important; }
+      .invoice-print-area, .invoice-print-area * { visibility: visible !important; }
+      .invoice-print-area {
+        position: absolute !important;
+        left: 0 !important; top: 0 !important;
+        width: 100% !important;
+        transform: none !important;
+        box-shadow: none !important;
+        display: block !important;
+      }
+      .invoice-scale-wrapper {
+        width: auto !important;
+        height: auto !important;
+        overflow: visible !important;
+        transform: none !important;
+      }
+      .invoice-print-area .invoice-sheet {
+        width: 100% !important;
+        min-height: 120mm !important;
+        font-size: 10.5px !important;
+        line-height: 1.18 !important;
         color: #000 !important;
         background: #fff !important;
-        box-shadow: none !important;
+        border: 1.5px solid #000 !important;
+        transform: none !important;
         margin: 0 !important;
-        ${sheetRules}
+        box-shadow: none !important;
       }
-      ${extra}
+      /* Squeeze the roomy on-screen spacing for print so the bill lands in
+         the top ~half of the A4 sheet instead of overflowing to page 2. */
+      .invoice-print-area .invoice-sheet [class~="p-3"] { padding: 3px 7px !important; }
+      .invoice-print-area .invoice-sheet [class~="p-2"] { padding: 3px 5px !important; }
+      .invoice-print-area .invoice-sheet [class~="px-3"] { padding-left: 7px !important; padding-right: 7px !important; }
+      .invoice-print-area .invoice-sheet [class~="pt-10"] { padding-top: 10px !important; }
+      .invoice-print-area .invoice-sheet [class~="pt-4"] { padding-top: 3px !important; }
+      .invoice-print-area .invoice-sheet [class~="mt-3"],
+      .invoice-print-area .invoice-sheet [class~="mt-2"] { margin-top: 2px !important; }
+      .invoice-print-area .invoice-sheet [class~="gap-y-2"] { row-gap: 2px !important; }
+      .invoice-print-area .invoice-sheet [class~="space-y-3"] > * + * { margin-top: 2px !important; }
+      .invoice-print-area .invoice-sheet [class~="space-y-1"] > * + * { margin-top: 1px !important; }
+      /* Decorative blank filler rows + all table cells: hairline vertical
+         padding (they otherwise eat ~25mm on a 3-line bill). */
+      .invoice-print-area .invoice-sheet [class~="py-3"],
+      .invoice-print-area .invoice-sheet [class~="py-2"],
+      .invoice-print-area .invoice-sheet [class~="py-1.5"] { padding-top: 1px !important; padding-bottom: 1px !important; }
+      .invoice-print-area .invoice-sheet table { width: 100% !important; }
+      .invoice-print-area .invoice-sheet td,
+      .invoice-print-area .invoice-sheet th {
+        padding: 1px 5px !important;
+        border-color: #000 !important;
+      }
+      .sidebar, .topbar, .no-print, button, nav { display: none !important; }
     }
   `;
-
-  // Legacy dense cash-memo. Its columns are laid out for a wide (~200mm) sheet,
-  // printed on the shop's own 146 x 208mm invoice stationery.
-  //   • portrait (146 x 208mm) → lay the wide sheet out at 200mm then `zoom` it
-  //     to ~0.685 so it fits the ~138mm usable width. `zoom` (unlike
-  //     `transform`) reflows and is honoured for print pagination, so a long
-  //     bill flows cleanly onto a second sheet.
-  //   • landscape (208 x 146mm) → the sheet spans the full width at natural
-  //     size, the classic wide tear-off bill.
-  if (meta.id === "a5-compact") {
-    const landscape = orientation === "landscape";
-    const pageRule = landscape ? "size: 208mm 146mm; margin: 4mm;" : "size: 146mm 208mm; margin: 4mm;";
-    const sheetRules = landscape
-      ? `width: 100% !important; min-height: 132mm !important; font-size: 10.5px !important; line-height: 1.2 !important; border: 1.5px solid #000 !important;`
-      : `width: 200mm !important; min-height: 284mm !important; zoom: 0.685; font-size: 10.5px !important; line-height: 1.2 !important; border: 1.5px solid #000 !important;`;
-    const squeeze = `
-      /* Squeeze the roomy on-screen spacing so a short bill still fills one
-         sheet with a few writable lines instead of a big blank gap. */
-      .invoice-print-portal .invoice-sheet [class~="p-3"] { padding: 3px 7px !important; }
-      .invoice-print-portal .invoice-sheet [class~="p-2"] { padding: 3px 5px !important; }
-      .invoice-print-portal .invoice-sheet [class~="px-3"] { padding-left: 7px !important; padding-right: 7px !important; }
-      .invoice-print-portal .invoice-sheet [class~="pt-10"] { padding-top: 10px !important; }
-      .invoice-print-portal .invoice-sheet [class~="pt-4"] { padding-top: 3px !important; }
-      .invoice-print-portal .invoice-sheet [class~="mt-3"],
-      .invoice-print-portal .invoice-sheet [class~="mt-2"] { margin-top: 2px !important; }
-      .invoice-print-portal .invoice-sheet [class~="gap-y-2"] { row-gap: 2px !important; }
-      .invoice-print-portal .invoice-sheet [class~="space-y-3"] > * + * { margin-top: 2px !important; }
-      .invoice-print-portal .invoice-sheet [class~="space-y-1"] > * + * { margin-top: 1px !important; }
-      .invoice-print-portal .invoice-sheet [class~="py-3"],
-      .invoice-print-portal .invoice-sheet [class~="py-2"],
-      .invoice-print-portal .invoice-sheet [class~="py-1.5"] { padding-top: 1px !important; padding-bottom: 1px !important; }
-      .invoice-print-portal .invoice-sheet table { width: 100% !important; }
-      .invoice-print-portal .invoice-sheet td,
-      .invoice-print-portal .invoice-sheet th { padding: 1px 5px !important; border-color: #000 !important; }
-    `;
-    return shell(pageRule, sheetRules, squeeze);
   }
 
-  // The other templates (Modern/Professional/Classic/Minimal) are one
-  // component for both their -a4 and -a5 entries. Explicit width×height
-  // (swapped for landscape) since several drivers ignore the portrait/
-  // landscape keyword. For A5, lay the A4-designed sheet out wide so text
-  // wraps as designed, then `zoom` the whole result down to fit.
+  // `size: A4 landscape` is valid CSS, but several browser/print-driver
+  // combinations only honor the paper-size keyword and silently ignore the
+  // portrait/landscape keyword next to it — the page prints in the same
+  // orientation regardless of what's selected. Explicit width×height (with
+  // the two swapped for landscape) is universally respected since it isn't
+  // relying on the browser to interpret the orientation keyword at all.
   const PAGE_DIMENSIONS_MM: Record<"A4" | "A5", [number, number]> = {
     A4: [210, 297],
     A5: [148, 210],
   };
   const [w, h] = PAGE_DIMENSIONS_MM[paper as "A4" | "A5"] ?? PAGE_DIMENSIONS_MM.A4;
-  const wh = orientation === "landscape" ? `${h}mm ${w}mm` : `${w}mm ${h}mm`;
-  const pageRule = `size: ${wh}; margin: ${paper === "A5" ? "5mm" : "8mm"};`;
-  const sheetRules =
-    paper === "A5" ? `width: 190mm !important; zoom: 0.72;` : `width: 100% !important;`;
-  return shell(pageRule, sheetRules);
+  const sizeRule = orientation === "landscape" ? `${h}mm ${w}mm` : `${w}mm ${h}mm`;
+  // The other four templates (Modern/Professional/Classic/Minimal) are the
+  // same component for both their -a4 and -a5 registry entries — nothing
+  // about their own markup/CSS actually shrinks for A5. Left alone, printing
+  // one on A5 constrains `.invoice-print-area` to the A5 page's ~138mm
+  // content width (see `width: 100%` below), which *reflows* the same A4-
+  // designed content into a much narrower column — making it taller, not
+  // shorter, and overflowing a 2-item invoice onto a second page with the
+  // totals cut off the first sheet. Fix: lay the sheet out at its natural
+  // A4-ish width first (so text wraps exactly as designed), then shrink the
+  // whole result with `zoom` (unlike `transform`, zoom reflows and is
+  // respected for print pagination) to fit A5's usable width.
+  const a5Shrink =
+    paper === "A5" && meta.id !== "a5-compact"
+      ? `
+      .invoice-print-area .invoice-sheet {
+        width: 190mm !important;
+        zoom: 0.72;
+      }`
+      : "";
+  return `
+    @page { size: ${sizeRule}; margin: ${paper === "A5" ? "5mm" : "8mm"}; }
+    @media print {
+      html, body {
+        background: #fff !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      body * { visibility: hidden !important; }
+      .invoice-print-area, .invoice-print-area * { visibility: visible !important; }
+      .invoice-print-area {
+        position: absolute !important;
+        left: 0 !important; top: 0 !important;
+        width: 100% !important;
+        box-shadow: none !important;
+        transform: none !important;
+        display: block !important;
+      }
+      .invoice-scale-wrapper {
+        width: auto !important;
+        height: auto !important;
+        overflow: visible !important;
+      }
+      .sidebar, .topbar, .no-print, button, nav { display: none !important; }
+      ${a5Shrink}
+    }
+  `;
 }
 
 // Faint background watermark, layered behind the sheet's own content via a
@@ -223,10 +273,8 @@ export function getPrintCss(
 export function getWatermarkCss(watermarkImage?: string | null, show?: boolean): string {
   if (!show || !watermarkImage) return "";
   return `
-    .invoice-print-area .invoice-sheet,
-    .invoice-print-portal .invoice-sheet { position: relative; }
-    .invoice-print-area .invoice-sheet::before,
-    .invoice-print-portal .invoice-sheet::before {
+    .invoice-print-area .invoice-sheet { position: relative; }
+    .invoice-print-area .invoice-sheet::before {
       content: "";
       position: absolute;
       inset: 0;
