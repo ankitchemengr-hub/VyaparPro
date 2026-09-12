@@ -21,6 +21,7 @@ import ItemRegister from "@/pages/item-register";
 import StockAdjustment from "@/pages/stock-adjustment";
 import Customers from "@/pages/customers";
 import CustomerProfile from "@/pages/customer-profile";
+import InactiveCustomers from "@/pages/inactive-customers";
 import Khatabook from "@/pages/khatabook";
 import Payments from "@/pages/payments";
 import Rewards from "@/pages/rewards";
@@ -91,6 +92,7 @@ function ProtectedRoutes() {
         <Route path="/brands" component={Brands} />
         <Route path="/stock-adjustment" component={StockAdjustment} />
         <Route path="/customers" component={Customers} />
+        <Route path="/customers/inactive" component={InactiveCustomers} />
         <Route path="/customers/:id" component={CustomerProfile} />
         <Route path="/khatabook" component={Khatabook} />
         <Route path="/payments" component={Payments} />

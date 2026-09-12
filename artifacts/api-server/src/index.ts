@@ -2,6 +2,7 @@ import app from "./app";
 import { ensureDatabaseReady } from "./lib/bootstrap";
 import { logger } from "./lib/logger";
 import { startSubscriptionScheduler } from "./lib/subscription-scheduler";
+import { startBackupScheduler, registerShutdownBackup } from "./lib/backup-scheduler";
 import { isMultiCompanyMode, getDefaultCompanyId } from "./lib/system-config";
 import { getCurrentCompany } from "./lib/company";
 
@@ -25,6 +26,8 @@ async function start(): Promise<void> {
   app.listen(port, () => {
     logger.info(`🚀 Server running on http://localhost:${port}`);
   });
+  startBackupScheduler();
+  registerShutdownBackup();
 }
 
 // Execute the start function

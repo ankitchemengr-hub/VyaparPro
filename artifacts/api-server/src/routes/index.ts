@@ -19,6 +19,7 @@ import accountsRouter from "./accounts";
 import workersRouter from "./workers";
 import expensesRouter from "./expenses";
 import customerOrdersRouter from "./customer-orders";
+import customerFollowUpsRouter from "./customer-follow-ups";
 import reportsRouter from "./reports";
 import commissionsRouter from "./commissions";
 import subscriptionsRouter from "./subscriptions";
@@ -59,6 +60,7 @@ router.use(accountsRouter);
 router.use(workersRouter);
 router.use(expensesRouter);
 router.use(customerOrdersRouter);
+router.use(customerFollowUpsRouter);
 router.use(reportsRouter);
 router.use(commissionsRouter);
 // settings + gstin are mounted BEFORE subscriptions: the subscriptions router

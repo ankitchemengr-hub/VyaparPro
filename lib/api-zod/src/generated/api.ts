@@ -3050,6 +3050,82 @@ export const UpdateSmartOrderSettingsResponse = zod.object({
 
 
 /**
+ * @summary Get the inactive-customer days threshold
+ */
+export const GetCustomerFollowUpSettingsResponse = zod.object({
+  "days": zod.number().describe('Customers with no invoice in this many days show up on the Inactive Customers list.')
+})
+
+
+/**
+ * @summary Update the inactive-customer days threshold (admin only)
+ */
+export const UpdateCustomerFollowUpSettingsBody = zod.object({
+  "days": zod.number().describe('Customers with no invoice in this many days show up on the Inactive Customers list.')
+})
+
+export const UpdateCustomerFollowUpSettingsResponse = zod.object({
+  "days": zod.number().describe('Customers with no invoice in this many days show up on the Inactive Customers list.')
+})
+
+
+/**
+ * Includes customers who have never had an invoice at all. Sorted most-inactive first (never-ordered, then oldest last order).
+ * @summary Customers with no (non-cancelled) invoice within the configured threshold
+ */
+export const ListInactiveCustomersResponseItem = zod.object({
+  "customerId": zod.number(),
+  "name": zod.string(),
+  "mobile": zod.string(),
+  "outstandingBalance": zod.number(),
+  "lastInvoiceDate": zod.coerce.date().nullable(),
+  "daysSinceLastInvoice": zod.number().nullable().describe('Null when the customer has never had an invoice.'),
+  "lastRemark": zod.union([zod.object({
+  "id": zod.number(),
+  "remark": zod.string(),
+  "createdByName": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+}),zod.null()])
+})
+export const ListInactiveCustomersResponse = zod.array(ListInactiveCustomersResponseItem)
+
+
+/**
+ * @summary Remark history for a customer, most recent first
+ */
+export const ListCustomerFollowUpsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListCustomerFollowUpsResponseItem = zod.object({
+  "id": zod.number(),
+  "remark": zod.string(),
+  "createdByName": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+})
+export const ListCustomerFollowUpsResponse = zod.array(ListCustomerFollowUpsResponseItem)
+
+
+/**
+ * @summary Log a contact remark for a customer
+ */
+export const CreateCustomerFollowUpParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const CreateCustomerFollowUpBody = zod.object({
+  "remark": zod.string()
+})
+
+export const CreateCustomerFollowUpResponse = zod.object({
+  "id": zod.number(),
+  "remark": zod.string(),
+  "createdByName": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
  * Ranks products by sales velocity (finished goods, from invoice history) or consumption velocity (raw materials, from Manufacturing stock movements), and suggests how much to reorder — a velocity-based coverage quantity plus an optional reinvestment boost computed from the profit margin actually earned on units sold.
  * @summary Fast-moving finished products and raw materials, with a suggested reorder qty
  */

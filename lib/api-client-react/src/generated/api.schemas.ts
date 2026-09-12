@@ -2174,6 +2174,38 @@ export interface WorkloadCardUpdate {
   targetQty?: number;
 }
 
+export interface CustomerFollowUpSettings {
+  /** Customers with no invoice in this many days show up on the Inactive Customers list. */
+  days: number;
+}
+
+export interface CustomerFollowUp {
+  id: number;
+  remark: string;
+  /** @nullable */
+  createdByName: string | null;
+  createdAt: string;
+}
+
+export interface InactiveCustomer {
+  customerId: number;
+  name: string;
+  mobile: string;
+  outstandingBalance: number;
+  /** @nullable */
+  lastInvoiceDate: string | null;
+  /**
+     * Null when the customer has never had an invoice.
+     * @nullable
+     */
+  daysSinceLastInvoice: number | null;
+  lastRemark: CustomerFollowUp | null;
+}
+
+export interface CreateCustomerFollowUpInput {
+  remark: string;
+}
+
 export interface SmartOrderSettings {
   /** % of profit margin earned in the lookback window that gets converted into extra reorder qty for that product, on top of the plain velocity-based suggestion. */
   reinvestPct: number;

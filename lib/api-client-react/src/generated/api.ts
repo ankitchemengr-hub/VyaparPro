@@ -51,10 +51,13 @@ import type {
   CollectCashInput,
   CommissionReport,
   CompanyOption,
+  CreateCustomerFollowUpInput,
   CreateMaterialTransferInput,
   CreatePurchaseInput,
   CreateSubscriptionInput,
   CreateUserInput,
+  CustomerFollowUp,
+  CustomerFollowUpSettings,
   CustomerOrder,
   CustomerOrderDetail,
   CustomerOrderInput,
@@ -86,6 +89,7 @@ import type {
   GlobalSearchParams,
   GstinLookupResult,
   HealthStatus,
+  InactiveCustomer,
   Invoice,
   InvoiceInput,
   InvoicePaymentReceiptSummary,
@@ -7713,6 +7717,379 @@ export const useUpdateSmartOrderSettings = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getUpdateSmartOrderSettingsMutationOptions(options));
+    }
+
+export const getGetCustomerFollowUpSettingsUrl = () => {
+
+
+
+
+  return `/api/customer-follow-ups/settings`
+}
+
+/**
+ * @summary Get the inactive-customer days threshold
+ */
+export const getCustomerFollowUpSettings = async ( options?: RequestInit): Promise<CustomerFollowUpSettings> => {
+
+  return customFetch<CustomerFollowUpSettings>(getGetCustomerFollowUpSettingsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCustomerFollowUpSettingsQueryKey = () => {
+    return [
+    `/api/customer-follow-ups/settings`
+    ] as const;
+    }
+
+
+export const getGetCustomerFollowUpSettingsQueryOptions = <TData = Awaited<ReturnType<typeof getCustomerFollowUpSettings>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCustomerFollowUpSettings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCustomerFollowUpSettingsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCustomerFollowUpSettings>>> = ({ signal }) => getCustomerFollowUpSettings({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCustomerFollowUpSettings>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCustomerFollowUpSettingsQueryResult = NonNullable<Awaited<ReturnType<typeof getCustomerFollowUpSettings>>>
+export type GetCustomerFollowUpSettingsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get the inactive-customer days threshold
+ */
+
+export function useGetCustomerFollowUpSettings<TData = Awaited<ReturnType<typeof getCustomerFollowUpSettings>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCustomerFollowUpSettings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCustomerFollowUpSettingsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateCustomerFollowUpSettingsUrl = () => {
+
+
+
+
+  return `/api/customer-follow-ups/settings`
+}
+
+/**
+ * @summary Update the inactive-customer days threshold (admin only)
+ */
+export const updateCustomerFollowUpSettings = async (customerFollowUpSettings: CustomerFollowUpSettings, options?: RequestInit): Promise<CustomerFollowUpSettings> => {
+
+  return customFetch<CustomerFollowUpSettings>(getUpdateCustomerFollowUpSettingsUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(customerFollowUpSettings)
+  }
+);}
+
+
+
+
+export const getUpdateCustomerFollowUpSettingsMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCustomerFollowUpSettings>>, TError,{data: BodyType<CustomerFollowUpSettings>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateCustomerFollowUpSettings>>, TError,{data: BodyType<CustomerFollowUpSettings>}, TContext> => {
+
+const mutationKey = ['updateCustomerFollowUpSettings'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateCustomerFollowUpSettings>>, {data: BodyType<CustomerFollowUpSettings>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateCustomerFollowUpSettings(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateCustomerFollowUpSettingsMutationResult = NonNullable<Awaited<ReturnType<typeof updateCustomerFollowUpSettings>>>
+    export type UpdateCustomerFollowUpSettingsMutationBody = BodyType<CustomerFollowUpSettings>
+    export type UpdateCustomerFollowUpSettingsMutationError = ErrorType<void>
+
+    /**
+ * @summary Update the inactive-customer days threshold (admin only)
+ */
+export const useUpdateCustomerFollowUpSettings = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCustomerFollowUpSettings>>, TError,{data: BodyType<CustomerFollowUpSettings>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateCustomerFollowUpSettings>>,
+        TError,
+        {data: BodyType<CustomerFollowUpSettings>},
+        TContext
+      > => {
+      return useMutation(getUpdateCustomerFollowUpSettingsMutationOptions(options));
+    }
+
+export const getListInactiveCustomersUrl = () => {
+
+
+
+
+  return `/api/customers/inactive`
+}
+
+/**
+ * Includes customers who have never had an invoice at all. Sorted most-inactive first (never-ordered, then oldest last order).
+ * @summary Customers with no (non-cancelled) invoice within the configured threshold
+ */
+export const listInactiveCustomers = async ( options?: RequestInit): Promise<InactiveCustomer[]> => {
+
+  return customFetch<InactiveCustomer[]>(getListInactiveCustomersUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListInactiveCustomersQueryKey = () => {
+    return [
+    `/api/customers/inactive`
+    ] as const;
+    }
+
+
+export const getListInactiveCustomersQueryOptions = <TData = Awaited<ReturnType<typeof listInactiveCustomers>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listInactiveCustomers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListInactiveCustomersQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listInactiveCustomers>>> = ({ signal }) => listInactiveCustomers({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listInactiveCustomers>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListInactiveCustomersQueryResult = NonNullable<Awaited<ReturnType<typeof listInactiveCustomers>>>
+export type ListInactiveCustomersQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Customers with no (non-cancelled) invoice within the configured threshold
+ */
+
+export function useListInactiveCustomers<TData = Awaited<ReturnType<typeof listInactiveCustomers>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listInactiveCustomers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListInactiveCustomersQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListCustomerFollowUpsUrl = (id: number,) => {
+
+
+
+
+  return `/api/customers/${id}/follow-ups`
+}
+
+/**
+ * @summary Remark history for a customer, most recent first
+ */
+export const listCustomerFollowUps = async (id: number, options?: RequestInit): Promise<CustomerFollowUp[]> => {
+
+  return customFetch<CustomerFollowUp[]>(getListCustomerFollowUpsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCustomerFollowUpsQueryKey = (id: number,) => {
+    return [
+    `/api/customers/${id}/follow-ups`
+    ] as const;
+    }
+
+
+export const getListCustomerFollowUpsQueryOptions = <TData = Awaited<ReturnType<typeof listCustomerFollowUps>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCustomerFollowUps>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCustomerFollowUpsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCustomerFollowUps>>> = ({ signal }) => listCustomerFollowUps(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCustomerFollowUps>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListCustomerFollowUpsQueryResult = NonNullable<Awaited<ReturnType<typeof listCustomerFollowUps>>>
+export type ListCustomerFollowUpsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Remark history for a customer, most recent first
+ */
+
+export function useListCustomerFollowUps<TData = Awaited<ReturnType<typeof listCustomerFollowUps>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCustomerFollowUps>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListCustomerFollowUpsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateCustomerFollowUpUrl = (id: number,) => {
+
+
+
+
+  return `/api/customers/${id}/follow-ups`
+}
+
+/**
+ * @summary Log a contact remark for a customer
+ */
+export const createCustomerFollowUp = async (id: number,
+    createCustomerFollowUpInput: CreateCustomerFollowUpInput, options?: RequestInit): Promise<CustomerFollowUp> => {
+
+  return customFetch<CustomerFollowUp>(getCreateCustomerFollowUpUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createCustomerFollowUpInput)
+  }
+);}
+
+
+
+
+export const getCreateCustomerFollowUpMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCustomerFollowUp>>, TError,{id: number;data: BodyType<CreateCustomerFollowUpInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createCustomerFollowUp>>, TError,{id: number;data: BodyType<CreateCustomerFollowUpInput>}, TContext> => {
+
+const mutationKey = ['createCustomerFollowUp'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createCustomerFollowUp>>, {id: number;data: BodyType<CreateCustomerFollowUpInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  createCustomerFollowUp(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateCustomerFollowUpMutationResult = NonNullable<Awaited<ReturnType<typeof createCustomerFollowUp>>>
+    export type CreateCustomerFollowUpMutationBody = BodyType<CreateCustomerFollowUpInput>
+    export type CreateCustomerFollowUpMutationError = ErrorType<void>
+
+    /**
+ * @summary Log a contact remark for a customer
+ */
+export const useCreateCustomerFollowUp = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCustomerFollowUp>>, TError,{id: number;data: BodyType<CreateCustomerFollowUpInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createCustomerFollowUp>>,
+        TError,
+        {id: number;data: BodyType<CreateCustomerFollowUpInput>},
+        TContext
+      > => {
+      return useMutation(getCreateCustomerFollowUpMutationOptions(options));
     }
 
 export const getListSmartOrderSuggestionsUrl = () => {

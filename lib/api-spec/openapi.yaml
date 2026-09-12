@@ -2099,6 +2099,102 @@ paths:
         "403":
           description: Admin only
 
+  /customer-follow-ups/settings:
+    get:
+      operationId: getCustomerFollowUpSettings
+      tags: [customer-follow-ups]
+      summary: Get the inactive-customer days threshold
+      responses:
+        "200":
+          description: Settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerFollowUpSettings"
+    put:
+      operationId: updateCustomerFollowUpSettings
+      tags: [customer-follow-ups]
+      summary: Update the inactive-customer days threshold (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerFollowUpSettings"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerFollowUpSettings"
+        "403":
+          description: Admin only
+
+  /customers/inactive:
+    get:
+      operationId: listInactiveCustomers
+      tags: [customer-follow-ups]
+      summary: Customers with no (non-cancelled) invoice within the configured threshold
+      description: >
+        Includes customers who have never had an invoice at all. Sorted
+        most-inactive first (never-ordered, then oldest last order).
+      responses:
+        "200":
+          description: Inactive customers, most-inactive first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InactiveCustomer"
+
+  /customers/{id}/follow-ups:
+    get:
+      operationId: listCustomerFollowUps
+      tags: [customer-follow-ups]
+      summary: Remark history for a customer, most recent first
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Follow-up remarks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CustomerFollowUp"
+    post:
+      operationId: createCustomerFollowUp
+      tags: [customer-follow-ups]
+      summary: Log a contact remark for a customer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCustomerFollowUpInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerFollowUp"
+        "400":
+          description: Invalid request
+
   /smart-order/suggestions:
     get:
       operationId: listSmartOrderSuggestions
@@ -5632,6 +5728,58 @@ components:
             'done' — overrides the card's original targetQty so the worker can
             confirm what actually came off the line. Must be > 0.
           minimum: 0.001
+
+    CustomerFollowUpSettings:
+      type: object
+      required: [days]
+      properties:
+        days:
+          type: number
+          description: Customers with no invoice in this many days show up on the Inactive Customers list.
+
+    InactiveCustomer:
+      type: object
+      required: [customerId, name, mobile, outstandingBalance, lastInvoiceDate, daysSinceLastInvoice, lastRemark]
+      properties:
+        customerId:
+          type: integer
+        name:
+          type: string
+        mobile:
+          type: string
+        outstandingBalance:
+          type: number
+        lastInvoiceDate:
+          type: ["string", "null"]
+          format: date-time
+        daysSinceLastInvoice:
+          type: ["integer", "null"]
+          description: Null when the customer has never had an invoice.
+        lastRemark:
+          oneOf:
+            - $ref: "#/components/schemas/CustomerFollowUp"
+            - type: "null"
+
+    CustomerFollowUp:
+      type: object
+      required: [id, remark, createdByName, createdAt]
+      properties:
+        id:
+          type: integer
+        remark:
+          type: string
+        createdByName:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateCustomerFollowUpInput:
+      type: object
+      required: [remark]
+      properties:
+        remark:
+          type: string
 
     SmartOrderSettings:
       type: object
