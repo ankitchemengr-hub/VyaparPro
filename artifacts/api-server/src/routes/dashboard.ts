@@ -119,7 +119,12 @@ router.get("/dashboard/capital", async (req, res): Promise<void> => {
   const cashInAccounts = Number(cashRow.v ?? 0);
   const payable = Number(payRow.v ?? 0);
   const expenses = Number(expRow.v ?? 0);
-  const capital = inventoryValue + receivable + cashInAccounts - payable - expenses;
+  // Not subtracted here: every expense (see POST /expenses) always debits an
+  // `accounts` row and is mirrored by an account_transactions "out" entry, so
+  // its impact is already inside `cashInAccounts`. Subtracting the cumulative
+  // `expenses` total on top of that double-counted every rupee spent — Cash
+  // and Expenses would both drop by the same amount for one real outflow.
+  const capital = inventoryValue + receivable + cashInAccounts - payable;
   const capitalK = capital / 1000;
 
   const today = new Date();
@@ -170,7 +175,6 @@ router.get("/dashboard/capital", async (req, res): Promise<void> => {
         { label: "Receivable", change: receivable - Number(prevRow.receivable ?? 0) },
         { label: "Cash", change: cashInAccounts - Number(prevRow.cash_in_accounts ?? 0) },
         { label: "Supplier Balance", change: -(payable - Number(prevRow.payable ?? 0)) },
-        { label: "Expenses", change: -(expenses - Number(prevRow.expenses ?? 0)) },
       ]
     : null;
 
