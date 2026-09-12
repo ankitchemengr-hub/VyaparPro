@@ -53,16 +53,20 @@ router.get("/customers/inactive", async (req, res): Promise<void> => {
     const days = await loadThreshold(companyId);
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
+    // A customer who has never invoiced only counts as inactive once they've
+    // had the full threshold to place a first order (created_at < cutoff) —
+    // otherwise every brand-new customer would show up here on day one.
     const { rows: customers } = await pool.query(
-      `SELECT e.id, e.name, e.mobile, e.outstanding_balance,
+      `SELECT e.id, e.name, e.mobile, e.outstanding_balance, e.created_at,
               MAX(i.invoice_date) AS last_invoice_date
        FROM entities e
        LEFT JOIN invoices i
          ON i.customer_id = e.id AND i.company_id = e.company_id AND i.status != 'cancelled'
        WHERE e.company_id = $1 AND e.type = 'customer' AND e.is_active = true
        GROUP BY e.id
-       HAVING MAX(i.invoice_date) IS NULL OR MAX(i.invoice_date) < $2
-       ORDER BY MAX(i.invoice_date) ASC NULLS FIRST`,
+       HAVING MAX(i.invoice_date) < $2
+          OR (MAX(i.invoice_date) IS NULL AND e.created_at < $2)
+       ORDER BY COALESCE(MAX(i.invoice_date), e.created_at) ASC`,
       [companyId, cutoff],
     );
 
@@ -95,6 +99,11 @@ router.get("/customers/inactive", async (req, res): Promise<void> => {
       daysSinceLastInvoice: c.last_invoice_date
         ? Math.floor((now - new Date(c.last_invoice_date).getTime()) / (24 * 60 * 60 * 1000))
         : null,
+      // Never invoiced — days since registration instead, so the UI can show
+      // "registered N days ago, still no order" rather than a bare "Never ordered".
+      daysSinceRegistered: c.last_invoice_date
+        ? null
+        : Math.floor((now - new Date(c.created_at).getTime()) / (24 * 60 * 60 * 1000)),
       lastRemark: latestRemarkByCustomer.get(c.id) ?? null,
     })));
   } catch (err) {

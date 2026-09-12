@@ -5739,7 +5739,7 @@ components:
 
     InactiveCustomer:
       type: object
-      required: [customerId, name, mobile, outstandingBalance, lastInvoiceDate, daysSinceLastInvoice, lastRemark]
+      required: [customerId, name, mobile, outstandingBalance, lastInvoiceDate, daysSinceLastInvoice, daysSinceRegistered, lastRemark]
       properties:
         customerId:
           type: integer
@@ -5755,6 +5755,9 @@ components:
         daysSinceLastInvoice:
           type: ["integer", "null"]
           description: Null when the customer has never had an invoice.
+        daysSinceRegistered:
+          type: ["integer", "null"]
+          description: Days since this customer was registered — set only when they've never had an invoice (daysSinceLastInvoice is null).
         lastRemark:
           oneOf:
             - $ref: "#/components/schemas/CustomerFollowUp"

@@ -3080,6 +3080,7 @@ export const ListInactiveCustomersResponseItem = zod.object({
   "outstandingBalance": zod.number(),
   "lastInvoiceDate": zod.coerce.date().nullable(),
   "daysSinceLastInvoice": zod.number().nullable().describe('Null when the customer has never had an invoice.'),
+  "daysSinceRegistered": zod.number().nullable().describe('Days since this customer was registered — set only when they\'ve never had an invoice (daysSinceLastInvoice is null).'),
   "lastRemark": zod.union([zod.object({
   "id": zod.number(),
   "remark": zod.string(),

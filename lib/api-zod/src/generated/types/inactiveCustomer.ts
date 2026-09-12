@@ -19,5 +19,10 @@ export interface InactiveCustomer {
      * @nullable
      */
   daysSinceLastInvoice: number | null;
+  /**
+     * Days since this customer was registered — set only when they've never had an invoice (daysSinceLastInvoice is null).
+     * @nullable
+     */
+  daysSinceRegistered: number | null;
   lastRemark: CustomerFollowUp | null;
 }

@@ -136,7 +136,12 @@ export default function InactiveCustomers() {
                   <span>{c.mobile}</span>
                   <span className="mx-1">·</span>
                   {c.daysSinceLastInvoice == null ? (
-                    <Badge variant="outline" className="text-[11px]">Never ordered</Badge>
+                    <>
+                      <Badge variant="outline" className="text-[11px]">Never ordered</Badge>
+                      {c.daysSinceRegistered != null && (
+                        <span>Registered {c.daysSinceRegistered} days ago</span>
+                      )}
+                    </>
                   ) : (
                     <span>Last order {c.daysSinceLastInvoice} days ago</span>
                   )}
