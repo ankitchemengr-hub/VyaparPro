@@ -291,7 +291,7 @@ export default function PriceList() {
       const key = `${id}:${field}`;
       setManualPrice((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
     }
-  }, [derivePriceField]);
+  }, []);
 
   const allFilteredSelected = filtered.length > 0 && filtered.every((p) => selected.has(p.id));
 
@@ -424,8 +424,14 @@ export default function PriceList() {
     const original = products.find((p) => p.id === id);
     const origVal = String(original?.[field as keyof Product] ?? fallback ?? "");
     const staged = edits[id]?.[field];
-    const current = staged === undefined ? String(fallback ?? "") : (resolveCurrent ? resolveCurrent(staged) : staged);
-    const isDirty = staged !== undefined && current !== origVal;
+    // A margin-linked price cell (resolveCurrent given) always asks the
+    // resolver what to show, even when this exact field was never staged
+    // directly — resolveMarginPrice below decides live-vs-saved from
+    // whatever IS staged on the row (margin %, Purchase ₹, ...).
+    const current = resolveCurrent
+      ? resolveCurrent(staged !== undefined ? staged : origVal)
+      : (staged === undefined ? String(fallback ?? "") : staged);
+    const isDirty = current !== origVal;
 
     return (
       <div className="relative">
@@ -442,12 +448,25 @@ export default function PriceList() {
     );
   };
 
-  // For a margin-linked ₹ column: once staged, always show the live formula
-  // result rather than whatever string happened to be written at the last
+  // For a margin-linked ₹ column: always show the live formula result,
+  // recomputed from whatever's currently staged on the row (that column's
+  // margin %, or Purchase ₹) — never a value written at some earlier
   // keystroke — unless the user typed directly into that ₹ box, in which
   // case their manual value sticks until they touch the % cell again.
   const resolveMarginPrice = (id: number, field: "nonGstPrice" | "retailPrice" | "wholesalePrice") =>
-    (staged: string) => (manualPrice.has(`${id}:${field}`) ? staged : (derivePriceField(edits[id], id, field) ?? staged));
+    (fallbackVal: string) => {
+      if (manualPrice.has(`${id}:${field}`)) return fallbackVal;
+      const rowEdits = edits[id];
+      if (!rowEdits) return fallbackVal;
+      // Only derive once something that actually feeds this formula was
+      // staged — otherwise an untouched row could show amber-dirty just
+      // because its saved price doesn't exactly match what its saved
+      // margin would compute today.
+      const marginField = PRICE_TO_MARGIN_FIELD[field];
+      const relevant = rowEdits[marginField] !== undefined || rowEdits.purchasePrice !== undefined || rowEdits[field] !== undefined;
+      if (!relevant) return fallbackVal;
+      return derivePriceField(rowEdits, id, field) ?? fallbackVal;
+    };
 
   const percentCell = (id: number, field: keyof EditedRow, defaultValue: number, widthClass = "w-20") => {
     const original = products.find((p) => p.id === id);
