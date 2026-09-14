@@ -28,8 +28,8 @@ export function computeMarginedPrices(
   const wholesalePct = margins.wholesaleMarginPct ?? DEFAULT_WHOLESALE_MARGIN_PCT;
   const gstFactor = 1 + (taxRate || DEFAULT_GST_RATE) / 100;
   return {
-    nonGstPrice: Math.round(purchasePrice * (1 + nonGstPct / 100) * 100) / 100,
-    retailPrice: Math.round(purchasePrice * (1 + retailPct / 100) * 100) / 100,
-    wholesalePrice: Math.round(((purchasePrice * (1 + wholesalePct / 100)) / gstFactor) * 100) / 100,
+    nonGstPrice: Math.ceil((purchasePrice * (1 + nonGstPct / 100)) / 3) * 3,
+    retailPrice: Math.ceil((purchasePrice * (1 + retailPct / 100)) / 3) * 3,
+    wholesalePrice: Math.ceil(((purchasePrice * (1 + wholesalePct / 100)) / gstFactor) / 3) * 3,
   };
 }

@@ -59,14 +59,13 @@ function marginedPrices(
   margins: { nonGstMarginPct: number; retailMarginPct: number; wholesaleMarginPct: number },
 ) {
   const gstFactor = 1 + (taxRate || DEFAULT_GST_RATE) / 100;
-  // Non-GST and Retail prices are both rounded up to the nearest ₹5 so
-  // cash-bill / shelf prices land on round numbers instead of odd-looking
-  // figures like ₹138.00. Wholesale keeps its exact value (GST is added on
-  // top of it on the invoice, so a round wholesale rate wouldn't stay round).
+  // Non-GST, Retail and Wholesale prices are all rounded up to the nearest
+  // ₹3 so cash-bill / shelf / trade rates land on round numbers instead of
+  // odd-looking figures like ₹138.00.
   return {
-    nonGstPrice: Math.ceil((purchasePrice * (1 + margins.nonGstMarginPct / 100)) / 5) * 5,
-    retailPrice: Math.ceil((purchasePrice * (1 + margins.retailMarginPct / 100)) / 5) * 5,
-    wholesalePrice: (purchasePrice * (1 + margins.wholesaleMarginPct / 100)) / gstFactor,
+    nonGstPrice: Math.ceil((purchasePrice * (1 + margins.nonGstMarginPct / 100)) / 3) * 3,
+    retailPrice: Math.ceil((purchasePrice * (1 + margins.retailMarginPct / 100)) / 3) * 3,
+    wholesalePrice: Math.ceil(((purchasePrice * (1 + margins.wholesaleMarginPct / 100)) / gstFactor) / 3) * 3,
   };
 }
 
@@ -271,16 +270,16 @@ export default function PriceList() {
 
   const PRICE_FIELDS = new Set<keyof EditedRow>(["nonGstPrice", "retailPrice", "wholesalePrice"]);
 
+  // Margin % (or Purchase ₹) edits only stage THAT field — they don't also
+  // write a computed price string into edits[id][priceField]. The price
+  // cell's displayed/saved value is derived live instead (see
+  // resolveMarginPrice / priceForSave below), from whatever's actually
+  // staged on the row right now. Two copies of "the computed price" — one
+  // written here at keystroke time, one recomputed at render time — could
+  // only ever go stale relative to each other; deriving it in exactly one
+  // place removes that risk entirely.
   const setCell = useCallback((id: number, field: keyof EditedRow, value: string) => {
-    setEdits((prev) => {
-      const rowEdits: Partial<EditedRow> = { ...(prev[id] ?? {}), [field]: value };
-      const priceField = MARGIN_TO_PRICE_FIELD[field];
-      if (priceField) {
-        const computed = derivePriceField(rowEdits, id, priceField);
-        if (computed !== undefined) rowEdits[priceField] = computed;
-      }
-      return { ...prev, [id]: rowEdits };
-    });
+    setEdits((prev) => ({ ...prev, [id]: { ...(prev[id] ?? {}), [field]: value } }));
 
     const priceField = MARGIN_TO_PRICE_FIELD[field];
     if (priceField) {
@@ -325,10 +324,18 @@ export default function PriceList() {
   // What actually gets saved for a margin-linked ₹ field: the live formula
   // result (never a possibly-stale staged string), unless the user typed
   // directly into that ₹ box, in which case their exact entry is saved.
+  // Recomputes whenever ANYTHING that feeds the formula was staged — that
+  // column's margin %, Purchase ₹, or (from Apply Margin) the price itself —
+  // not only when the price field happens to have been staged directly.
   const priceForSave = (id: number, field: "nonGstPrice" | "retailPrice" | "wholesalePrice"): string | undefined => {
-    const staged = edits[id]?.[field];
-    if (staged === undefined) return undefined;
-    return manualPrice.has(`${id}:${field}`) ? staged : (derivePriceField(edits[id], id, field) ?? staged);
+    const rowEdits = edits[id];
+    if (!rowEdits) return undefined;
+    const manualStaged = rowEdits[field];
+    if (manualPrice.has(`${id}:${field}`)) return manualStaged;
+    const marginField = PRICE_TO_MARGIN_FIELD[field];
+    const relevant = rowEdits[marginField] !== undefined || rowEdits.purchasePrice !== undefined || manualStaged !== undefined;
+    if (!relevant) return undefined;
+    return derivePriceField(rowEdits, id, field) ?? manualStaged;
   };
 
   const handleSaveConfirm = () => {
@@ -769,7 +776,7 @@ export default function PriceList() {
         Existing invoices are not affected.
       </p>
       <p className="text-xs text-muted-foreground">
-        <strong>Apply Margin</strong> fills Non-GST, Retail and Wholesale (Wholesale ÷ (1 + that product's GST%)) from Purchase ₹ using each product's own Non-GST %/Retail %/Wholesale % column — defaulting to 10%/15%/12% when left blank. Non-GST ₹ and Retail ₹ are rounded up to the nearest ₹5. Still editable afterward, still requires Save.
+        <strong>Apply Margin</strong> fills Non-GST, Retail and Wholesale (Wholesale ÷ (1 + that product's GST%)) from Purchase ₹ using each product's own Non-GST %/Retail %/Wholesale % column — defaulting to 10%/15%/12% when left blank. Non-GST ₹, Retail ₹ and Wholesale ₹ are rounded up to the nearest ₹3. Still editable afterward, still requires Save.
       </p>
 
       {/* Confirmation dialog */}
