@@ -162,20 +162,15 @@ router.get("/dashboard/capital", async (req, res): Promise<void> => {
         ? prevRow.snapshot_date.toISOString().slice(0, 10)
         : String(prevRow.snapshot_date))
     : null;
-  const growth = previousCapital != null ? capital - previousCapital : null;
-  const growthK = previousCapitalK != null ? capitalK - previousCapitalK : null;
+  // Growth tracks Cash only, not the full Capital (inventory/receivable/
+  // payable swings — e.g. stocking up or a customer's balance moving — aren't
+  // "growth", they're the same money in a different form).
+  const previousCash = prevRow?.cash_in_accounts != null ? Number(prevRow.cash_in_accounts) : null;
+  const growth = previousCash != null ? cashInAccounts - previousCash : null;
+  const growthK = growth != null ? growth / 1000 : null;
 
-  // Per-component change since the previous snapshot, so "Growth" can explain
-  // itself instead of just showing one number — same sign convention as the
-  // Capital card's own breakdown (inventory/receivable/cash grow capital,
-  // payable/expenses shrink it).
   const growthBreakdown = prevRow
-    ? [
-        { label: "Inventory", change: inventoryValue - Number(prevRow.inventory_value ?? 0) },
-        { label: "Receivable", change: receivable - Number(prevRow.receivable ?? 0) },
-        { label: "Cash", change: cashInAccounts - Number(prevRow.cash_in_accounts ?? 0) },
-        { label: "Supplier Balance", change: -(payable - Number(prevRow.payable ?? 0)) },
-      ]
+    ? [{ label: "Cash", change: cashInAccounts - Number(prevRow.cash_in_accounts ?? 0) }]
     : null;
 
   res.json({
