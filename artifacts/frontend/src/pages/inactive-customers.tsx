@@ -20,7 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
-import { PhoneCall, MessageCircle, Loader2, Settings2, UserX, Save } from "lucide-react";
+import { PhoneCall, MessageCircle, Loader2, Settings2, UserX, Save, Search } from "lucide-react";
 
 // Customers with no (non-cancelled) invoice within the configured threshold —
 // see /customer-follow-ups/settings. Never-ordered customers sort first, then
@@ -38,27 +38,53 @@ export default function InactiveCustomers() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: customers, isLoading } = useListInactiveCustomers();
   const { data: settings } = useGetCustomerFollowUpSettings();
   const updateSettings = useUpdateCustomerFollowUpSettings();
 
   const [days, setDays] = useState("10");
+  // The threshold actually being queried right now. Starts undefined so we
+  // don't fetch with a guessed value before the saved setting has loaded;
+  // "Search" then re-points it at whatever's typed, previewing that
+  // threshold without touching the saved setting (server-side ?days=
+  // override — see GET /customers/inactive).
+  const [appliedDays, setAppliedDays] = useState<number | undefined>(undefined);
   useEffect(() => {
-    if (settings) setDays(String(settings.days));
+    if (settings) {
+      setDays(String(settings.days));
+      setAppliedDays(settings.days);
+    }
   }, [settings]);
 
-  const handleSaveDays = () => {
+  const inactiveParams = appliedDays !== undefined ? { days: appliedDays } : undefined;
+  const { data: customers, isLoading, isFetching } = useListInactiveCustomers(
+    inactiveParams,
+    { query: { enabled: appliedDays !== undefined, queryKey: getListInactiveCustomersQueryKey(inactiveParams) } },
+  );
+
+  const parseDays = (): number | null => {
     const value = Number(days);
     if (!Number.isFinite(value) || value < 1) {
       toast({ title: "Enter a valid number of days", variant: "destructive" });
-      return;
+      return null;
     }
+    return value;
+  };
+
+  const handleSearch = () => {
+    const value = parseDays();
+    if (value == null) return;
+    setAppliedDays(value);
+  };
+
+  const handleSaveDays = () => {
+    const value = parseDays();
+    if (value == null) return;
     updateSettings.mutate(
       { data: { days: value } },
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getGetCustomerFollowUpSettingsQueryKey() });
-          queryClient.invalidateQueries({ queryKey: getListInactiveCustomersQueryKey() });
+          setAppliedDays(value);
           toast({ title: "Settings updated" });
         },
         onError: (err: any) => {
@@ -95,6 +121,7 @@ export default function InactiveCustomers() {
                 min="1"
                 value={days}
                 onChange={(e) => setDays(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }}
                 className="w-24"
                 data-testid="input-inactive-days-threshold"
               />
@@ -102,13 +129,22 @@ export default function InactiveCustomers() {
               <Button
                 size="sm"
                 variant="outline"
+                onClick={handleSearch}
+                disabled={isFetching}
+                className="sm:ml-auto"
+                data-testid="button-search-inactive-days-threshold"
+              >
+                {isFetching ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Search className="w-3.5 h-3.5 mr-1.5" />}
+                Search
+              </Button>
+              <Button
+                size="sm"
                 onClick={handleSaveDays}
                 disabled={updateSettings.isPending}
-                className="sm:ml-auto"
                 data-testid="button-save-inactive-days-threshold"
               >
                 {updateSettings.isPending ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Save className="w-3.5 h-3.5 mr-1.5" />}
-                Save
+                Save as default
               </Button>
             </>
           ) : (

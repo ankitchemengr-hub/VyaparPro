@@ -50,7 +50,13 @@ router.put("/customer-follow-ups/settings", async (req, res): Promise<void> => {
 router.get("/customers/inactive", async (req, res): Promise<void> => {
   const companyId = getCompanyId(req);
   try {
-    const days = await loadThreshold(companyId);
+    // ?days= lets the page preview a different threshold (the Search button)
+    // without persisting it — only a valid positive integer overrides the
+    // saved setting; anything else falls back to it same as before.
+    const previewDays = Number(req.query.days);
+    const days = Number.isFinite(previewDays) && previewDays > 0
+      ? previewDays
+      : await loadThreshold(companyId);
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
     // A customer who has never invoiced only counts as inactive once they've

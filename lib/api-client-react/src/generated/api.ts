@@ -104,6 +104,7 @@ import type {
   ListCustomerOrdersParams,
   ListEntitiesParams,
   ListExpensesParams,
+  ListInactiveCustomersParams,
   ListInvoicesParams,
   ListKhatabookParams,
   ListPaymentsParams,
@@ -7866,21 +7867,28 @@ export const useUpdateCustomerFollowUpSettings = <TError = ErrorType<void>,
       return useMutation(getUpdateCustomerFollowUpSettingsMutationOptions(options));
     }
 
-export const getListInactiveCustomersUrl = () => {
+export const getListInactiveCustomersUrl = (params?: ListInactiveCustomersParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/customers/inactive`
+  return stringifiedParams.length > 0 ? `/api/customers/inactive?${stringifiedParams}` : `/api/customers/inactive`
 }
 
 /**
  * Includes customers who have never had an invoice at all. Sorted most-inactive first (never-ordered, then oldest last order).
  * @summary Customers with no (non-cancelled) invoice within the configured threshold
  */
-export const listInactiveCustomers = async ( options?: RequestInit): Promise<InactiveCustomer[]> => {
+export const listInactiveCustomers = async (params?: ListInactiveCustomersParams, options?: RequestInit): Promise<InactiveCustomer[]> => {
 
-  return customFetch<InactiveCustomer[]>(getListInactiveCustomersUrl(),
+  return customFetch<InactiveCustomer[]>(getListInactiveCustomersUrl(params),
   {
     ...options,
     method: 'GET'
@@ -7893,23 +7901,23 @@ export const listInactiveCustomers = async ( options?: RequestInit): Promise<Ina
 
 
 
-export const getListInactiveCustomersQueryKey = () => {
+export const getListInactiveCustomersQueryKey = (params?: ListInactiveCustomersParams,) => {
     return [
-    `/api/customers/inactive`
+    `/api/customers/inactive`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getListInactiveCustomersQueryOptions = <TData = Awaited<ReturnType<typeof listInactiveCustomers>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listInactiveCustomers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getListInactiveCustomersQueryOptions = <TData = Awaited<ReturnType<typeof listInactiveCustomers>>, TError = ErrorType<unknown>>(params?: ListInactiveCustomersParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listInactiveCustomers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getListInactiveCustomersQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getListInactiveCustomersQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listInactiveCustomers>>> = ({ signal }) => listInactiveCustomers({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listInactiveCustomers>>> = ({ signal }) => listInactiveCustomers(params, { signal, ...requestOptions });
 
 
 
@@ -7927,11 +7935,11 @@ export type ListInactiveCustomersQueryError = ErrorType<unknown>
  */
 
 export function useListInactiveCustomers<TData = Awaited<ReturnType<typeof listInactiveCustomers>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listInactiveCustomers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ params?: ListInactiveCustomersParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listInactiveCustomers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getListInactiveCustomersQueryOptions(options)
+  const queryOptions = getListInactiveCustomersQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

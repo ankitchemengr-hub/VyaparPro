@@ -2139,6 +2139,16 @@ paths:
       description: >
         Includes customers who have never had an invoice at all. Sorted
         most-inactive first (never-ordered, then oldest last order).
+      parameters:
+        - name: days
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+          description: >
+            Preview a different threshold without saving it — overrides the
+            saved setting for this request only. Omit to use the saved value.
       responses:
         "200":
           description: Inactive customers, most-inactive first

@@ -153,6 +153,7 @@ export * from './listCustomerOrdersStatus';
 export * from './listEntitiesParams';
 export * from './listEntitiesType';
 export * from './listExpensesParams';
+export * from './listInactiveCustomersParams';
 export * from './listInvoicesParams';
 export * from './listInvoicesStatus';
 export * from './listInvoicesType';

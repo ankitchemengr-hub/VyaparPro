@@ -3189,6 +3189,14 @@ export const ListReadyMaterialBatchesStatus = {
   dispatched: 'dispatched',
 } as const;
 
+export type ListInactiveCustomersParams = {
+/**
+ * Preview a different threshold without saving it — overrides the saved setting for this request only. Omit to use the saved value.
+ * @minimum 1
+ */
+days?: number;
+};
+
 export type GetLedgerReportParams = {
 entityId?: number;
 from?: string;

@@ -3073,6 +3073,13 @@ export const UpdateCustomerFollowUpSettingsResponse = zod.object({
  * Includes customers who have never had an invoice at all. Sorted most-inactive first (never-ordered, then oldest last order).
  * @summary Customers with no (non-cancelled) invoice within the configured threshold
  */
+
+
+
+export const ListInactiveCustomersQueryParams = zod.object({
+  "days": zod.coerce.number().min(1).optional().describe('Preview a different threshold without saving it — overrides the saved setting for this request only. Omit to use the saved value.\n')
+})
+
 export const ListInactiveCustomersResponseItem = zod.object({
   "customerId": zod.number(),
   "name": zod.string(),
