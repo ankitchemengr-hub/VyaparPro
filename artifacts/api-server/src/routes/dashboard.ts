@@ -119,12 +119,13 @@ router.get("/dashboard/capital", async (req, res): Promise<void> => {
   const cashInAccounts = Number(cashRow.v ?? 0);
   const payable = Number(payRow.v ?? 0);
   const expenses = Number(expRow.v ?? 0);
-  // Not subtracted here: every expense (see POST /expenses) always debits an
-  // `accounts` row and is mirrored by an account_transactions "out" entry, so
-  // its impact is already inside `cashInAccounts`. Subtracting the cumulative
-  // `expenses` total on top of that double-counted every rupee spent — Cash
-  // and Expenses would both drop by the same amount for one real outflow.
-  const capital = inventoryValue + receivable + cashInAccounts - payable;
+  // Expenses is subtracted here by deliberate choice, even though every
+  // expense (see POST /expenses) already debits an `accounts` row and so
+  // already lowers `cashInAccounts` — this double-counts each rupee spent
+  // (once as a Cash drop, once as an Expenses drop). That double-count was
+  // treated as a bug and removed on 2026-09-12, then explicitly asked for
+  // again — don't "fix" this back without checking first.
+  const capital = inventoryValue + receivable + cashInAccounts - payable - expenses;
   const capitalK = capital / 1000;
 
   const today = new Date();
@@ -162,15 +163,23 @@ router.get("/dashboard/capital", async (req, res): Promise<void> => {
         ? prevRow.snapshot_date.toISOString().slice(0, 10)
         : String(prevRow.snapshot_date))
     : null;
-  // Growth tracks Cash only, not the full Capital (inventory/receivable/
-  // payable swings — e.g. stocking up or a customer's balance moving — aren't
-  // "growth", they're the same money in a different form).
+  // Growth tracks Cash and Expenses only, not the full Capital
+  // (inventory/receivable/payable swings — e.g. stocking up or a customer's
+  // balance moving — aren't "growth", they're the same money in a different
+  // form). Expenses is included alongside Cash by deliberate choice — see
+  // the capital formula above for the same double-count trade-off.
   const previousCash = prevRow?.cash_in_accounts != null ? Number(prevRow.cash_in_accounts) : null;
-  const growth = previousCash != null ? cashInAccounts - previousCash : null;
+  const previousExpenses = prevRow?.expenses != null ? Number(prevRow.expenses) : null;
+  const growth = previousCash != null && previousExpenses != null
+    ? (cashInAccounts - previousCash) - (expenses - previousExpenses)
+    : null;
   const growthK = growth != null ? growth / 1000 : null;
 
   const growthBreakdown = prevRow
-    ? [{ label: "Cash", change: cashInAccounts - Number(prevRow.cash_in_accounts ?? 0) }]
+    ? [
+        { label: "Cash", change: cashInAccounts - Number(prevRow.cash_in_accounts ?? 0) },
+        { label: "Expenses", change: -(expenses - Number(prevRow.expenses ?? 0)) },
+      ]
     : null;
 
   res.json({

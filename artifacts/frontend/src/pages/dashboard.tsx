@@ -249,6 +249,7 @@ export default function Dashboard() {
                         { label: "Receivable", value: capital.receivable, sign: "+" as const },
                         { label: "Cash", value: capital.cashInAccounts, sign: "+" as const },
                         { label: "Supplier Balance", value: capital.payable, sign: "-" as const },
+                        { label: "Expenses", value: capital.expenses, sign: "-" as const },
                       ].map((row) => (
                         <div
                           key={row.label}
