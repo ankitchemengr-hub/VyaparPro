@@ -535,6 +535,15 @@ type ProductForm = {
   mrp: string;
   wholesalePrice: string;
   retailPrice: string;
+  // Additive "Pricing Mode" feature — "direct" (default) is exactly today's
+  // flat wholesalePrice/retailPrice/nonGstPrice behavior, untouched. Only
+  // "mrp_based" products use the four discount-% fields below, deriving
+  // customer prices from MRP at billing time instead.
+  pricingMode: "direct" | "mrp_based";
+  retailDiscountPct: string;
+  retailNonGstDiscountPct: string;
+  wholesaleDiscountPct: string;
+  wholesaleNonGstDiscountPct: string;
   hsnCode: string;
   taxRate: string;
   commissionPerLiter: string;
@@ -552,6 +561,8 @@ type ProductForm = {
 const emptyForm: ProductForm = {
   name: "", printName: "", group: "", brand: "", itemCode: "",
   unit: "", purchasePrice: "", mrp: "", wholesalePrice: "", retailPrice: "",
+  pricingMode: "direct",
+  retailDiscountPct: "", retailNonGstDiscountPct: "", wholesaleDiscountPct: "", wholesaleNonGstDiscountPct: "",
   gstPrice: "", nonGstPrice: "",
   hsnCode: "", taxRate: "18", commissionPerLiter: "0", volumeUnit: "liter", litersPerBox: "", unitsPerBox: "", packagingUnit: "Box", openingStock: "0",
   minStockThreshold: "5", notForSale: false, addForManufacturing: false, imageUrl: "",
@@ -620,6 +631,14 @@ function ProductDialog({ open, onOpenChange, product, isAdmin }: { open: boolean
         nonGstPrice: product.nonGstPrice != null ? String(product.nonGstPrice) : "",
         wholesalePrice: product.wholesalePrice != null ? String(product.wholesalePrice) : "",
         retailPrice: product.retailPrice != null ? String(product.retailPrice) : "",
+        // Every pre-existing product has no pricingMode in the database yet
+        // — the API defaults it to "direct", so this always resolves to the
+        // exact same flat-price behavior those products already had.
+        pricingMode: product.pricingMode === "mrp_based" ? "mrp_based" : "direct",
+        retailDiscountPct: product.retailDiscountPct != null ? String(product.retailDiscountPct) : "",
+        retailNonGstDiscountPct: product.retailNonGstDiscountPct != null ? String(product.retailNonGstDiscountPct) : "",
+        wholesaleDiscountPct: product.wholesaleDiscountPct != null ? String(product.wholesaleDiscountPct) : "",
+        wholesaleNonGstDiscountPct: product.wholesaleNonGstDiscountPct != null ? String(product.wholesaleNonGstDiscountPct) : "",
         hsnCode: product.hsnCode ?? "",
         taxRate: product.taxRate != null ? String(product.taxRate) : "18",
         commissionPerLiter: product.commissionPerLiter != null ? String(product.commissionPerLiter) : "0",
@@ -705,7 +724,14 @@ function ProductDialog({ open, onOpenChange, product, isAdmin }: { open: boolean
       return;
     }
     const isManufactured = productType === "Manufactured";
-    if (!form.retailPrice || !form.wholesalePrice || !form.mrp || (!isManufactured && !form.purchasePrice)) {
+    const isMrpBased = form.pricingMode === "mrp_based";
+    if (isMrpBased) {
+      if (!form.mrp || (!isManufactured && !form.purchasePrice)) {
+        toast({ title: "Pricing required", description: "Fill in MRP" + (isManufactured ? "." : " and Purchase Price."), variant: "destructive" });
+        setTab("pricing");
+        return;
+      }
+    } else if (!form.retailPrice || !form.wholesalePrice || !form.mrp || (!isManufactured && !form.purchasePrice)) {
       toast({ title: "Pricing required", description: "Fill in all price fields.", variant: "destructive" });
       setTab("pricing");
       return;
@@ -725,9 +751,17 @@ function ProductDialog({ open, onOpenChange, product, isAdmin }: { open: boolean
       unit: form.unit.trim(),
       purchasePrice: isManufactured ? 0 : Number(form.purchasePrice),
       mrp: Number(form.mrp),
-      wholesalePrice: Number(form.wholesalePrice),
-      retailPrice: Number(form.retailPrice),
-      nonGstPrice: form.nonGstPrice ? Number(form.nonGstPrice) : undefined,
+      // mrp_based products don't use these flat fields for billing (see
+      // getBaseRate in billing.tsx) — sent as 0/omitted rather than left
+      // populated with stale values from before a mode switch.
+      wholesalePrice: isMrpBased ? 0 : Number(form.wholesalePrice),
+      retailPrice: isMrpBased ? 0 : Number(form.retailPrice),
+      nonGstPrice: isMrpBased ? undefined : (form.nonGstPrice ? Number(form.nonGstPrice) : undefined),
+      pricingMode: form.pricingMode,
+      retailDiscountPct: isMrpBased && form.retailDiscountPct ? Number(form.retailDiscountPct) : undefined,
+      retailNonGstDiscountPct: isMrpBased && form.retailNonGstDiscountPct ? Number(form.retailNonGstDiscountPct) : undefined,
+      wholesaleDiscountPct: isMrpBased && form.wholesaleDiscountPct ? Number(form.wholesaleDiscountPct) : undefined,
+      wholesaleNonGstDiscountPct: isMrpBased && form.wholesaleNonGstDiscountPct ? Number(form.wholesaleNonGstDiscountPct) : undefined,
       hsnCode: form.hsnCode.trim() || undefined,
       taxRate: form.taxRate ? Number(form.taxRate) : undefined,
       commissionPerLiter: form.commissionPerLiter ? Number(form.commissionPerLiter) : 0,
@@ -990,87 +1024,156 @@ function ProductDialog({ open, onOpenChange, product, isAdmin }: { open: boolean
               </div>
             </div>
             <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
-              <p className="text-sm font-medium">Selling Prices</p>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <p className="text-sm font-medium">Selling Prices</p>
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground shrink-0">Pricing Mode</Label>
+                  <Select
+                    value={form.pricingMode}
+                    onValueChange={(v) => set("pricingMode", v as "direct" | "mrp_based")}
+                  >
+                    <SelectTrigger className="w-40" data-testid="select-pricing-mode">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="direct">Direct Rate</SelectItem>
+                      <SelectItem value="mrp_based">MRP Based</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
 
-              {/* GST Price calculator */}
-              <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-3 space-y-2">
-                <p className="text-xs font-medium text-blue-700 dark:text-blue-400">
-                  GST Price → Auto-calculate Wholesale Price
-                </p>
-                <div className="flex flex-col sm:flex-row sm:items-end gap-2">
-                  <div className="flex-1 min-w-0 space-y-1">
-                    <Label className="text-xs">GST Price / Market Rate (₹)</Label>
-                    <Input
-                      type="number" min={0}
-                      value={form.gstPrice}
-                      onChange={(e) => {
-                        const gstPrice = Number(e.target.value);
-                        const taxRate = Number(form.taxRate) || 0;
-                        const wholesale = taxRate > 0
-                          ? gstPrice / (1 + taxRate / 100)
-                          : gstPrice;
-                        set("gstPrice", e.target.value);
-                        set("wholesalePrice", wholesale > 0 ? wholesale.toFixed(2) : "");
-                      }}
-                      placeholder="e.g. 105"
-                    />
+              {form.pricingMode === "direct" ? (
+                <>
+                  {/* GST Price calculator */}
+                  <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-3 space-y-2">
+                    <p className="text-xs font-medium text-blue-700 dark:text-blue-400">
+                      GST Price → Auto-calculate Wholesale Price
+                    </p>
+                    <div className="flex flex-col sm:flex-row sm:items-end gap-2">
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <Label className="text-xs">GST Price / Market Rate (₹)</Label>
+                        <Input
+                          type="number" min={0}
+                          value={form.gstPrice}
+                          onChange={(e) => {
+                            const gstPrice = Number(e.target.value);
+                            const taxRate = Number(form.taxRate) || 0;
+                            const wholesale = taxRate > 0
+                              ? gstPrice / (1 + taxRate / 100)
+                              : gstPrice;
+                            set("gstPrice", e.target.value);
+                            set("wholesalePrice", wholesale > 0 ? wholesale.toFixed(2) : "");
+                          }}
+                          placeholder="e.g. 105"
+                        />
+                      </div>
+                      <div className="text-xs text-muted-foreground sm:pb-2 text-center sm:text-left">
+                        ÷ (1 + {form.taxRate || 0}%) =
+                      </div>
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <Label className="text-xs">Base Wholesale Price (₹)</Label>
+                        <Input
+                          type="number"
+                          value={form.wholesalePrice}
+                          readOnly
+                          className="bg-muted"
+                          placeholder="Auto-calculated"
+                        />
+                      </div>
+                    </div>
+                    {form.gstPrice && form.wholesalePrice && (
+                      <p className="text-xs text-blue-600 dark:text-blue-400">
+                        GST ({form.taxRate}%) = ₹{(Number(form.gstPrice) - Number(form.wholesalePrice)).toFixed(2)} |
+                        Total bill = ₹{Number(form.gstPrice).toFixed(2)}
+                      </p>
+                    )}
                   </div>
-                  <div className="text-xs text-muted-foreground sm:pb-2 text-center sm:text-left">
-                    ÷ (1 + {form.taxRate || 0}%) =
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label>Wholesale Price (₹) *</Label>
+                      <Input
+                        type="number" min={0}
+                        value={form.wholesalePrice}
+                        onChange={(e) => {
+                          set("wholesalePrice", e.target.value);
+                          set("gstPrice", ""); // clear gst price if manually edited
+                        }}
+                        placeholder="0.00"
+                        data-testid="input-wholesale-price"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Retail Price (₹) *</Label>
+                      <Input
+                        type="number" min={0}
+                        value={form.retailPrice}
+                        onChange={(e) => set("retailPrice", e.target.value)}
+                        placeholder="0.00"
+                        data-testid="input-retail-price"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Non-GST Price (₹) <span className="text-xs text-muted-foreground">(for non-GST invoices)</span></Label>
+                      <Input
+                        type="number" min={0}
+                        value={form.nonGstPrice}
+                        onChange={(e) => set("nonGstPrice", e.target.value)}
+                        placeholder="Direct selling price without GST"
+                        data-testid="input-non-gst-price"
+                      />
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0 space-y-1">
-                    <Label className="text-xs">Base Wholesale Price (₹)</Label>
-                    <Input
-                      type="number"
-                      value={form.wholesalePrice}
-                      readOnly
-                      className="bg-muted"
-                      placeholder="Auto-calculated"
-                    />
-                  </div>
-                </div>
-                {form.gstPrice && form.wholesalePrice && (
-                  <p className="text-xs text-blue-600 dark:text-blue-400">
-                    GST ({form.taxRate}%) = ₹{(Number(form.gstPrice) - Number(form.wholesalePrice)).toFixed(2)} |
-                    Total bill = ₹{Number(form.gstPrice).toFixed(2)}
+                </>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    Customer prices are derived from MRP (₹{form.mrp || "0"} above) minus each discount % below — left blank means 0% discount (full MRP).
                   </p>
-                )}
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label>Wholesale Price (₹) *</Label>
-                  <Input
-                    type="number" min={0}
-                    value={form.wholesalePrice}
-                    onChange={(e) => {
-                      set("wholesalePrice", e.target.value);
-                      set("gstPrice", ""); // clear gst price if manually edited
-                    }}
-                    placeholder="0.00"
-                    data-testid="input-wholesale-price"
-                  />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label>Retail Discount % <span className="text-xs text-muted-foreground">(GST invoices)</span></Label>
+                      <Input
+                        type="number" min={0} max={100}
+                        value={form.retailDiscountPct}
+                        onChange={(e) => set("retailDiscountPct", e.target.value)}
+                        placeholder="0"
+                        data-testid="input-retail-discount-pct"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Retail Non-GST Discount % <span className="text-xs text-muted-foreground">(non-GST invoices)</span></Label>
+                      <Input
+                        type="number" min={0} max={100}
+                        value={form.retailNonGstDiscountPct}
+                        onChange={(e) => set("retailNonGstDiscountPct", e.target.value)}
+                        placeholder="0"
+                        data-testid="input-retail-non-gst-discount-pct"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Wholesale Discount % <span className="text-xs text-muted-foreground">(GST invoices)</span></Label>
+                      <Input
+                        type="number" min={0} max={100}
+                        value={form.wholesaleDiscountPct}
+                        onChange={(e) => set("wholesaleDiscountPct", e.target.value)}
+                        placeholder="0"
+                        data-testid="input-wholesale-discount-pct"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Wholesale Non-GST Discount % <span className="text-xs text-muted-foreground">(non-GST invoices)</span></Label>
+                      <Input
+                        type="number" min={0} max={100}
+                        value={form.wholesaleNonGstDiscountPct}
+                        onChange={(e) => set("wholesaleNonGstDiscountPct", e.target.value)}
+                        placeholder="0"
+                        data-testid="input-wholesale-non-gst-discount-pct"
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-1.5">
-                  <Label>Retail Price (₹) *</Label>
-                  <Input
-                    type="number" min={0}
-                    value={form.retailPrice}
-                    onChange={(e) => set("retailPrice", e.target.value)}
-                    placeholder="0.00"
-                    data-testid="input-retail-price"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Non-GST Price (₹) <span className="text-xs text-muted-foreground">(for non-GST invoices)</span></Label>
-                  <Input
-                    type="number" min={0}
-                    value={form.nonGstPrice}
-                    onChange={(e) => set("nonGstPrice", e.target.value)}
-                    placeholder="Direct selling price without GST"
-                    data-testid="input-non-gst-price"
-                  />
-                </div>
-              </div>
+              )}
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">

@@ -5,6 +5,7 @@
  * Shradha Oil Center ERP API
  * OpenAPI spec version: 0.1.0
  */
+import type { ProductUpdatePricingMode } from './productUpdatePricingMode';
 
 export interface ProductUpdate {
   name?: string;
@@ -21,6 +22,11 @@ export interface ProductUpdate {
   pricingBasis?: string;
   wholesaleMargin?: number;
   retailMargin?: number;
+  pricingMode?: ProductUpdatePricingMode;
+  retailDiscountPct?: number;
+  retailNonGstDiscountPct?: number;
+  wholesaleDiscountPct?: number;
+  wholesaleNonGstDiscountPct?: number;
   hsnCode?: string;
   taxRate?: number;
   litersPerBox?: number;

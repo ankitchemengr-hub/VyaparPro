@@ -780,6 +780,17 @@ export const ProductPricingBasis = {
   fixed_margin: 'fixed_margin',
 } as const;
 
+/**
+ * direct (default): retailPrice/wholesalePrice/nonGstPrice are used as-is for billing, exactly as before this field existed. mrp_based: billing instead derives the rate live from mrp * (1 - the matching discount % below), per customer tier and invoice GST status. Independent of pricingBasis/wholesaleMargin/retailMargin and of nonGstMarginPct/retailMarginPct/wholesaleMarginPct.
+ */
+export type ProductPricingMode = typeof ProductPricingMode[keyof typeof ProductPricingMode];
+
+
+export const ProductPricingMode = {
+  direct: 'direct',
+  mrp_based: 'mrp_based',
+} as const;
+
 export interface Product {
   id: number;
   name: string;
@@ -817,6 +828,28 @@ export interface Product {
      * @nullable
      */
   retailMargin?: number | null;
+  /** direct (default): retailPrice/wholesalePrice/nonGstPrice are used as-is for billing, exactly as before this field existed. mrp_based: billing instead derives the rate live from mrp * (1 - the matching discount % below), per customer tier and invoice GST status. Independent of pricingBasis/wholesaleMargin/retailMargin and of nonGstMarginPct/retailMarginPct/wholesaleMarginPct. */
+  pricingMode?: ProductPricingMode;
+  /**
+     * mrp_based only: discount % off mrp for a retail customer on a GST invoice.
+     * @nullable
+     */
+  retailDiscountPct?: number | null;
+  /**
+     * mrp_based only: discount % off mrp for a retail customer on a Non-GST invoice.
+     * @nullable
+     */
+  retailNonGstDiscountPct?: number | null;
+  /**
+     * mrp_based only: discount % off mrp for a wholesale customer on a GST invoice.
+     * @nullable
+     */
+  wholesaleDiscountPct?: number | null;
+  /**
+     * mrp_based only: discount % off mrp for a wholesale customer on a Non-GST invoice.
+     * @nullable
+     */
+  wholesaleNonGstDiscountPct?: number | null;
   /** @nullable */
   hsnCode?: string | null;
   /** @nullable */
@@ -848,6 +881,14 @@ export const ProductInputPricingBasis = {
   fixed_margin: 'fixed_margin',
 } as const;
 
+export type ProductInputPricingMode = typeof ProductInputPricingMode[keyof typeof ProductInputPricingMode];
+
+
+export const ProductInputPricingMode = {
+  direct: 'direct',
+  mrp_based: 'mrp_based',
+} as const;
+
 export interface ProductInput {
   name: string;
   printName?: string;
@@ -865,6 +906,11 @@ export interface ProductInput {
   pricingBasis?: ProductInputPricingBasis;
   wholesaleMargin?: number;
   retailMargin?: number;
+  pricingMode?: ProductInputPricingMode;
+  retailDiscountPct?: number;
+  retailNonGstDiscountPct?: number;
+  wholesaleDiscountPct?: number;
+  wholesaleNonGstDiscountPct?: number;
   hsnCode?: string;
   taxRate?: number;
   commissionPerLiter?: number;
@@ -877,6 +923,14 @@ export interface ProductInput {
   minStockThreshold?: number;
   imageUrl?: string;
 }
+
+export type ProductUpdatePricingMode = typeof ProductUpdatePricingMode[keyof typeof ProductUpdatePricingMode];
+
+
+export const ProductUpdatePricingMode = {
+  direct: 'direct',
+  mrp_based: 'mrp_based',
+} as const;
 
 export interface ProductUpdate {
   name?: string;
@@ -893,6 +947,11 @@ export interface ProductUpdate {
   pricingBasis?: string;
   wholesaleMargin?: number;
   retailMargin?: number;
+  pricingMode?: ProductUpdatePricingMode;
+  retailDiscountPct?: number;
+  retailNonGstDiscountPct?: number;
+  wholesaleDiscountPct?: number;
+  wholesaleNonGstDiscountPct?: number;
   hsnCode?: string;
   taxRate?: number;
   litersPerBox?: number;
@@ -2207,6 +2266,14 @@ export interface InactiveCustomer {
   lastRemark: CustomerFollowUp | null;
 }
 
+export interface SetCustomerReminderInput {
+  /**
+     * Snooze this customer off the Inactive Customers list for this many days.
+     * @minimum 1
+     */
+  days: number;
+}
+
 export interface CreateCustomerFollowUpInput {
   remark: string;
 }
@@ -3195,6 +3262,10 @@ export type ListInactiveCustomersParams = {
  * @minimum 1
  */
 days?: number;
+};
+
+export type SetCustomerReminder200 = {
+  remindAfter: string;
 };
 
 export type GetLedgerReportParams = {

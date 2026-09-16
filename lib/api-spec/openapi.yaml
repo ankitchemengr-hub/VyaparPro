@@ -2205,6 +2205,42 @@ paths:
         "400":
           description: Invalid request
 
+  /customers/{id}/remind:
+    post:
+      operationId: setCustomerReminder
+      tags: [customer-follow-ups]
+      summary: Snooze a customer off the Inactive Customers list for N days
+      description: >
+        For when a customer says "I'll order in N days" — the customer drops
+        off the Inactive Customers list until that many days from now have
+        passed, then reappears automatically if they still haven't ordered.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetCustomerReminderInput"
+      responses:
+        "200":
+          description: Reminder set
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [remindAfter]
+                properties:
+                  remindAfter:
+                    type: string
+                    format: date-time
+        "400":
+          description: Invalid request
+
   /smart-order/suggestions:
     get:
       operationId: listSmartOrderSuggestions
@@ -4139,6 +4175,22 @@ components:
         retailMargin:
           type: ["number", "null"]
           description: Percentage markup over purchasePrice, only applied when pricingBasis is fixed_margin.
+        pricingMode:
+          type: string
+          enum: [direct, mrp_based]
+          description: "direct (default): retailPrice/wholesalePrice/nonGstPrice are used as-is for billing, exactly as before this field existed. mrp_based: billing instead derives the rate live from mrp * (1 - the matching discount % below), per customer tier and invoice GST status. Independent of pricingBasis/wholesaleMargin/retailMargin and of nonGstMarginPct/retailMarginPct/wholesaleMarginPct."
+        retailDiscountPct:
+          type: ["number", "null"]
+          description: "mrp_based only: discount % off mrp for a retail customer on a GST invoice."
+        retailNonGstDiscountPct:
+          type: ["number", "null"]
+          description: "mrp_based only: discount % off mrp for a retail customer on a Non-GST invoice."
+        wholesaleDiscountPct:
+          type: ["number", "null"]
+          description: "mrp_based only: discount % off mrp for a wholesale customer on a GST invoice."
+        wholesaleNonGstDiscountPct:
+          type: ["number", "null"]
+          description: "mrp_based only: discount % off mrp for a wholesale customer on a Non-GST invoice."
         hsnCode:
           type: ["string", "null"]
         taxRate:
@@ -4202,6 +4254,17 @@ components:
           type: number
         retailMargin:
           type: number
+        pricingMode:
+          type: string
+          enum: [direct, mrp_based]
+        retailDiscountPct:
+          type: number
+        retailNonGstDiscountPct:
+          type: number
+        wholesaleDiscountPct:
+          type: number
+        wholesaleNonGstDiscountPct:
+          type: number
         hsnCode:
           type: string
         taxRate:
@@ -4255,6 +4318,17 @@ components:
         wholesaleMargin:
           type: number
         retailMargin:
+          type: number
+        pricingMode:
+          type: string
+          enum: [direct, mrp_based]
+        retailDiscountPct:
+          type: number
+        retailNonGstDiscountPct:
+          type: number
+        wholesaleDiscountPct:
+          type: number
+        wholesaleNonGstDiscountPct:
           type: number
         hsnCode:
           type: string
@@ -5786,6 +5860,15 @@ components:
         createdAt:
           type: string
           format: date-time
+
+    SetCustomerReminderInput:
+      type: object
+      required: [days]
+      properties:
+        days:
+          type: number
+          minimum: 1
+          description: Snooze this customer off the Inactive Customers list for this many days.
 
     CreateCustomerFollowUpInput:
       type: object

@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ProductPricingBasis } from './productPricingBasis';
+import type { ProductPricingMode } from './productPricingMode';
 
 export interface Product {
   id: number;
@@ -44,6 +45,28 @@ export interface Product {
      * @nullable
      */
   retailMargin?: number | null;
+  /** direct (default): retailPrice/wholesalePrice/nonGstPrice are used as-is for billing, exactly as before this field existed. mrp_based: billing instead derives the rate live from mrp * (1 - the matching discount % below), per customer tier and invoice GST status. Independent of pricingBasis/wholesaleMargin/retailMargin and of nonGstMarginPct/retailMarginPct/wholesaleMarginPct. */
+  pricingMode?: ProductPricingMode;
+  /**
+     * mrp_based only: discount % off mrp for a retail customer on a GST invoice.
+     * @nullable
+     */
+  retailDiscountPct?: number | null;
+  /**
+     * mrp_based only: discount % off mrp for a retail customer on a Non-GST invoice.
+     * @nullable
+     */
+  retailNonGstDiscountPct?: number | null;
+  /**
+     * mrp_based only: discount % off mrp for a wholesale customer on a GST invoice.
+     * @nullable
+     */
+  wholesaleDiscountPct?: number | null;
+  /**
+     * mrp_based only: discount % off mrp for a wholesale customer on a Non-GST invoice.
+     * @nullable
+     */
+  wholesaleNonGstDiscountPct?: number | null;
   /** @nullable */
   hsnCode?: string | null;
   /** @nullable */

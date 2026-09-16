@@ -32,6 +32,9 @@ export const entitiesTable = pgTable("entities", {
   // that customer's profile or edits them — a lightweight "new" notification
   // flag, cleared as a side effect of the admin actually looking at it.
   isNewFromSalesman: boolean("is_new_from_salesman").notNull().default(false),
+  // "Remind me in N days" snooze off the Inactive Customers list — set when
+  // a customer says they'll order soon; they reappear once this passes.
+  inactiveReminderUntil: timestamp("inactive_reminder_until", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (t) => [

@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ProductInputPricingBasis } from './productInputPricingBasis';
+import type { ProductInputPricingMode } from './productInputPricingMode';
 
 export interface ProductInput {
   name: string;
@@ -24,6 +25,11 @@ export interface ProductInput {
   pricingBasis?: ProductInputPricingBasis;
   wholesaleMargin?: number;
   retailMargin?: number;
+  pricingMode?: ProductInputPricingMode;
+  retailDiscountPct?: number;
+  retailNonGstDiscountPct?: number;
+  wholesaleDiscountPct?: number;
+  wholesaleNonGstDiscountPct?: number;
   hsnCode?: string;
   taxRate?: number;
   commissionPerLiter?: number;

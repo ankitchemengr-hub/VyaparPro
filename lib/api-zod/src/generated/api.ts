@@ -548,6 +548,11 @@ export const ListProductsResponseItem = zod.object({
   "pricingBasis": zod.enum(['manual', 'fixed_margin']).describe('manual: wholesalePrice\/retailPrice are entered directly. fixed_margin: they\'re computed as purchasePrice \* (1 + margin \/ 100) whenever purchasePrice changes or Recalculate Prices runs.'),
   "wholesaleMargin": zod.number().nullish().describe('Percentage markup over purchasePrice, only applied when pricingBasis is fixed_margin.'),
   "retailMargin": zod.number().nullish().describe('Percentage markup over purchasePrice, only applied when pricingBasis is fixed_margin.'),
+  "pricingMode": zod.enum(['direct', 'mrp_based']).optional().describe('direct (default): retailPrice\/wholesalePrice\/nonGstPrice are used as-is for billing, exactly as before this field existed. mrp_based: billing instead derives the rate live from mrp \* (1 - the matching discount % below), per customer tier and invoice GST status. Independent of pricingBasis\/wholesaleMargin\/retailMargin and of nonGstMarginPct\/retailMarginPct\/wholesaleMarginPct.'),
+  "retailDiscountPct": zod.number().nullish().describe('mrp_based only: discount % off mrp for a retail customer on a GST invoice.'),
+  "retailNonGstDiscountPct": zod.number().nullish().describe('mrp_based only: discount % off mrp for a retail customer on a Non-GST invoice.'),
+  "wholesaleDiscountPct": zod.number().nullish().describe('mrp_based only: discount % off mrp for a wholesale customer on a GST invoice.'),
+  "wholesaleNonGstDiscountPct": zod.number().nullish().describe('mrp_based only: discount % off mrp for a wholesale customer on a Non-GST invoice.'),
   "hsnCode": zod.string().nullish(),
   "taxRate": zod.number().nullish(),
   "commissionPerLiter": zod.number().nullish(),
@@ -584,6 +589,11 @@ export const CreateProductBody = zod.object({
   "pricingBasis": zod.enum(['manual', 'fixed_margin']).optional(),
   "wholesaleMargin": zod.number().optional(),
   "retailMargin": zod.number().optional(),
+  "pricingMode": zod.enum(['direct', 'mrp_based']).optional(),
+  "retailDiscountPct": zod.number().optional(),
+  "retailNonGstDiscountPct": zod.number().optional(),
+  "wholesaleDiscountPct": zod.number().optional(),
+  "wholesaleNonGstDiscountPct": zod.number().optional(),
   "hsnCode": zod.string().optional(),
   "taxRate": zod.number().optional(),
   "commissionPerLiter": zod.number().optional(),
@@ -617,6 +627,11 @@ export const CreateProductResponse = zod.object({
   "pricingBasis": zod.enum(['manual', 'fixed_margin']).describe('manual: wholesalePrice\/retailPrice are entered directly. fixed_margin: they\'re computed as purchasePrice \* (1 + margin \/ 100) whenever purchasePrice changes or Recalculate Prices runs.'),
   "wholesaleMargin": zod.number().nullish().describe('Percentage markup over purchasePrice, only applied when pricingBasis is fixed_margin.'),
   "retailMargin": zod.number().nullish().describe('Percentage markup over purchasePrice, only applied when pricingBasis is fixed_margin.'),
+  "pricingMode": zod.enum(['direct', 'mrp_based']).optional().describe('direct (default): retailPrice\/wholesalePrice\/nonGstPrice are used as-is for billing, exactly as before this field existed. mrp_based: billing instead derives the rate live from mrp \* (1 - the matching discount % below), per customer tier and invoice GST status. Independent of pricingBasis\/wholesaleMargin\/retailMargin and of nonGstMarginPct\/retailMarginPct\/wholesaleMarginPct.'),
+  "retailDiscountPct": zod.number().nullish().describe('mrp_based only: discount % off mrp for a retail customer on a GST invoice.'),
+  "retailNonGstDiscountPct": zod.number().nullish().describe('mrp_based only: discount % off mrp for a retail customer on a Non-GST invoice.'),
+  "wholesaleDiscountPct": zod.number().nullish().describe('mrp_based only: discount % off mrp for a wholesale customer on a GST invoice.'),
+  "wholesaleNonGstDiscountPct": zod.number().nullish().describe('mrp_based only: discount % off mrp for a wholesale customer on a Non-GST invoice.'),
   "hsnCode": zod.string().nullish(),
   "taxRate": zod.number().nullish(),
   "commissionPerLiter": zod.number().nullish(),
@@ -659,6 +674,11 @@ export const GetProductResponse = zod.object({
   "pricingBasis": zod.enum(['manual', 'fixed_margin']).describe('manual: wholesalePrice\/retailPrice are entered directly. fixed_margin: they\'re computed as purchasePrice \* (1 + margin \/ 100) whenever purchasePrice changes or Recalculate Prices runs.'),
   "wholesaleMargin": zod.number().nullish().describe('Percentage markup over purchasePrice, only applied when pricingBasis is fixed_margin.'),
   "retailMargin": zod.number().nullish().describe('Percentage markup over purchasePrice, only applied when pricingBasis is fixed_margin.'),
+  "pricingMode": zod.enum(['direct', 'mrp_based']).optional().describe('direct (default): retailPrice\/wholesalePrice\/nonGstPrice are used as-is for billing, exactly as before this field existed. mrp_based: billing instead derives the rate live from mrp \* (1 - the matching discount % below), per customer tier and invoice GST status. Independent of pricingBasis\/wholesaleMargin\/retailMargin and of nonGstMarginPct\/retailMarginPct\/wholesaleMarginPct.'),
+  "retailDiscountPct": zod.number().nullish().describe('mrp_based only: discount % off mrp for a retail customer on a GST invoice.'),
+  "retailNonGstDiscountPct": zod.number().nullish().describe('mrp_based only: discount % off mrp for a retail customer on a Non-GST invoice.'),
+  "wholesaleDiscountPct": zod.number().nullish().describe('mrp_based only: discount % off mrp for a wholesale customer on a GST invoice.'),
+  "wholesaleNonGstDiscountPct": zod.number().nullish().describe('mrp_based only: discount % off mrp for a wholesale customer on a Non-GST invoice.'),
   "hsnCode": zod.string().nullish(),
   "taxRate": zod.number().nullish(),
   "commissionPerLiter": zod.number().nullish(),
@@ -696,6 +716,11 @@ export const UpdateProductBody = zod.object({
   "pricingBasis": zod.string().optional(),
   "wholesaleMargin": zod.number().optional(),
   "retailMargin": zod.number().optional(),
+  "pricingMode": zod.enum(['direct', 'mrp_based']).optional(),
+  "retailDiscountPct": zod.number().optional(),
+  "retailNonGstDiscountPct": zod.number().optional(),
+  "wholesaleDiscountPct": zod.number().optional(),
+  "wholesaleNonGstDiscountPct": zod.number().optional(),
   "hsnCode": zod.string().optional(),
   "taxRate": zod.number().optional(),
   "litersPerBox": zod.number().optional(),
@@ -729,6 +754,11 @@ export const UpdateProductResponse = zod.object({
   "pricingBasis": zod.enum(['manual', 'fixed_margin']).describe('manual: wholesalePrice\/retailPrice are entered directly. fixed_margin: they\'re computed as purchasePrice \* (1 + margin \/ 100) whenever purchasePrice changes or Recalculate Prices runs.'),
   "wholesaleMargin": zod.number().nullish().describe('Percentage markup over purchasePrice, only applied when pricingBasis is fixed_margin.'),
   "retailMargin": zod.number().nullish().describe('Percentage markup over purchasePrice, only applied when pricingBasis is fixed_margin.'),
+  "pricingMode": zod.enum(['direct', 'mrp_based']).optional().describe('direct (default): retailPrice\/wholesalePrice\/nonGstPrice are used as-is for billing, exactly as before this field existed. mrp_based: billing instead derives the rate live from mrp \* (1 - the matching discount % below), per customer tier and invoice GST status. Independent of pricingBasis\/wholesaleMargin\/retailMargin and of nonGstMarginPct\/retailMarginPct\/wholesaleMarginPct.'),
+  "retailDiscountPct": zod.number().nullish().describe('mrp_based only: discount % off mrp for a retail customer on a GST invoice.'),
+  "retailNonGstDiscountPct": zod.number().nullish().describe('mrp_based only: discount % off mrp for a retail customer on a Non-GST invoice.'),
+  "wholesaleDiscountPct": zod.number().nullish().describe('mrp_based only: discount % off mrp for a wholesale customer on a GST invoice.'),
+  "wholesaleNonGstDiscountPct": zod.number().nullish().describe('mrp_based only: discount % off mrp for a wholesale customer on a Non-GST invoice.'),
   "hsnCode": zod.string().nullish(),
   "taxRate": zod.number().nullish(),
   "commissionPerLiter": zod.number().nullish(),
@@ -3134,6 +3164,26 @@ export const CreateCustomerFollowUpResponse = zod.object({
 
 
 /**
+ * For when a customer says "I'll order in N days" — the customer drops off the Inactive Customers list until that many days from now have passed, then reappears automatically if they still haven't ordered.
+ * @summary Snooze a customer off the Inactive Customers list for N days
+ */
+export const SetCustomerReminderParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+
+
+export const SetCustomerReminderBody = zod.object({
+  "days": zod.number().min(1).describe('Snooze this customer off the Inactive Customers list for this many days.')
+})
+
+export const SetCustomerReminderResponse = zod.object({
+  "remindAfter": zod.coerce.date()
+})
+
+
+/**
  * Ranks products by sales velocity (finished goods, from invoice history) or consumption velocity (raw materials, from Manufacturing stock movements), and suggests how much to reorder — a velocity-based coverage quantity plus an optional reinvestment boost computed from the profit margin actually earned on units sold.
  * @summary Fast-moving finished products and raw materials, with a suggested reorder qty
  */
@@ -3769,6 +3819,11 @@ export const GlobalSearchResponse = zod.object({
   "pricingBasis": zod.enum(['manual', 'fixed_margin']).describe('manual: wholesalePrice\/retailPrice are entered directly. fixed_margin: they\'re computed as purchasePrice \* (1 + margin \/ 100) whenever purchasePrice changes or Recalculate Prices runs.'),
   "wholesaleMargin": zod.number().nullish().describe('Percentage markup over purchasePrice, only applied when pricingBasis is fixed_margin.'),
   "retailMargin": zod.number().nullish().describe('Percentage markup over purchasePrice, only applied when pricingBasis is fixed_margin.'),
+  "pricingMode": zod.enum(['direct', 'mrp_based']).optional().describe('direct (default): retailPrice\/wholesalePrice\/nonGstPrice are used as-is for billing, exactly as before this field existed. mrp_based: billing instead derives the rate live from mrp \* (1 - the matching discount % below), per customer tier and invoice GST status. Independent of pricingBasis\/wholesaleMargin\/retailMargin and of nonGstMarginPct\/retailMarginPct\/wholesaleMarginPct.'),
+  "retailDiscountPct": zod.number().nullish().describe('mrp_based only: discount % off mrp for a retail customer on a GST invoice.'),
+  "retailNonGstDiscountPct": zod.number().nullish().describe('mrp_based only: discount % off mrp for a retail customer on a Non-GST invoice.'),
+  "wholesaleDiscountPct": zod.number().nullish().describe('mrp_based only: discount % off mrp for a wholesale customer on a GST invoice.'),
+  "wholesaleNonGstDiscountPct": zod.number().nullish().describe('mrp_based only: discount % off mrp for a wholesale customer on a Non-GST invoice.'),
   "hsnCode": zod.string().nullish(),
   "taxRate": zod.number().nullish(),
   "commissionPerLiter": zod.number().nullish(),

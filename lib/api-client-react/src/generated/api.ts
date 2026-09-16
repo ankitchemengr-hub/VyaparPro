@@ -159,6 +159,8 @@ import type {
   SalesTrendPoint,
   SearchResults,
   SetActiveCompanyInput,
+  SetCustomerReminder200,
+  SetCustomerReminderInput,
   SmartOrderSettings,
   SmartOrderSettingsInput,
   SmartOrderSuggestion,
@@ -8098,6 +8100,78 @@ export const useCreateCustomerFollowUp = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getCreateCustomerFollowUpMutationOptions(options));
+    }
+
+export const getSetCustomerReminderUrl = (id: number,) => {
+
+
+
+
+  return `/api/customers/${id}/remind`
+}
+
+/**
+ * For when a customer says "I'll order in N days" — the customer drops off the Inactive Customers list until that many days from now have passed, then reappears automatically if they still haven't ordered.
+ * @summary Snooze a customer off the Inactive Customers list for N days
+ */
+export const setCustomerReminder = async (id: number,
+    setCustomerReminderInput: SetCustomerReminderInput, options?: RequestInit): Promise<SetCustomerReminder200> => {
+
+  return customFetch<SetCustomerReminder200>(getSetCustomerReminderUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(setCustomerReminderInput)
+  }
+);}
+
+
+
+
+export const getSetCustomerReminderMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setCustomerReminder>>, TError,{id: number;data: BodyType<SetCustomerReminderInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setCustomerReminder>>, TError,{id: number;data: BodyType<SetCustomerReminderInput>}, TContext> => {
+
+const mutationKey = ['setCustomerReminder'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setCustomerReminder>>, {id: number;data: BodyType<SetCustomerReminderInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  setCustomerReminder(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetCustomerReminderMutationResult = NonNullable<Awaited<ReturnType<typeof setCustomerReminder>>>
+    export type SetCustomerReminderMutationBody = BodyType<SetCustomerReminderInput>
+    export type SetCustomerReminderMutationError = ErrorType<void>
+
+    /**
+ * @summary Snooze a customer off the Inactive Customers list for N days
+ */
+export const useSetCustomerReminder = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setCustomerReminder>>, TError,{id: number;data: BodyType<SetCustomerReminderInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setCustomerReminder>>,
+        TError,
+        {id: number;data: BodyType<SetCustomerReminderInput>},
+        TContext
+      > => {
+      return useMutation(getSetCustomerReminderMutationOptions(options));
     }
 
 export const getListSmartOrderSuggestionsUrl = () => {

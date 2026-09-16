@@ -30,6 +30,19 @@ export const productsTable = pgTable("products", {
   nonGstMarginPct: numeric("non_gst_margin_pct", { precision: 5, scale: 2 }),
   retailMarginPct: numeric("retail_margin_pct", { precision: 5, scale: 2 }),
   wholesaleMarginPct: numeric("wholesale_margin_pct", { precision: 5, scale: 2 }),
+  // Pricing Mode — "direct" (default) keeps today's behavior exactly:
+  // retailPrice/wholesalePrice/nonGstPrice are used as-is by billing's
+  // getBaseRate(). "mrp_based" is a distinct, additive mode: billing derives
+  // the rate live from mrp * (1 - the matching discount % below), per
+  // customer tier (retail/wholesale) and invoice GST status, instead of
+  // reading the flat price columns. Independent of pricingBasis
+  // ("fixed_margin") and nonGstMarginPct/retailMarginPct/wholesaleMarginPct
+  // above — neither of those existing mechanisms is touched by this one.
+  pricingMode: text("pricing_mode").notNull().default("direct"),
+  retailDiscountPct: numeric("retail_discount_pct", { precision: 5, scale: 2 }),
+  retailNonGstDiscountPct: numeric("retail_non_gst_discount_pct", { precision: 5, scale: 2 }),
+  wholesaleDiscountPct: numeric("wholesale_discount_pct", { precision: 5, scale: 2 }),
+  wholesaleNonGstDiscountPct: numeric("wholesale_non_gst_discount_pct", { precision: 5, scale: 2 }),
   hsnCode: text("hsn_code"),
   taxRate: numeric("tax_rate", { precision: 5, scale: 2 }).default("18"),
   commissionPerLiter: numeric("commission_per_liter", { precision: 12, scale: 2 }).notNull().default("0"),

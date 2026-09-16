@@ -327,6 +327,11 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
     )`,
     `CREATE INDEX IF NOT EXISTS customer_follow_ups_company_idx ON customer_follow_ups(company_id)`,
     `CREATE INDEX IF NOT EXISTS customer_follow_ups_customer_idx ON customer_follow_ups(customer_id)`,
+
+    // ── Customers: "remind me in N days" snooze for Inactive Customers ────
+    // Set when a customer says "I'll order in N days" — hides them from the
+    // list until this timestamp passes, then they reappear automatically.
+    `ALTER TABLE entities ADD COLUMN IF NOT EXISTS inactive_reminder_until TIMESTAMP WITH TIME ZONE`,
   ];
 
   for (const sql of patches) {

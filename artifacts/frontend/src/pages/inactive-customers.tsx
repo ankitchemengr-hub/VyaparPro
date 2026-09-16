@@ -5,6 +5,7 @@ import {
   useUpdateCustomerFollowUpSettings,
   useListCustomerFollowUps,
   useCreateCustomerFollowUp,
+  useSetCustomerReminder,
   getGetCustomerFollowUpSettingsQueryKey,
   getListInactiveCustomersQueryKey,
   getListCustomerFollowUpsQueryKey,
@@ -20,7 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
-import { PhoneCall, MessageCircle, Loader2, Settings2, UserX, Save, Search } from "lucide-react";
+import { PhoneCall, MessageCircle, Loader2, Settings2, UserX, Save, Search, BellRing } from "lucide-react";
 
 // Customers with no (non-cancelled) invoice within the configured threshold —
 // see /customer-follow-ups/settings. Never-ordered customers sort first, then
@@ -95,6 +96,7 @@ export default function InactiveCustomers() {
   };
 
   const [remarkFor, setRemarkFor] = useState<{ id: number; name: string } | null>(null);
+  const [remindFor, setRemindFor] = useState<{ id: number; name: string } | null>(null);
 
   const rows = customers ?? [];
 
@@ -202,6 +204,14 @@ export default function InactiveCustomers() {
                 <Button size="sm" onClick={() => setRemarkFor({ id: c.customerId, name: c.name })} data-testid={`button-remark-${c.customerId}`}>
                   Remark
                 </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setRemindFor({ id: c.customerId, name: c.name })}
+                  data-testid={`button-remind-${c.customerId}`}
+                >
+                  <BellRing className="w-3.5 h-3.5 mr-1.5" /> Remind
+                </Button>
               </div>
             </div>
           ))}
@@ -209,7 +219,72 @@ export default function InactiveCustomers() {
       )}
 
       <RemarkDialog target={remarkFor} onClose={() => setRemarkFor(null)} />
+      <ReminderDialog target={remindFor} onClose={() => setRemindFor(null)} />
     </div>
+  );
+}
+
+function ReminderDialog({ target, onClose }: { target: { id: number; name: string } | null; onClose: () => void }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [days, setDays] = useState("5");
+  const setReminder = useSetCustomerReminder();
+
+  useEffect(() => {
+    setDays("5");
+  }, [target?.id]);
+
+  const handleSave = () => {
+    if (!target) return;
+    const value = Number(days);
+    if (!Number.isFinite(value) || value < 1) {
+      toast({ title: "Enter a valid number of days", variant: "destructive" });
+      return;
+    }
+    setReminder.mutate(
+      { id: target.id, data: { days: value } },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getListInactiveCustomersQueryKey() });
+          toast({ title: `Reminder set`, description: `${target.name} will drop off this list for ${value} day${value !== 1 ? "s" : ""}.` });
+          onClose();
+        },
+        onError: (err: any) => {
+          toast({ title: "Failed to set reminder", description: err?.message ?? "Server error", variant: "destructive" });
+        },
+      },
+    );
+  };
+
+  return (
+    <Dialog open={!!target} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="sm:max-w-[420px]">
+        <DialogHeader>
+          <DialogTitle>Remind me later — {target?.name}</DialogTitle>
+          <DialogDescription>
+            If they said "I'll order in a few days", snooze them off this list — they'll reappear automatically once that time passes if they still haven't ordered.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Input
+              type="number"
+              min="1"
+              value={days}
+              onChange={(e) => setDays(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }}
+              className="w-24"
+              data-testid="input-remind-days"
+            />
+            <span className="text-sm text-muted-foreground">days</span>
+          </div>
+          <Button onClick={handleSave} disabled={setReminder.isPending} className="w-full" data-testid="button-save-reminder">
+            {setReminder.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+            Set Reminder
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

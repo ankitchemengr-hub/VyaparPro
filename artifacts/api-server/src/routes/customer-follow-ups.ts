@@ -62,6 +62,9 @@ router.get("/customers/inactive", async (req, res): Promise<void> => {
     // A customer who has never invoiced only counts as inactive once they've
     // had the full threshold to place a first order (created_at < cutoff) —
     // otherwise every brand-new customer would show up here on day one.
+    // A customer with a still-pending "remind me in N days" snooze
+    // (inactive_reminder_until in the future) is excluded regardless —
+    // see POST /customers/:id/remind.
     const { rows: customers } = await pool.query(
       `SELECT e.id, e.name, e.mobile, e.outstanding_balance, e.created_at,
               MAX(i.invoice_date) AS last_invoice_date
@@ -69,6 +72,7 @@ router.get("/customers/inactive", async (req, res): Promise<void> => {
        LEFT JOIN invoices i
          ON i.customer_id = e.id AND i.company_id = e.company_id AND i.status != 'cancelled'
        WHERE e.company_id = $1 AND e.type = 'customer' AND e.is_active = true
+         AND (e.inactive_reminder_until IS NULL OR e.inactive_reminder_until <= NOW())
        GROUP BY e.id
        HAVING MAX(i.invoice_date) < $2
           OR (MAX(i.invoice_date) IS NULL AND e.created_at < $2)
@@ -169,6 +173,36 @@ router.post("/customers/:id/follow-ups", async (req, res): Promise<void> => {
   } catch (err) {
     logger.error({ err }, "POST /customers/:id/follow-ups failed");
     res.status(500).json({ error: "Failed to save remark" });
+  }
+});
+
+// POST /customers/:id/remind — "I'll order in N days": snooze this customer
+// off the Inactive Customers list until then. They reappear automatically
+// once that date passes if they still haven't invoiced.
+router.post("/customers/:id/remind", async (req, res): Promise<void> => {
+  const companyId = getCompanyId(req);
+  const customerId = parseInt(req.params.id, 10);
+  const days = Number((req.body ?? {}).days);
+  if (!Number.isFinite(days) || days < 1) {
+    res.status(400).json({ error: "days must be a positive number" });
+    return;
+  }
+  try {
+    const { rows } = await pool.query(
+      `UPDATE entities
+       SET inactive_reminder_until = NOW() + ($1::text || ' days')::interval
+       WHERE id = $2 AND company_id = $3
+       RETURNING inactive_reminder_until`,
+      [days, customerId, companyId],
+    );
+    if (rows.length === 0) {
+      res.status(404).json({ error: "Customer not found" });
+      return;
+    }
+    res.json({ remindAfter: rows[0].inactive_reminder_until.toISOString() });
+  } catch (err) {
+    logger.error({ err }, "POST /customers/:id/remind failed");
+    res.status(500).json({ error: "Failed to set reminder" });
   }
 });
 
