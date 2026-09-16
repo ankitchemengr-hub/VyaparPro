@@ -147,7 +147,21 @@ export function getPrintCss(
          sheet below (a direct child of <body>) survives. */
       #root { display: none !important; }
       body > *:not(.invoice-print-portal) { display: none !important; }
-      .invoice-print-portal { display: block !important; }
+      /* #root:none alone relies on the portal being the only remaining
+         block in normal flow to land at the page's top margin — true in
+         every browser's own paginator, but some physical-printer drivers
+         (as opposed to a "Save as PDF" virtual printer, which always
+         renders straight from that flow) re-lay the page out and don't
+         treat flow position as the true top, printing lower down instead.
+         Pinning the portal with position:absolute; top/left:0 removes that
+         ambiguity outright instead of relying on it being first in flow. */
+      .invoice-print-portal {
+        display: block !important;
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100% !important;
+      }
       .invoice-print-portal .invoice-sheet {
         color: #000 !important;
         background: #fff !important;
