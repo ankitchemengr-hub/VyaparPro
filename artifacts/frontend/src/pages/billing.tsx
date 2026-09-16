@@ -5,8 +5,6 @@ import {
   useListProducts,
   useGetProductRecentPrices,
   getGetProductRecentPricesQueryKey,
-  useGetProductBilledRate,
-  getGetProductBilledRateQueryKey,
   useCreateInvoice,
   useUpdateInvoice,
   useGetInvoice,
@@ -60,12 +58,39 @@ function isGstInvoiceType(t: string) { return GST_INVOICE_TYPES.has(t); }
 // Retail customers always get retailPrice, on both GST and Non-GST invoices.
 // The product's dedicated "Non-GST Price" field is a wholesale-only cash-bill
 // rate — it only kicks in for wholesale customers on a Non-GST invoice.
+//
+// "mrp_based" products (an additive Pricing Mode, opt-in per product) skip
+// all of the above and derive the rate live from mrp * (1 - discount%),
+// picking the discount column for this customer tier / GST status. Nothing
+// here changes for "direct" (the default, and every pre-existing product) —
+// that branch is untouched, byte-for-byte the same logic as before this mode
+// existed. The GST/tax engine itself is never touched either way: this only
+// changes what `rate` gets handed to it, exactly like a Direct Rate product's
+// flat retailPrice/wholesalePrice always has.
 function getBaseRate(p: any, customer: any, invoiceType: string): number {
+  const isWholesale = customer?.pricingTier === "wholesale";
+  const isGst = isGstInvoiceType(invoiceType);
+
+  if (p.pricingMode === "mrp_based") {
+    const mrp = Number(p.mrp) || 0;
+    if (mrp > 0) {
+      const discountPct = Number(
+        isWholesale
+          ? (isGst ? p.wholesaleDiscountPct : p.wholesaleNonGstDiscountPct)
+          : (isGst ? p.retailDiscountPct : p.retailNonGstDiscountPct)
+      ) || 0;
+      const rate = mrp * (1 - discountPct / 100);
+      if (rate > 0) return rate;
+    }
+    // Misconfigured mrp_based product (no mrp yet) — fall through to the
+    // direct-rate fields below rather than billing at ₹0.
+  }
+
   const wholesalePrice = Number(p.wholesalePrice) || 0;
   const retailPrice = Number(p.retailPrice) || 0;
-  if (customer?.pricingTier !== "wholesale") return retailPrice || wholesalePrice;
+  if (!isWholesale) return retailPrice || wholesalePrice;
   const nonGstPrice = Number((p as any).nonGstPrice) || 0;
-  if (!isGstInvoiceType(invoiceType) && nonGstPrice > 0) return nonGstPrice;
+  if (!isGst && nonGstPrice > 0) return nonGstPrice;
   return wholesalePrice || retailPrice;
 }
 
@@ -204,49 +229,6 @@ function RecentPriceHint({ productId, onPickRate }: { productId: number; onPickR
       {bought && <div>Bought: {bought}</div>}
     </div>
   );
-}
-
-// Renders nothing — pre-fills a billing line's Rate from history: the rate
-// this customer was last billed for the product (partyRate), else the last
-// billed sale rate to anyone (lastSaleRate). Fires at most once per
-// (product, customer) pair and never once the user has hand-typed a rate on
-// the line (item.rateEdited), so it can't stomp a deliberate choice. Its own
-// component so the per-product query obeys the rules of hooks even as lines
-// are added and removed.
-function BilledRateAutofill({
-  productId,
-  customerId,
-  rateEdited,
-  onRate,
-}: {
-  productId: number;
-  customerId: number | null | undefined;
-  rateEdited: boolean;
-  onRate: (rate: number) => void;
-}) {
-  const enabled = !!productId && !!customerId && !rateEdited;
-  const { data } = useGetProductBilledRate(productId, customerId as number, {
-    query: {
-      queryKey: getGetProductBilledRateQueryKey(productId, customerId as number),
-      enabled,
-      staleTime: 5 * 60 * 1000,
-    },
-  });
-  const appliedRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!enabled || !data) return;
-    const key = `${productId}:${customerId}`;
-    if (appliedRef.current === key) return;
-    const rate = data.partyRate ?? data.lastSaleRate;
-    if (rate != null && rate > 0) {
-      appliedRef.current = key;
-      onRate(Number(rate));
-    }
-    // onRate is a fresh closure each render; the appliedRef guard already
-    // stops repeat fires, so it's deliberately left out of the deps.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, data, productId, customerId]);
-  return null;
 }
 
 function parseSearch(search: string) {
@@ -940,18 +922,6 @@ export default function Billing() {
               )}
             </div>
             <CardContent className="p-0">
-              {/* Pre-fills each line's Rate from this customer's billing
-                  history — headless, one per product so the query respects
-                  the rules of hooks. */}
-              {items.map((item, idx) => (
-                <BilledRateAutofill
-                  key={item.productId}
-                  productId={item.productId}
-                  customerId={customer?.id}
-                  rateEdited={!!item.rateEdited}
-                  onRate={(r) => updateItem(idx, "rate", r)}
-                />
-              ))}
               {/* Desktop / tablet: dense table */}
               <div className="hidden md:block overflow-x-auto max-h-[400px] overflow-y-auto">
                 <Table>

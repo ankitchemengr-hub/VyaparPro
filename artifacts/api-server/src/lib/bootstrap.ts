@@ -310,6 +310,23 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
     // Distinguishes store-user payments (accepted by the admin from the Cash
     // Book) from salesman payments (approved on the Payments page).
     `ALTER TABLE payments ADD COLUMN IF NOT EXISTS created_by_role TEXT`,
+
+    // ── Customer follow-ups: contact log for the Inactive Customers page ──
+    // One row per contact attempt (see customer-follow-ups.ts routes). This
+    // table was missing on installs from before that feature shipped, which
+    // made GET /customers/inactive throw and the page silently show "no
+    // inactive customers" instead of an error.
+    `CREATE TABLE IF NOT EXISTS customer_follow_ups (
+      id                  SERIAL PRIMARY KEY,
+      company_id          INTEGER NOT NULL,
+      customer_id         INTEGER NOT NULL REFERENCES entities(id),
+      remark              TEXT NOT NULL,
+      created_by_user_id  INTEGER,
+      created_by_name     TEXT,
+      created_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    )`,
+    `CREATE INDEX IF NOT EXISTS customer_follow_ups_company_idx ON customer_follow_ups(company_id)`,
+    `CREATE INDEX IF NOT EXISTS customer_follow_ups_customer_idx ON customer_follow_ups(customer_id)`,
   ];
 
   for (const sql of patches) {
