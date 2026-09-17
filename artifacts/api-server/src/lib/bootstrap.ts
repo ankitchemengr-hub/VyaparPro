@@ -332,6 +332,15 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
     // Set when a customer says "I'll order in N days" — hides them from the
     // list until this timestamp passes, then they reappear automatically.
     `ALTER TABLE entities ADD COLUMN IF NOT EXISTS inactive_reminder_until TIMESTAMP WITH TIME ZONE`,
+
+    // ── Products: pricing mode + per-tier discount percentages ────────────
+    // Missing on installs from before this feature shipped, which made every
+    // GET /products (and therefore the whole Product Catalog page) throw.
+    `ALTER TABLE products ADD COLUMN IF NOT EXISTS pricing_mode TEXT NOT NULL DEFAULT 'direct'`,
+    `ALTER TABLE products ADD COLUMN IF NOT EXISTS retail_discount_pct NUMERIC(5, 2)`,
+    `ALTER TABLE products ADD COLUMN IF NOT EXISTS retail_non_gst_discount_pct NUMERIC(5, 2)`,
+    `ALTER TABLE products ADD COLUMN IF NOT EXISTS wholesale_discount_pct NUMERIC(5, 2)`,
+    `ALTER TABLE products ADD COLUMN IF NOT EXISTS wholesale_non_gst_discount_pct NUMERIC(5, 2)`,
   ];
 
   for (const sql of patches) {
