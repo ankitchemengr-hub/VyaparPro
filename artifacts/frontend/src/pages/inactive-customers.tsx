@@ -21,7 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
-import { PhoneCall, MessageCircle, Loader2, Settings2, UserX, Save, Search, BellRing } from "lucide-react";
+import { PhoneCall, MessageCircle, Loader2, Settings2, UserX, Save, Search, BellRing, StickyNote } from "lucide-react";
 
 // Customers with no (non-cancelled) invoice within the configured threshold —
 // see /customer-follow-ups/settings. Never-ordered customers sort first, then
@@ -113,41 +113,49 @@ export default function InactiveCustomers() {
       </div>
 
       <Card>
-        <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center gap-3">
-          <Settings2 className="w-4 h-4 text-muted-foreground shrink-0" />
-          <span className="text-sm text-muted-foreground shrink-0">Show customers with no order in the last</span>
+        <CardContent className="p-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Settings2 className="w-4 h-4 shrink-0" />
+            <span>Show customers with no order in the last</span>
+          </div>
           {isAdmin ? (
             <>
-              <Input
-                type="number"
-                min="1"
-                value={days}
-                onChange={(e) => setDays(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }}
-                className="w-24"
-                data-testid="input-inactive-days-threshold"
-              />
-              <span className="text-sm text-muted-foreground">days</span>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleSearch}
-                disabled={isFetching}
-                className="sm:ml-auto"
-                data-testid="button-search-inactive-days-threshold"
-              >
-                {isFetching ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Search className="w-3.5 h-3.5 mr-1.5" />}
-                Search
-              </Button>
-              <Button
-                size="sm"
-                onClick={handleSaveDays}
-                disabled={updateSettings.isPending}
-                data-testid="button-save-inactive-days-threshold"
-              >
-                {updateSettings.isPending ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Save className="w-3.5 h-3.5 mr-1.5" />}
-                Save as default
-              </Button>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min="1"
+                  value={days}
+                  onChange={(e) => setDays(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }}
+                  className="w-20 shrink-0"
+                  data-testid="input-inactive-days-threshold"
+                />
+                <span className="text-sm text-muted-foreground shrink-0">days</span>
+              </div>
+              <div className="flex items-center gap-2 sm:ml-auto">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleSearch}
+                  disabled={isFetching}
+                  className="flex-1 sm:flex-none"
+                  data-testid="button-search-inactive-days-threshold"
+                >
+                  {isFetching ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Search className="w-3.5 h-3.5 mr-1.5" />}
+                  Search
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleSaveDays}
+                  disabled={updateSettings.isPending}
+                  className="flex-1 sm:flex-none"
+                  data-testid="button-save-inactive-days-threshold"
+                >
+                  {updateSettings.isPending ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Save className="w-3.5 h-3.5 mr-1.5" />}
+                  <span className="sm:hidden">Save</span>
+                  <span className="hidden sm:inline">Save as default</span>
+                </Button>
+              </div>
             </>
           ) : (
             <span className="text-sm font-medium">{settings?.days ?? days} days</span>
@@ -190,27 +198,27 @@ export default function InactiveCustomers() {
                   </div>
                 )}
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <a href={`tel:${c.mobile}`} data-testid={`link-call-${c.customerId}`}>
-                  <Button variant="outline" size="sm">
-                    <PhoneCall className="w-3.5 h-3.5 mr-1.5" /> Call
+              <div className="grid grid-cols-4 gap-1.5 sm:flex sm:items-center sm:shrink-0 sm:gap-2">
+                <a href={`tel:${c.mobile}`} className="block" data-testid={`link-call-${c.customerId}`}>
+                  <Button variant="outline" size="sm" className="w-full">
+                    <PhoneCall className="w-3.5 h-3.5 sm:mr-1.5" /> <span className="hidden sm:inline">Call</span>
                   </Button>
                 </a>
-                <a href={waLink(c.mobile, c.name)} target="_blank" rel="noopener noreferrer" data-testid={`link-whatsapp-${c.customerId}`}>
-                  <Button variant="outline" size="sm">
-                    <MessageCircle className="w-3.5 h-3.5 mr-1.5 text-green-600" /> WhatsApp
+                <a href={waLink(c.mobile, c.name)} target="_blank" rel="noopener noreferrer" className="block" data-testid={`link-whatsapp-${c.customerId}`}>
+                  <Button variant="outline" size="sm" className="w-full">
+                    <MessageCircle className="w-3.5 h-3.5 sm:mr-1.5 text-green-600" /> <span className="hidden sm:inline">WhatsApp</span>
                   </Button>
                 </a>
-                <Button size="sm" onClick={() => setRemarkFor({ id: c.customerId, name: c.name })} data-testid={`button-remark-${c.customerId}`}>
-                  Remark
-                </Button>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setRemindFor({ id: c.customerId, name: c.name })}
                   data-testid={`button-remind-${c.customerId}`}
                 >
-                  <BellRing className="w-3.5 h-3.5 mr-1.5" /> Remind
+                  <BellRing className="w-3.5 h-3.5 sm:mr-1.5" /> <span className="hidden sm:inline">Remind</span>
+                </Button>
+                <Button size="sm" onClick={() => setRemarkFor({ id: c.customerId, name: c.name })} data-testid={`button-remark-${c.customerId}`}>
+                  <StickyNote className="w-3.5 h-3.5 sm:mr-1.5" /> <span className="hidden sm:inline">Remark</span>
                 </Button>
               </div>
             </div>
