@@ -63,6 +63,8 @@ export interface Invoice {
   igst?: number;
   freight?: number;
   roundOff?: number;
+  /** Flat discount applied after Grand Total at billing time. Also logged as an expense (category "Discount") for reporting — no Cash Book account is debited since no cash actually left the business. */
+  billDiscount?: number;
   grandTotal: number;
   amountPaid?: number;
   balanceDue?: number;

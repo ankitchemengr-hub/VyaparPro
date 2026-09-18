@@ -265,6 +265,10 @@ export default function Billing() {
   const [placeOfSupply, setPlaceOfSupply] = useState(customer?.state || "Maharashtra");
   const [items, setItems] = useState<BillingItem[]>([]);
   const [freight, setFreight] = useState(0);
+  // Flat discount entered after Grand Total — subtracted from it, and
+  // mirrored server-side as a reporting-only "Discount" expense (no Cash
+  // Book account is touched, since no real cash left the business).
+  const [billDiscount, setBillDiscount] = useState(0);
   const [saved, setSaved] = useState(false);
   const [salesmanId, setSalesmanId] = useState<number | null>(null);
   const [productSearch, setProductSearch] = useState("");
@@ -357,6 +361,7 @@ export default function Billing() {
     setInvoiceDate(String(existingInvoice.invoiceDate).slice(0, 10));
     setPlaceOfSupply(existingInvoice.placeOfSupply || "Maharashtra");
     setFreight(Number(existingInvoice.freight ?? 0));
+    setBillDiscount(Number(existingInvoice.billDiscount ?? 0));
     if (existingInvoice.customerId || existingInvoice.customerName) {
       setCustomer({
         id: existingInvoice.customerId, name: existingInvoice.customerName,
@@ -573,7 +578,11 @@ export default function Billing() {
   const cgst = invoiceType === "gst" && !isInterstate ? totalTax / 2 : 0;
   const sgst = invoiceType === "gst" && !isInterstate ? totalTax / 2 : 0;
   const igst = invoiceType === "gst" && isInterstate ? totalTax : 0;
-  const grandTotal = subtotal + totalTax + freight;
+  const preDiscountTotal = subtotal + totalTax + freight;
+  // Clamped so a stray large entry can't send the customer's payable below
+  // zero — the input itself still shows whatever the biller typed.
+  const effectiveBillDiscount = Math.max(0, Math.min(billDiscount, preDiscountTotal));
+  const grandTotal = preDiscountTotal - effectiveBillDiscount;
   const roundOff = Math.round(grandTotal) - grandTotal;
   const finalTotal = Math.round(grandTotal);
 
@@ -589,7 +598,7 @@ export default function Billing() {
       customerGstin: customer?.gstin ?? undefined,
       billingAddress: customer?.address ?? undefined,
       salesmanId: salesmanId ?? undefined,
-      freight, roundOff,
+      freight, roundOff, billDiscount: effectiveBillDiscount,
       items: items.map((i) => ({
         productId: i.productId, qty: billedUnits(i),
         ...(i.qtyMode === "box" && i.unitsPerBox > 0 ? { qtyBoxes: i.qty } : {}),
@@ -1124,6 +1133,22 @@ export default function Billing() {
                 </>
               )}
               {freight > 0 && <div className="flex justify-between text-muted-foreground"><span>Freight</span><span>₹{freight.toLocaleString()}</span></div>}
+              <Separator />
+              <div className="flex justify-between font-medium"><span>Total</span><span>₹{preDiscountTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></div>
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="input-bill-discount" className="text-muted-foreground shrink-0">Discount (₹)</Label>
+                <NumberInput
+                  id="input-bill-discount"
+                  min={0}
+                  value={billDiscount}
+                  onChange={(v) => setBillDiscount(v)}
+                  className="w-28 text-right"
+                  data-testid="input-bill-discount"
+                />
+              </div>
+              {effectiveBillDiscount > 0 && (
+                <p className="text-[11px] text-muted-foreground -mt-1">Logged as an expense (category "Discount") — no Cash Book account is affected.</p>
+              )}
               {Math.abs(roundOff) > 0.001 && <div className="flex justify-between text-muted-foreground text-xs"><span>Round Off</span><span>{roundOff > 0 ? "+" : ""}₹{roundOff.toFixed(2)}</span></div>}
               <Separator />
               <div className="flex justify-between font-bold text-lg"><span>Grand Total</span><span className="text-primary">₹{finalTotal.toLocaleString()}</span></div>

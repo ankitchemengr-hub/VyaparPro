@@ -40,6 +40,8 @@ export interface InvoiceUpdate {
   eWayBillNo?: string | null;
   freight?: number;
   roundOff?: number;
+  /** Flat discount applied after Grand Total, subtracted from it. The linked "Discount" expense is created/updated/removed to match. */
+  billDiscount?: number;
   /** When present, fully replaces line items and triggers stock/ledger reversal+reapply. */
   items?: InvoiceItemInput[];
 }

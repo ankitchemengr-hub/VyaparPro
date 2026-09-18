@@ -1354,6 +1354,8 @@ export interface Invoice {
   igst?: number;
   freight?: number;
   roundOff?: number;
+  /** Flat discount applied after Grand Total at billing time. Also logged as an expense (category "Discount") for reporting — no Cash Book account is debited since no cash actually left the business. */
+  billDiscount?: number;
   grandTotal: number;
   amountPaid?: number;
   balanceDue?: number;
@@ -1400,6 +1402,8 @@ export interface InvoiceInput {
   eWayBillNo?: string;
   freight?: number;
   roundOff?: number;
+  /** Flat discount applied after Grand Total, subtracted from it. Automatically logged as an expense (category "Discount") for reporting. */
+  billDiscount?: number;
   items: InvoiceItemInput[];
 }
 
@@ -1451,6 +1455,8 @@ export interface InvoiceUpdate {
   eWayBillNo?: string | null;
   freight?: number;
   roundOff?: number;
+  /** Flat discount applied after Grand Total, subtracted from it. The linked "Discount" expense is created/updated/removed to match. */
+  billDiscount?: number;
   /** When present, fully replaces line items and triggers stock/ledger reversal+reapply. */
   items?: InvoiceItemInput[];
 }

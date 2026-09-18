@@ -29,6 +29,11 @@ export const invoicesTable = pgTable("invoices", {
   igst: numeric("igst", { precision: 12, scale: 2 }).notNull().default("0"),
   freight: numeric("freight", { precision: 12, scale: 2 }).notNull().default("0"),
   roundOff: numeric("round_off", { precision: 6, scale: 2 }).notNull().default("0"),
+  // Flat discount entered after Grand Total at billing time — subtracted
+  // from grandTotal below and mirrored as an expense (category "Discount",
+  // see POST/PATCH /invoices) so the amount given away shows up in
+  // reporting without touching any Cash Book account balance.
+  billDiscount: numeric("bill_discount", { precision: 12, scale: 2 }).notNull().default("0"),
   grandTotal: numeric("grand_total", { precision: 12, scale: 2 }).notNull().default("0"),
   amountPaid: numeric("amount_paid", { precision: 12, scale: 2 }).notNull().default("0"),
   balanceDue: numeric("balance_due", { precision: 12, scale: 2 }).notNull().default("0"),

@@ -24,6 +24,11 @@ export const expensesTable = pgTable("expenses", {
   accountId: integer("account_id"),
   paidTo: text("paid_to"),
   notes: text("notes"),
+  // Set only for the auto-created "Discount" expense mirroring an invoice's
+  // billDiscount (see POST/PATCH /invoices) — lets that route find and
+  // update/remove its own linked expense when the invoice is edited or
+  // cancelled, instead of accumulating a stale or duplicate row.
+  invoiceId: integer("invoice_id"),
   createdByUserId: integer("created_by_user_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [

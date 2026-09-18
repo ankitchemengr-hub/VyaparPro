@@ -4756,6 +4756,9 @@ components:
           type: number
         roundOff:
           type: number
+        billDiscount:
+          type: number
+          description: Flat discount applied after Grand Total at billing time. Also logged as an expense (category "Discount") for reporting — no Cash Book account is debited since no cash actually left the business.
         grandTotal:
           type: number
         amountPaid:
@@ -4848,6 +4851,9 @@ components:
           type: number
         roundOff:
           type: number
+        billDiscount:
+          type: number
+          description: Flat discount applied after Grand Total, subtracted from it. Automatically logged as an expense (category "Discount") for reporting.
         items:
           type: array
           items:
@@ -4921,6 +4927,9 @@ components:
           type: number
         roundOff:
           type: number
+        billDiscount:
+          type: number
+          description: Flat discount applied after Grand Total, subtracted from it. The linked "Discount" expense is created/updated/removed to match.
         items:
           type: array
           description: When present, fully replaces line items and triggers stock/ledger reversal+reapply.

@@ -311,6 +311,10 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
     // Book) from salesman payments (approved on the Payments page).
     `ALTER TABLE payments ADD COLUMN IF NOT EXISTS created_by_role TEXT`,
 
+    // ── Invoices: flat post-total discount, mirrored as a reporting expense ─
+    `ALTER TABLE invoices ADD COLUMN IF NOT EXISTS bill_discount NUMERIC(12, 2) NOT NULL DEFAULT 0`,
+    `ALTER TABLE expenses ADD COLUMN IF NOT EXISTS invoice_id INTEGER`,
+
     // ── Customer follow-ups: contact log for the Inactive Customers page ──
     // One row per contact attempt (see customer-follow-ups.ts routes). This
     // table was missing on installs from before that feature shipped, which

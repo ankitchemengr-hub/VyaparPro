@@ -24,5 +24,7 @@ export interface InvoiceInput {
   eWayBillNo?: string;
   freight?: number;
   roundOff?: number;
+  /** Flat discount applied after Grand Total, subtracted from it. Automatically logged as an expense (category "Discount") for reporting. */
+  billDiscount?: number;
   items: InvoiceItemInput[];
 }

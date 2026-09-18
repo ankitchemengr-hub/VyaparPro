@@ -50,6 +50,80 @@ async function generateInvoiceNumber(client: any, companyId: number, invoiceType
   return generateSeriesNumber(client, seriesTypeForInvoiceType(invoiceType), companyId);
 }
 
+const BILL_DISCOUNT_CATEGORY = "Discount";
+
+// Upserts the "Discount" expense category for a company and returns its id —
+// same trick as generate*Number's insert-or-fetch pattern, one round trip
+// either way thanks to ON CONFLICT ... DO UPDATE ... RETURNING.
+async function getBillDiscountCategoryId(client: any, companyId: number): Promise<number> {
+  const { rows } = await client.query(
+    `INSERT INTO expense_categories (company_id, name)
+     VALUES ($1, $2)
+     ON CONFLICT (company_id, name) DO UPDATE SET name = EXCLUDED.name
+     RETURNING id`,
+    [companyId, BILL_DISCOUNT_CATEGORY],
+  );
+  return rows[0].id;
+}
+
+// Creates the reporting-only expense mirroring a newly-saved invoice's
+// billDiscount. No accountId/account_transactions row — no real cash left
+// any Cash Book account, the customer simply paid less than the listed
+// total, so this exists purely so the amount given away shows up in the
+// Expenses report under "Discount".
+async function recordBillDiscountExpense(
+  client: any,
+  companyId: number,
+  invoiceId: number,
+  invoiceNo: string,
+  invoiceDate: string,
+  amount: number,
+  userId: number | null,
+): Promise<void> {
+  const categoryId = await getBillDiscountCategoryId(client, companyId);
+  await client.query(
+    `INSERT INTO expenses (company_id, date, category_id, category_name, amount, payment_mode, account_id, notes, invoice_id, created_by_user_id)
+     VALUES ($1, $2, $3, $4, $5, 'cash', NULL, $6, $7, $8)`,
+    [companyId, invoiceDate, categoryId, BILL_DISCOUNT_CATEGORY, String(amount), `Discount on Invoice ${invoiceNo}`, invoiceId, userId],
+  );
+}
+
+// Keeps an edited invoice's linked "Discount" expense (if any) in sync with
+// its current billDiscount — update the amount, create one if it just
+// became positive, or remove it if it dropped to zero. Never touches a Cash
+// Book account either way, matching recordBillDiscountExpense above.
+async function syncBillDiscountExpense(
+  client: any,
+  companyId: number,
+  invoiceId: number,
+  invoiceNo: string,
+  invoiceDate: string,
+  newAmount: number,
+  userId: number | null,
+): Promise<void> {
+  const { rows: existingRows } = await client.query(
+    `SELECT id FROM expenses WHERE company_id = $1 AND invoice_id = $2`,
+    [companyId, invoiceId],
+  );
+  const existing = existingRows[0];
+
+  if (newAmount <= 0) {
+    if (existing) {
+      await client.query(`DELETE FROM expenses WHERE id = $1 AND company_id = $2`, [existing.id, companyId]);
+    }
+    return;
+  }
+
+  if (existing) {
+    await client.query(
+      `UPDATE expenses SET amount = $1, date = $2 WHERE id = $3 AND company_id = $4`,
+      [String(newAmount), invoiceDate, existing.id, companyId],
+    );
+  } else {
+    await recordBillDiscountExpense(client, companyId, invoiceId, invoiceNo, invoiceDate, newAmount, userId);
+  }
+}
+
 // GET /invoices
 router.get("/invoices", async (req, res): Promise<void> => {
   const params = ListInvoicesQueryParams.safeParse(req.query);
@@ -250,7 +324,8 @@ router.post("/invoices", async (req, res): Promise<void> => {
 
     const freight = Number(data.freight ?? 0);
     const roundOff = Number(data.roundOff ?? 0);
-    const grandTotal = subtotal + totalTax + freight + roundOff;
+    const billDiscount = Number(data.billDiscount ?? 0);
+    const grandTotal = subtotal + totalTax + freight + roundOff - billDiscount;
     const balanceDue = isQuotation ? 0 : grandTotal;
 
     // Resolve effective salesman (for invoice attribution + commission).
@@ -288,8 +363,8 @@ router.post("/invoices", async (req, res): Promise<void> => {
       `INSERT INTO invoices (invoice_no, invoice_date, due_date, invoice_type, customer_id, customer_name,
         customer_gstin, billing_address, shipping_address, place_of_supply, salesman_id, salesman_name,
         po_number, e_way_bill_no, subtotal, total_discount, total_tax, cgst, sgst, igst, freight,
-        round_off, grand_total, balance_due, status, created_by_user_id, company_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)
+        round_off, bill_discount, grand_total, balance_due, status, created_by_user_id, company_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)
        RETURNING *`,
       [
         invoiceNo,
@@ -314,6 +389,7 @@ router.post("/invoices", async (req, res): Promise<void> => {
         String(igst),
         String(freight),
         String(roundOff),
+        String(billDiscount),
         String(grandTotal),
         String(balanceDue),
         "saved",
@@ -322,6 +398,13 @@ router.post("/invoices", async (req, res): Promise<void> => {
       ]
     );
     const invRow = invoiceQueryResult.rows[0];
+
+    // Mirror a positive bill discount as a reporting-only expense (category
+    // "Discount") — no accountId, so no Cash Book account is touched, since
+    // no real cash left the business; the customer simply paid less.
+    if (billDiscount > 0) {
+      await recordBillDiscountExpense(client, companyId, invRow.id, invoiceNo, data.invoiceDate, billDiscount, session?.userId ?? null);
+    }
 
     // Insert items + deduct stock
     for (const item of processedItems) {
@@ -709,7 +792,8 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
     });
     const freight = Number(data.freight ?? existing.freight ?? 0);
     const roundOff = Number(data.roundOff ?? existing.round_off ?? 0);
-    const newGrandTotal = subtotal + totalTax + freight + roundOff;
+    const billDiscount = Number(data.billDiscount ?? existing.bill_discount ?? 0);
+    const newGrandTotal = subtotal + totalTax + freight + roundOff - billDiscount;
     const amountPaid = Number(existing.amount_paid ?? 0);
     const balanceDue = isQuotationEdit ? 0 : newGrandTotal - amountPaid;
 
@@ -748,8 +832,8 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
          customer_gstin = $6, billing_address = $7, shipping_address = $8, place_of_supply = $9,
          salesman_id = $10, salesman_name = $11, po_number = $12, e_way_bill_no = $13,
          subtotal = $14, total_discount = $15, total_tax = $16, cgst = $17, sgst = $18, igst = $19,
-         freight = $20, round_off = $21, grand_total = $22, balance_due = $23, status = $24
-       WHERE id = $25 AND company_id = $26`,
+         freight = $20, round_off = $21, bill_discount = $22, grand_total = $23, balance_due = $24, status = $25
+       WHERE id = $26 AND company_id = $27`,
       [
         data.invoiceType ?? existing.invoice_type,
         data.invoiceDate ?? existing.invoice_date,
@@ -766,11 +850,17 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
         data.eWayBillNo === undefined ? existing.e_way_bill_no : data.eWayBillNo,
         String(subtotal), String(totalDiscount), String(totalTax),
         String(cgst), String(sgst), String(igst),
-        String(freight), String(roundOff), String(newGrandTotal), String(balanceDue),
+        String(freight), String(roundOff), String(billDiscount), String(newGrandTotal), String(balanceDue),
         data.status ?? existing.status,
         invoiceId,
         companyId,
       ]
+    );
+
+    // Keep the linked "Discount" expense (if any) in sync with the new amount.
+    await syncBillDiscountExpense(
+      client, companyId, invoiceId, existing.invoice_no,
+      (data.invoiceDate ?? existing.invoice_date) as string, billDiscount, session?.userId ?? null,
     );
 
     // 5. Insert new line items + outward stock movements (skip stock for quotations)
@@ -989,6 +1079,11 @@ router.delete("/invoices/:id", async (req, res): Promise<void> => {
       }
     }
 
+    // Cancelling the invoice means the discount it carried never really
+    // happened either — remove its mirrored "Discount" expense so it stops
+    // showing up in reporting.
+    await client.query(`DELETE FROM expenses WHERE company_id = $1 AND invoice_id = $2`, [companyId, params.data.id]);
+
     await client.query(
       `INSERT INTO audit_log (company_id, action, description, user_id, user_name, metadata)
        VALUES ($1, 'invoice_cancelled', $2, $3, $4, $5)`,
@@ -1171,6 +1266,7 @@ function formatInvoice(
     igst: Number(inv.igst),
     freight: Number(inv.freight),
     roundOff: Number(inv.roundOff),
+    billDiscount: Number(inv.billDiscount ?? 0),
     grandTotal: Number(inv.grandTotal),
     amountPaid: Number(inv.amountPaid),
     balanceDue: Number(inv.balanceDue),
