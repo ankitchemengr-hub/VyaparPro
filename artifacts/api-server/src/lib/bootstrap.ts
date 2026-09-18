@@ -328,6 +328,34 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
     `CREATE INDEX IF NOT EXISTS customer_follow_ups_company_idx ON customer_follow_ups(company_id)`,
     `CREATE INDEX IF NOT EXISTS customer_follow_ups_customer_idx ON customer_follow_ups(customer_id)`,
 
+    // ── Entities: backfill missing codes ───────────────────────────────────
+    // Auto-generated codes (e.g. "0001") only started being assigned once
+    // this feature shipped — every entity created before that has code =
+    // NULL, which made "search by code" in Change Customer silently match
+    // nothing for any existing customer. Assigns each NULL-code row the next
+    // number from its company's shared entity_code_sequence counter (same
+    // source generateEntityCode() uses for new entities) and advances that
+    // counter as it goes, so it can't be re-run into a collision later.
+    // Idempotent: once every row has a code, the WHERE clause matches
+    // nothing and this is a no-op on every future boot.
+    `DO $$
+     DECLARE
+       r RECORD;
+       next_num INTEGER;
+     BEGIN
+       FOR r IN SELECT id, company_id FROM entities WHERE code IS NULL ORDER BY company_id, id LOOP
+         INSERT INTO entity_code_sequence (company_id, entity_type, last_number)
+         VALUES (r.company_id, 'all', 0)
+         ON CONFLICT (company_id, entity_type) DO NOTHING;
+
+         UPDATE entity_code_sequence SET last_number = last_number + 1
+         WHERE company_id = r.company_id AND entity_type = 'all'
+         RETURNING last_number INTO next_num;
+
+         UPDATE entities SET code = LPAD(next_num::text, 4, '0') WHERE id = r.id;
+       END LOOP;
+     END $$`,
+
     // ── Customers: "remind me in N days" snooze for Inactive Customers ────
     // Set when a customer says "I'll order in N days" — hides them from the
     // list until this timestamp passes, then they reappear automatically.

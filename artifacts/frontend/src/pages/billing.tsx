@@ -1327,7 +1327,7 @@ function CustomerSearchDialog({
             ) : (
               <div className="space-y-2">
                 <Input
-                  placeholder="Type customer name..."
+                  placeholder="Type customer name or code..."
                   value={nameInput}
                   onChange={(e) => setNameInput(e.target.value)}
                   autoComplete="off"
@@ -1374,7 +1374,10 @@ function CustomerSearchDialog({
                           data-testid={`option-customer-${c.id}`}
                         >
                           <div className="font-medium">{c.name}</div>
-                          <div className="text-xs text-muted-foreground">{c.mobile}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {c.mobile}
+                            {c.code && <span className="ml-1.5 font-mono">· #{c.code}</span>}
+                          </div>
                         </button>
                       );
                     })
