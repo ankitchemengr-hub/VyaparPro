@@ -151,6 +151,27 @@ function buildPriceChange(productId: number, prod: any, newRate: number): PriceC
   };
 }
 
+// Weighted-average cost across the stock already on hand and this new
+// purchase, replacing the old "purchase price = whatever this one bill
+// charged" behavior (which threw away the cost of any stock bought earlier
+// at a different rate). Existing products keep whatever purchase_price they
+// already have until their next real purchase recomputes it this way — no
+// retroactive backfill.
+//
+// oldStock is clamped to >= 0 so a product that's gone oversold (negative
+// current_stock) can't skew the average with a negative weight; the
+// zero-stock case (new product, or fully sold out) falls out of the same
+// formula naturally, since a zero weight on oldAvgCost leaves newRate as
+// the whole answer.
+function weightedAverageCost(oldStock: number, oldAvgCost: number, newQty: number, newRate: number): number {
+  const clampedOldStock = Math.max(0, oldStock);
+  const combinedQty = clampedOldStock + newQty;
+  const avg = combinedQty > 0
+    ? ((clampedOldStock * oldAvgCost) + (newQty * newRate)) / combinedQty
+    : newRate;
+  return Math.round(avg * 100) / 100;
+}
+
 // ---- File upload setup for purchase attachments ----
 // Stored as bytes directly in Postgres (not local disk) — Railway's
 // container filesystem is ephemeral and wipes local uploads on every
@@ -426,7 +447,7 @@ router.post("/purchases", async (req, res): Promise<void> => {
     for (const item of processed) {
       const prodRes = await client.query(
         `SELECT name, item_code, purchase_price, wholesale_price, retail_price, non_gst_price,
-                tax_rate, non_gst_margin_pct, retail_margin_pct, wholesale_margin_pct
+                tax_rate, non_gst_margin_pct, retail_margin_pct, wholesale_margin_pct, current_stock
            FROM products WHERE company_id = $1 AND id = $2`,
         [companyId, item.productId],
       );
@@ -461,15 +482,20 @@ router.post("/purchases", async (req, res): Promise<void> => {
         `UPDATE products SET current_stock = current_stock + $1 WHERE company_id = $2 AND id = $3`,
         [item.qty, companyId, item.productId],
       );
-      const priceChange = buildPriceChange(item.productId, prod, Number(item.rate));
+      // Purchase Price is now the weighted average of the stock already on
+      // hand (at its old cost) and this new purchase, not just whatever this
+      // one bill charged — see weightedAverageCost() above. If this product
+      // feeds a BOM, this new cost is what "Recalculate Prices" (surfaced
+      // right after save, see the frontend) cascades into every recipe that
+      // uses it.
+      const newAvgCost = weightedAverageCost(
+        Number(prod?.current_stock ?? 0), Number(prod?.purchase_price ?? 0), Number(item.qty), Number(item.rate),
+      );
+      const priceChange = buildPriceChange(item.productId, prod, newAvgCost);
       if (priceChange) priceChanges.push(priceChange);
-      // Purchase Price reflects what was actually paid on this bill — the
-      // entered rate, not an average. If this product feeds a BOM, its
-      // stale cost is what "Recalculate Prices" (surfaced right after save,
-      // see the frontend) cascades into every recipe that uses it.
       await client.query(
         `UPDATE products SET purchase_price = $1 WHERE company_id = $2 AND id = $3`,
-        [item.rate, companyId, item.productId],
+        [newAvgCost, companyId, item.productId],
       );
     }
 
@@ -671,7 +697,7 @@ router.put("/purchases/:id", async (req, res): Promise<void> => {
     for (const item of processed) {
       const prodRes = await client.query(
         `SELECT name, item_code, purchase_price, wholesale_price, retail_price, non_gst_price,
-                tax_rate, non_gst_margin_pct, retail_margin_pct, wholesale_margin_pct
+                tax_rate, non_gst_margin_pct, retail_margin_pct, wholesale_margin_pct, current_stock
            FROM products WHERE company_id = $1 AND id = $2`,
         [companyId, item.productId],
       );
@@ -695,11 +721,16 @@ router.put("/purchases/:id", async (req, res): Promise<void> => {
         `UPDATE products SET current_stock = current_stock + $1 WHERE company_id = $2 AND id = $3`,
         [String(item.qty), companyId, item.productId],
       );
-      const priceChange = buildPriceChange(item.productId, prod, Number(item.rate));
+      // Same weighted-average cost as a new purchase — see
+      // weightedAverageCost() above.
+      const newAvgCost = weightedAverageCost(
+        Number(prod?.current_stock ?? 0), Number(prod?.purchase_price ?? 0), Number(item.qty), Number(item.rate),
+      );
+      const priceChange = buildPriceChange(item.productId, prod, newAvgCost);
       if (priceChange) priceChanges.push(priceChange);
       await client.query(
         `UPDATE products SET purchase_price = $1 WHERE company_id = $2 AND id = $3`,
-        [String(item.rate), companyId, item.productId],
+        [String(newAvgCost), companyId, item.productId],
       );
     }
 
