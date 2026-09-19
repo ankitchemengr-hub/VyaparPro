@@ -473,7 +473,10 @@ router.post("/purchases", async (req, res): Promise<void> => {
       );
     }
 
-    // Vendor payable: increase outstanding (we owe them) + credit-side ledger entry
+    // Vendor payable: increase outstanding (we owe them) + debit-side ledger
+    // entry — matches the personal-khata convention this app's ledger views
+    // use throughout (debit = goods/value received, growing what we owe;
+    // credit = a payment we made, shrinking it), not formal double-entry.
     await client.query(
       `UPDATE entities SET outstanding_balance = outstanding_balance + $1 WHERE company_id = $2 AND id = $3`,
       [grandTotal, companyId, data.vendorId],
@@ -485,7 +488,7 @@ router.post("/purchases", async (req, res): Promise<void> => {
     const newBal = balRes.rows[0].outstanding_balance;
     await client.query(
       `INSERT INTO ledger_entries (company_id, entity_id, date, description, debit, credit, balance, type, reference_id, reference_no)
-       VALUES ($1, $2, NOW(), $3, 0, $4, $5, 'purchase', $6, $7)`,
+       VALUES ($1, $2, NOW(), $3, $4, 0, $5, 'purchase', $6, $7)`,
       [companyId, data.vendorId, `Purchase ${billNo}`, grandTotal, newBal, billRow.id, billNo],
     );
 
@@ -718,7 +721,7 @@ router.put("/purchases/:id", async (req, res): Promise<void> => {
       const existingLedgerRow = existingLedgerRes.rows[0];
       if (existingLedgerRow) {
         await client.query(
-          `UPDATE ledger_entries SET credit = $1, description = $2, balance = balance + $3 WHERE id = $4`,
+          `UPDATE ledger_entries SET debit = $1, description = $2, balance = balance + $3 WHERE id = $4`,
           [grandTotal, `Purchase ${old.bill_no}`, delta, existingLedgerRow.id],
         );
         await client.query(
@@ -733,7 +736,7 @@ router.put("/purchases/:id", async (req, res): Promise<void> => {
         const newBal = balRes.rows[0].outstanding_balance;
         await client.query(
           `INSERT INTO ledger_entries (company_id, entity_id, date, description, debit, credit, balance, type, reference_id, reference_no)
-           VALUES ($1,$2,NOW(),$3,0,$4,$5,'purchase',$6,$7)`,
+           VALUES ($1,$2,NOW(),$3,$4,0,$5,'purchase',$6,$7)`,
           [companyId, data.vendorId, `Purchase ${old.bill_no}`, grandTotal, newBal, purchaseId, old.bill_no],
         );
       }
@@ -762,7 +765,7 @@ router.put("/purchases/:id", async (req, res): Promise<void> => {
       const newBal = balRes.rows[0].outstanding_balance;
       await client.query(
         `INSERT INTO ledger_entries (company_id, entity_id, date, description, debit, credit, balance, type, reference_id, reference_no)
-         VALUES ($1,$2,NOW(),$3,0,$4,$5,'purchase',$6,$7)`,
+         VALUES ($1,$2,NOW(),$3,$4,0,$5,'purchase',$6,$7)`,
         [companyId, data.vendorId, `Purchase ${old.bill_no} (edited)`, grandTotal, newBal, purchaseId, old.bill_no],
       );
     }

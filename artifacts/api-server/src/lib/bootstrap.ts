@@ -315,6 +315,17 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
     `ALTER TABLE invoices ADD COLUMN IF NOT EXISTS bill_discount NUMERIC(12, 2) NOT NULL DEFAULT 0`,
     `ALTER TABLE expenses ADD COLUMN IF NOT EXISTS invoice_id INTEGER`,
 
+    // ── Vendor ledger: purchases were posted to the wrong column ───────────
+    // Every "purchase" ledger_entries row used to put the amount in `credit`
+    // (formal double-entry: a liability increase is a credit). This app's
+    // ledger views instead follow the personal-khata convention throughout
+    // (debit = value received, growing what we owe; credit = a payment we
+    // made, shrinking it) — matching what a Payment row already did. Swaps
+    // every existing purchase row to match; a purchase entry with a nonzero
+    // credit is unambiguously one of these old rows, since new ones are only
+    // ever written to debit, so this can't misfire on a legitimate credit.
+    `UPDATE ledger_entries SET debit = credit, credit = 0 WHERE type = 'purchase' AND credit > 0 AND debit = 0`,
+
     // ── Customer follow-ups: contact log for the Inactive Customers page ──
     // One row per contact attempt (see customer-follow-ups.ts routes). This
     // table was missing on installs from before that feature shipped, which
