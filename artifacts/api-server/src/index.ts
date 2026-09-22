@@ -28,6 +28,7 @@ async function start(): Promise<void> {
   });
   startBackupScheduler();
   registerShutdownBackup();
+  startSubscriptionScheduler();
 }
 
 // Execute the start function

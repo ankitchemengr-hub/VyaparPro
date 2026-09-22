@@ -384,6 +384,66 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
     `ALTER TABLE products ADD COLUMN IF NOT EXISTS retail_non_gst_discount_pct NUMERIC(5, 2)`,
     `ALTER TABLE products ADD COLUMN IF NOT EXISTS wholesale_discount_pct NUMERIC(5, 2)`,
     `ALTER TABLE products ADD COLUMN IF NOT EXISTS wholesale_non_gst_discount_pct NUMERIC(5, 2)`,
+
+    // ── SaaS portal: pricing-page plan tiers, payment history, public site ──
+    // subscriptions.planName is the billing CYCLE (monthly/quarterly/...);
+    // planTier is the separate pricing-page tier (Starter/Business/...) a
+    // subscription is on. subscriptions itself is one row per company, so
+    // payment history needs its own table.
+    `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS plan_tier TEXT`,
+    `CREATE TABLE IF NOT EXISTS subscription_plans (
+      id              SERIAL PRIMARY KEY,
+      slug            TEXT NOT NULL UNIQUE,
+      name            TEXT NOT NULL,
+      tagline         TEXT,
+      price_monthly   NUMERIC(12, 2) NOT NULL DEFAULT 0,
+      max_users       INTEGER,
+      max_companies   INTEGER,
+      features        JSONB NOT NULL DEFAULT '[]',
+      trial_days      INTEGER NOT NULL DEFAULT 0,
+      is_active       BOOLEAN NOT NULL DEFAULT TRUE,
+      sort_order      INTEGER NOT NULL DEFAULT 0,
+      created_at      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+      updated_at      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    )`,
+    `CREATE TABLE IF NOT EXISTS subscription_payments (
+      id                   SERIAL PRIMARY KEY,
+      company_id           INTEGER NOT NULL,
+      subscription_id      INTEGER NOT NULL,
+      plan_tier            TEXT NOT NULL,
+      billing_cycle        TEXT NOT NULL,
+      amount               NUMERIC(12, 2) NOT NULL,
+      currency             TEXT NOT NULL DEFAULT 'INR',
+      gateway              TEXT NOT NULL DEFAULT 'razorpay',
+      razorpay_order_id    TEXT NOT NULL UNIQUE,
+      razorpay_payment_id  TEXT UNIQUE,
+      razorpay_signature   TEXT,
+      status               TEXT NOT NULL DEFAULT 'pending',
+      created_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+      verified_at          TIMESTAMP WITH TIME ZONE
+    )`,
+    `CREATE INDEX IF NOT EXISTS subscription_payments_company_idx ON subscription_payments(company_id)`,
+    `CREATE INDEX IF NOT EXISTS subscription_payments_subscription_idx ON subscription_payments(subscription_id)`,
+    `CREATE TABLE IF NOT EXISTS demo_requests (
+      id             SERIAL PRIMARY KEY,
+      name           TEXT NOT NULL,
+      business_name  TEXT,
+      mobile         TEXT NOT NULL,
+      email          TEXT,
+      business_type  TEXT,
+      num_users      INTEGER,
+      message        TEXT,
+      status         TEXT NOT NULL DEFAULT 'new',
+      created_at     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    )`,
+    `CREATE TABLE IF NOT EXISTS faqs (
+      id          SERIAL PRIMARY KEY,
+      question    TEXT NOT NULL,
+      answer      TEXT NOT NULL,
+      sort_order  INTEGER NOT NULL DEFAULT 0,
+      is_active   BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at  TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    )`,
   ];
 
   for (const sql of patches) {
@@ -394,6 +454,83 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
     }
   }
   logger.info("Schema patches applied");
+}
+
+// Seeds the 4 public pricing-page tiers exactly once — only fires while the
+// table is empty, so an admin's later edits (via the platform console) are
+// never overwritten on a later boot. Prices are placeholders; edit them in
+// the database (or a future "Manage Plans" admin tab) before going live.
+async function seedSubscriptionPlansIfEmpty(client: pg.Client): Promise<void> {
+  const { rows } = await client.query(`SELECT COUNT(*)::int AS n FROM subscription_plans`);
+  if (rows[0].n > 0) return;
+
+  const plans: Array<{
+    slug: string; name: string; tagline: string; priceMonthly: number;
+    maxUsers: number | null; maxCompanies: number | null; features: string[]; trialDays: number; sortOrder: number;
+  }> = [
+    {
+      slug: "starter", name: "Starter", tagline: "For small shops just getting started",
+      priceMonthly: 999, maxUsers: 2, maxCompanies: 1, trialDays: 7, sortOrder: 1,
+      features: ["GST & Non-GST billing", "Inventory management", "Up to 2 users", "1 company", "Email support"],
+    },
+    {
+      slug: "business", name: "Business", tagline: "For growing businesses with a team",
+      priceMonthly: 1999, maxUsers: 10, maxCompanies: 1, trialDays: 7, sortOrder: 2,
+      features: ["Everything in Starter", "Purchases & accounting", "Salesman management", "Up to 10 users", "Priority support"],
+    },
+    {
+      slug: "professional", name: "Professional", tagline: "For multi-company operations",
+      priceMonthly: 3999, maxUsers: 25, maxCompanies: 5, trialDays: 7, sortOrder: 3,
+      features: ["Everything in Business", "Manufacturing module", "Multi-company (up to 5)", "Up to 25 users", "Phone + priority support"],
+    },
+    {
+      slug: "enterprise", name: "Enterprise", tagline: "Custom pricing for large operations",
+      priceMonthly: 0, maxUsers: null, maxCompanies: null, trialDays: 0, sortOrder: 4,
+      features: ["Everything in Professional", "Unlimited users & companies", "Dedicated account manager", "Custom integrations"],
+    },
+  ];
+
+  for (const p of plans) {
+    await client.query(
+      `INSERT INTO subscription_plans (slug, name, tagline, price_monthly, max_users, max_companies, features, trial_days, sort_order)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       ON CONFLICT (slug) DO NOTHING`,
+      [p.slug, p.name, p.tagline, String(p.priceMonthly), p.maxUsers, p.maxCompanies, JSON.stringify(p.features), p.trialDays, p.sortOrder],
+    );
+  }
+  logger.info("Seeded default subscription plan tiers");
+}
+
+// Same once-only, never-overwrite pattern as seedSubscriptionPlansIfEmpty —
+// an admin's later edits to these FAQs are never clobbered on a later boot.
+async function seedFaqsIfEmpty(client: pg.Client): Promise<void> {
+  const { rows } = await client.query(`SELECT COUNT(*)::int AS n FROM faqs`);
+  if (rows[0].n > 0) return;
+
+  const faqs: Array<[string, string]> = [
+    ["What is SHRADHA ERP?", "SHRADHA ERP is a complete business management platform for billing, GST, sales, purchases, inventory, accounting, and manufacturing — all in one place."],
+    ["How does the free trial work?", "Starter, Business, and Professional plans include a free trial with no payment required to get started. You can subscribe any time before or after it ends."],
+    ["How much does SHRADHA ERP cost?", "Pricing starts at a low monthly rate depending on the plan you choose. See the Pricing page for full details."],
+    ["How do I register?", "Click \"Start Free Trial\" or \"Get Started\", fill in your business details, and your account is created instantly."],
+    ["How do I make payment?", "Payments are processed securely online via Razorpay — cards, UPI, and net banking are all supported."],
+    ["How do I renew my subscription?", "Log in to your Customer Portal, go to \"Manage Subscription\", and click \"Renew Now\"."],
+    ["Can I change my plan?", "Yes — you can upgrade your plan any time from the Pricing page or your Customer Portal."],
+    ["Can I use multiple companies?", "Business, Professional, and Enterprise plans support running more than one company from a single account."],
+    ["Does SHRADHA ERP support GST?", "Yes — GST and Non-GST billing, tax reports, and e-way bills are fully supported."],
+    ["How do I access the ERP?", "Once your subscription is active, click \"Open ERP\" from your Customer Portal dashboard."],
+    ["Where can I find tutorials?", "Tutorial videos are available from your Customer Portal — this section is being expanded regularly."],
+    ["What happens when my subscription expires?", "Your data is never deleted. Simply renew your subscription from the Customer Portal to restore access."],
+    ["How do I contact support?", "Use the Contact page to reach us by phone, email, or WhatsApp — or book a demo any time."],
+  ];
+
+  for (let i = 0; i < faqs.length; i++) {
+    const [question, answer] = faqs[i];
+    await client.query(
+      `INSERT INTO faqs (question, answer, sort_order) VALUES ($1, $2, $3)`,
+      [question, answer, i],
+    );
+  }
+  logger.info("Seeded default FAQs");
 }
 
 async function ensureDefaultAdmin(client: pg.Client): Promise<void> {
@@ -605,6 +742,8 @@ export async function ensureDatabaseReady(): Promise<void> {
 
     await seedBusinessDataIfEmpty(client);
     await applySchemaPatches(client);
+    await seedSubscriptionPlansIfEmpty(client);
+    await seedFaqsIfEmpty(client);
     await ensureDefaultAdmin(client);
     await hashPlaintextPasswords(client);
     await backfillExpenseAccounts(client);

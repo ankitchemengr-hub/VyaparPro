@@ -282,6 +282,11 @@ export type SystemConfigCompany = {
 
 export interface SystemConfig {
   multiCompanyMode: boolean;
+  /**
+     * Where the customer portal's "Open ERP" button should send the customer — configured via the ERP_APPLICATION_URL env var.
+     * @nullable
+     */
+  erpApplicationUrl?: string | null;
   /** @nullable */
   company: SystemConfigCompany;
 }
@@ -3077,6 +3082,132 @@ export type BillWiseProfitReportTotals = {
 export interface BillWiseProfitReport {
   items: BillWiseProfitRow[];
   totals: BillWiseProfitReportTotals;
+}
+
+export interface SubscriptionPlan {
+  id: number;
+  slug: string;
+  name: string;
+  /** @nullable */
+  tagline?: string | null;
+  priceMonthly: number;
+  /** @nullable */
+  maxUsers?: number | null;
+  /** @nullable */
+  maxCompanies?: number | null;
+  features: string[];
+  trialDays: number;
+  isActive: boolean;
+}
+
+export interface Faq {
+  id: number;
+  question: string;
+  answer: string;
+}
+
+export interface DemoRequestInput {
+  name: string;
+  businessName?: string;
+  mobile: string;
+  email?: string;
+  businessType?: string;
+  numUsers?: number;
+  message?: string;
+}
+
+export type PortalRegisterInputBillingCycle = typeof PortalRegisterInputBillingCycle[keyof typeof PortalRegisterInputBillingCycle];
+
+
+export const PortalRegisterInputBillingCycle = {
+  monthly: 'monthly',
+  quarterly: 'quarterly',
+  half_yearly: 'half_yearly',
+  yearly: 'yearly',
+} as const;
+
+export interface PortalRegisterInput {
+  businessName: string;
+  ownerName: string;
+  mobile: string;
+  email?: string;
+  /** @minLength 6 */
+  password: string;
+  businessType?: string;
+  city?: string;
+  state?: string;
+  gstin?: string;
+  referralCode?: string;
+  /** Which subscription_plans.slug the customer picked on the pricing page. */
+  planSlug: string;
+  billingCycle?: PortalRegisterInputBillingCycle;
+}
+
+export interface PortalRegisterResult {
+  companyId: number;
+  subscriptionId: number;
+  /** False only when the chosen plan has trial_days > 0 — the account is already active. */
+  requiresPayment: boolean;
+}
+
+export type CreatePaymentOrderInputBillingCycle = typeof CreatePaymentOrderInputBillingCycle[keyof typeof CreatePaymentOrderInputBillingCycle];
+
+
+export const CreatePaymentOrderInputBillingCycle = {
+  monthly: 'monthly',
+  quarterly: 'quarterly',
+  half_yearly: 'half_yearly',
+  yearly: 'yearly',
+} as const;
+
+export interface CreatePaymentOrderInput {
+  subscriptionId: number;
+  planSlug: string;
+  billingCycle: CreatePaymentOrderInputBillingCycle;
+}
+
+export interface CreatePaymentOrderResult {
+  orderId: string;
+  amount: number;
+  currency: string;
+  /** Razorpay public Key ID only — the secret never leaves the server. */
+  keyId: string;
+}
+
+export interface VerifyPaymentInput {
+  razorpayOrderId: string;
+  razorpayPaymentId: string;
+  razorpaySignature: string;
+}
+
+export interface MySubscription {
+  id: number;
+  companyId: number;
+  /** @nullable */
+  planTier: string | null;
+  /** @nullable */
+  planName?: string | null;
+  /** @nullable */
+  billingCycle: string | null;
+  subscriptionAmount: number;
+  subscriptionStatus: string;
+  paymentStatus: string;
+  /** @nullable */
+  subscriptionStartDate?: string | null;
+  subscriptionEndDate: string;
+  daysRemaining: number;
+}
+
+export interface MyPayment {
+  id: number;
+  planTier: string;
+  billingCycle: string;
+  amount: number;
+  currency: string;
+  status: string;
+  /** @nullable */
+  razorpayPaymentId?: string | null;
+  createdAt: string;
 }
 
 export type LookupGstinParams = {

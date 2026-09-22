@@ -16,6 +16,7 @@ export * from "./capital-snapshots";
 export * from "./customer-orders";
 export * from "./customer-follow-ups";
 export * from "./subscriptions";
+export * from "./saas-portal";
 export * from "./settings";
 export * from "./print-settings";
 export * from "./backups";

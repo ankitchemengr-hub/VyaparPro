@@ -53,6 +53,8 @@ import type {
   CompanyOption,
   CreateCustomerFollowUpInput,
   CreateMaterialTransferInput,
+  CreatePaymentOrderInput,
+  CreatePaymentOrderResult,
   CreatePurchaseInput,
   CreateSubscriptionInput,
   CreateUserInput,
@@ -65,6 +67,7 @@ import type {
   CustomerWiseSalesReport,
   DashboardSummary,
   DeleteSubscriptionResult,
+  DemoRequestInput,
   Entity,
   EntityInput,
   EntityLedger,
@@ -75,6 +78,7 @@ import type {
   ExpenseCategoryInput,
   ExpenseInput,
   ExpenseList,
+  Faq,
   GetBillWiseProfitReportParams,
   GetCommissionReportParams,
   GetCustomerWiseSalesReportParams,
@@ -125,11 +129,15 @@ import type {
   LowStockAlert,
   MaterialTransfer,
   MaterialTransferSummary,
+  MyPayment,
+  MySubscription,
   NumberSeries,
   NumberSeriesUpdate,
   Payment,
   PaymentInput,
   PaymentReceipt,
+  PortalRegisterInput,
+  PortalRegisterResult,
   PriceRecalculationItem,
   PrintSettings,
   PrintSettingsUpdate,
@@ -170,6 +178,7 @@ import type {
   SubscriptionCharts,
   SubscriptionDashboard,
   SubscriptionListItem,
+  SubscriptionPlan,
   SystemConfig,
   TaxReport,
   TopProduct,
@@ -178,6 +187,7 @@ import type {
   UpdateSubscriptionInput,
   UpdateUserInput,
   UserAccount,
+  VerifyPaymentInput,
   Worker,
   WorkerAttendance,
   WorkerAttendanceInput,
@@ -12557,4 +12567,592 @@ export const useDeleteSubscription = <TError = ErrorType<void>,
       > => {
       return useMutation(getDeleteSubscriptionMutationOptions(options));
     }
+
+export const getListPortalPlansUrl = () => {
+
+
+
+
+  return `/api/portal/plans`
+}
+
+/**
+ * @summary Active pricing-page plan tiers (public)
+ */
+export const listPortalPlans = async ( options?: RequestInit): Promise<SubscriptionPlan[]> => {
+
+  return customFetch<SubscriptionPlan[]>(getListPortalPlansUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPortalPlansQueryKey = () => {
+    return [
+    `/api/portal/plans`
+    ] as const;
+    }
+
+
+export const getListPortalPlansQueryOptions = <TData = Awaited<ReturnType<typeof listPortalPlans>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPortalPlans>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPortalPlansQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPortalPlans>>> = ({ signal }) => listPortalPlans({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPortalPlans>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPortalPlansQueryResult = NonNullable<Awaited<ReturnType<typeof listPortalPlans>>>
+export type ListPortalPlansQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Active pricing-page plan tiers (public)
+ */
+
+export function useListPortalPlans<TData = Awaited<ReturnType<typeof listPortalPlans>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPortalPlans>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPortalPlansQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListPortalFaqsUrl = () => {
+
+
+
+
+  return `/api/portal/faqs`
+}
+
+/**
+ * @summary Active FAQ entries for the public website (public)
+ */
+export const listPortalFaqs = async ( options?: RequestInit): Promise<Faq[]> => {
+
+  return customFetch<Faq[]>(getListPortalFaqsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPortalFaqsQueryKey = () => {
+    return [
+    `/api/portal/faqs`
+    ] as const;
+    }
+
+
+export const getListPortalFaqsQueryOptions = <TData = Awaited<ReturnType<typeof listPortalFaqs>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPortalFaqs>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPortalFaqsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPortalFaqs>>> = ({ signal }) => listPortalFaqs({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPortalFaqs>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPortalFaqsQueryResult = NonNullable<Awaited<ReturnType<typeof listPortalFaqs>>>
+export type ListPortalFaqsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Active FAQ entries for the public website (public)
+ */
+
+export function useListPortalFaqs<TData = Awaited<ReturnType<typeof listPortalFaqs>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPortalFaqs>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPortalFaqsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateDemoRequestUrl = () => {
+
+
+
+
+  return `/api/portal/demo-requests`
+}
+
+/**
+ * @summary Submit a "Book a Demo" / contact request (public)
+ */
+export const createDemoRequest = async (demoRequestInput: DemoRequestInput, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getCreateDemoRequestUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(demoRequestInput)
+  }
+);}
+
+
+
+
+export const getCreateDemoRequestMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDemoRequest>>, TError,{data: BodyType<DemoRequestInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createDemoRequest>>, TError,{data: BodyType<DemoRequestInput>}, TContext> => {
+
+const mutationKey = ['createDemoRequest'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createDemoRequest>>, {data: BodyType<DemoRequestInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createDemoRequest(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateDemoRequestMutationResult = NonNullable<Awaited<ReturnType<typeof createDemoRequest>>>
+    export type CreateDemoRequestMutationBody = BodyType<DemoRequestInput>
+    export type CreateDemoRequestMutationError = ErrorType<void>
+
+    /**
+ * @summary Submit a "Book a Demo" / contact request (public)
+ */
+export const useCreateDemoRequest = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDemoRequest>>, TError,{data: BodyType<DemoRequestInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createDemoRequest>>,
+        TError,
+        {data: BodyType<DemoRequestInput>},
+        TContext
+      > => {
+      return useMutation(getCreateDemoRequestMutationOptions(options));
+    }
+
+export const getRegisterPortalCustomerUrl = () => {
+
+
+
+
+  return `/api/portal/register`
+}
+
+/**
+ * @summary Self-serve signup — creates the company, admin login, and a pending/trial subscription (public)
+ */
+export const registerPortalCustomer = async (portalRegisterInput: PortalRegisterInput, options?: RequestInit): Promise<PortalRegisterResult> => {
+
+  return customFetch<PortalRegisterResult>(getRegisterPortalCustomerUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(portalRegisterInput)
+  }
+);}
+
+
+
+
+export const getRegisterPortalCustomerMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerPortalCustomer>>, TError,{data: BodyType<PortalRegisterInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof registerPortalCustomer>>, TError,{data: BodyType<PortalRegisterInput>}, TContext> => {
+
+const mutationKey = ['registerPortalCustomer'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof registerPortalCustomer>>, {data: BodyType<PortalRegisterInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  registerPortalCustomer(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RegisterPortalCustomerMutationResult = NonNullable<Awaited<ReturnType<typeof registerPortalCustomer>>>
+    export type RegisterPortalCustomerMutationBody = BodyType<PortalRegisterInput>
+    export type RegisterPortalCustomerMutationError = ErrorType<void>
+
+    /**
+ * @summary Self-serve signup — creates the company, admin login, and a pending/trial subscription (public)
+ */
+export const useRegisterPortalCustomer = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerPortalCustomer>>, TError,{data: BodyType<PortalRegisterInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof registerPortalCustomer>>,
+        TError,
+        {data: BodyType<PortalRegisterInput>},
+        TContext
+      > => {
+      return useMutation(getRegisterPortalCustomerMutationOptions(options));
+    }
+
+export const getCreatePortalPaymentOrderUrl = () => {
+
+
+
+
+  return `/api/portal/payments/create-order`
+}
+
+/**
+ * @summary Create a Razorpay order for a pending/renewing subscription (public — subscriptionId is the capability)
+ */
+export const createPortalPaymentOrder = async (createPaymentOrderInput: CreatePaymentOrderInput, options?: RequestInit): Promise<CreatePaymentOrderResult> => {
+
+  return customFetch<CreatePaymentOrderResult>(getCreatePortalPaymentOrderUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createPaymentOrderInput)
+  }
+);}
+
+
+
+
+export const getCreatePortalPaymentOrderMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPortalPaymentOrder>>, TError,{data: BodyType<CreatePaymentOrderInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createPortalPaymentOrder>>, TError,{data: BodyType<CreatePaymentOrderInput>}, TContext> => {
+
+const mutationKey = ['createPortalPaymentOrder'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createPortalPaymentOrder>>, {data: BodyType<CreatePaymentOrderInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createPortalPaymentOrder(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreatePortalPaymentOrderMutationResult = NonNullable<Awaited<ReturnType<typeof createPortalPaymentOrder>>>
+    export type CreatePortalPaymentOrderMutationBody = BodyType<CreatePaymentOrderInput>
+    export type CreatePortalPaymentOrderMutationError = ErrorType<void>
+
+    /**
+ * @summary Create a Razorpay order for a pending/renewing subscription (public — subscriptionId is the capability)
+ */
+export const useCreatePortalPaymentOrder = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPortalPaymentOrder>>, TError,{data: BodyType<CreatePaymentOrderInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createPortalPaymentOrder>>,
+        TError,
+        {data: BodyType<CreatePaymentOrderInput>},
+        TContext
+      > => {
+      return useMutation(getCreatePortalPaymentOrderMutationOptions(options));
+    }
+
+export const getVerifyPortalPaymentUrl = () => {
+
+
+
+
+  return `/api/portal/payments/verify`
+}
+
+/**
+ * @summary Verify a completed Razorpay payment server-side and activate/extend the subscription
+ */
+export const verifyPortalPayment = async (verifyPaymentInput: VerifyPaymentInput, options?: RequestInit): Promise<MySubscription> => {
+
+  return customFetch<MySubscription>(getVerifyPortalPaymentUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(verifyPaymentInput)
+  }
+);}
+
+
+
+
+export const getVerifyPortalPaymentMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyPortalPayment>>, TError,{data: BodyType<VerifyPaymentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof verifyPortalPayment>>, TError,{data: BodyType<VerifyPaymentInput>}, TContext> => {
+
+const mutationKey = ['verifyPortalPayment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof verifyPortalPayment>>, {data: BodyType<VerifyPaymentInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  verifyPortalPayment(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type VerifyPortalPaymentMutationResult = NonNullable<Awaited<ReturnType<typeof verifyPortalPayment>>>
+    export type VerifyPortalPaymentMutationBody = BodyType<VerifyPaymentInput>
+    export type VerifyPortalPaymentMutationError = ErrorType<void>
+
+    /**
+ * @summary Verify a completed Razorpay payment server-side and activate/extend the subscription
+ */
+export const useVerifyPortalPayment = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyPortalPayment>>, TError,{data: BodyType<VerifyPaymentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof verifyPortalPayment>>,
+        TError,
+        {data: BodyType<VerifyPaymentInput>},
+        TContext
+      > => {
+      return useMutation(getVerifyPortalPaymentMutationOptions(options));
+    }
+
+export const getGetMySubscriptionUrl = () => {
+
+
+
+
+  return `/api/portal/my-subscription`
+}
+
+/**
+ * @summary The signed-in company's subscription + plan tier
+ */
+export const getMySubscription = async ( options?: RequestInit): Promise<MySubscription> => {
+
+  return customFetch<MySubscription>(getGetMySubscriptionUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMySubscriptionQueryKey = () => {
+    return [
+    `/api/portal/my-subscription`
+    ] as const;
+    }
+
+
+export const getGetMySubscriptionQueryOptions = <TData = Awaited<ReturnType<typeof getMySubscription>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMySubscription>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMySubscriptionQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMySubscription>>> = ({ signal }) => getMySubscription({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMySubscription>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMySubscriptionQueryResult = NonNullable<Awaited<ReturnType<typeof getMySubscription>>>
+export type GetMySubscriptionQueryError = ErrorType<void>
+
+
+/**
+ * @summary The signed-in company's subscription + plan tier
+ */
+
+export function useGetMySubscription<TData = Awaited<ReturnType<typeof getMySubscription>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMySubscription>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMySubscriptionQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListMyPaymentsUrl = () => {
+
+
+
+
+  return `/api/portal/my-payments`
+}
+
+/**
+ * @summary The signed-in company's payment history
+ */
+export const listMyPayments = async ( options?: RequestInit): Promise<MyPayment[]> => {
+
+  return customFetch<MyPayment[]>(getListMyPaymentsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListMyPaymentsQueryKey = () => {
+    return [
+    `/api/portal/my-payments`
+    ] as const;
+    }
+
+
+export const getListMyPaymentsQueryOptions = <TData = Awaited<ReturnType<typeof listMyPayments>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMyPayments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListMyPaymentsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listMyPayments>>> = ({ signal }) => listMyPayments({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listMyPayments>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListMyPaymentsQueryResult = NonNullable<Awaited<ReturnType<typeof listMyPayments>>>
+export type ListMyPaymentsQueryError = ErrorType<void>
+
+
+/**
+ * @summary The signed-in company's payment history
+ */
+
+export function useListMyPayments<TData = Awaited<ReturnType<typeof listMyPayments>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMyPayments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListMyPaymentsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 

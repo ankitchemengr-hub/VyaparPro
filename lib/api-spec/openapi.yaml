@@ -3308,6 +3308,154 @@ paths:
         "404":
           description: Subscription not found
 
+  /portal/plans:
+    get:
+      operationId: listPortalPlans
+      tags: [portal]
+      summary: Active pricing-page plan tiers (public)
+      responses:
+        "200":
+          description: Plans
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SubscriptionPlan"
+
+  /portal/faqs:
+    get:
+      operationId: listPortalFaqs
+      tags: [portal]
+      summary: Active FAQ entries for the public website (public)
+      responses:
+        "200":
+          description: FAQs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Faq"
+
+  /portal/demo-requests:
+    post:
+      operationId: createDemoRequest
+      tags: [portal]
+      summary: Submit a "Book a Demo" / contact request (public)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DemoRequestInput"
+      responses:
+        "201":
+          description: Saved
+        "400":
+          description: Invalid input
+
+  /portal/register:
+    post:
+      operationId: registerPortalCustomer
+      tags: [portal]
+      summary: Self-serve signup — creates the company, admin login, and a pending/trial subscription (public)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PortalRegisterInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortalRegisterResult"
+        "400":
+          description: Invalid input
+        "409":
+          description: Email or mobile already registered
+
+  /portal/payments/create-order:
+    post:
+      operationId: createPortalPaymentOrder
+      tags: [portal]
+      summary: Create a Razorpay order for a pending/renewing subscription (public — subscriptionId is the capability)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePaymentOrderInput"
+      responses:
+        "201":
+          description: Order created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatePaymentOrderResult"
+        "400":
+          description: Invalid input
+        "404":
+          description: Subscription or plan not found
+
+  /portal/payments/verify:
+    post:
+      operationId: verifyPortalPayment
+      tags: [portal]
+      summary: Verify a completed Razorpay payment server-side and activate/extend the subscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyPaymentInput"
+      responses:
+        "200":
+          description: Payment verified, subscription activated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MySubscription"
+        "400":
+          description: Signature mismatch or invalid input
+        "404":
+          description: Order not found
+
+  /portal/my-subscription:
+    get:
+      operationId: getMySubscription
+      tags: [portal]
+      summary: The signed-in company's subscription + plan tier
+      responses:
+        "200":
+          description: Subscription
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MySubscription"
+        "401":
+          description: Not authenticated
+
+  /portal/my-payments:
+    get:
+      operationId: listMyPayments
+      tags: [portal]
+      summary: The signed-in company's payment history
+      responses:
+        "200":
+          description: Payments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MyPayment"
+        "401":
+          description: Not authenticated
+
 components:
   schemas:
     SubscriptionListItem:
@@ -3589,6 +3737,9 @@ components:
       properties:
         multiCompanyMode:
           type: boolean
+        erpApplicationUrl:
+          type: ["string", "null"]
+          description: Where the customer portal's "Open ERP" button should send the customer — configured via the ERP_APPLICATION_URL env var.
         company:
           type: ["object", "null"]
           required: [id, name]
@@ -6922,3 +7073,130 @@ components:
             profit: { type: number }
             marginPct: { type: number }
             count: { type: integer }
+
+    SubscriptionPlan:
+      type: object
+      required: [id, slug, name, priceMonthly, features, trialDays, isActive]
+      properties:
+        id: { type: integer }
+        slug: { type: string }
+        name: { type: string }
+        tagline: { type: ["string", "null"] }
+        priceMonthly: { type: number }
+        maxUsers: { type: ["integer", "null"] }
+        maxCompanies: { type: ["integer", "null"] }
+        features:
+          type: array
+          items: { type: string }
+        trialDays: { type: integer }
+        isActive: { type: boolean }
+
+    Faq:
+      type: object
+      required: [id, question, answer]
+      properties:
+        id: { type: integer }
+        question: { type: string }
+        answer: { type: string }
+
+    DemoRequestInput:
+      type: object
+      required: [name, mobile]
+      properties:
+        name: { type: string }
+        businessName: { type: string }
+        mobile: { type: string }
+        email: { type: string }
+        businessType: { type: string }
+        numUsers: { type: integer }
+        message: { type: string }
+
+    PortalRegisterInput:
+      type: object
+      required: [businessName, ownerName, mobile, password, planSlug]
+      properties:
+        businessName: { type: string }
+        ownerName: { type: string }
+        mobile: { type: string }
+        email: { type: string }
+        password: { type: string, minLength: 6 }
+        businessType: { type: string }
+        city: { type: string }
+        state: { type: string }
+        gstin: { type: string }
+        referralCode: { type: string }
+        planSlug:
+          type: string
+          description: Which subscription_plans.slug the customer picked on the pricing page.
+        billingCycle:
+          type: string
+          enum: [monthly, quarterly, half_yearly, yearly]
+          default: monthly
+
+    PortalRegisterResult:
+      type: object
+      required: [companyId, subscriptionId, requiresPayment]
+      properties:
+        companyId: { type: integer }
+        subscriptionId: { type: integer }
+        requiresPayment:
+          type: boolean
+          description: False only when the chosen plan has trial_days > 0 — the account is already active.
+
+    CreatePaymentOrderInput:
+      type: object
+      required: [subscriptionId, planSlug, billingCycle]
+      properties:
+        subscriptionId: { type: integer }
+        planSlug: { type: string }
+        billingCycle:
+          type: string
+          enum: [monthly, quarterly, half_yearly, yearly]
+
+    CreatePaymentOrderResult:
+      type: object
+      required: [orderId, amount, currency, keyId]
+      properties:
+        orderId: { type: string }
+        amount: { type: number }
+        currency: { type: string }
+        keyId:
+          type: string
+          description: Razorpay public Key ID only — the secret never leaves the server.
+
+    VerifyPaymentInput:
+      type: object
+      required: [razorpayOrderId, razorpayPaymentId, razorpaySignature]
+      properties:
+        razorpayOrderId: { type: string }
+        razorpayPaymentId: { type: string }
+        razorpaySignature: { type: string }
+
+    MySubscription:
+      type: object
+      required: [id, companyId, planTier, billingCycle, subscriptionAmount, subscriptionStatus, paymentStatus, subscriptionEndDate, daysRemaining]
+      properties:
+        id: { type: integer }
+        companyId: { type: integer }
+        planTier: { type: ["string", "null"] }
+        planName: { type: ["string", "null"] }
+        billingCycle: { type: ["string", "null"] }
+        subscriptionAmount: { type: number }
+        subscriptionStatus: { type: string }
+        paymentStatus: { type: string }
+        subscriptionStartDate: { type: ["string", "null"], format: date-time }
+        subscriptionEndDate: { type: string, format: date-time }
+        daysRemaining: { type: integer }
+
+    MyPayment:
+      type: object
+      required: [id, planTier, billingCycle, amount, currency, status, createdAt]
+      properties:
+        id: { type: integer }
+        planTier: { type: string }
+        billingCycle: { type: string }
+        amount: { type: number }
+        currency: { type: string }
+        status: { type: string }
+        razorpayPaymentId: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }

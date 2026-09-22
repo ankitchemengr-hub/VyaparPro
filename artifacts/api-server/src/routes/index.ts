@@ -29,6 +29,7 @@ import transportRouter from "./transport";
 import whatsappRouter from "./whatsapp";
 import khatabookRouter from "./khatabook";
 import systemAdminRouter from "./system-admin";
+import portalRouter from "./portal";
 import { requireAuth } from "../lib/tenant";
 
 const router: IRouter = Router();
@@ -37,6 +38,10 @@ const router: IRouter = Router();
 router.use(healthRouter);
 router.use(systemRouter);
 router.use(authRouter);
+// Mostly public (marketing site + self-serve signup + payment webhooks) —
+// its two "my-*" routes check auth themselves via getCompanyId(req), same
+// as every route below the requireAuth gate does internally.
+router.use(portalRouter);
 
 // Everything below requires an authenticated session. This is the single choke
 // point that guarantees no data route can be reached anonymously, and exposes

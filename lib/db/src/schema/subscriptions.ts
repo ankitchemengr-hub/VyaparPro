@@ -21,6 +21,10 @@ export const subscriptionsTable = pgTable("subscriptions", {
   id: serial("id").primaryKey(),
   companyId: integer("company_id").notNull(),
   planName: text("plan_name").notNull(), // monthly, quarterly, half_yearly, yearly
+  // Which pricing-page tier (Starter/Business/...) this subscription is on —
+  // a different axis from planName above (that's the billing cycle). See
+  // subscription_plans in saas-portal.ts for the tier catalog.
+  planTier: text("plan_tier"),
   subscriptionStartDate: timestamp("subscription_start_date", { withTimezone: true }).notNull(),
   subscriptionEndDate: timestamp("subscription_end_date", { withTimezone: true }).notNull(),
   subscriptionAmount: numeric("subscription_amount", { precision: 12, scale: 2 }).notNull().default("0"),

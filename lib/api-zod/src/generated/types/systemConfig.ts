@@ -9,6 +9,11 @@ import type { SystemConfigCompany } from './systemConfigCompany';
 
 export interface SystemConfig {
   multiCompanyMode: boolean;
+  /**
+     * Where the customer portal's "Open ERP" button should send the customer — configured via the ERP_APPLICATION_URL env var.
+     * @nullable
+     */
+  erpApplicationUrl?: string | null;
   /** @nullable */
   company: SystemConfigCompany;
 }

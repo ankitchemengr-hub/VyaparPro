@@ -26,7 +26,7 @@ router.get("/system/config", async (_req, res): Promise<void> => {
     if (c) company = { id: c.id, name: c.name, logo: c.logo ?? null };
   }
 
-  res.json({ multiCompanyMode, company });
+  res.json({ multiCompanyMode, company, erpApplicationUrl: process.env["ERP_APPLICATION_URL"] ?? null });
 });
 
 // GET /system/companies-public — PUBLIC (no auth). Lists tenant companies for

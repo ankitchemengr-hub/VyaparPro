@@ -21,6 +21,7 @@ export const HealthCheckResponse = zod.object({
  */
 export const GetSystemConfigResponse = zod.object({
   "multiCompanyMode": zod.boolean(),
+  "erpApplicationUrl": zod.string().nullish().describe('Where the customer portal\'s \"Open ERP\" button should send the customer — configured via the ERP_APPLICATION_URL env var.'),
   "company": zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -4634,5 +4635,154 @@ export const DeleteSubscriptionResponse = zod.object({
   "message": zod.string(),
   "companyName": zod.string()
 })
+
+
+/**
+ * @summary Active pricing-page plan tiers (public)
+ */
+export const ListPortalPlansResponseItem = zod.object({
+  "id": zod.number(),
+  "slug": zod.string(),
+  "name": zod.string(),
+  "tagline": zod.string().nullish(),
+  "priceMonthly": zod.number(),
+  "maxUsers": zod.number().nullish(),
+  "maxCompanies": zod.number().nullish(),
+  "features": zod.array(zod.string()),
+  "trialDays": zod.number(),
+  "isActive": zod.boolean()
+})
+export const ListPortalPlansResponse = zod.array(ListPortalPlansResponseItem)
+
+
+/**
+ * @summary Active FAQ entries for the public website (public)
+ */
+export const ListPortalFaqsResponseItem = zod.object({
+  "id": zod.number(),
+  "question": zod.string(),
+  "answer": zod.string()
+})
+export const ListPortalFaqsResponse = zod.array(ListPortalFaqsResponseItem)
+
+
+/**
+ * @summary Submit a "Book a Demo" / contact request (public)
+ */
+export const CreateDemoRequestBody = zod.object({
+  "name": zod.string(),
+  "businessName": zod.string().optional(),
+  "mobile": zod.string(),
+  "email": zod.string().optional(),
+  "businessType": zod.string().optional(),
+  "numUsers": zod.number().optional(),
+  "message": zod.string().optional()
+})
+
+export const CreateDemoRequestResponse = zod.void()
+
+
+/**
+ * @summary Self-serve signup — creates the company, admin login, and a pending/trial subscription (public)
+ */
+export const registerPortalCustomerBodyPasswordMin = 6;
+
+export const registerPortalCustomerBodyBillingCycleDefault = `monthly`;
+
+export const RegisterPortalCustomerBody = zod.object({
+  "businessName": zod.string(),
+  "ownerName": zod.string(),
+  "mobile": zod.string(),
+  "email": zod.string().optional(),
+  "password": zod.string().min(registerPortalCustomerBodyPasswordMin),
+  "businessType": zod.string().optional(),
+  "city": zod.string().optional(),
+  "state": zod.string().optional(),
+  "gstin": zod.string().optional(),
+  "referralCode": zod.string().optional(),
+  "planSlug": zod.string().describe('Which subscription_plans.slug the customer picked on the pricing page.'),
+  "billingCycle": zod.enum(['monthly', 'quarterly', 'half_yearly', 'yearly']).default(registerPortalCustomerBodyBillingCycleDefault)
+})
+
+export const RegisterPortalCustomerResponse = zod.object({
+  "companyId": zod.number(),
+  "subscriptionId": zod.number(),
+  "requiresPayment": zod.boolean().describe('False only when the chosen plan has trial_days > 0 — the account is already active.')
+})
+
+
+/**
+ * @summary Create a Razorpay order for a pending/renewing subscription (public — subscriptionId is the capability)
+ */
+export const CreatePortalPaymentOrderBody = zod.object({
+  "subscriptionId": zod.number(),
+  "planSlug": zod.string(),
+  "billingCycle": zod.enum(['monthly', 'quarterly', 'half_yearly', 'yearly'])
+})
+
+export const CreatePortalPaymentOrderResponse = zod.object({
+  "orderId": zod.string(),
+  "amount": zod.number(),
+  "currency": zod.string(),
+  "keyId": zod.string().describe('Razorpay public Key ID only — the secret never leaves the server.')
+})
+
+
+/**
+ * @summary Verify a completed Razorpay payment server-side and activate/extend the subscription
+ */
+export const VerifyPortalPaymentBody = zod.object({
+  "razorpayOrderId": zod.string(),
+  "razorpayPaymentId": zod.string(),
+  "razorpaySignature": zod.string()
+})
+
+export const VerifyPortalPaymentResponse = zod.object({
+  "id": zod.number(),
+  "companyId": zod.number(),
+  "planTier": zod.string().nullable(),
+  "planName": zod.string().nullish(),
+  "billingCycle": zod.string().nullable(),
+  "subscriptionAmount": zod.number(),
+  "subscriptionStatus": zod.string(),
+  "paymentStatus": zod.string(),
+  "subscriptionStartDate": zod.coerce.date().nullish(),
+  "subscriptionEndDate": zod.coerce.date(),
+  "daysRemaining": zod.number()
+})
+
+
+/**
+ * @summary The signed-in company's subscription + plan tier
+ */
+export const GetMySubscriptionResponse = zod.object({
+  "id": zod.number(),
+  "companyId": zod.number(),
+  "planTier": zod.string().nullable(),
+  "planName": zod.string().nullish(),
+  "billingCycle": zod.string().nullable(),
+  "subscriptionAmount": zod.number(),
+  "subscriptionStatus": zod.string(),
+  "paymentStatus": zod.string(),
+  "subscriptionStartDate": zod.coerce.date().nullish(),
+  "subscriptionEndDate": zod.coerce.date(),
+  "daysRemaining": zod.number()
+})
+
+
+/**
+ * @summary The signed-in company's payment history
+ */
+export const ListMyPaymentsResponseItem = zod.object({
+  "id": zod.number(),
+  "planTier": zod.string(),
+  "billingCycle": zod.string(),
+  "amount": zod.number(),
+  "currency": zod.string(),
+  "status": zod.string(),
+  "razorpayPaymentId": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const ListMyPaymentsResponse = zod.array(ListMyPaymentsResponseItem)
 
 

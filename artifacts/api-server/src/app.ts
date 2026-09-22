@@ -40,6 +40,11 @@ app.use(
   }),
 );
 app.use(cors({ origin: true, credentials: true }));
+// Razorpay's webhook signature is computed over the exact raw request bytes
+// — re-stringifying the parsed JSON body could differ in key order/whitespace
+// and fail verification. Capture the raw body for just this one path, before
+// the global JSON parser below would otherwise consume the stream.
+app.use("/api/portal/payments/webhook", express.raw({ type: "application/json", limit: "1mb" }));
 // 10mb limit to allow base64-encoded product images (~2MB raw → ~2.7MB encoded)
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));

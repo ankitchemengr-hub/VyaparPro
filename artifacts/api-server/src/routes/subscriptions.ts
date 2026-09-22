@@ -11,7 +11,10 @@ import { hashPassword } from "../lib/password";
 
 const router: IRouter = Router();
 
-const PLAN_MONTHS: Record<string, number> = {
+// Exported for portal.ts (public registration/payment endpoints) — same
+// billing-cycle math must not drift between the platform console and the
+// self-serve portal.
+export const PLAN_MONTHS: Record<string, number> = {
   trial: 0,
   monthly: 1,
   quarterly: 3,
@@ -42,13 +45,13 @@ async function requireSuperAdmin(req: Request, res: Response, next: NextFunction
 // Every route in this router is super_admin-only.
 router.use(requireSuperAdmin);
 
-function addMonths(date: Date, months: number): Date {
+export function addMonths(date: Date, months: number): Date {
   const d = new Date(date);
   d.setMonth(d.getMonth() + months);
   return d;
 }
 
-function daysBetween(from: Date, to: Date): number {
+export function daysBetween(from: Date, to: Date): number {
   const ms = to.getTime() - from.getTime();
   return Math.ceil(ms / (1000 * 60 * 60 * 24));
 }
