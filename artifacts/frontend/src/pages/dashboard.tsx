@@ -574,11 +574,11 @@ export default function Dashboard() {
             {showLowStock && (productLowStockAlerts.length + rawMaterialLowStockAlerts.length) > 0 && (
               <div className="mt-3" onClick={(e) => e.stopPropagation()}>
                 <Tabs defaultValue={productLowStockAlerts.length === 0 ? "raw" : "products"}>
-                  <TabsList className="h-7">
-                    <TabsTrigger value="products" className="text-xs px-2 py-0.5" data-testid="tab-low-stock-products">
+                  <TabsList className="h-auto w-full grid grid-cols-2 gap-1">
+                    <TabsTrigger value="products" className="text-xs px-2 py-1 truncate" data-testid="tab-low-stock-products">
                       Products ({productLowStockAlerts.length})
                     </TabsTrigger>
-                    <TabsTrigger value="raw" className="text-xs px-2 py-0.5" data-testid="tab-low-stock-raw">
+                    <TabsTrigger value="raw" className="text-xs px-2 py-1 truncate" data-testid="tab-low-stock-raw">
                       Raw Materials ({rawMaterialLowStockAlerts.length})
                     </TabsTrigger>
                   </TabsList>
