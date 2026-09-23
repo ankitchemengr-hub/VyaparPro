@@ -19,13 +19,13 @@ export default function PortalPayments() {
   });
 
   if (authLoading) return null;
-  if (!isAuthenticated) return <Redirect to="/portal/login" />;
+  if (!isAuthenticated) return <Redirect to="/login" />;
 
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="bg-white border-b">
         <div className="max-w-3xl mx-auto px-4 h-16 flex items-center gap-3">
-          <Link href="/portal/dashboard" className="text-slate-500 hover:text-slate-900"><ArrowLeft className="w-5 h-5" /></Link>
+          <Link href="/dashboard" className="text-slate-500 hover:text-slate-900"><ArrowLeft className="w-5 h-5" /></Link>
           <span className="font-bold text-slate-900 flex items-center gap-2"><Building2 className="w-5 h-5 text-blue-600" /> Payment History</span>
         </div>
       </header>

@@ -21,7 +21,7 @@ export default function PortalLogin() {
 
   if (isLoading) return null;
   if (isAuthenticated) {
-    window.location.href = "/portal/dashboard";
+    window.location.href = "/dashboard";
     return null;
   }
 
@@ -30,7 +30,7 @@ export default function PortalLogin() {
     loginMutation.mutate(
       { data: { username, password, companyId: null } },
       {
-        onSuccess: () => { window.location.href = "/portal/dashboard"; },
+        onSuccess: () => { window.location.href = "/dashboard"; },
         onError: () => toast({ title: "Login failed", description: "Invalid username or password.", variant: "destructive" }),
       },
     );

@@ -178,7 +178,7 @@ export default function PortalRegister() {
           <CheckCircle2 className="w-16 h-16 text-teal-600 mx-auto mb-4" />
           <h1 className="text-2xl font-bold">Account created successfully!</h1>
           <p className="mt-2 text-slate-500">Log in to your customer portal to get started.</p>
-          <Link href="/portal/login">
+          <Link href="/login">
             <Button className="mt-6 bg-blue-600 hover:bg-blue-700">Go to Login</Button>
           </Link>
         </div>
@@ -273,7 +273,7 @@ export default function PortalRegister() {
                 {step === "paying" ? "Waiting for payment…" : "Create Account"}
               </Button>
               <p className="text-center text-xs text-slate-500">
-                Already have an account? <Link href="/portal/login" className="text-blue-600 hover:underline">Log in</Link>
+                Already have an account? <Link href="/login" className="text-blue-600 hover:underline">Log in</Link>
               </p>
             </form>
           </CardContent>

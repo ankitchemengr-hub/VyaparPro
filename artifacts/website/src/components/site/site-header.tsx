@@ -35,10 +35,10 @@ export function SiteHeader() {
 
         <div className="hidden md:flex items-center gap-2">
           {isAuthenticated ? (
-            <Link href="/portal/dashboard"><Button size="sm">Dashboard</Button></Link>
+            <Link href="/dashboard"><Button size="sm">Dashboard</Button></Link>
           ) : (
             <>
-              <Link href="/portal/login"><Button size="sm" variant="ghost">Login</Button></Link>
+              <Link href="/login"><Button size="sm" variant="ghost">Login</Button></Link>
               <Link href="/register"><Button size="sm" className="bg-blue-600 hover:bg-blue-700">Get Started</Button></Link>
             </>
           )}
@@ -58,10 +58,10 @@ export function SiteHeader() {
           ))}
           <div className="pt-3 border-t flex flex-col gap-2">
             {isAuthenticated ? (
-              <Link href="/portal/dashboard"><Button className="w-full">Dashboard</Button></Link>
+              <Link href="/dashboard"><Button className="w-full">Dashboard</Button></Link>
             ) : (
               <>
-                <Link href="/portal/login"><Button className="w-full" variant="outline">Login</Button></Link>
+                <Link href="/login"><Button className="w-full" variant="outline">Login</Button></Link>
                 <Link href="/register"><Button className="w-full bg-blue-600 hover:bg-blue-700">Get Started</Button></Link>
               </>
             )}

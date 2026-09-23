@@ -50,15 +50,6 @@ import Quotations from "@/pages/quotations";
 import Transporters from "@/pages/transporters";
 import Vehicles from "@/pages/vehicles";
 import Dispatches from "@/pages/dispatches";
-import SiteHome from "@/pages/site-home";
-import SitePricing from "@/pages/site-pricing";
-import SiteContact from "@/pages/site-contact";
-import PortalRegister from "@/pages/portal-register";
-import PortalLogin from "@/pages/portal-login";
-import PortalDashboard from "@/pages/portal-dashboard";
-import PortalSubscription from "@/pages/portal-subscription";
-import PortalPayments from "@/pages/portal-payments";
-import { useAuth } from "@/contexts/use-auth";
 
 // Bare `new QueryClient()` used React Query's raw defaults: 3 retries with
 // exponential backoff (1s, 2s, 4s...) on every failed query — including 401s
@@ -132,28 +123,10 @@ function ProtectedRoutes() {
   );
 }
 
-// Public SaaS website + customer portal — a marketing/registration/billing
-// surface that sits ALONGSIDE the ERP app in the same SPA (reusing its
-// session, API client, and design system), not a separate deployment. See
-// the "/" special-case below for how it coexists with the ERP's own root
-// route: `/` already belongs to the authenticated Dashboard, so an anonymous
-// visitor sees the marketing homepage there instead, while a logged-in user
-// sees the same Dashboard as before — nothing changes for them.
 function Router() {
-  const { isAuthenticated, isLoading } = useAuth();
   return (
     <Switch>
       <Route path="/login" component={Login} />
-      <Route path="/pricing" component={SitePricing} />
-      <Route path="/contact" component={SiteContact} />
-      <Route path="/register" component={PortalRegister} />
-      <Route path="/portal/login" component={PortalLogin} />
-      <Route path="/portal/dashboard" component={PortalDashboard} />
-      <Route path="/portal/subscription" component={PortalSubscription} />
-      <Route path="/portal/payments" component={PortalPayments} />
-      <Route path="/">
-        {() => (isLoading ? null : isAuthenticated ? <ProtectedRoutes /> : <SiteHome />)}
-      </Route>
       <Route path="/*" component={ProtectedRoutes} />
     </Switch>
   );

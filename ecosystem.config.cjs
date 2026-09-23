@@ -1,14 +1,20 @@
 // PM2 process manager config for Vipro ERP (local Windows setup).
 //
 // Usage (from the project root, C:\Users\Ankit\Desktop\Auth-Fixer):
-//   pm2 start ecosystem.config.cjs     -> start both apps
+//   pm2 start ecosystem.config.cjs     -> start all apps
 //   pm2 status                         -> see if they're running
-//   pm2 logs                           -> see live logs from both
+//   pm2 logs                           -> see live logs from all
 //   pm2 logs vipro-api                 -> see logs from just the backend
-//   pm2 restart all                    -> restart both
-//   pm2 stop all                       -> stop both
+//   pm2 restart all                    -> restart all
+//   pm2 stop all                       -> stop all
 //   pm2 save                           -> remember this state for auto-start on boot
 //
+// vipro-website (localhost:3002) is the public SHRADHA ERP marketing site +
+// customer portal — a separate app/link from vipro-frontend (the ERP itself,
+// localhost:3000), both talking to the same vipro-api backend. Kept as its
+// own process/port (rather than routes inside vipro-frontend) so it's a
+// genuinely different link now, matching what two different domains would
+// look like once this is actually deployed.
 module.exports = {
   apps: [
     {
@@ -29,6 +35,19 @@ module.exports = {
       max_restarts: 10,
       min_uptime: "10s",
       env: {
+        VITE_API_PROXY_TARGET: "http://localhost:3001",
+      },
+    },
+    {
+      name: "vipro-website",
+      cwd: "./artifacts/website",
+      script: "node",
+      args: "./node_modules/vite/bin/vite.js --config vite.config.ts --host 0.0.0.0",
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: "10s",
+      env: {
+        PORT: "3002",
         VITE_API_PROXY_TARGET: "http://localhost:3001",
       },
     },

@@ -25,13 +25,13 @@ export default function PortalDashboard() {
   const queryClient = useQueryClient();
 
   if (authLoading) return null;
-  if (!isAuthenticated) return <Redirect to="/portal/login" />;
+  if (!isAuthenticated) return <Redirect to="/login" />;
 
   const handleLogout = () => {
     logout.mutate(undefined, {
       onSuccess: () => {
         queryClient.clear();
-        window.location.href = "/portal/login";
+        window.location.href = "/login";
       },
     });
   };
@@ -93,7 +93,7 @@ export default function PortalDashboard() {
               <Card className="border-amber-300 bg-amber-50">
                 <CardContent className="p-4 flex items-center justify-between flex-wrap gap-3">
                   <span className="text-sm text-amber-800">Your payment is pending — complete it to activate your account.</span>
-                  <Link href="/portal/subscription"><Button size="sm" className="bg-amber-600 hover:bg-amber-700">Complete Payment</Button></Link>
+                  <Link href="/subscription"><Button size="sm" className="bg-amber-600 hover:bg-amber-700">Complete Payment</Button></Link>
                 </CardContent>
               </Card>
             )}
@@ -101,7 +101,7 @@ export default function PortalDashboard() {
               <Card className="border-red-300 bg-red-50">
                 <CardContent className="p-4 flex items-center justify-between flex-wrap gap-3">
                   <span className="text-sm text-red-800">Your SHRADHA ERP subscription has expired.</span>
-                  <Link href="/portal/subscription"><Button size="sm" className="bg-red-600 hover:bg-red-700">Renew Subscription</Button></Link>
+                  <Link href="/subscription"><Button size="sm" className="bg-red-600 hover:bg-red-700">Renew Subscription</Button></Link>
                 </CardContent>
               </Card>
             )}
@@ -115,7 +115,7 @@ export default function PortalDashboard() {
                   </CardContent>
                 </Card>
               </a>
-              <Link href="/portal/subscription">
+              <Link href="/subscription">
                 <Card className="hover:border-blue-400 transition-colors cursor-pointer h-full">
                   <CardContent className="p-5 flex items-center gap-3">
                     <RefreshCw className="w-5 h-5 text-teal-600" />
@@ -123,7 +123,7 @@ export default function PortalDashboard() {
                   </CardContent>
                 </Card>
               </Link>
-              <Link href="/portal/payments">
+              <Link href="/payments">
                 <Card className="hover:border-blue-400 transition-colors cursor-pointer h-full">
                   <CardContent className="p-5 flex items-center gap-3">
                     <Receipt className="w-5 h-5 text-slate-600" />

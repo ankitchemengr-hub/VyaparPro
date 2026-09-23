@@ -26,7 +26,7 @@ export function SiteFooter() {
         <div>
           <div className="text-white font-medium mb-2">Account</div>
           <div className="space-y-1.5">
-            <Link href="/portal/login" className="block hover:text-white">Customer Login</Link>
+            <Link href="/login" className="block hover:text-white">Customer Login</Link>
             <Link href="/register" className="block hover:text-white">Create Account</Link>
           </div>
         </div>
