@@ -18,4 +18,6 @@ export interface InvoiceItemInput {
   discountAmt?: number;
   taxPct?: number;
   cessPct?: number;
+  /** Free-text note for this line item (size/model/serial no., etc.), printed on the invoice under the item name. */
+  description?: string;
 }

@@ -4940,6 +4940,9 @@ components:
           type: string
         hsnCode:
           type: ["string", "null"]
+        description:
+          type: ["string", "null"]
+          description: Free-text note entered per line item at billing time (size/model/serial no., etc.), shown on the printed invoice under the item name.
         qty:
           type: number
         qtyBoxes:
@@ -5036,6 +5039,9 @@ components:
           type: number
         cessPct:
           type: number
+        description:
+          type: string
+          description: Free-text note for this line item (size/model/serial no., etc.), printed on the invoice under the item name.
 
     InvoiceUpdate:
       type: object

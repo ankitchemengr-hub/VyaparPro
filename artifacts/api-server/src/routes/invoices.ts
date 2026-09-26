@@ -409,14 +409,15 @@ router.post("/invoices", async (req, res): Promise<void> => {
     // Insert items + deduct stock
     for (const item of processedItems) {
       await client.query(
-        `INSERT INTO invoice_items (company_id, invoice_id, product_id, product_name, hsn_code, qty, qty_boxes, total_liters, unit, rate, mrp, discount_pct, discount_amt, tax_pct, cess_pct, net_price, amount, cost_price)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+        `INSERT INTO invoice_items (company_id, invoice_id, product_id, product_name, hsn_code, description, qty, qty_boxes, total_liters, unit, rate, mrp, discount_pct, discount_amt, tax_pct, cess_pct, net_price, amount, cost_price)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
         [
           companyId,
           invRow.id,
           item.productId,
           productById.get(item.productId)?.name ?? "Unknown",
           null,
+          item.description ?? null,
           item.qty,
           item.qtyBoxes,
           item.totalLiters,
@@ -867,9 +868,9 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
     for (const item of processedItems) {
       const prodName = productById.get(item.productId)?.name ?? "Unknown";
       await client.query(
-        `INSERT INTO invoice_items (company_id, invoice_id, product_id, product_name, hsn_code, qty, qty_boxes, total_liters, unit, rate, mrp, discount_pct, discount_amt, tax_pct, cess_pct, net_price, amount, cost_price)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
-        [companyId, invoiceId, item.productId, prodName, null, item.qty, item.qtyBoxesVal, item.totalLitersVal, item.unit, item.rate, item.mrp, item.discountPct, item.discountAmt, item.taxPct, item.cessPct, item.netPrice, item.amount, item.costPriceVal]
+        `INSERT INTO invoice_items (company_id, invoice_id, product_id, product_name, hsn_code, description, qty, qty_boxes, total_liters, unit, rate, mrp, discount_pct, discount_amt, tax_pct, cess_pct, net_price, amount, cost_price)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
+        [companyId, invoiceId, item.productId, prodName, null, item.description ?? null, item.qty, item.qtyBoxesVal, item.totalLitersVal, item.unit, item.rate, item.mrp, item.discountPct, item.discountAmt, item.taxPct, item.cessPct, item.netPrice, item.amount, item.costPriceVal]
       );
       if (!isQuotationEdit) {
         await client.query(
@@ -1283,6 +1284,7 @@ function formatItem(i: any) {
     productId: i.productId,
     productName: i.productName,
     hsnCode: i.hsnCode ?? null,
+    description: i.description ?? null,
     qty: Number(i.qty),
     qtyBoxes: i.qtyBoxes != null ? Number(i.qtyBoxes) : null,
     totalLiters: i.totalLiters != null ? Number(i.totalLiters) : null,

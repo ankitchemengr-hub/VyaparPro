@@ -95,7 +95,12 @@ export function ItemsTable({ computed, settings, maps, theme, grandTotal }: Item
           return (
             <tr key={item.id} data-testid={`row-item-${item.id}`}>
               <td className={`${cell} align-top`}>{idx + 1}</td>
-              <td className={`${cell} align-top font-medium`}>{item.productName}</td>
+              <td className={`${cell} align-top font-medium`}>
+                {item.productName}
+                {item.description && (
+                  <div className="font-normal text-[0.85em] text-muted-foreground">{item.description}</div>
+                )}
+              </td>
               {showHsn && <td className={`${cell} align-top font-mono`}>{item.hsnCode ?? ""}</td>}
               <td className={`${cell} align-top uppercase`}>{item.unit}</td>
               <td className={`${cell} align-top text-right`}>{num(item.qty, 0)}</td>

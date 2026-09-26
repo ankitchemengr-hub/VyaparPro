@@ -118,6 +118,10 @@ type BillingItem = {
   amount: number;
   litersPerBox: number;
   packagingUnit: string;
+  // Free-text note for this line item (size/model/serial no., etc.) —
+  // printed on the invoice under the item name, separate from the
+  // product's own catalog name/description.
+  description: string;
   // Set once the user types in the Rate field — stops the history auto-fill
   // (this customer's last billed rate, else the last sale rate) from
   // overwriting a rate they chose by hand.
@@ -384,6 +388,7 @@ export default function Billing() {
         discountPct: Number(it.discountPct), discountAmt: Number(it.discountAmt),
         amount: Number(it.amount), litersPerBox: Number(prod?.litersPerBox ?? 0) || 0,
         packagingUnit: prod?.packagingUnit?.trim() || "Box",
+        description: it.description ?? "",
       };
     }));
     setPrefilled(true);
@@ -408,6 +413,7 @@ export default function Billing() {
           amount: Math.round(amount * 100) / 100,
           litersPerBox: Number((p as any).litersPerBox ?? 0) || 0,
           packagingUnit: (p as any).packagingUnit?.trim() || "Box",
+          description: "",
         } as BillingItem;
       }).filter(Boolean) as BillingItem[];
       setItems(billing);
@@ -525,6 +531,7 @@ export default function Billing() {
         amount: Math.round(amount * 100) / 100,
         litersPerBox: Number((p as any).litersPerBox ?? 0) || 0,
         packagingUnit: (p as any).packagingUnit?.trim() || "Box",
+        description: "",
       }]);
     }
     setProductSearch("");
@@ -606,6 +613,7 @@ export default function Billing() {
         unit: i.unit ?? "QTY", rate: i.rate ?? 0, mrp: i.mrp ?? 0,
         taxPct: isGstInvoiceType(invoiceType) ? i.taxPct : 0,
         discountPct: i.discountPct, discountAmt: i.discountAmt, cessPct: 0,
+        ...(i.description?.trim() ? { description: i.description.trim() } : {}),
       })),
     };
     if (isEditMode && editId) {
@@ -954,6 +962,13 @@ export default function Billing() {
                         <TableCell>
                           <div className="font-medium text-sm leading-tight">{item.name}</div>
                           <div className="text-xs text-muted-foreground">{item.unit}</div>
+                          <Input
+                            value={item.description}
+                            onChange={(e) => updateItem(idx, "description", e.target.value)}
+                            placeholder="Add description (optional)"
+                            className="h-6 mt-1 text-xs px-1.5"
+                            data-testid={`input-description-${idx}`}
+                          />
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex flex-col items-end gap-1">
@@ -1035,6 +1050,14 @@ export default function Billing() {
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>
                     </div>
+
+                    <Input
+                      value={item.description}
+                      onChange={(e) => updateItem(idx, "description", e.target.value)}
+                      placeholder="Add description (optional)"
+                      className="h-8 text-xs"
+                      data-testid={`input-description-mobile-${idx}`}
+                    />
 
                     <div className="grid grid-cols-2 gap-2">
                       <div className="space-y-1">

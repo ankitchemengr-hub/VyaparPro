@@ -169,6 +169,9 @@ export function A5CompactTemplate({ invoice, maps, settings, computed }: Templat
                 <td className="border-r border-black px-2 py-1 align-top">{idx + 1}</td>
                 <td className="border-r border-black px-2 py-1 align-top font-semibold">
                   {item.productName}
+                  {item.description && (
+                    <div className="font-normal text-[10px] leading-tight">{item.description}</div>
+                  )}
                 </td>
                 {isGst && (
                   <td className="border-r border-black px-2 py-1 align-top font-mono">
