@@ -516,26 +516,45 @@ export default function Billing() {
 
   const removeItem = (idx: number) => setItems((prev) => prev.filter((_, i) => i !== idx));
 
-  const addProduct = (p: any) => {
+  // Returns the row index the product landed on (existing row if it was
+  // already in the cart, otherwise the newly appended row) — callers use
+  // this to move keyboard focus straight into that row's Qty field.
+  const addProduct = (p: any): number => {
     const existing = items.findIndex((i) => i.productId === p.id);
-    if (existing >= 0) { updateItem(existing, "qty", items[existing].qty + 1); }
-    else {
-      const rate = getBaseRate(p, customer, invoiceType);
-      const taxPct = isGstInvoiceType(invoiceType) ? (Number(p.taxRate) || 18) : 0;
-      const amount = Number(rate ?? 0) * (1 + taxPct / 100);
-      setItems((prev) => [...prev, {
-        productId: p.id, name: p.name, unit: p.unit ?? "QTY", qty: 1,
-        qtyMode: "unit" as QtyMode, unitsPerBox: resolvePack(p),
-        rate: Number(rate ?? 0), mrp: Number(p.mrp ?? 0), taxPct,
-        discountPct: 0, discountAmt: 0,
-        amount: Math.round(amount * 100) / 100,
-        litersPerBox: Number((p as any).litersPerBox ?? 0) || 0,
-        packagingUnit: (p as any).packagingUnit?.trim() || "Box",
-        description: "",
-      }]);
+    if (existing >= 0) {
+      updateItem(existing, "qty", items[existing].qty + 1);
+      setProductSearch("");
+      setSearchOpen(false);
+      return existing;
     }
+    const rate = getBaseRate(p, customer, invoiceType);
+    const taxPct = isGstInvoiceType(invoiceType) ? (Number(p.taxRate) || 18) : 0;
+    const amount = Number(rate ?? 0) * (1 + taxPct / 100);
+    const newIdx = items.length;
+    setItems((prev) => [...prev, {
+      productId: p.id, name: p.name, unit: p.unit ?? "QTY", qty: 1,
+      qtyMode: "unit" as QtyMode, unitsPerBox: resolvePack(p),
+      rate: Number(rate ?? 0), mrp: Number(p.mrp ?? 0), taxPct,
+      discountPct: 0, discountAmt: 0,
+      amount: Math.round(amount * 100) / 100,
+      litersPerBox: Number((p as any).litersPerBox ?? 0) || 0,
+      packagingUnit: (p as any).packagingUnit?.trim() || "Box",
+      description: "",
+    }]);
     setProductSearch("");
     setSearchOpen(false);
+    return newIdx;
+  };
+
+  // After picking a product (Enter or click), jump straight into that row's
+  // Qty field so the whole add-item flow stays keyboard-only: search → pick
+  // → qty → (Enter) rate → (Enter) back to search for the next product.
+  const addProductAndFocusQty = (p: any) => {
+    const idx = addProduct(p);
+    requestAnimationFrame(() => {
+      const el = document.querySelector<HTMLInputElement>(`[data-testid="input-qty-${idx}"]`);
+      if (el) { el.focus(); el.select(); }
+    });
   };
 
   // Enter in a line-item field jumps to the next editable field (qty → rate →
@@ -902,7 +921,7 @@ export default function Billing() {
                       setSearchActiveIdx((i) => Math.max(i - 1, 0));
                     } else if (e.key === "Enter") {
                       const pick = filteredProducts[searchActiveIdx];
-                      if (pick) { e.preventDefault(); addProduct(pick); setSearchOpen(true); }
+                      if (pick) { e.preventDefault(); addProductAndFocusQty(pick); }
                     }
                   }} />
                 <kbd className="hidden md:inline-flex absolute right-2.5 top-1/2 -translate-y-1/2 items-center rounded border px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground pointer-events-none">/</kbd>
@@ -917,20 +936,20 @@ export default function Billing() {
                     return (
                       <button key={p.id} type="button" id={`product-opt-${idx}`} role="option" aria-selected={active}
                         data-active={active}
-                        onClick={() => addProduct(p)}
+                        onClick={() => addProductAndFocusQty(p)}
                         onMouseEnter={() => setSearchActiveIdx(idx)}
-                        className={`w-full text-left px-3 py-2 flex items-center justify-between gap-3 text-sm border-b last:border-0 ${active ? "bg-accent" : "hover:bg-accent"}`}
+                        className={`w-full text-left px-3 py-2 flex items-center justify-between gap-3 text-sm border-b last:border-0 ${active ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
                         data-testid={`product-option-${p.id}`}>
                         <div className="min-w-0 flex-1">
                           <div className="font-medium truncate">{p.name}</div>
-                          <div className="text-xs text-muted-foreground">
+                          <div className={`text-xs ${active ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
                             ₹{getBaseRate(p, customer, invoiceType).toLocaleString()}
                             {isGstInvoiceType(invoiceType) && p.taxRate ? ` · GST ${p.taxRate}%` : ""}
                           </div>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
-                          {alreadyAdded && <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">Added</span>}
-                          <Plus className="w-4 h-4 text-muted-foreground" />
+                          {alreadyAdded && <span className={`text-[10px] uppercase px-1.5 py-0.5 rounded font-medium ${active ? "bg-primary-foreground/20 text-primary-foreground" : "bg-primary/10 text-primary"}`}>Added</span>}
+                          <Plus className={`w-4 h-4 ${active ? "text-primary-foreground" : "text-muted-foreground"}`} />
                         </div>
                       </button>
                     );
