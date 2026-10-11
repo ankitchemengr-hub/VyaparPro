@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { pool } from "@workspace/db";
 import { getCompanyId } from "../lib/tenant";
+import { GST_ACCOUNTANT_ROLE, isGstAccountant } from "../lib/gst-access";
 
 const router: IRouter = Router();
 
@@ -13,8 +14,11 @@ async function queryOne(text: string, params: any[] = []): Promise<any> {
   return result.rows[0] ?? {};
 }
 
-function requireAdmin(req: any, res: any): boolean {
+// `allowGstAccountant` opens a report to the read-only GST login — only for
+// reports that are (or are forced to be) GST-only.
+function requireAdmin(req: any, res: any, allowGstAccountant = false): boolean {
   const role = req.session?.role;
+  if (allowGstAccountant && role === GST_ACCOUNTANT_ROLE) return true;
   if (role !== "admin" && role !== "accountant") {
     res.status(403).json({ error: "Forbidden" });
     return false;
@@ -33,10 +37,10 @@ function dateRange(req: any): { from: Date | null; to: Date | null; clauses: str
 
 // ── GET /reports/sales ──────────────────────────────────────────────
 router.get("/reports/sales", async (req, res): Promise<void> => {
-  if (!requireAdmin(req, res)) return;
+  if (!requireAdmin(req, res, true)) return;
   const companyId = getCompanyId(req);
   const { from, to } = req.query as any;
-  const type = String((req.query as any).type ?? "all"); // gst | non_gst | all
+  const type = isGstAccountant(req) ? "gst" : String((req.query as any).type ?? "all"); // gst | non_gst | all
   const customerId = (req.query as any).customerId ? Number((req.query as any).customerId) : null;
   const search = String((req.query as any).search ?? "").trim();
 
@@ -274,7 +278,8 @@ router.get("/reports/production", async (req, res): Promise<void> => {
 
 // ── GET /reports/tax ────────────────────────────────────────────────
 router.get("/reports/tax", async (req, res): Promise<void> => {
-  if (!requireAdmin(req, res)) return;
+  // Already restricted to invoice_type/bill_type = 'gst' below.
+  if (!requireAdmin(req, res, true)) return;
   const companyId = getCompanyId(req);
   const { from, to } = req.query as any;
   const ps: any[] = [companyId];

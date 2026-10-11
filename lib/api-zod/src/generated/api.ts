@@ -81,7 +81,7 @@ export const LoginBody = zod.object({
 export const LoginResponse = zod.object({
   "id": zod.number(),
   "username": zod.string(),
-  "role": zod.enum(['super_admin', 'admin', 'salesman', 'store', 'manufacturing', 'accountant', 'customer', 'counter']),
+  "role": zod.enum(['super_admin', 'admin', 'salesman', 'store', 'manufacturing', 'accountant', 'gst_accountant', 'customer', 'counter']),
   "name": zod.string(),
   "customerId": zod.number().nullish(),
   "companyId": zod.number().nullish(),
@@ -102,7 +102,7 @@ export const LogoutResponse = zod.void()
 export const GetMeResponse = zod.object({
   "id": zod.number(),
   "username": zod.string(),
-  "role": zod.enum(['super_admin', 'admin', 'salesman', 'store', 'manufacturing', 'accountant', 'customer', 'counter']),
+  "role": zod.enum(['super_admin', 'admin', 'salesman', 'store', 'manufacturing', 'accountant', 'gst_accountant', 'customer', 'counter']),
   "name": zod.string(),
   "customerId": zod.number().nullish(),
   "companyId": zod.number().nullish(),
@@ -446,7 +446,7 @@ export const ListUsersResponseItem = zod.object({
   "id": zod.number(),
   "username": zod.string(),
   "name": zod.string(),
-  "role": zod.enum(['admin', 'salesman', 'store', 'manufacturing', 'accountant', 'customer', 'counter']),
+  "role": zod.enum(['admin', 'salesman', 'store', 'manufacturing', 'accountant', 'gst_accountant', 'customer', 'counter']),
   "entityId": zod.number().nullish(),
   "pricingTier": zod.union([zod.literal('retail'),zod.literal('wholesale'),zod.literal(null)]).nullish(),
   "isActive": zod.boolean(),
@@ -469,7 +469,7 @@ export const CreateUserBody = zod.object({
   "username": zod.string().min(createUserBodyUsernameMin).max(createUserBodyUsernameMax),
   "password": zod.string().min(createUserBodyPasswordMin),
   "name": zod.string().optional(),
-  "role": zod.enum(['admin', 'salesman', 'store', 'manufacturing', 'accountant', 'customer', 'counter']),
+  "role": zod.enum(['admin', 'salesman', 'store', 'manufacturing', 'accountant', 'gst_accountant', 'customer', 'counter']),
   "entityId": zod.number().nullish(),
   "pricingTier": zod.union([zod.literal('retail'),zod.literal('wholesale'),zod.literal(null)]).nullish()
 }).describe('Creates a login account. `name` falls back to the linked entity\'s name when omitted\nand an `entityId` is provided. Link a salesman\/worker\/customer entity via `entityId`\nso the login is associated with their ledger and invoice attribution.\n')
@@ -478,7 +478,7 @@ export const CreateUserResponse = zod.object({
   "id": zod.number(),
   "username": zod.string(),
   "name": zod.string(),
-  "role": zod.enum(['admin', 'salesman', 'store', 'manufacturing', 'accountant', 'customer', 'counter']),
+  "role": zod.enum(['admin', 'salesman', 'store', 'manufacturing', 'accountant', 'gst_accountant', 'customer', 'counter']),
   "entityId": zod.number().nullish(),
   "pricingTier": zod.union([zod.literal('retail'),zod.literal('wholesale'),zod.literal(null)]).nullish(),
   "isActive": zod.boolean(),
@@ -499,7 +499,7 @@ export const updateUserBodyPasswordMin = 8;
 
 export const UpdateUserBody = zod.object({
   "name": zod.string().optional(),
-  "role": zod.enum(['admin', 'salesman', 'store', 'manufacturing', 'accountant', 'customer', 'counter']).optional(),
+  "role": zod.enum(['admin', 'salesman', 'store', 'manufacturing', 'accountant', 'gst_accountant', 'customer', 'counter']).optional(),
   "pricingTier": zod.union([zod.literal('retail'),zod.literal('wholesale'),zod.literal(null)]).nullish(),
   "isActive": zod.boolean().optional(),
   "entityId": zod.number().nullish(),
@@ -510,7 +510,7 @@ export const UpdateUserResponse = zod.object({
   "id": zod.number(),
   "username": zod.string(),
   "name": zod.string(),
-  "role": zod.enum(['admin', 'salesman', 'store', 'manufacturing', 'accountant', 'customer', 'counter']),
+  "role": zod.enum(['admin', 'salesman', 'store', 'manufacturing', 'accountant', 'gst_accountant', 'customer', 'counter']),
   "entityId": zod.number().nullish(),
   "pricingTier": zod.union([zod.literal('retail'),zod.literal('wholesale'),zod.literal(null)]).nullish(),
   "isActive": zod.boolean(),

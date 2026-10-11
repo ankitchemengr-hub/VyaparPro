@@ -3683,7 +3683,7 @@ components:
           type: string
         role:
           type: string
-          enum: [super_admin, admin, salesman, store, manufacturing, accountant, customer, counter]
+          enum: [super_admin, admin, salesman, store, manufacturing, accountant, gst_accountant, customer, counter]
         name:
           type: string
         customerId:
@@ -3763,7 +3763,7 @@ components:
           type: string
         role:
           type: string
-          enum: [admin, salesman, store, manufacturing, accountant, customer, counter]
+          enum: [admin, salesman, store, manufacturing, accountant, gst_accountant, customer, counter]
         entityId:
           type: ["integer", "null"]
         pricingTier:
@@ -3793,7 +3793,7 @@ components:
           type: string
         role:
           type: string
-          enum: [admin, salesman, store, manufacturing, accountant, customer, counter]
+          enum: [admin, salesman, store, manufacturing, accountant, gst_accountant, customer, counter]
         entityId:
           type: ["integer", "null"]
         pricingTier:
@@ -3808,7 +3808,7 @@ components:
           type: string
         role:
           type: string
-          enum: [admin, salesman, store, manufacturing, accountant, customer, counter]
+          enum: [admin, salesman, store, manufacturing, accountant, gst_accountant, customer, counter]
         pricingTier:
           type: ["string", "null"]
           enum: [retail, wholesale, null]

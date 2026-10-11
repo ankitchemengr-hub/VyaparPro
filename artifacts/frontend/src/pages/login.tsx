@@ -141,7 +141,7 @@ export default function Login() {
         setLocation("/subscriptions");
       } else if (user.role === "admin") {
         setLocation("/");
-      } else if (user.role === "accountant") {
+      } else if ((user.role === "accountant" || user.role === "gst_accountant")) {
         setLocation("/menu");
       } else {
         setLocation("/catalog");
@@ -187,7 +187,7 @@ export default function Login() {
             window.location.href = "/subscriptions";
           } else if (data.role === "admin") {
             window.location.href = "/";
-          } else if (data.role === "accountant") {
+          } else if ((data.role === "accountant" || data.role === "gst_accountant")) {
             window.location.href = "/menu";
           } else {
             window.location.href = "/catalog";

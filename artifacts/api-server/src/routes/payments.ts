@@ -15,6 +15,7 @@ import {
 } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
 import { getCompanyId } from "../lib/tenant";
+import { isGstAccountant } from "../lib/gst-access";
 import { generateSeriesNumber } from "../lib/number-series";
 import { applyEntityPayment } from "../lib/entity-payment";
 
@@ -117,6 +118,47 @@ async function loadAllocationsAndBalance(
   return { allocations, customerBalanceBefore, customerBalanceAfter };
 }
 
+// GST-accountant view of a receipt: keep only the allocations against GST
+// invoices and report just that portion as the amount. The customer's running
+// balance (which mixes in non-GST bills) is withheld. Returns null when the
+// receipt touches no GST invoice at all, so the caller 404s.
+async function gstOnlyReceipt(
+  companyId: number,
+  receipt: { amount: number; invoiceNo: string | null; allocations: any[]; customerBalanceBefore: number | null; customerBalanceAfter: number | null },
+  directInvoiceId: number | null,
+) {
+  const ids = [...new Set([
+    ...receipt.allocations.map((a) => a.invoiceId),
+    ...(directInvoiceId != null ? [directInvoiceId] : []),
+  ].filter((v): v is number => v != null))];
+  const gst = ids.length === 0 ? [] : (await pool.query(
+    `SELECT id, invoice_no FROM invoices WHERE company_id = $1 AND id = ANY($2) AND invoice_type = 'gst'`,
+    [companyId, ids],
+  )).rows;
+  const gstIds = new Set(gst.map((r: any) => r.id));
+  const allocations = receipt.allocations.filter((a) => gstIds.has(a.invoiceId));
+  if (allocations.length > 0) {
+    return {
+      ...receipt,
+      amount: allocations.reduce((sum, a) => sum + a.allocatedAmount, 0),
+      invoiceNo: allocations[0].invoiceNo ?? null,
+      allocations,
+      customerBalanceBefore: null,
+      customerBalanceAfter: null,
+    };
+  }
+  // Older payments recorded against a single invoice, before allocations existed.
+  if (receipt.allocations.length === 0 && directInvoiceId != null && gstIds.has(directInvoiceId)) {
+    return {
+      ...receipt,
+      invoiceNo: gst.find((r: any) => r.id === directInvoiceId)?.invoice_no ?? null,
+      customerBalanceBefore: null,
+      customerBalanceAfter: null,
+    };
+  }
+  return null;
+}
+
 const router: IRouter = Router();
 
 // GET /payments
@@ -131,6 +173,22 @@ router.get("/payments", async (req, res): Promise<void> => {
   const conditions: any[] = [eq(paymentsTable.companyId, companyId)];
   if (params.data.customerId) conditions.push(eq(paymentsTable.customerId, params.data.customerId));
   if (params.data.status) conditions.push(eq(paymentsTable.status, params.data.status));
+  if (isGstAccountant(req)) {
+    // Only payments settled purely against GST invoices. A receipt that also
+    // covers non-GST bills is left out here (its GST share still shows under
+    // each GST invoice's payment-receipts), so no non-GST amount leaks.
+    const linkedInvoices = (invoiceTypeCheck: ReturnType<typeof sql>) => sql`EXISTS (
+      SELECT 1 FROM invoices i
+      WHERE i.company_id = ${paymentsTable.companyId}
+        AND (i.id = ${paymentsTable.invoiceId} OR i.id IN (
+          SELECT pa.invoice_id FROM payment_allocations pa
+          WHERE pa.company_id = ${paymentsTable.companyId} AND pa.receipt_no = ${paymentsTable.receiptId}
+        ))
+        AND ${invoiceTypeCheck}
+    )`;
+    conditions.push(linkedInvoices(sql`i.invoice_type = 'gst'`));
+    conditions.push(sql`NOT ${linkedInvoices(sql`i.invoice_type <> 'gst'`)}`);
+  }
 
   const payments = await db
     .select()
@@ -158,7 +216,7 @@ router.get("/payment-receipts/:receiptNo", async (req, res): Promise<void> => {
   const { receiptNo } = params.data;
 
   const paymentRes = await pool.query(
-    `SELECT p.receipt_id, p.created_at, p.customer_id, p.customer_name, p.mode, p.amount, p.status, i.invoice_no
+    `SELECT p.receipt_id, p.created_at, p.customer_id, p.customer_name, p.mode, p.amount, p.status, p.invoice_id, i.invoice_no
      FROM payments p
      LEFT JOIN invoices i ON i.id = p.invoice_id AND i.company_id = p.company_id
      WHERE p.receipt_id = $1 AND p.company_id = $2`,
@@ -168,7 +226,7 @@ router.get("/payment-receipts/:receiptNo", async (req, res): Promise<void> => {
     const r = paymentRes.rows[0];
     const { allocations, customerBalanceBefore, customerBalanceAfter } =
       await loadAllocationsAndBalance(pool, companyId, receiptNo, r.customer_id ?? null);
-    res.json({
+    const body = {
       receiptNo: r.receipt_id,
       date: r.created_at?.toISOString?.() ?? r.created_at,
       partyName: r.customer_name ?? null,
@@ -181,7 +239,14 @@ router.get("/payment-receipts/:receiptNo", async (req, res): Promise<void> => {
       allocations,
       customerBalanceBefore,
       customerBalanceAfter,
-    });
+    };
+    if (isGstAccountant(req)) {
+      const view = await gstOnlyReceipt(companyId, body, r.invoice_id ?? null);
+      if (!view) { res.status(404).json({ error: "Receipt not found" }); return; }
+      res.json(view);
+      return;
+    }
+    res.json(body);
     return;
   }
 
@@ -194,7 +259,7 @@ router.get("/payment-receipts/:receiptNo", async (req, res): Promise<void> => {
     const r = txnRes.rows[0];
     const { allocations, customerBalanceBefore, customerBalanceAfter } =
       await loadAllocationsAndBalance(pool, companyId, receiptNo, r.party_entity_id ?? null);
-    res.json({
+    const body = {
       receiptNo: r.receipt_no,
       date: r.created_at?.toISOString?.() ?? r.created_at,
       partyName: r.party_name ?? null,
@@ -207,7 +272,14 @@ router.get("/payment-receipts/:receiptNo", async (req, res): Promise<void> => {
       allocations,
       customerBalanceBefore,
       customerBalanceAfter,
-    });
+    };
+    if (isGstAccountant(req)) {
+      const view = await gstOnlyReceipt(companyId, body, null);
+      if (!view) { res.status(404).json({ error: "Receipt not found" }); return; }
+      res.json(view);
+      return;
+    }
+    res.json(body);
     return;
   }
 

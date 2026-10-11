@@ -16,6 +16,7 @@ export const AuthSessionRole = {
   store: 'store',
   manufacturing: 'manufacturing',
   accountant: 'accountant',
+  gst_accountant: 'gst_accountant',
   customer: 'customer',
   counter: 'counter',
 } as const;

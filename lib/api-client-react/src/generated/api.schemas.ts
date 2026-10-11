@@ -211,6 +211,7 @@ export const AuthSessionRole = {
   store: 'store',
   manufacturing: 'manufacturing',
   accountant: 'accountant',
+  gst_accountant: 'gst_accountant',
   customer: 'customer',
   counter: 'counter',
 } as const;
@@ -300,6 +301,7 @@ export const UserAccountRole = {
   store: 'store',
   manufacturing: 'manufacturing',
   accountant: 'accountant',
+  gst_accountant: 'gst_accountant',
   customer: 'customer',
   counter: 'counter',
 } as const;
@@ -337,6 +339,7 @@ export const CreateUserInputRole = {
   store: 'store',
   manufacturing: 'manufacturing',
   accountant: 'accountant',
+  gst_accountant: 'gst_accountant',
   customer: 'customer',
   counter: 'counter',
 } as const;
@@ -382,6 +385,7 @@ export const UpdateUserInputRole = {
   store: 'store',
   manufacturing: 'manufacturing',
   accountant: 'accountant',
+  gst_accountant: 'gst_accountant',
   customer: 'customer',
   counter: 'counter',
 } as const;

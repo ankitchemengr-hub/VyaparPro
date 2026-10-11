@@ -361,6 +361,13 @@ router.get("/auth/permissions", async (req, res): Promise<void> => {
 
 // PUT /auth/permissions — scoped to the caller's company.
 router.put("/auth/permissions", async (req, res): Promise<void> => {
+  // Only the company admin (or super_admin inside a company) may change what
+  // other roles can do — otherwise any logged-in user could widen their own access.
+  const role = (req as any).session?.role;
+  if (role !== "admin" && role !== "super_admin") {
+    res.status(403).json({ error: "Forbidden — admin only" });
+    return;
+  }
   const parsed = UpdateRolePermissionsBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });

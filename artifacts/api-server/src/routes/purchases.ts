@@ -18,12 +18,14 @@ import {
 } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
 import { getCompanyId } from "../lib/tenant";
+import { GST_ACCOUNTANT_ROLE, isGstAccountant } from "../lib/gst-access";
 import { computeMarginedPrices } from "../lib/margin-pricing";
 import multer from "multer";
 
 const router: IRouter = Router();
 
-const PURCHASE_READ_ROLES = new Set(["admin", "accountant", "store"]);
+// gst_accountant is read-only and further limited to bill_type = 'gst' below.
+const PURCHASE_READ_ROLES = new Set(["admin", "accountant", "store", GST_ACCOUNTANT_ROLE]);
 const PURCHASE_WRITE_ROLES = new Set(["admin", "accountant", "store"]);
 
 function requireSession(req: any, res: any, roles: Set<string>): { userId: number; role: string } | null {
@@ -220,6 +222,7 @@ router.get("/purchases", async (req, res): Promise<void> => {
   const conditions: any[] = [eq(purchasesTable.companyId, companyId)];
   if (parsed.data.vendorId) conditions.push(eq(purchasesTable.vendorId, parsed.data.vendorId));
   if (parsed.data.status) conditions.push(eq(purchasesTable.status, parsed.data.status));
+  if (isGstAccountant(req)) conditions.push(eq(purchasesTable.billType, "gst"));
   const rows = await db.select().from(purchasesTable).where(and(...conditions)).orderBy(sql`${purchasesTable.createdAt} DESC`);
   res.json(rows.map((r) => formatPurchase(r, [])));
 });
@@ -244,7 +247,9 @@ router.get("/purchases/report", async (req, res): Promise<void> => {
     params.push(Number(productId));
     conditions.push(`pi.product_id = $${params.length}`);
   }
-  if (billType === "gst" || billType === "non_gst") {
+  if (isGstAccountant(req)) {
+    conditions.push(`p.bill_type = 'gst'`);
+  } else if (billType === "gst" || billType === "non_gst") {
     params.push(billType);
     conditions.push(`p.bill_type = $${params.length}`);
   }
@@ -297,7 +302,7 @@ router.get("/purchases/:id", async (req, res): Promise<void> => {
   }
   const companyId = getCompanyId(req);
   const [row] = await db.select().from(purchasesTable).where(and(eq(purchasesTable.companyId, companyId), eq(purchasesTable.id, parsed.data.id)));
-  if (!row) {
+  if (!row || (isGstAccountant(req) && row.billType !== "gst")) {
     res.status(404).json({ error: "Purchase not found" });
     return;
   }
@@ -927,8 +932,10 @@ router.get("/purchases/attachments/:attachmentId/file", async (req, res): Promis
   if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   try {
     const result = await pool.query(
-      `SELECT * FROM purchase_attachments WHERE id = $1 AND company_id = $2`,
-      [id, companyId],
+      `SELECT a.* FROM purchase_attachments a
+       LEFT JOIN purchases p ON p.id = a.purchase_id AND p.company_id = a.company_id
+       WHERE a.id = $1 AND a.company_id = $2 AND ($3::boolean = false OR p.bill_type = 'gst')`,
+      [id, companyId, isGstAccountant(req)],
     );
     if (!result.rows[0]) { res.status(404).json({ error: "Attachment not found" }); return; }
     const att = result.rows[0];
@@ -1022,10 +1029,11 @@ router.get("/purchases/:id/attachments", async (req, res): Promise<void> => {
   if (!Number.isFinite(purchaseId)) { res.status(400).json({ error: "Invalid id" }); return; }
   try {
     const result = await pool.query(
-      `SELECT * FROM purchase_attachments
-       WHERE purchase_id = $1 AND company_id = $2
-       ORDER BY created_at ASC`,
-      [purchaseId, companyId],
+      `SELECT a.* FROM purchase_attachments a
+       LEFT JOIN purchases p ON p.id = a.purchase_id AND p.company_id = a.company_id
+       WHERE a.purchase_id = $1 AND a.company_id = $2 AND ($3::boolean = false OR p.bill_type = 'gst')
+       ORDER BY a.created_at ASC`,
+      [purchaseId, companyId, isGstAccountant(req)],
     );
     res.json(result.rows.map((r) => ({
       id: r.id,

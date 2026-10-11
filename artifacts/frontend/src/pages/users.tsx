@@ -27,7 +27,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/use-auth";
 
-const ROLES = ["admin", "salesman", "store", "manufacturing", "accountant", "customer", "counter"] as const;
+const ROLES = ["admin", "salesman", "store", "manufacturing", "accountant", "gst_accountant", "customer", "counter"] as const;
 type Role = typeof ROLES[number];
 
 const ROLE_LABELS: Record<Role, string> = {
@@ -36,6 +36,7 @@ const ROLE_LABELS: Record<Role, string> = {
   store: "Store",
   manufacturing: "Manufacturing",
   accountant: "Accountant",
+  gst_accountant: "GST Accountant / CA (read-only, GST bills only)",
   customer: "Customer (B2B portal)",
   counter: "Counter (shared retail/wholesale login)",
 };

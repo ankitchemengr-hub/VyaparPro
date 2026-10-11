@@ -25,6 +25,7 @@ import {
 import { logger } from "../lib/logger";
 import { generateSeriesNumber, type SeriesType } from "../lib/number-series";
 import { getCompanyId } from "../lib/tenant";
+import { isGstAccountant } from "../lib/gst-access";
 
 const router: IRouter = Router();
 
@@ -157,6 +158,8 @@ router.get("/invoices", async (req, res): Promise<void> => {
   } else if (params.data.salesmanId) {
     conditions.push(eq(invoicesTable.salesmanId, params.data.salesmanId));
   }
+  // GST accountant only ever sees GST tax invoices, whatever `type` the client sends.
+  if (isGstAccountant(req)) conditions.push(eq(invoicesTable.invoiceType, "gst"));
   if (params.data.type) conditions.push(eq(invoicesTable.invoiceType, params.data.type));
   if (params.data.productId) {
     conditions.push(sql`EXISTS (
@@ -556,6 +559,9 @@ router.get("/invoices/:id", async (req, res): Promise<void> => {
       res.status(404).json({ error: "Invoice not found" });
       return;
     }
+  } else if (isGstAccountant(req) && inv.invoiceType !== "gst") {
+    res.status(404).json({ error: "Invoice not found" });
+    return;
   }
 
   const items = await db.select().from(invoiceItemsTable).where(and(eq(invoiceItemsTable.companyId, companyId), eq(invoiceItemsTable.invoiceId, params.data.id)));
@@ -564,9 +570,16 @@ router.get("/invoices/:id", async (req, res): Promise<void> => {
     const [creator] = await db.select({ name: usersTable.name }).from(usersTable).where(eq(usersTable.id, inv.createdByUserId));
     createdByName = creator?.name ?? null;
   }
-  const customerBalance = await getCustomerBalanceSnapshot(companyId, inv.id, inv.customerId ?? null);
+  // The customer's running balance mixes in non-GST bills, so it's withheld
+  // from the GST accountant (this invoice's own amountPaid/balanceDue still show).
+  const customerBalance = isGstAccountant(req)
+    ? null
+    : await getCustomerBalanceSnapshot(companyId, inv.id, inv.customerId ?? null);
   const customerMobile = await getCustomerMobile(companyId, inv.customerId ?? null);
-  res.json(formatInvoice(inv, items, createdByName, customerBalance, customerMobile));
+  const body = formatInvoice(inv, items, createdByName, customerBalance, customerMobile);
+  // Purchase cost / margin is internal, not GST data.
+  if (isGstAccountant(req)) body.items = body.items.map((it) => ({ ...it, costPrice: null }));
+  res.json(body);
 });
 
 // GET /invoices/:id/payment-receipts — the receipt number(s) this invoice's
@@ -583,7 +596,7 @@ router.get("/invoices/:id/payment-receipts", async (req, res): Promise<void> => 
   }
 
   const companyId = getCompanyId(req);
-  const [inv] = await db.select({ id: invoicesTable.id, salesmanId: invoicesTable.salesmanId, createdByUserId: invoicesTable.createdByUserId })
+  const [inv] = await db.select({ id: invoicesTable.id, salesmanId: invoicesTable.salesmanId, createdByUserId: invoicesTable.createdByUserId, invoiceType: invoicesTable.invoiceType })
     .from(invoicesTable)
     .where(and(eq(invoicesTable.companyId, companyId), eq(invoicesTable.id, params.data.id)));
   if (!inv) {
@@ -602,6 +615,9 @@ router.get("/invoices/:id/payment-receipts", async (req, res): Promise<void> => 
       res.status(404).json({ error: "Invoice not found" });
       return;
     }
+  } else if (isGstAccountant(req) && inv.invoiceType !== "gst") {
+    res.status(404).json({ error: "Invoice not found" });
+    return;
   }
 
   const rows = await pool.query(
