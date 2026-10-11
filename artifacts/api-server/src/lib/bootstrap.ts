@@ -444,6 +444,46 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
       is_active   BOOLEAN NOT NULL DEFAULT TRUE,
       created_at  TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
     )`,
+    // Mirror of the company's current custom domain (active, else pending) —
+    // the real state lives in company_domains below (see lib/custom-domains.ts).
+    `ALTER TABLE companies ADD COLUMN IF NOT EXISTS custom_domain TEXT`,
+    `ALTER TABLE companies ADD COLUMN IF NOT EXISTS custom_domain_status TEXT`,
+    // Customer custom domains: at most one 'active' and one 'pending' per
+    // company, so a change of domain never breaks the working one until the
+    // new one's DNS verifies.
+    `CREATE TABLE IF NOT EXISTS company_domains (
+      id                  SERIAL PRIMARY KEY,
+      company_id          INTEGER NOT NULL,
+      domain              TEXT NOT NULL UNIQUE,
+      status              TEXT NOT NULL DEFAULT 'pending',
+      railway_domain_id   TEXT,
+      dns_records         JSONB NOT NULL DEFAULT '[]',
+      certificate_status  TEXT,
+      last_checked_at     TIMESTAMP WITH TIME ZONE,
+      last_error          TEXT,
+      dns_verified_at     TIMESTAMP WITH TIME ZONE,
+      activated_at        TIMESTAMP WITH TIME ZONE,
+      created_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS company_domains_one_active ON company_domains(company_id) WHERE status = 'active'`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS company_domains_one_pending ON company_domains(company_id) WHERE status = 'pending'`,
+    // Carry over domains saved by the earlier "just store it" version. Safe to
+    // re-run: the companies columns are kept in sync with this table.
+    `INSERT INTO company_domains (company_id, domain, status, activated_at)
+     SELECT id, lower(custom_domain), COALESCE(custom_domain_status, 'pending'),
+            CASE WHEN custom_domain_status = 'active' THEN NOW() END
+       FROM companies WHERE custom_domain IS NOT NULL
+     ON CONFLICT DO NOTHING`,
+    // Portal "Forgot password" — only a hash of the token is ever stored.
+    `CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      id          SERIAL PRIMARY KEY,
+      user_id     INTEGER NOT NULL,
+      token_hash  TEXT NOT NULL UNIQUE,
+      expires_at  TIMESTAMP WITH TIME ZONE NOT NULL,
+      used_at     TIMESTAMP WITH TIME ZONE,
+      created_at  TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    )`,
+    `CREATE INDEX IF NOT EXISTS password_reset_tokens_user_idx ON password_reset_tokens(user_id)`,
   ];
 
   for (const sql of patches) {

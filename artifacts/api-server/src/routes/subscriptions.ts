@@ -8,6 +8,7 @@ import {
 } from "@workspace/api-zod";
 import { COMPANY_TABLES } from "../lib/company-data";
 import { hashPassword } from "../lib/password";
+import { DomainError, listDomainRequests, adminSetDomainStatus } from "../lib/custom-domains";
 
 const router: IRouter = Router();
 
@@ -235,6 +236,34 @@ router.get("/subscriptions", async (req, res): Promise<void> => {
     params
   );
   res.json(rows.map(mapRow));
+});
+
+// GET /subscriptions/domain-requests — one row per company with a custom
+// domain: its pending request if any (needs attention), else its active one.
+router.get("/subscriptions/domain-requests", async (_req, res): Promise<void> => {
+  res.json(await listDomainRequests());
+});
+
+// PUT /subscriptions/:companyId/domain-status — manual override. "active"
+// switches the company's pending domain live (use when Railway automation
+// isn't configured and staff attached the domain by hand); "pending" takes
+// the active one offline. Emails the customer when a domain goes live.
+router.put("/subscriptions/:companyId/domain-status", async (req, res): Promise<void> => {
+  const companyId = Number(req.params.companyId);
+  const status = req.body?.status === "active" ? "active" : req.body?.status === "pending" ? "pending" : null;
+  if (!status) {
+    res.status(400).json({ error: "status must be 'pending' or 'active'" });
+    return;
+  }
+  try {
+    res.json(await adminSetDomainStatus(companyId, status));
+  } catch (err) {
+    if (err instanceof DomainError) {
+      res.status(err.status).json({ error: err.message });
+      return;
+    }
+    throw err;
+  }
 });
 
 // POST /subscriptions/create — create company + subscription (SERIALIZABLE money op)

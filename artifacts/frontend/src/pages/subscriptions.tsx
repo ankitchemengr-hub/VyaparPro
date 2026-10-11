@@ -11,6 +11,9 @@ import {
   useActivateSubscription,
   useUpdateSubscription,
   useDeleteSubscription,
+  useListDomainRequests,
+  useSetDomainRequestStatus,
+  getListDomainRequestsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -42,7 +45,7 @@ import {
 import {
   Users, CheckCircle2, XCircle, Clock, TrendingUp, DollarSign, Bell, Plus,
   RefreshCw, ArrowUpDown, Ban, Play, Download, FileSpreadsheet, FileText, Search,
-  Pencil, Trash2, AlertTriangle,
+  Pencil, Trash2, AlertTriangle, Globe,
 } from "lucide-react";
 
 const PLANS = [
@@ -189,6 +192,8 @@ export default function Subscriptions() {
   const dashboard = useGetSubscriptionDashboard();
   const charts = useGetSubscriptionCharts();
   const alerts = useGetSubscriptionAlerts();
+  const domainRequests = useListDomainRequests();
+  const setDomainStatus = useSetDomainRequestStatus();
   const list = useListSubscriptions({
     search: search || undefined,
     status: statusFilter === "all" ? undefined : statusFilter,
@@ -485,6 +490,9 @@ export default function Subscriptions() {
           <TabsTrigger value="alerts">
             Alerts {alerts.data && alerts.data.length > 0 ? `(${alerts.data.length})` : ""}
           </TabsTrigger>
+          <TabsTrigger value="domains">
+            Domain Requests {domainRequests.data?.filter((r) => r.status === "pending").length ? `(${domainRequests.data.filter((r) => r.status === "pending").length})` : ""}
+          </TabsTrigger>
         </TabsList>
 
         {/* SUBSCRIPTIONS TABLE */}
@@ -660,6 +668,78 @@ export default function Subscriptions() {
                       </TableCell>
                       <TableCell className={`text-right font-semibold ${expiryColor(a.daysRemaining, "active")}`}>{a.daysRemaining}d</TableCell>
                       <TableCell>{a.createdAt.slice(0, 10)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="domains">
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Company</TableHead>
+                    <TableHead>Contact</TableHead>
+                    <TableHead>Domain</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Requested</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(domainRequests.data ?? []).length === 0 && (
+                    <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No domain requests yet.</TableCell></TableRow>
+                  )}
+                  {(domainRequests.data ?? []).map((r) => (
+                    <TableRow key={r.companyId}>
+                      <TableCell className="font-medium">{r.companyName}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{r.email ?? r.mobile ?? "—"}</TableCell>
+                      <TableCell className="flex items-center gap-2"><Globe className="w-4 h-4 text-blue-500" /> {r.customDomain}</TableCell>
+                      <TableCell>
+                        <Badge variant={r.status === "active" ? "default" : "outline"} className={r.status === "active" ? "bg-green-600 hover:bg-green-600" : ""}>
+                          {r.status === "active" ? "Active" : "Pending"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{r.updatedAt ? r.updatedAt.slice(0, 10) : "—"}</TableCell>
+                      <TableCell className="text-right">
+                        {r.status === "pending" ? (
+                          <Button
+                            size="sm"
+                            disabled={setDomainStatus.isPending}
+                            onClick={() => setDomainStatus.mutate(
+                              { companyId: r.companyId, data: { status: "active" } },
+                              {
+                                onSuccess: () => {
+                                  queryClient.invalidateQueries({ queryKey: getListDomainRequestsQueryKey() });
+                                  toast({ title: "Marked active", description: `${r.customDomain} — the customer has been emailed.` });
+                                },
+                                onError: () => toast({ title: "Could not update", variant: "destructive" }),
+                              },
+                            )}
+                          >
+                            Mark as Active
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={setDomainStatus.isPending}
+                            onClick={() => setDomainStatus.mutate(
+                              { companyId: r.companyId, data: { status: "pending" } },
+                              {
+                                onSuccess: () => queryClient.invalidateQueries({ queryKey: getListDomainRequestsQueryKey() }),
+                                onError: () => toast({ title: "Could not update", variant: "destructive" }),
+                              },
+                            )}
+                          >
+                            Revert to Pending
+                          </Button>
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

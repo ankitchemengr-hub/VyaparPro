@@ -62,6 +62,9 @@ export default function PortalLogin() {
                   Login
                 </Button>
                 <p className="text-center text-xs text-slate-500">
+                  <Link href="/forgot-password" className="text-blue-600 hover:underline">Forgot password?</Link>
+                </p>
+                <p className="text-center text-xs text-slate-500">
                   New here? <Link href="/register" className="text-blue-600 hover:underline">Create an account</Link>
                 </p>
               </form>

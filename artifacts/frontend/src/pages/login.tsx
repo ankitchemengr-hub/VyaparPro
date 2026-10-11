@@ -155,7 +155,14 @@ export default function Login() {
 
   const onSubmit = (values: LoginFormValues) => {
     loginMutation.mutate(
-      { data: { ...values, companyId: override?.id ?? null } },
+      // In shared mode the server only returns a company when this page was
+      // opened on that company's custom domain — sign straight into it.
+      {
+        data: {
+          ...values,
+          companyId: override?.id ?? (systemConfig?.multiCompanyMode ? systemConfig.company?.id : null) ?? null,
+        },
+      },
       {
         onSuccess: (data) => {
           // If a company was picked via the hidden switcher and this account can

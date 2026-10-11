@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Loader2, Building2 } from "lucide-react";
+import { ArrowLeft, Loader2, Building2, Globe } from "lucide-react";
 
 declare global {
   interface Window { Razorpay: any; }
@@ -29,6 +29,23 @@ function useRazorpayScript() {
     return () => { document.body.removeChild(script); };
   }, []);
   return ready;
+}
+
+function DomainCard() {
+  return (
+    <Card>
+      <CardContent className="p-5 flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3">
+          <Globe className="w-5 h-5 text-blue-600" />
+          <div>
+            <div className="font-medium">Custom Domain</div>
+            <div className="text-sm text-slate-500">Open your ERP on your own web address, e.g. erp.myshop.com</div>
+          </div>
+        </div>
+        <Link href="/domain"><Button variant="outline">Manage Domain</Button></Link>
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function PortalSubscription() {
@@ -140,6 +157,12 @@ export default function PortalSubscription() {
               )}
             </CardContent>
           </Card>
+        )}
+
+        {!isLoading && sub && (
+          <div className="mt-6">
+            <DomainCard />
+          </div>
         )}
       </main>
     </div>

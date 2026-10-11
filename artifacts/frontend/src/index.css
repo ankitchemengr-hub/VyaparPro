@@ -112,6 +112,17 @@
   --chart-4: 43 74% 66%;
   --chart-5: 27 87% 67%;
 
+  /* Dashboard stock-breakdown pie — a categorical, colorblind-validated
+     5-hue order (blue/orange/aqua/yellow/magenta), kept separate from
+     --chart-1..5 above (that ramp doesn't clear CVD-separation at adjacent
+     slots). "Other" deliberately uses --muted-foreground rather than a 6th
+     hue, so the rolled-up bucket never impersonates a real category. */
+  --stock-pie-1: #2a78d6;
+  --stock-pie-2: #eb6834;
+  --stock-pie-3: #1baf7a;
+  --stock-pie-4: #eda100;
+  --stock-pie-5: #e87ba4;
+
   --sidebar: 222 47% 11%;
   --sidebar-foreground: 210 40% 98%;
   --sidebar-border: 215 28% 17%;
@@ -192,6 +203,14 @@
   --chart-3: 30 80% 55%;
   --chart-4: 280 65% 60%;
   --chart-5: 340 75% 55%;
+
+  /* Same 5 hues, stepped for the dark surface — see :root for why these are
+     separate from --chart-1..5. */
+  --stock-pie-1: #3987e5;
+  --stock-pie-2: #d95926;
+  --stock-pie-3: #199e70;
+  --stock-pie-4: #c98500;
+  --stock-pie-5: #d55181;
 
   --sidebar: 222 47% 9%;
   --sidebar-foreground: 210 40% 98%;

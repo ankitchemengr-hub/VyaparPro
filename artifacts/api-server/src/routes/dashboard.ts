@@ -375,6 +375,93 @@ router.get("/dashboard/liters-balance", async (req, res): Promise<void> => {
   });
 });
 
+const STOCK_BREAKDOWN_GROUP_COLUMN: Record<string, string> = {
+  brand: "p.brand",
+  category: "p.\"group\"",
+};
+
+// GET /dashboard/stock-breakdown?by=brand|category|product (admin only) —
+// current stock VALUE (current_stock x purchase_price), grouped by the
+// requested dimension. Value rather than raw quantity, since quantity units
+// differ across products/brands (liters vs boxes vs qty) and wouldn't sum
+// meaningfully in a single pie. Sorted descending, capped at the top 5 plus
+// a single "Other" bucket so the pie chart never exceeds ~6 slices (dataviz
+// guidance: part-to-whole at a glance only reads up to ~6 segments).
+router.get("/dashboard/stock-breakdown", async (req, res): Promise<void> => {
+  const role = (req as any).session?.role;
+  if (role !== "admin") {
+    res.status(403).json({ error: "Admin only" });
+    return;
+  }
+
+  const by = String(req.query.by ?? "");
+  if (by !== "brand" && by !== "category" && by !== "product") {
+    res.status(400).json({ error: 'Invalid "by" value — expected brand, category, or product' });
+    return;
+  }
+
+  const companyId = getCompanyId(req);
+  const groupCol = STOCK_BREAKDOWN_GROUP_COLUMN[by];
+  const rows = groupCol
+    ? await queryMany(
+        `SELECT ${groupCol} AS label, SUM(p.current_stock * p.purchase_price) AS value
+         FROM products p
+         WHERE p.company_id = $1 AND p.deleted_at IS NULL AND p.not_for_sale = false AND p.current_stock > 0
+         GROUP BY ${groupCol}
+         ORDER BY value DESC`,
+        [companyId]
+      )
+    : await queryMany(
+        `SELECT p.name AS label, (p.current_stock * p.purchase_price) AS value
+         FROM products p
+         WHERE p.company_id = $1 AND p.deleted_at IS NULL AND p.not_for_sale = false AND p.current_stock > 0
+         ORDER BY value DESC`,
+        [companyId]
+      );
+
+  const parsed = rows.map((r) => ({ label: r.label as string, value: Number(r.value) }));
+  const totalValue = parsed.reduce((sum, r) => sum + r.value, 0);
+
+  const TOP_N = 5;
+  const top = parsed.slice(0, TOP_N);
+  const rest = parsed.slice(TOP_N);
+  const items = [...top];
+  if (rest.length > 0) {
+    items.push({ label: "Other", value: rest.reduce((sum, r) => sum + r.value, 0) });
+  }
+
+  res.json({ by, items, totalValue });
+});
+
+// GET /dashboard/finance-overview (admin only) — all-time Total Purchase /
+// Total Sale / Due (customer outstanding), for the optional "Purchase vs
+// Sale vs Due" pie in Settings > Dashboard. Sale excludes quotations (never
+// real revenue) and cancelled invoices; Purchase excludes cancelled
+// purchases; Due mirrors /dashboard/summary's totalOutstanding.
+router.get("/dashboard/finance-overview", async (req, res): Promise<void> => {
+  const role = (req as any).session?.role;
+  if (role !== "admin") {
+    res.status(403).json({ error: "Admin only" });
+    return;
+  }
+
+  const companyId = getCompanyId(req);
+  const [purchaseRow, saleRow, dueRow] = await Promise.all([
+    queryOne(`SELECT COALESCE(SUM(grand_total), 0) AS total FROM purchases WHERE company_id = $1 AND status != 'cancelled'`, [companyId]),
+    queryOne(`SELECT COALESCE(SUM(grand_total), 0) AS total FROM invoices WHERE company_id = $1 AND status = 'saved' AND invoice_type != 'quotation'`, [companyId]),
+    queryOne(`SELECT COALESCE(SUM(outstanding_balance), 0) AS total FROM entities WHERE company_id = $1 AND type = 'customer'`, [companyId]),
+  ]);
+
+  const items = [
+    { label: "Total Purchase", value: Number(purchaseRow.total ?? 0) },
+    { label: "Total Sale", value: Number(saleRow.total ?? 0) },
+    { label: "Due", value: Number(dueRow.total ?? 0) },
+  ];
+  const totalValue = items.reduce((sum, i) => sum + i.value, 0);
+
+  res.json({ items, totalValue });
+});
+
 // GET /reports/ledger
 router.get("/reports/ledger", async (req, res): Promise<void> => {
   const role = (req as any).session?.role;

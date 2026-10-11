@@ -12,4 +12,9 @@ export type InvoiceInputInvoiceType = typeof InvoiceInputInvoiceType[keyof typeo
 export const InvoiceInputInvoiceType = {
   gst: 'gst',
   non_gst: 'non_gst',
+  quotation: 'quotation',
+  proforma_invoice: 'proforma_invoice',
+  bill_of_supply: 'bill_of_supply',
+  delivery_challan: 'delivery_challan',
+  sale_order: 'sale_order',
 } as const;

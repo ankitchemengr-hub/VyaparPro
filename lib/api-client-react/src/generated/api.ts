@@ -68,6 +68,7 @@ import type {
   DashboardSummary,
   DeleteSubscriptionResult,
   DemoRequestInput,
+  DomainRequest,
   Entity,
   EntityInput,
   EntityLedger,
@@ -79,6 +80,8 @@ import type {
   ExpenseInput,
   ExpenseList,
   Faq,
+  FinanceOverview,
+  ForgotPasswordInput,
   GetBillWiseProfitReportParams,
   GetCommissionReportParams,
   GetCustomerWiseSalesReportParams,
@@ -89,6 +92,7 @@ import type {
   GetProductionReportParams,
   GetProfitLossReportParams,
   GetSalesReportParams,
+  GetStockBreakdownParams,
   GetTaxReportParams,
   GlobalSearchParams,
   GstinLookupResult,
@@ -129,6 +133,8 @@ import type {
   LowStockAlert,
   MaterialTransfer,
   MaterialTransferSummary,
+  MessageResult,
+  MyDomain,
   MyPayment,
   MySubscription,
   NumberSeries,
@@ -151,6 +157,7 @@ import type {
   Purchase,
   ReadyMaterialBatch,
   ResetDataInput,
+  ResetPasswordInput,
   ResetResult,
   RestoreBackupInput,
   RestoreResult,
@@ -169,9 +176,12 @@ import type {
   SetActiveCompanyInput,
   SetCustomerReminder200,
   SetCustomerReminderInput,
+  SetDomainInput,
+  SetDomainRequestStatusInput,
   SmartOrderSettings,
   SmartOrderSettingsInput,
   SmartOrderSuggestion,
+  StockBreakdown,
   StockMovement,
   StockMovementInput,
   SubscriptionAlert,
@@ -9243,6 +9253,171 @@ export function useGetLitersBalance<TData = Awaited<ReturnType<typeof getLitersB
 
 
 
+export const getGetStockBreakdownUrl = (params: GetStockBreakdownParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/dashboard/stock-breakdown?${stringifiedParams}` : `/api/dashboard/stock-breakdown`
+}
+
+/**
+ * @summary Admin-only current stock value broken down by brand, category (product group), or individual product — the data behind the dashboard's configurable stock pie charts (see Settings > Dashboard). Sorted descending by value; past the top slots the remainder is folded into a single "Other" bucket so the chart never exceeds ~6 slices.
+
+ */
+export const getStockBreakdown = async (params: GetStockBreakdownParams, options?: RequestInit): Promise<StockBreakdown> => {
+
+  return customFetch<StockBreakdown>(getGetStockBreakdownUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetStockBreakdownQueryKey = (params?: GetStockBreakdownParams,) => {
+    return [
+    `/api/dashboard/stock-breakdown`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetStockBreakdownQueryOptions = <TData = Awaited<ReturnType<typeof getStockBreakdown>>, TError = ErrorType<void>>(params: GetStockBreakdownParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStockBreakdown>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetStockBreakdownQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getStockBreakdown>>> = ({ signal }) => getStockBreakdown(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getStockBreakdown>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetStockBreakdownQueryResult = NonNullable<Awaited<ReturnType<typeof getStockBreakdown>>>
+export type GetStockBreakdownQueryError = ErrorType<void>
+
+
+/**
+ * @summary Admin-only current stock value broken down by brand, category (product group), or individual product — the data behind the dashboard's configurable stock pie charts (see Settings > Dashboard). Sorted descending by value; past the top slots the remainder is folded into a single "Other" bucket so the chart never exceeds ~6 slices.
+
+ */
+
+export function useGetStockBreakdown<TData = Awaited<ReturnType<typeof getStockBreakdown>>, TError = ErrorType<void>>(
+ params: GetStockBreakdownParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStockBreakdown>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetStockBreakdownQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetFinanceOverviewUrl = () => {
+
+
+
+
+  return `/api/dashboard/finance-overview`
+}
+
+/**
+ * @summary Admin-only all-time Total Purchase / Total Sale / Due (customer outstanding) — the data behind the dashboard's optional "Purchase vs Sale vs Due" pie chart (see Settings > Dashboard).
+
+ */
+export const getFinanceOverview = async ( options?: RequestInit): Promise<FinanceOverview> => {
+
+  return customFetch<FinanceOverview>(getGetFinanceOverviewUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFinanceOverviewQueryKey = () => {
+    return [
+    `/api/dashboard/finance-overview`
+    ] as const;
+    }
+
+
+export const getGetFinanceOverviewQueryOptions = <TData = Awaited<ReturnType<typeof getFinanceOverview>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFinanceOverview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFinanceOverviewQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFinanceOverview>>> = ({ signal }) => getFinanceOverview({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFinanceOverview>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFinanceOverviewQueryResult = NonNullable<Awaited<ReturnType<typeof getFinanceOverview>>>
+export type GetFinanceOverviewQueryError = ErrorType<void>
+
+
+/**
+ * @summary Admin-only all-time Total Purchase / Total Sale / Due (customer outstanding) — the data behind the dashboard's optional "Purchase vs Sale vs Due" pie chart (see Settings > Dashboard).
+
+ */
+
+export function useGetFinanceOverview<TData = Awaited<ReturnType<typeof getFinanceOverview>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFinanceOverview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFinanceOverviewQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getGetLedgerReportUrl = (params?: GetLedgerReportParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -12427,6 +12602,154 @@ export const useActivateSubscription = <TError = ErrorType<unknown>,
       return useMutation(getActivateSubscriptionMutationOptions(options));
     }
 
+export const getListDomainRequestsUrl = () => {
+
+
+
+
+  return `/api/subscriptions/domain-requests`
+}
+
+/**
+ * @summary Every company that has ever submitted a custom domain (pending or active)
+ */
+export const listDomainRequests = async ( options?: RequestInit): Promise<DomainRequest[]> => {
+
+  return customFetch<DomainRequest[]>(getListDomainRequestsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListDomainRequestsQueryKey = () => {
+    return [
+    `/api/subscriptions/domain-requests`
+    ] as const;
+    }
+
+
+export const getListDomainRequestsQueryOptions = <TData = Awaited<ReturnType<typeof listDomainRequests>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDomainRequests>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListDomainRequestsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listDomainRequests>>> = ({ signal }) => listDomainRequests({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listDomainRequests>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListDomainRequestsQueryResult = NonNullable<Awaited<ReturnType<typeof listDomainRequests>>>
+export type ListDomainRequestsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Every company that has ever submitted a custom domain (pending or active)
+ */
+
+export function useListDomainRequests<TData = Awaited<ReturnType<typeof listDomainRequests>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDomainRequests>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListDomainRequestsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSetDomainRequestStatusUrl = (companyId: number,) => {
+
+
+
+
+  return `/api/subscriptions/${companyId}/domain-status`
+}
+
+/**
+ * @summary Mark a company's custom domain pending/active once staff finish (or undo) the manual DNS/SSL setup
+ */
+export const setDomainRequestStatus = async (companyId: number,
+    setDomainRequestStatusInput: SetDomainRequestStatusInput, options?: RequestInit): Promise<DomainRequest> => {
+
+  return customFetch<DomainRequest>(getSetDomainRequestStatusUrl(companyId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(setDomainRequestStatusInput)
+  }
+);}
+
+
+
+
+export const getSetDomainRequestStatusMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setDomainRequestStatus>>, TError,{companyId: number;data: BodyType<SetDomainRequestStatusInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setDomainRequestStatus>>, TError,{companyId: number;data: BodyType<SetDomainRequestStatusInput>}, TContext> => {
+
+const mutationKey = ['setDomainRequestStatus'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setDomainRequestStatus>>, {companyId: number;data: BodyType<SetDomainRequestStatusInput>}> = (props) => {
+          const {companyId,data} = props ?? {};
+
+          return  setDomainRequestStatus(companyId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetDomainRequestStatusMutationResult = NonNullable<Awaited<ReturnType<typeof setDomainRequestStatus>>>
+    export type SetDomainRequestStatusMutationBody = BodyType<SetDomainRequestStatusInput>
+    export type SetDomainRequestStatusMutationError = ErrorType<void>
+
+    /**
+ * @summary Mark a company's custom domain pending/active once staff finish (or undo) the manual DNS/SSL setup
+ */
+export const useSetDomainRequestStatus = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setDomainRequestStatus>>, TError,{companyId: number;data: BodyType<SetDomainRequestStatusInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setDomainRequestStatus>>,
+        TError,
+        {companyId: number;data: BodyType<SetDomainRequestStatusInput>},
+        TContext
+      > => {
+      return useMutation(getSetDomainRequestStatusMutationOptions(options));
+    }
+
 export const getUpdateSubscriptionUrl = (id: number,) => {
 
 
@@ -13155,4 +13478,431 @@ export function useListMyPayments<TData = Awaited<ReturnType<typeof listMyPaymen
 
 
 
+
+export const getGetMyDomainUrl = () => {
+
+
+
+
+  return `/api/portal/domain`
+}
+
+/**
+ * @summary The signed-in company's live custom domain, any pending change, and the DNS records to add
+ */
+export const getMyDomain = async ( options?: RequestInit): Promise<MyDomain> => {
+
+  return customFetch<MyDomain>(getGetMyDomainUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMyDomainQueryKey = () => {
+    return [
+    `/api/portal/domain`
+    ] as const;
+    }
+
+
+export const getGetMyDomainQueryOptions = <TData = Awaited<ReturnType<typeof getMyDomain>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMyDomain>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMyDomainQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMyDomain>>> = ({ signal }) => getMyDomain({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMyDomain>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMyDomainQueryResult = NonNullable<Awaited<ReturnType<typeof getMyDomain>>>
+export type GetMyDomainQueryError = ErrorType<void>
+
+
+/**
+ * @summary The signed-in company's live custom domain, any pending change, and the DNS records to add
+ */
+
+export function useGetMyDomain<TData = Awaited<ReturnType<typeof getMyDomain>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMyDomain>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMyDomainQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSetMyDomainUrl = () => {
+
+
+
+
+  return `/api/portal/domain`
+}
+
+/**
+ * @summary Add a custom domain, or start changing to a new one (the live one keeps working until the new one verifies)
+ */
+export const setMyDomain = async (setDomainInput: SetDomainInput, options?: RequestInit): Promise<MyDomain> => {
+
+  return customFetch<MyDomain>(getSetMyDomainUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(setDomainInput)
+  }
+);}
+
+
+
+
+export const getSetMyDomainMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setMyDomain>>, TError,{data: BodyType<SetDomainInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setMyDomain>>, TError,{data: BodyType<SetDomainInput>}, TContext> => {
+
+const mutationKey = ['setMyDomain'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setMyDomain>>, {data: BodyType<SetDomainInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  setMyDomain(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetMyDomainMutationResult = NonNullable<Awaited<ReturnType<typeof setMyDomain>>>
+    export type SetMyDomainMutationBody = BodyType<SetDomainInput>
+    export type SetMyDomainMutationError = ErrorType<void>
+
+    /**
+ * @summary Add a custom domain, or start changing to a new one (the live one keeps working until the new one verifies)
+ */
+export const useSetMyDomain = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setMyDomain>>, TError,{data: BodyType<SetDomainInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setMyDomain>>,
+        TError,
+        {data: BodyType<SetDomainInput>},
+        TContext
+      > => {
+      return useMutation(getSetMyDomainMutationOptions(options));
+    }
+
+export const getVerifyMyDomainUrl = () => {
+
+
+
+
+  return `/api/portal/domain/verify`
+}
+
+/**
+ * @summary Check the pending domain's DNS now; switches it live when every record matches
+ */
+export const verifyMyDomain = async ( options?: RequestInit): Promise<MyDomain> => {
+
+  return customFetch<MyDomain>(getVerifyMyDomainUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getVerifyMyDomainMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyMyDomain>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof verifyMyDomain>>, TError,void, TContext> => {
+
+const mutationKey = ['verifyMyDomain'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof verifyMyDomain>>, void> = () => {
+
+
+          return  verifyMyDomain(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type VerifyMyDomainMutationResult = NonNullable<Awaited<ReturnType<typeof verifyMyDomain>>>
+
+    export type VerifyMyDomainMutationError = ErrorType<void>
+
+    /**
+ * @summary Check the pending domain's DNS now; switches it live when every record matches
+ */
+export const useVerifyMyDomain = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyMyDomain>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof verifyMyDomain>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getVerifyMyDomainMutationOptions(options));
+    }
+
+export const getRemoveMyDomainUrl = (which: 'pending' | 'active',) => {
+
+
+
+
+  return `/api/portal/domain/${which}`
+}
+
+/**
+ * @summary Remove the live domain or cancel the pending change
+ */
+export const removeMyDomain = async (which: 'pending' | 'active', options?: RequestInit): Promise<MyDomain> => {
+
+  return customFetch<MyDomain>(getRemoveMyDomainUrl(which),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getRemoveMyDomainMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeMyDomain>>, TError,{which: 'pending' | 'active'}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof removeMyDomain>>, TError,{which: 'pending' | 'active'}, TContext> => {
+
+const mutationKey = ['removeMyDomain'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof removeMyDomain>>, {which: 'pending' | 'active'}> = (props) => {
+          const {which} = props ?? {};
+
+          return  removeMyDomain(which,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RemoveMyDomainMutationResult = NonNullable<Awaited<ReturnType<typeof removeMyDomain>>>
+
+    export type RemoveMyDomainMutationError = ErrorType<void>
+
+    /**
+ * @summary Remove the live domain or cancel the pending change
+ */
+export const useRemoveMyDomain = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeMyDomain>>, TError,{which: 'pending' | 'active'}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof removeMyDomain>>,
+        TError,
+        {which: 'pending' | 'active'},
+        TContext
+      > => {
+      return useMutation(getRemoveMyDomainMutationOptions(options));
+    }
+
+export const getForgotPortalPasswordUrl = () => {
+
+
+
+
+  return `/api/portal/forgot-password`
+}
+
+/**
+ * @summary Request a password reset email — always returns the same message so this can't enumerate registered accounts
+ */
+export const forgotPortalPassword = async (forgotPasswordInput: ForgotPasswordInput, options?: RequestInit): Promise<MessageResult> => {
+
+  return customFetch<MessageResult>(getForgotPortalPasswordUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(forgotPasswordInput)
+  }
+);}
+
+
+
+
+export const getForgotPortalPasswordMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof forgotPortalPassword>>, TError,{data: BodyType<ForgotPasswordInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof forgotPortalPassword>>, TError,{data: BodyType<ForgotPasswordInput>}, TContext> => {
+
+const mutationKey = ['forgotPortalPassword'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof forgotPortalPassword>>, {data: BodyType<ForgotPasswordInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  forgotPortalPassword(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ForgotPortalPasswordMutationResult = NonNullable<Awaited<ReturnType<typeof forgotPortalPassword>>>
+    export type ForgotPortalPasswordMutationBody = BodyType<ForgotPasswordInput>
+    export type ForgotPortalPasswordMutationError = ErrorType<void>
+
+    /**
+ * @summary Request a password reset email — always returns the same message so this can't enumerate registered accounts
+ */
+export const useForgotPortalPassword = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof forgotPortalPassword>>, TError,{data: BodyType<ForgotPasswordInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof forgotPortalPassword>>,
+        TError,
+        {data: BodyType<ForgotPasswordInput>},
+        TContext
+      > => {
+      return useMutation(getForgotPortalPasswordMutationOptions(options));
+    }
+
+export const getResetPortalPasswordUrl = () => {
+
+
+
+
+  return `/api/portal/reset-password`
+}
+
+/**
+ * @summary Complete a password reset using the token from the email link
+ */
+export const resetPortalPassword = async (resetPasswordInput: ResetPasswordInput, options?: RequestInit): Promise<MessageResult> => {
+
+  return customFetch<MessageResult>(getResetPortalPasswordUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(resetPasswordInput)
+  }
+);}
+
+
+
+
+export const getResetPortalPasswordMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resetPortalPassword>>, TError,{data: BodyType<ResetPasswordInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof resetPortalPassword>>, TError,{data: BodyType<ResetPasswordInput>}, TContext> => {
+
+const mutationKey = ['resetPortalPassword'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resetPortalPassword>>, {data: BodyType<ResetPasswordInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  resetPortalPassword(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ResetPortalPasswordMutationResult = NonNullable<Awaited<ReturnType<typeof resetPortalPassword>>>
+    export type ResetPortalPasswordMutationBody = BodyType<ResetPasswordInput>
+    export type ResetPortalPasswordMutationError = ErrorType<void>
+
+    /**
+ * @summary Complete a password reset using the token from the email link
+ */
+export const useResetPortalPassword = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resetPortalPassword>>, TError,{data: BodyType<ResetPasswordInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof resetPortalPassword>>,
+        TError,
+        {data: BodyType<ResetPasswordInput>},
+        TContext
+      > => {
+      return useMutation(getResetPortalPasswordMutationOptions(options));
+    }
 

@@ -3,6 +3,7 @@ import { asc } from "drizzle-orm";
 import { db, companiesTable } from "@workspace/db";
 import { isMultiCompanyMode, getDefaultCompanyId } from "../lib/system-config";
 import { getCurrentCompany } from "../lib/company";
+import { companyIdForHost } from "../lib/custom-domains";
 import { requireAuth, requireSuperAdmin, getSession } from "../lib/tenant";
 import { SetActiveCompanyBody } from "@workspace/api-zod";
 
@@ -13,16 +14,22 @@ const router: IRouter = Router();
 // (show the fixed company name + logo, no company selection). This is
 // presentation only; real access control lives in the login handler + tenant
 // middleware.
-router.get("/system/config", async (_req, res): Promise<void> => {
+//
+// In shared mode, a request arriving on a customer's verified custom domain
+// (e.g. erp.myshop.com) returns THAT company, so the login screen shows its
+// branding and signs staff straight into it (see lib/custom-domains.ts).
+router.get("/system/config", async (req, res): Promise<void> => {
   // Identity/branding config must not be cached across deployments.
   res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
 
   const multiCompanyMode = isMultiCompanyMode();
-  const defaultCompanyId = getDefaultCompanyId();
+  const brandCompanyId = multiCompanyMode
+    ? await companyIdForHost(req.headers["x-forwarded-host"]?.toString().split(",")[0] ?? req.headers.host)
+    : getDefaultCompanyId();
 
   let company: { id: number; name: string; logo: string | null } | null = null;
-  if (!multiCompanyMode && defaultCompanyId != null) {
-    const c = await getCurrentCompany(defaultCompanyId);
+  if (brandCompanyId != null) {
+    const c = await getCurrentCompany(brandCompanyId);
     if (c) company = { id: c.id, name: c.name, logo: c.logo ?? null };
   }
 

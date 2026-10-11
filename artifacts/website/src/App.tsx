@@ -7,9 +7,12 @@ import Pricing from "@/pages/pricing";
 import Contact from "@/pages/contact";
 import Register from "@/pages/register";
 import Login from "@/pages/login";
+import ForgotPassword from "@/pages/forgot-password";
+import ResetPassword from "@/pages/reset-password";
 import Dashboard from "@/pages/dashboard";
 import Subscription from "@/pages/subscription";
 import Payments from "@/pages/payments";
+import Domain from "@/pages/domain";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -26,9 +29,12 @@ function Router() {
       <Route path="/contact" component={Contact} />
       <Route path="/register" component={Register} />
       <Route path="/login" component={Login} />
+      <Route path="/forgot-password" component={ForgotPassword} />
+      <Route path="/reset-password" component={ResetPassword} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/subscription" component={Subscription} />
       <Route path="/payments" component={Payments} />
+      <Route path="/domain" component={Domain} />
       <Route component={NotFound} />
     </Switch>
   );

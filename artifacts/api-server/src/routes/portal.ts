@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Response } from "express";
 import crypto from "node:crypto";
 import { pool } from "@workspace/db";
 import {
@@ -6,11 +6,15 @@ import {
   RegisterPortalCustomerBody,
   CreatePortalPaymentOrderBody,
   VerifyPortalPaymentBody,
+  ForgotPortalPasswordBody,
+  ResetPortalPasswordBody,
 } from "@workspace/api-zod";
 import { hashPassword } from "../lib/password";
 import { getCompanyId } from "../lib/tenant";
 import { logger } from "../lib/logger";
+import { sendMail, passwordResetEmail } from "../lib/mailer";
 import { PLAN_MONTHS, addMonths, daysBetween } from "./subscriptions";
+import { DomainError, getDomainState, requestDomain, verifyDomain, removeDomain } from "../lib/custom-domains";
 
 const router: IRouter = Router();
 
@@ -397,6 +401,110 @@ router.get("/portal/my-payments", async (req, res): Promise<void> => {
     razorpayPaymentId: r.razorpay_payment_id ?? null,
     createdAt: r.created_at.toISOString(),
   })));
+});
+
+// ── Custom domain (portal "My Domain" page) ────────────────────────────────
+// All authenticated via getCompanyId(). The logic — DNS records, Railway
+// attach, verification, safe switch-over — lives in lib/custom-domains.ts.
+
+async function domainRoute(res: Response, fn: () => Promise<unknown>): Promise<void> {
+  try {
+    res.json(await fn());
+  } catch (err) {
+    if (err instanceof DomainError) {
+      res.status(err.status).json({ error: err.message });
+      return;
+    }
+    throw err;
+  }
+}
+
+// GET /portal/domain — current active domain, pending change, DNS records.
+router.get("/portal/domain", async (req, res): Promise<void> => {
+  const companyId = getCompanyId(req);
+  await domainRoute(res, () => getDomainState(companyId));
+});
+
+// POST /portal/domain { domain } — add a domain, or start changing to a new
+// one (the current active domain keeps working until the new one verifies).
+router.post("/portal/domain", async (req, res): Promise<void> => {
+  const companyId = getCompanyId(req);
+  await domainRoute(res, () => requestDomain(companyId, req.body?.domain));
+});
+
+// POST /portal/domain/verify — check the DNS records now; goes live if correct.
+router.post("/portal/domain/verify", async (req, res): Promise<void> => {
+  const companyId = getCompanyId(req);
+  await domainRoute(res, () => verifyDomain(companyId));
+});
+
+// DELETE /portal/domain/pending | /portal/domain/active
+router.delete("/portal/domain/:which", async (req, res): Promise<void> => {
+  const companyId = getCompanyId(req);
+  const which = req.params.which;
+  if (which !== "pending" && which !== "active") {
+    res.status(400).json({ error: "Use /pending or /active" });
+    return;
+  }
+  await domainRoute(res, () => removeDomain(companyId, which));
+});
+
+// POST /portal/forgot-password — public. Always returns the same generic
+// message regardless of whether the email exists, so this endpoint can't be
+// used to enumerate registered companies. Only email-based accounts can
+// reset this way — a portal account whose username is a mobile number
+// (registered with no email) has no recovery channel yet.
+router.post("/portal/forgot-password", async (req, res): Promise<void> => {
+  const parsed = ForgotPortalPasswordBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const email = parsed.data.email.trim().toLowerCase();
+
+  const { rows } = await pool.query(
+    `SELECT id, username FROM users WHERE lower(username) = $1 AND company_id IS NOT NULL AND is_active = true`,
+    [email],
+  );
+  const user = rows[0];
+  if (user) {
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+    await pool.query(
+      `INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)`,
+      [user.id, tokenHash, expiresAt],
+    );
+    const baseUrl = process.env["PORTAL_APPLICATION_URL"] ?? "http://localhost:3002";
+    const resetUrl = `${baseUrl}/reset-password?token=${rawToken}`;
+    const { subject, html } = passwordResetEmail(resetUrl);
+    void sendMail(user.username, subject, html);
+  }
+  res.json({ message: "If that email is registered, a password reset link has been sent." });
+});
+
+// POST /portal/reset-password — public (the token IS the capability). One-time
+// use: a token is marked used_at the moment it's consumed, so a reused/leaked
+// link doesn't grant a second reset.
+router.post("/portal/reset-password", async (req, res): Promise<void> => {
+  const parsed = ResetPortalPasswordBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const { token, newPassword } = parsed.data;
+  const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+
+  const { rows } = await pool.query(`SELECT * FROM password_reset_tokens WHERE token_hash = $1`, [tokenHash]);
+  const record = rows[0];
+  if (!record || record.used_at || new Date(record.expires_at) < new Date()) {
+    res.status(400).json({ error: "This reset link is invalid or has expired" });
+    return;
+  }
+
+  await pool.query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [hashPassword(newPassword), record.user_id]);
+  await pool.query(`UPDATE password_reset_tokens SET used_at = NOW() WHERE id = $1`, [record.id]);
+  res.json({ message: "Password reset successfully — you can now log in with your new password." });
 });
 
 function formatMySubscription(r: any) {
