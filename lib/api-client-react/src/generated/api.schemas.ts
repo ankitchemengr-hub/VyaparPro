@@ -1319,6 +1319,11 @@ export interface InvoiceItem {
   productName: string;
   /** @nullable */
   hsnCode?: string | null;
+  /**
+     * Free-text note entered per line item at billing time (size/model/serial no., etc.), shown on the printed invoice under the item name.
+     * @nullable
+     */
+  description?: string | null;
   qty: number;
   /** @nullable */
   qtyBoxes?: number | null;
@@ -1426,6 +1431,8 @@ export interface InvoiceItemInput {
   discountAmt?: number;
   taxPct?: number;
   cessPct?: number;
+  /** Free-text note for this line item (size/model/serial no., etc.), printed on the invoice under the item name. */
+  description?: string;
 }
 
 export interface InvoiceInput {

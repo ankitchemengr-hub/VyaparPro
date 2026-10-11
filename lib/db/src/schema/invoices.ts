@@ -56,6 +56,10 @@ export const invoiceItemsTable = pgTable("invoice_items", {
   productId: integer("product_id").notNull().references(() => productsTable.id),
   productName: text("product_name").notNull(),
   hsnCode: text("hsn_code"),
+  // Free-text note entered per line item at billing time (size/model/serial
+  // no., special instructions, etc.) — shown on the printed invoice under the
+  // item name, distinct from the product's own catalog description.
+  description: text("description"),
   qty: numeric("qty", { precision: 12, scale: 3 }).notNull(),
   qtyBoxes: numeric("qty_boxes", { precision: 12, scale: 3 }),
   totalLiters: numeric("total_liters", { precision: 12, scale: 3 }),

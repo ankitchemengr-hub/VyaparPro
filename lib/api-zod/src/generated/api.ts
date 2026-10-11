@@ -1354,6 +1354,7 @@ export const ListInvoicesResponseItem = zod.object({
   "productId": zod.number(),
   "productName": zod.string(),
   "hsnCode": zod.string().nullish(),
+  "description": zod.string().nullish().describe('Free-text note entered per line item at billing time (size\/model\/serial no., etc.), shown on the printed invoice under the item name.'),
   "qty": zod.number(),
   "qtyBoxes": zod.number().nullish(),
   "totalLiters": zod.number().nullish(),
@@ -1404,7 +1405,8 @@ export const CreateInvoiceBody = zod.object({
   "discountPct": zod.number().optional(),
   "discountAmt": zod.number().optional(),
   "taxPct": zod.number().optional(),
-  "cessPct": zod.number().optional()
+  "cessPct": zod.number().optional(),
+  "description": zod.string().optional().describe('Free-text note for this line item (size\/model\/serial no., etc.), printed on the invoice under the item name.')
 }))
 })
 
@@ -1447,6 +1449,7 @@ export const CreateInvoiceResponse = zod.object({
   "productId": zod.number(),
   "productName": zod.string(),
   "hsnCode": zod.string().nullish(),
+  "description": zod.string().nullish().describe('Free-text note entered per line item at billing time (size\/model\/serial no., etc.), shown on the printed invoice under the item name.'),
   "qty": zod.number(),
   "qtyBoxes": zod.number().nullish(),
   "totalLiters": zod.number().nullish(),
@@ -1511,6 +1514,7 @@ export const GetInvoiceResponse = zod.object({
   "productId": zod.number(),
   "productName": zod.string(),
   "hsnCode": zod.string().nullish(),
+  "description": zod.string().nullish().describe('Free-text note entered per line item at billing time (size\/model\/serial no., etc.), shown on the printed invoice under the item name.'),
   "qty": zod.number(),
   "qtyBoxes": zod.number().nullish(),
   "totalLiters": zod.number().nullish(),
@@ -1564,7 +1568,8 @@ export const UpdateInvoiceBody = zod.object({
   "discountPct": zod.number().optional(),
   "discountAmt": zod.number().optional(),
   "taxPct": zod.number().optional(),
-  "cessPct": zod.number().optional()
+  "cessPct": zod.number().optional(),
+  "description": zod.string().optional().describe('Free-text note for this line item (size\/model\/serial no., etc.), printed on the invoice under the item name.')
 })).optional().describe('When present, fully replaces line items and triggers stock\/ledger reversal+reapply.')
 }).describe('Update an existing invoice. Two modes:\n- Header-only patch: send only status\/dueDate (no stock or ledger impact).\n- Full edit: include `items` to fully replace line items, totals, customer, freight, etc.\n  The server reverses the previous stock movements and ledger entry inside a SERIALIZABLE\n  transaction and re-applies them with the new payload.\n')
 
@@ -1607,6 +1612,7 @@ export const UpdateInvoiceResponse = zod.object({
   "productId": zod.number(),
   "productName": zod.string(),
   "hsnCode": zod.string().nullish(),
+  "description": zod.string().nullish().describe('Free-text note entered per line item at billing time (size\/model\/serial no., etc.), shown on the printed invoice under the item name.'),
   "qty": zod.number(),
   "qtyBoxes": zod.number().nullish(),
   "totalLiters": zod.number().nullish(),

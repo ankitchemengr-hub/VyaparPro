@@ -118,6 +118,10 @@ type BillingItem = {
   amount: number;
   litersPerBox: number;
   packagingUnit: string;
+  // Free-text note for this line item (size/model/serial no., etc.) —
+  // printed on the invoice under the item name, separate from the
+  // product's own catalog name/description.
+  description: string;
   // Set once the user types in the Rate field — stops the history auto-fill
   // (this customer's last billed rate, else the last sale rate) from
   // overwriting a rate they chose by hand.
@@ -384,6 +388,7 @@ export default function Billing() {
         discountPct: Number(it.discountPct), discountAmt: Number(it.discountAmt),
         amount: Number(it.amount), litersPerBox: Number(prod?.litersPerBox ?? 0) || 0,
         packagingUnit: prod?.packagingUnit?.trim() || "Box",
+        description: it.description ?? "",
       };
     }));
     setPrefilled(true);
@@ -408,6 +413,7 @@ export default function Billing() {
           amount: Math.round(amount * 100) / 100,
           litersPerBox: Number((p as any).litersPerBox ?? 0) || 0,
           packagingUnit: (p as any).packagingUnit?.trim() || "Box",
+          description: "",
         } as BillingItem;
       }).filter(Boolean) as BillingItem[];
       setItems(billing);
@@ -510,25 +516,45 @@ export default function Billing() {
 
   const removeItem = (idx: number) => setItems((prev) => prev.filter((_, i) => i !== idx));
 
-  const addProduct = (p: any) => {
+  // Returns the row index the product landed on (existing row if it was
+  // already in the cart, otherwise the newly appended row) — callers use
+  // this to move keyboard focus straight into that row's Qty field.
+  const addProduct = (p: any): number => {
     const existing = items.findIndex((i) => i.productId === p.id);
-    if (existing >= 0) { updateItem(existing, "qty", items[existing].qty + 1); }
-    else {
-      const rate = getBaseRate(p, customer, invoiceType);
-      const taxPct = isGstInvoiceType(invoiceType) ? (Number(p.taxRate) || 18) : 0;
-      const amount = Number(rate ?? 0) * (1 + taxPct / 100);
-      setItems((prev) => [...prev, {
-        productId: p.id, name: p.name, unit: p.unit ?? "QTY", qty: 1,
-        qtyMode: "unit" as QtyMode, unitsPerBox: resolvePack(p),
-        rate: Number(rate ?? 0), mrp: Number(p.mrp ?? 0), taxPct,
-        discountPct: 0, discountAmt: 0,
-        amount: Math.round(amount * 100) / 100,
-        litersPerBox: Number((p as any).litersPerBox ?? 0) || 0,
-        packagingUnit: (p as any).packagingUnit?.trim() || "Box",
-      }]);
+    if (existing >= 0) {
+      updateItem(existing, "qty", items[existing].qty + 1);
+      setProductSearch("");
+      setSearchOpen(false);
+      return existing;
     }
+    const rate = getBaseRate(p, customer, invoiceType);
+    const taxPct = isGstInvoiceType(invoiceType) ? (Number(p.taxRate) || 18) : 0;
+    const amount = Number(rate ?? 0) * (1 + taxPct / 100);
+    const newIdx = items.length;
+    setItems((prev) => [...prev, {
+      productId: p.id, name: p.name, unit: p.unit ?? "QTY", qty: 1,
+      qtyMode: "unit" as QtyMode, unitsPerBox: resolvePack(p),
+      rate: Number(rate ?? 0), mrp: Number(p.mrp ?? 0), taxPct,
+      discountPct: 0, discountAmt: 0,
+      amount: Math.round(amount * 100) / 100,
+      litersPerBox: Number((p as any).litersPerBox ?? 0) || 0,
+      packagingUnit: (p as any).packagingUnit?.trim() || "Box",
+      description: "",
+    }]);
     setProductSearch("");
     setSearchOpen(false);
+    return newIdx;
+  };
+
+  // After picking a product (Enter or click), jump straight into that row's
+  // Qty field so the whole add-item flow stays keyboard-only: search → pick
+  // → qty → (Enter) rate → (Enter) back to search for the next product.
+  const addProductAndFocusQty = (p: any) => {
+    const idx = addProduct(p);
+    requestAnimationFrame(() => {
+      const el = document.querySelector<HTMLInputElement>(`[data-testid="input-qty-${idx}"]`);
+      if (el) { el.focus(); el.select(); }
+    });
   };
 
   // Enter in a line-item field jumps to the next editable field (qty → rate →
@@ -606,6 +632,7 @@ export default function Billing() {
         unit: i.unit ?? "QTY", rate: i.rate ?? 0, mrp: i.mrp ?? 0,
         taxPct: isGstInvoiceType(invoiceType) ? i.taxPct : 0,
         discountPct: i.discountPct, discountAmt: i.discountAmt, cessPct: 0,
+        ...(i.description?.trim() ? { description: i.description.trim() } : {}),
       })),
     };
     if (isEditMode && editId) {
@@ -894,7 +921,7 @@ export default function Billing() {
                       setSearchActiveIdx((i) => Math.max(i - 1, 0));
                     } else if (e.key === "Enter") {
                       const pick = filteredProducts[searchActiveIdx];
-                      if (pick) { e.preventDefault(); addProduct(pick); setSearchOpen(true); }
+                      if (pick) { e.preventDefault(); addProductAndFocusQty(pick); }
                     }
                   }} />
                 <kbd className="hidden md:inline-flex absolute right-2.5 top-1/2 -translate-y-1/2 items-center rounded border px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground pointer-events-none">/</kbd>
@@ -909,20 +936,20 @@ export default function Billing() {
                     return (
                       <button key={p.id} type="button" id={`product-opt-${idx}`} role="option" aria-selected={active}
                         data-active={active}
-                        onClick={() => addProduct(p)}
+                        onClick={() => addProductAndFocusQty(p)}
                         onMouseEnter={() => setSearchActiveIdx(idx)}
-                        className={`w-full text-left px-3 py-2 flex items-center justify-between gap-3 text-sm border-b last:border-0 ${active ? "bg-accent" : "hover:bg-accent"}`}
+                        className={`w-full text-left px-3 py-2 flex items-center justify-between gap-3 text-sm border-b last:border-0 ${active ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
                         data-testid={`product-option-${p.id}`}>
                         <div className="min-w-0 flex-1">
                           <div className="font-medium truncate">{p.name}</div>
-                          <div className="text-xs text-muted-foreground">
+                          <div className={`text-xs ${active ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
                             ₹{getBaseRate(p, customer, invoiceType).toLocaleString()}
                             {isGstInvoiceType(invoiceType) && p.taxRate ? ` · GST ${p.taxRate}%` : ""}
                           </div>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
-                          {alreadyAdded && <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">Added</span>}
-                          <Plus className="w-4 h-4 text-muted-foreground" />
+                          {alreadyAdded && <span className={`text-[10px] uppercase px-1.5 py-0.5 rounded font-medium ${active ? "bg-primary-foreground/20 text-primary-foreground" : "bg-primary/10 text-primary"}`}>Added</span>}
+                          <Plus className={`w-4 h-4 ${active ? "text-primary-foreground" : "text-muted-foreground"}`} />
                         </div>
                       </button>
                     );
@@ -954,6 +981,13 @@ export default function Billing() {
                         <TableCell>
                           <div className="font-medium text-sm leading-tight">{item.name}</div>
                           <div className="text-xs text-muted-foreground">{item.unit}</div>
+                          <Input
+                            value={item.description}
+                            onChange={(e) => updateItem(idx, "description", e.target.value)}
+                            placeholder="Add description (optional)"
+                            className="h-6 mt-1 text-xs px-1.5"
+                            data-testid={`input-description-${idx}`}
+                          />
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex flex-col items-end gap-1">
@@ -1035,6 +1069,14 @@ export default function Billing() {
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>
                     </div>
+
+                    <Input
+                      value={item.description}
+                      onChange={(e) => updateItem(idx, "description", e.target.value)}
+                      placeholder="Add description (optional)"
+                      className="h-8 text-xs"
+                      data-testid={`input-description-mobile-${idx}`}
+                    />
 
                     <div className="grid grid-cols-2 gap-2">
                       <div className="space-y-1">
