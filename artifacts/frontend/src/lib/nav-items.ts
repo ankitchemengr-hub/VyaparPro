@@ -97,5 +97,6 @@ export function homePathForRole(role: Role | undefined): string {
   if (role === "admin") return "/";
   if (role === "super_admin") return "/subscriptions";
   if (role === "accountant" || role === "gst_accountant") return "/menu";
+  if (role === "customer") return "/home";
   return "/catalog";
 }

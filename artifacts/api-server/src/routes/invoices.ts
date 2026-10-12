@@ -26,6 +26,7 @@ import { logger } from "../lib/logger";
 import { generateSeriesNumber, type SeriesType } from "../lib/number-series";
 import { getCompanyId } from "../lib/tenant";
 import { isGstAccountant } from "../lib/gst-access";
+import { loadManufacturingCosts, effectiveUnitCost } from "../lib/bom-cost";
 
 const router: IRouter = Router();
 
@@ -155,6 +156,15 @@ router.get("/invoices", async (req, res): Promise<void> => {
     // Store users only see invoices they personally created (e.g. via the
     // catalog checkout flow), not the full company invoice list.
     conditions.push(eq(invoicesTable.createdByUserId, session.userId));
+  } else if (session?.role === "customer") {
+    // A customer (mechanic/retailer portal login) only ever sees their own
+    // bills, regardless of the customerId query param. No linked entity →
+    // nothing, rather than every customer's invoices.
+    if (!session.entityId) {
+      res.json([]);
+      return;
+    }
+    conditions.push(eq(invoicesTable.customerId, session.entityId));
   } else if (params.data.salesmanId) {
     conditions.push(eq(invoicesTable.salesmanId, params.data.salesmanId));
   }
@@ -268,6 +278,8 @@ router.post("/invoices", async (req, res): Promise<void> => {
           .where(and(eq(productsTable.companyId, companyId), inArray(productsTable.id, productIds)))
       : [];
     const productById = new Map(productRows.map((p) => [p.id, p]));
+    // Live BOM cost for manufactured items — snapshotted as cost_price below.
+    const manufacturingCosts = await loadManufacturingCosts(companyId);
 
     const processedItems = data.items.map((item) => {
       const qty = Number(item.qty);
@@ -302,10 +314,11 @@ router.post("/invoices", async (req, res): Promise<void> => {
       // QTY"). This feeds the commission calculation, so it must not depend
       // on qtyBoxes/box-mode being set.
       const litersPerBox = productById.get(item.productId)?.litersPerBox;
-      // costPrice snapshots the product's purchase price at sale time, so
-      // P&L/COGS reporting reflects what this sale actually cost rather than
-      // whatever the purchase price happens to be whenever the report runs.
-      const costPrice = productById.get(item.productId)?.purchasePrice;
+      // costPrice snapshots the product's cost at sale time — the live BOM
+      // (manufacturing) cost for products we make, else the purchase price —
+      // so P&L/COGS reporting reflects what this sale actually cost rather
+      // than whatever the cost happens to be whenever the report runs.
+      const costPrice = effectiveUnitCost(item.productId, productById.get(item.productId)?.purchasePrice, manufacturingCosts);
       return {
         ...item,
         qty: String(qty),
@@ -560,6 +573,11 @@ router.get("/invoices/:id", async (req, res): Promise<void> => {
       res.status(404).json({ error: "Invoice not found" });
       return;
     }
+  } else if (session?.role === "customer") {
+    if (!session.entityId || inv.customerId !== session.entityId) {
+      res.status(404).json({ error: "Invoice not found" });
+      return;
+    }
   } else if (isGstAccountant(req) && inv.invoiceType !== "gst") {
     res.status(404).json({ error: "Invoice not found" });
     return;
@@ -597,7 +615,7 @@ router.get("/invoices/:id/payment-receipts", async (req, res): Promise<void> => 
   }
 
   const companyId = getCompanyId(req);
-  const [inv] = await db.select({ id: invoicesTable.id, salesmanId: invoicesTable.salesmanId, createdByUserId: invoicesTable.createdByUserId, invoiceType: invoicesTable.invoiceType })
+  const [inv] = await db.select({ id: invoicesTable.id, salesmanId: invoicesTable.salesmanId, createdByUserId: invoicesTable.createdByUserId, invoiceType: invoicesTable.invoiceType, customerId: invoicesTable.customerId })
     .from(invoicesTable)
     .where(and(eq(invoicesTable.companyId, companyId), eq(invoicesTable.id, params.data.id)));
   if (!inv) {
@@ -613,6 +631,11 @@ router.get("/invoices/:id/payment-receipts", async (req, res): Promise<void> => 
     }
   } else if (session?.role === "store") {
     if (inv.createdByUserId !== session.userId) {
+      res.status(404).json({ error: "Invoice not found" });
+      return;
+    }
+  } else if (session?.role === "customer") {
+    if (!session.entityId || inv.customerId !== session.entityId) {
       res.status(404).json({ error: "Invoice not found" });
       return;
     }
@@ -772,6 +795,8 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
           .where(and(eq(productsTable.companyId, companyId), inArray(productsTable.id, productIds)))
       : [];
     const productById = new Map(productRows.map((p) => [p.id, p]));
+    // Live BOM cost for manufactured items — snapshotted as cost_price below.
+    const manufacturingCosts = await loadManufacturingCosts(companyId);
 
     const processedItems = data.items.map((item) => {
       const qty = Number(item.qty);
@@ -794,7 +819,8 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
       const litersPerBoxVal = productById.get(item.productId)?.litersPerBox;
       // total_liters = qty × liters-per-unit. Feeds the commission calculation.
       const totalLiters = litersPerBoxVal != null ? qty * Number(litersPerBoxVal) : null;
-      const costPriceVal = productById.get(item.productId)?.purchasePrice;
+      // Same cost snapshot as the create route (BOM cost for manufactured items).
+      const costPriceVal = effectiveUnitCost(item.productId, productById.get(item.productId)?.purchasePrice, manufacturingCosts);
       return {
         ...item,
         qty: String(qty), rate: String(rate), mrp: String(item.mrp),

@@ -32,7 +32,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { useToast } from "@/hooks/use-toast";
-import { Factory, Check } from "lucide-react";
+import { Factory, Check, Eye, EyeOff } from "lucide-react";
 
 // Persisted login-screen company override, set via the hidden switcher. After a
 // super_admin signs in, the app jumps straight into this company instead of the
@@ -68,6 +68,8 @@ export default function Login() {
 
   // Hidden company switcher state.
   const [switcherOpen, setSwitcherOpen] = React.useState(false);
+  const [showPassword, setShowPassword] = React.useState(false);
+  const [loginError, setLoginError] = React.useState<string | null>(null);
   const [override, setOverride] = React.useState<LoginCompany | null>(() => readLoginCompany());
   const logoClicksRef = React.useRef(0);
   const logoTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -143,6 +145,8 @@ export default function Login() {
         setLocation("/");
       } else if ((user.role === "accountant" || user.role === "gst_accountant")) {
         setLocation("/menu");
+      } else if (user.role === "customer") {
+        setLocation("/home");
       } else {
         setLocation("/catalog");
       }
@@ -153,7 +157,11 @@ export default function Login() {
     return null;
   }
 
-  const onSubmit = (values: LoginFormValues) => {
+  const onSubmit = (raw: LoginFormValues) => {
+    // Phone keyboards often append a space after an auto-completed word —
+    // "ramesh " would otherwise never match.
+    const values = { username: raw.username.trim(), password: raw.password };
+    setLoginError(null);
     loginMutation.mutate(
       // In shared mode the server only returns a company when this page was
       // opened on that company's custom domain — sign straight into it.
@@ -196,16 +204,21 @@ export default function Login() {
             window.location.href = "/";
           } else if ((data.role === "accountant" || data.role === "gst_accountant")) {
             window.location.href = "/menu";
+          } else if (data.role === "customer") {
+            window.location.href = "/home";
           } else {
             window.location.href = "/catalog";
           }
         },
-        onError: () => {
-          toast({
-            title: "Login failed",
-            description: "Invalid username or password.",
-            variant: "destructive",
-          });
+        onError: (err: any) => {
+          // Rate-limit / dedicated-company messages are specific and useful —
+          // show them as-is; anything else is a wrong username/password.
+          const serverMsg = typeof err?.data?.error === "string" ? err.data.error : null;
+          const msg = err?.status === 429 || err?.status === 403
+            ? (serverMsg ?? "Too many attempts. Please wait a few minutes.")
+            : "Wrong username or password. Check the spelling and try again.";
+          setLoginError(msg);
+          toast({ title: "Login failed", description: msg, variant: "destructive" });
         },
       }
     );
@@ -232,13 +245,15 @@ export default function Login() {
             )}
           </div>
           <h1 className="text-3xl font-bold tracking-tight text-sidebar-foreground">{companyName}</h1>
-          <p className="text-sidebar-foreground/60 mt-2">Vipro ERP System</p>
         </div>
 
         <Card className="border-sidebar-border bg-card shadow-2xl">
           <CardHeader>
-            <CardTitle className="text-2xl">Sign In</CardTitle>
-            <CardDescription>Enter your credentials to access the system</CardDescription>
+            <CardTitle className="text-2xl">Login</CardTitle>
+            <CardDescription>
+              Use the username and password given to you by {companyName}.
+              <span className="block mt-0.5">दुकान से मिला username और password डालें।</span>
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <Form {...form}>
@@ -250,7 +265,14 @@ export default function Login() {
                     <FormItem>
                       <FormLabel>Username</FormLabel>
                       <FormControl>
-                        <Input placeholder="Enter your username" {...field} />
+                        <Input
+                          placeholder="Enter your username"
+                          autoComplete="username"
+                          autoCapitalize="none"
+                          autoCorrect="off"
+                          spellCheck={false}
+                          {...field}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -263,7 +285,27 @@ export default function Login() {
                     <FormItem>
                       <FormLabel>Password</FormLabel>
                       <FormControl>
-                        <Input type="password" placeholder="Enter your password" {...field} />
+                        <div className="relative">
+                          <Input
+                            type={showPassword ? "text" : "password"}
+                            placeholder="Enter your password"
+                            autoComplete="current-password"
+                            autoCapitalize="none"
+                            autoCorrect="off"
+                            spellCheck={false}
+                            className="pr-10"
+                            {...field}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword((v) => !v)}
+                            className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 grid place-items-center rounded text-muted-foreground hover:text-foreground"
+                            aria-label={showPassword ? "Hide password" : "Show password"}
+                            data-testid="button-toggle-password"
+                          >
+                            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -274,8 +316,15 @@ export default function Login() {
                   className="w-full font-bold" 
                   disabled={loginMutation.isPending}
                 >
-                  {loginMutation.isPending ? "Signing in..." : "Sign In"}
+                  {loginMutation.isPending ? "Logging in..." : "Login"}
                 </Button>
+                {loginError && (
+                  <p className="text-sm text-destructive text-center" role="alert">{loginError}</p>
+                )}
+                <p className="text-xs text-muted-foreground text-center">
+                  Forgot password? Ask {companyName} to reset it.
+                  <span className="block">पासवर्ड भूल गए? दुकान से नया पासवर्ड लें।</span>
+                </p>
               </form>
             </Form>
           </CardContent>

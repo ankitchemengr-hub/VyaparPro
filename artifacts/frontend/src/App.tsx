@@ -38,6 +38,7 @@ import Expenses from "@/pages/expenses";
 import Bom from "@/pages/bom";
 import MyOrders from "@/pages/my-orders";
 import CustomerOrdersAdmin from "@/pages/customer-orders";
+import CustomerHome, { CustomerOrdersTrack } from "@/pages/customer-home";
 import Subscriptions from "@/pages/subscriptions";
 import Menu from "@/pages/menu";
 import SalesmanOrders from "@/pages/salesman-orders";
@@ -76,6 +77,8 @@ function ProtectedRoutes() {
       <Switch>
         <Route path="/" component={Dashboard} />
         <Route path="/menu" component={Menu} />
+        <Route path="/home" component={CustomerHome} />
+        <Route path="/track-orders" component={CustomerOrdersTrack} />
         <Route path="/catalog" component={Catalog} />
         <Route path="/salesman-orders" component={SalesmanOrders} />
         <Route path="/salesman-dashboard" component={SalesmanDashboard} />

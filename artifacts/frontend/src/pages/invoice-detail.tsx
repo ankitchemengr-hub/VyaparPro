@@ -173,6 +173,8 @@ export default function InvoiceDetail() {
 
   const isGst = invoice.invoiceType === "gst";
   const isAdmin = user?.role === "admin";
+  // Customer portal login: view / share / print only — no staff actions.
+  const isCustomer = user?.role === "customer";
   const activeTemplate = templateOverride ?? settings.defaultTemplate ?? "minimal-a5";
   const activeMeta = getTemplate(activeTemplate);
 
@@ -181,8 +183,8 @@ export default function InvoiceDetail() {
       {/* Top toolbar */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between print:hidden no-print">
         <div className="flex items-center gap-2 flex-wrap">
-          <Button variant="outline" size="sm" onClick={() => setLocation("/invoices")} data-testid="button-back">
-            <ArrowLeft className="h-4 w-4 sm:mr-2" /><span className="hidden sm:inline">Back to invoices</span>
+          <Button variant="outline" size="sm" onClick={() => setLocation(isCustomer ? "/my-orders" : "/invoices")} data-testid="button-back">
+            <ArrowLeft className="h-4 w-4 sm:mr-2" /><span className="hidden sm:inline">{isCustomer ? "Back to my bills" : "Back to invoices"}</span>
           </Button>
           <Badge variant={isGst ? "default" : "secondary"}>{isGst ? "GST" : "Non-GST"}</Badge>
           {invPayStatus === "paid" && <Badge className="bg-green-600 text-white hover:bg-green-700">Paid</Badge>}
@@ -192,11 +194,13 @@ export default function InvoiceDetail() {
           {invPayStatus === "na" && <Badge variant="secondary">{invoice.status}</Badge>}
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          {!isCustomer && (
           <Button variant="outline" size="sm" onClick={() => setSelectorOpen(true)} data-testid="button-choose-template">
             <LayoutTemplate className="h-4 w-4 sm:mr-2" />
             <span className="hidden sm:inline">{activeMeta?.name ?? "Choose Template"}</span>
           </Button>
-          {invoice.status !== "cancelled" && invPayStatus !== "paid" && Number(invoice.balanceDue) > 0 && (
+          )}
+          {!isCustomer && invoice.status !== "cancelled" && invPayStatus !== "paid" && Number(invoice.balanceDue) > 0 && (
             <Button size="sm" onClick={openPayDialog} data-testid="button-record-payment">
               <IndianRupee className="h-4 w-4 sm:mr-2" /><span className="hidden sm:inline">Record Payment</span>
             </Button>
@@ -212,6 +216,7 @@ export default function InvoiceDetail() {
             {sharing ? <Loader2 className="h-4 w-4 sm:mr-2 animate-spin" /> : <Share2 className="h-4 w-4 sm:mr-2" />}
             <span className="hidden sm:inline">Share</span>
           </Button>
+          {!isCustomer && (
           <Button
             variant="outline"
             size="sm"
@@ -221,6 +226,7 @@ export default function InvoiceDetail() {
           >
             <MessageCircle className="h-4 w-4 sm:mr-2" /><span className="hidden sm:inline">WhatsApp</span>
           </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
