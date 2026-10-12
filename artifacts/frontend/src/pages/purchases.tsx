@@ -22,6 +22,7 @@ import {
 } from "@workspace/api-client-react";
 import { RecalculatePricesDialog } from "@/components/recalculate-prices-dialog";
 import { UpdateSalePriceDialog } from "@/components/update-sale-price-dialog";
+import { BillScanDialog, ScanBillButton, type ScanApplyResult } from "@/components/bill-scan-dialog";
 import { useAuth } from "@/contexts/use-auth";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -773,6 +774,9 @@ function NewPurchaseTab({
   const [showRecalcPrompt, setShowRecalcPrompt] = useState(false);
   const [salePriceChanges, setSalePriceChanges] = useState<PurchasePriceChange[]>([]);
   const [showSalePricePrompt, setShowSalePricePrompt] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
+  // The photo/PDF a bill was scanned from — attached to the purchase on save.
+  const [scannedFile, setScannedFile] = useState<File | null>(null);
 
   // Only checked for BOM cost cascades once the sale-price prompt (if any)
   // has been dismissed, so the two prompts never stack on top of each other.
@@ -860,6 +864,30 @@ function NewPurchaseTab({
     setLines((prev) => prev.length === 1 ? [emptyLine()] : prev.filter((_, idx) => idx !== i));
   };
 
+  // Scanned bill → this form. Rates/GST come from the bill (that's what we
+  // actually paid); unit comes from our product so stock stays consistent.
+  const onScanApply = (r: ScanApplyResult) => {
+    if (r.partyId) setVendorId(String(r.partyId));
+    if (r.billNo) setVendorBillNo(r.billNo);
+    if (r.billDate) setBillDate(r.billDate);
+    setBillType(r.isGstBill ? "gst" : "non_gst");
+    if (r.placeOfSupply) setPlaceOfSupply(r.placeOfSupply);
+    setFreight(String(r.freight || 0));
+    setLines(r.lines.map((l) => {
+      const p = productMap.get(l.productId);
+      return {
+        productId: l.productId,
+        productName: p?.name ?? l.rawName,
+        unit: p?.unit ?? (l.unit || "pcs"),
+        qty: String(l.qty),
+        rate: String(l.rate),
+        discountPct: String(l.discountPct || 0),
+        taxPct: String(l.taxPct),
+      };
+    }));
+    setScannedFile(r.file);
+  };
+
   const valid = lines.every((l) => l.productId != null && Number(l.qty) > 0 && Number(l.rate) >= 0);
 
   const onSubmit = async () => {
@@ -897,6 +925,14 @@ function NewPurchaseTab({
         queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() }),
         queryClient.invalidateQueries({ queryKey: getListEntitiesQueryKey() }),
       ]);
+      // Keep the scanned bill with the purchase. Uploaded before the
+      // Attachments card mounts so it shows up there straight away.
+      if (scannedFile) {
+        const form = new FormData();
+        form.append("files", scannedFile);
+        await fetch(`/api/purchases/${newPurchase.id}/attachments`, { method: "POST", body: form }).catch(() => {});
+        setScannedFile(null);
+      }
       setSavedPurchaseId(newPurchase.id);
       toast({ title: "Purchase saved", description: `Bill recorded. Stock updated, vendor payable booked.` });
       setLines([emptyLine()]);
@@ -948,7 +984,15 @@ function NewPurchaseTab({
       {/* ── Bill Details ── */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Bill Details</CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle className="text-base">Bill Details</CardTitle>
+            <ScanBillButton onClick={() => setScanOpen(true)} />
+          </div>
+          {scannedFile && (
+            <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+              <Paperclip className="w-3.5 h-3.5" /> Filled from scanned bill — the photo will be attached on save.
+            </p>
+          )}
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -1093,6 +1137,15 @@ function NewPurchaseTab({
       />
 
       <RecalculatePricesDialog open={showRecalcPrompt} onOpenChange={setShowRecalcPrompt} />
+
+      <BillScanDialog
+        open={scanOpen}
+        onOpenChange={setScanOpen}
+        kind="purchase"
+        products={products ?? []}
+        parties={vendors ?? []}
+        onApply={onScanApply}
+      />
 
       <UpdateSalePriceDialog
         open={showSalePricePrompt}
