@@ -1,10 +1,8 @@
-import { useState, useEffect, useRef } from "react";
+import { Fragment, useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/use-auth";
 import {
   useListProducts,
-  useGetProductRecentPrices,
-  getGetProductRecentPricesQueryKey,
   useCreateInvoice,
   useUpdateInvoice,
   useGetInvoice,
@@ -45,8 +43,7 @@ import {
 } from "lucide-react";
 import { playWarningBeep } from "@/lib/notification-sound";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { clickableProps } from "@/components/ui/clickable";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { shareInvoiceImage } from "@/lib/share-invoice";
 import { usePrintTitle } from "@/lib/print-with-title";
@@ -156,87 +153,85 @@ const fmtHistDate = (iso: string) => {
   return isNaN(d.getTime()) ? "—" : d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" });
 };
 
-// Shown under the Rate input while billing: the last few prices this product
-// actually sold/bought at, and — behind a "history" button — the full
-// date / party / qty / rate breakdown, mirroring the reference lookup in
-// Hitech. Clicking a row copies that rate into the line. Separate cached
-// query per product so switching a row's product doesn't wait on every
-// other row's history.
-function RecentPriceHint({ productId, onPickRate }: { productId: number; onPickRate?: (rate: number) => void }) {
-  const { data } = useGetProductRecentPrices(productId, {
-    query: { queryKey: getGetProductRecentPricesQueryKey(productId), enabled: !!productId, staleTime: 5 * 60 * 1000 },
-  });
-  if (!data) return null;
-  const sales = data.lastSalePrices ?? [];
-  const purchases = data.lastPurchasePrices ?? [];
-  const sold = sales.map((p) => `₹${Number(p.rate).toLocaleString()}`).join(", ");
-  const bought = purchases.map((p) => `₹${Number(p.rate).toLocaleString()}`).join(", ");
-  if (!sold && !bought) return null;
+type SaleHistory = {
+  forCustomer: boolean;
+  rows: { date: string; invoiceNo: string; party: string | null; qty: number; unit: string | null; rate: number }[];
+};
 
-  const renderHist = (rows: typeof sales, kind: "Sale" | "Purchase") => {
-    if (rows.length === 0) return null;
-    return (
-      <div key={kind}>
-        <div className="px-2 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Recent {kind}s
-        </div>
-        <table className="w-full text-[11px]">
-          <thead>
-            <tr className="border-b text-muted-foreground">
-              <th className="text-left font-normal px-2 py-1">Date</th>
-              <th className="text-left font-normal px-2 py-1">{kind === "Sale" ? "Customer" : "Vendor"}</th>
-              <th className="text-right font-normal px-2 py-1">Qty</th>
-              <th className="text-right font-normal px-2 py-1">Rate</th>
-            </tr>
-          </thead>
+// Opens right under a line while its Rate field has focus: what THIS customer
+// paid for this item on their last 4 bills (qty + rate), or — for a new
+// customer / cash sale — the last 3 sales of it to anyone. Read-only and never
+// focusable, so Enter keeps moving through the line exactly as before. Blinks
+// twice when it appears so it gets noticed.
+function RateHistoryPanel({ productId, customerId, customerName, excludeInvoiceId, unit }: {
+  productId: number;
+  customerId: number | null;
+  customerName: string | null;
+  excludeInvoiceId: number | null;
+  unit: string;
+}) {
+  const { data, isLoading, isError } = useQuery<SaleHistory>({
+    queryKey: ["/api/products/sale-history", productId, customerId ?? 0, excludeInvoiceId ?? 0],
+    queryFn: async () => {
+      const qs = new URLSearchParams();
+      if (customerId) qs.set("customerId", String(customerId));
+      if (excludeInvoiceId) qs.set("excludeInvoiceId", String(excludeInvoiceId));
+      const r = await fetch(`/api/products/${productId}/sale-history?${qs}`, { credentials: "include" });
+      if (!r.ok) throw new Error("Failed to load sale history");
+      return r.json();
+    },
+    staleTime: 60_000,
+  });
+
+  const title = !data
+    ? "Sale history"
+    : data.forCustomer
+      ? `${customerName ?? "This customer"} — last ${data.rows.length === 1 ? "bill" : `${data.rows.length} bills`}`
+      : customerName
+        ? `First time for ${customerName} — recent sales`
+        : "Recent sales of this item";
+
+  return (
+    <div
+      className="rate-hist-panel rounded-lg border-2 border-primary/50 bg-primary/5 px-3 py-2 text-left max-w-md ml-auto"
+      // Never steal focus from the Rate field if it's clicked.
+      onMouseDown={(e) => e.preventDefault()}
+      data-testid={`rate-history-${productId}`}
+    >
+      <style>{RATE_HIST_CSS}</style>
+      <div className="flex items-center gap-1.5 text-xs font-semibold text-primary mb-1">
+        <History className="w-3.5 h-3.5" /> {title}
+      </div>
+      {isLoading ? (
+        <div className="text-xs text-muted-foreground py-1">Loading…</div>
+      ) : isError ? (
+        <div className="text-xs text-muted-foreground py-1">Couldn't load history.</div>
+      ) : !data || data.rows.length === 0 ? (
+        <div className="text-xs text-muted-foreground py-1">Not sold yet — no previous rate.</div>
+      ) : (
+        <table className="w-full text-sm tabular-nums">
           <tbody>
-            {rows.map((r, i) => (
-              <tr
-                key={i}
-                className={`border-b border-dashed last:border-0 ${onPickRate ? "hover:bg-accent cursor-pointer" : ""}`}
-                {...(onPickRate ? clickableProps(() => onPickRate(Number(r.rate))) : {})}
-                title={onPickRate ? "Use this rate" : undefined}
-              >
-                <td className="px-2 py-1 whitespace-nowrap">{fmtHistDate(r.date)}</td>
-                <td className="px-2 py-1 max-w-[130px] truncate">{r.party ?? "—"}</td>
-                <td className="px-2 py-1 text-right whitespace-nowrap">
-                  {r.qty != null ? Number(r.qty).toLocaleString() : "—"}
-                  {r.unit ? ` ${r.unit}` : ""}
-                </td>
-                <td className="px-2 py-1 text-right font-medium tabular-nums">₹{Number(r.rate).toLocaleString()}</td>
+            {data.rows.map((r, i) => (
+              <tr key={i} className={i === 0 ? "font-semibold" : "text-muted-foreground"}>
+                <td className="py-0.5 pr-3 whitespace-nowrap">{fmtHistDate(r.date)}</td>
+                {!data.forCustomer && <td className="py-0.5 pr-3 max-w-[140px] truncate">{r.party ?? "Cash"}</td>}
+                <td className="py-0.5 pr-3 text-right whitespace-nowrap">{r.qty.toLocaleString("en-IN")} {r.unit ?? unit}</td>
+                <td className="py-0.5 text-right whitespace-nowrap text-foreground">₹{r.rate.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</td>
               </tr>
             ))}
           </tbody>
         </table>
-      </div>
-    );
-  };
-
-  return (
-    <div className="text-[9px] leading-tight text-muted-foreground">
-      <Popover>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            className="inline-flex items-center gap-0.5 text-[9px] text-primary hover:underline"
-            data-testid={`button-price-history-${productId}`}
-          >
-            <History className="w-2.5 h-2.5" /> Price history
-          </button>
-        </PopoverTrigger>
-        <PopoverContent align="end" className="w-72 p-0 max-h-[300px] overflow-y-auto">
-          {renderHist(sales, "Sale")}
-          {renderHist(purchases, "Purchase")}
-          {onPickRate && (
-            <div className="px-2 py-1.5 text-[10px] text-muted-foreground border-t">Click a row to use that rate.</div>
-          )}
-        </PopoverContent>
-      </Popover>
-      {sold && <div>Sold: {sold}</div>}
-      {bought && <div>Bought: {bought}</div>}
+      )}
     </div>
   );
 }
+
+const RATE_HIST_CSS = `
+.rate-hist-panel { animation: rateHistIn .18s ease-out, rateHistBlink .55s ease-in-out .2s 2; }
+@keyframes rateHistIn { from { opacity: 0; transform: translateY(-4px) } to { opacity: 1; transform: none } }
+@keyframes rateHistBlink { 0%,100% { box-shadow: 0 0 0 0 hsl(var(--primary) / 0) } 50% { box-shadow: 0 0 0 5px hsl(var(--primary) / .35) } }
+@media (prefers-reduced-motion: reduce) { .rate-hist-panel { animation: none } }
+`;
 
 // Red line under a Rate field whose net rate is at/below the product's
 // purchase price — the always-visible half of the cost warning (the beep +
@@ -320,6 +315,9 @@ export default function Billing() {
   // those guards, so the effect can't close over it directly.
   const handleSaveRef = useRef<() => void>(() => {});
   const [scanOpen, setScanOpen] = useState(false);
+  // Which line's Rate field has focus — that line shows the customer's past
+  // rates for the item right underneath it.
+  const [rateFocusIdx, setRateFocusIdx] = useState<number | null>(null);
   // "Rate at/below purchase price" warning popup shown on save, and the last
   // net rate each row was already warned about (so leaving the Rate field
   // again without changing it doesn't beep a second time).
@@ -1140,7 +1138,8 @@ export default function Billing() {
                     {items.length === 0 ? (
                       <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground text-sm">No items — search above to add products</TableCell></TableRow>
                     ) : items.map((item, idx) => (
-                      <TableRow key={idx} data-testid={`billing-row-${idx}`}>
+                      <Fragment key={idx}>
+                      <TableRow data-testid={`billing-row-${idx}`}>
                         <TableCell>
                           <div className="font-medium text-sm leading-tight">{item.name}</div>
                           <div className="text-xs text-muted-foreground">{item.unit}</div>
@@ -1179,15 +1178,12 @@ export default function Billing() {
                           <NumberInput min={0} value={item.rate}
                             onChange={(v) => updateItem(idx, "rate", v, { rateEdited: true })}
                             onKeyDown={(e) => lineItemKeyDown(e, idx, "rate")}
-                            onBlur={() => checkCostOnBlur(idx)}
+                            onFocus={() => setRateFocusIdx(idx)}
+                            onBlur={() => { setRateFocusIdx((cur) => (cur === idx ? null : cur)); checkCostOnBlur(idx); }}
                             className={`w-24 text-right h-7 text-sm disabled:opacity-100 disabled:cursor-not-allowed ${costWarning(item) ? "border-red-500 bg-red-50 text-red-700 focus-visible:ring-red-500" : ""}`}
                             data-testid={`input-rate-${idx}`} disabled={user?.role !== "admin"}
                             title={user?.role !== "admin" ? "Only admin can edit rate" : undefined} />
                           <CostWarningHint w={costWarning(item)} testId={`hint-cost-warning-${idx}`} />
-                          <RecentPriceHint
-                            productId={item.productId}
-                            onPickRate={user?.role === "admin" ? (r) => updateItem(idx, "rate", r, { rateEdited: true }) : undefined}
-                          />
                         </TableCell>
                         {isGstInvoiceType(invoiceType) && (
                           <TableCell className="text-right">
@@ -1212,6 +1208,20 @@ export default function Billing() {
                           </Button>
                         </TableCell>
                       </TableRow>
+                      {rateFocusIdx === idx && (
+                        <TableRow className="hover:bg-transparent border-0">
+                          <TableCell colSpan={isGstInvoiceType(invoiceType) ? 8 : 7} className="pt-0 pb-2">
+                            <RateHistoryPanel
+                              productId={item.productId}
+                              customerId={customer?.id ?? null}
+                              customerName={customer?.name ?? null}
+                              excludeInvoiceId={isEditMode ? editId : null}
+                              unit={item.unit}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      )}
+                      </Fragment>
                     ))}
                   </TableBody>
                 </Table>
@@ -1267,17 +1277,24 @@ export default function Billing() {
                         <Label className="text-[11px] text-muted-foreground">Rate (₹)</Label>
                         <NumberInput min={0} value={item.rate}
                           onChange={(v) => updateItem(idx, "rate", v, { rateEdited: true })}
-                          onBlur={() => checkCostOnBlur(idx)}
+                          onFocus={() => setRateFocusIdx(idx)}
+                          onBlur={() => { setRateFocusIdx((cur) => (cur === idx ? null : cur)); checkCostOnBlur(idx); }}
                           className={`h-8 text-sm disabled:opacity-100 disabled:cursor-not-allowed ${costWarning(item) ? "border-red-500 bg-red-50 text-red-700 focus-visible:ring-red-500" : ""}`}
                           data-testid={`input-rate-mobile-${idx}`} disabled={user?.role !== "admin"}
                           title={user?.role !== "admin" ? "Only admin can edit rate" : undefined} />
                         <CostWarningHint w={costWarning(item)} testId={`hint-cost-warning-mobile-${idx}`} />
-                        <RecentPriceHint
-                          productId={item.productId}
-                          onPickRate={user?.role === "admin" ? (r) => updateItem(idx, "rate", r, { rateEdited: true }) : undefined}
-                        />
                       </div>
                     </div>
+
+                    {rateFocusIdx === idx && (
+                      <RateHistoryPanel
+                        productId={item.productId}
+                        customerId={customer?.id ?? null}
+                        customerName={customer?.name ?? null}
+                        excludeInvoiceId={isEditMode ? editId : null}
+                        unit={item.unit}
+                      />
+                    )}
 
                     <div className={`grid gap-2 ${isGstInvoiceType(invoiceType) ? "grid-cols-3" : "grid-cols-2"}`}>
                       {isGstInvoiceType(invoiceType) && (

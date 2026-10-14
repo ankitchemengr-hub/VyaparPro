@@ -389,6 +389,62 @@ router.get("/products/:id/recent-prices", async (req, res): Promise<void> => {
   });
 });
 
+// GET /products/:id/sale-history?customerId=&excludeInvoiceId= — shown under
+// the Rate field while billing. With a customer that has bought this product
+// before: their last 4 bills for it (forCustomer = true). Otherwise (new
+// customer / cash sale): the last 3 sales of it to anyone. Real bills only —
+// quotations, proforma, challans and sale orders aren't sales. The invoice
+// being edited is excluded so it doesn't list itself.
+const NOT_A_SALE = ["quotation", "proforma_invoice", "delivery_challan", "sale_order"];
+router.get("/products/:id/sale-history", async (req, res): Promise<void> => {
+  const productId = Number(req.params.id);
+  if (!Number.isInteger(productId)) {
+    res.status(400).json({ error: "Invalid product id" });
+    return;
+  }
+  // Staff only — it shows other customers' names and the rates they paid.
+  const role = (req as any).session?.role;
+  if (!["admin", "store", "salesman", "accountant", "super_admin"].includes(role)) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  const customerId = Number(req.query.customerId);
+  const excludeInvoiceId = Number(req.query.excludeInvoiceId);
+  const companyId = getCompanyId(req);
+
+  const query = (extraWhere: string, extraParams: unknown[], limit: number) =>
+    pool.query(
+      `SELECT i.invoice_date AS date, i.invoice_no, i.customer_name AS party, ii.qty, ii.unit, ii.rate
+       FROM invoice_items ii
+       JOIN invoices i ON i.id = ii.invoice_id AND i.company_id = ii.company_id
+       WHERE ii.company_id = $1 AND ii.product_id = $2 AND i.status = 'saved'
+         AND i.invoice_type <> ALL($3) AND i.id <> $4 ${extraWhere}
+       ORDER BY i.invoice_date DESC, i.id DESC
+       LIMIT ${limit}`,
+      [companyId, productId, NOT_A_SALE, Number.isInteger(excludeInvoiceId) ? excludeInvoiceId : 0, ...extraParams],
+    );
+
+  let forCustomer = false;
+  let rows: any[] = [];
+  if (Number.isInteger(customerId) && customerId > 0) {
+    rows = (await query("AND i.customer_id = $5", [customerId], 4)).rows;
+    forCustomer = rows.length > 0;
+  }
+  if (!forCustomer) rows = (await query("", [], 3)).rows;
+
+  res.json({
+    forCustomer,
+    rows: rows.map((r) => ({
+      date: new Date(r.date).toISOString(),
+      invoiceNo: r.invoice_no,
+      party: r.party ?? null,
+      qty: Number(r.qty),
+      unit: r.unit ?? null,
+      rate: Number(r.rate),
+    })),
+  });
+});
+
 // GET /products/:id/billed-rate/:customerId — the rate billing should
 // pre-fill for this product on a new line: the rate THIS customer was last
 // billed for it (partyRate), falling back to the most recent billed sale
