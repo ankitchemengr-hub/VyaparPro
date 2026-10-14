@@ -18,7 +18,7 @@ import {
   BulkStockReconciliationBody,
 } from "@workspace/api-zod";
 import { getCompanyId, handleTenantError } from "../lib/tenant";
-import { computeProductCosts } from "../lib/bom-cost";
+import { loadManufacturingCosts } from "../lib/bom-cost";
 import { computeRecalculation, applyRecalculation } from "../lib/recalculate-prices";
 import { buildProductImageUrl, decodeProductImageDataUrl } from "../lib/product-image";
 
@@ -69,38 +69,13 @@ router.get("/products", async (req, res): Promise<void> => {
   // Live recipe-cost rollup for manufactured items, so Price List can show
   // what a BOM product actually costs to make right now — separate from
   // purchasePrice, which only gets synced to this when "Recalculate Prices"
-  // is run and can otherwise drift as raw material rates change. Costed
-  // against every company product (not just this filtered/searched page),
-  // since a recipe's raw materials may not themselves match the filter.
-  const bomRows = await pool.query(
-    `SELECT b.finished_product_id, b.output_quantity, bi.material_product_id, bi.quantity
-     FROM boms b
-     JOIN bom_items bi ON bi.bom_id = b.id AND bi.company_id = b.company_id
-     WHERE b.company_id = $1`,
-    [companyId],
-  );
-  let manufacturingCosts = new Map<number, number>();
-  let finishedProductIds = new Set<number>();
-  if (bomRows.rows.length > 0) {
-    const bomItems = bomRows.rows.map((r: any) => ({
-      finishedProductId: r.finished_product_id,
-      materialProductId: r.material_product_id,
-      quantity: r.quantity,
-      outputQuantity: r.output_quantity,
-    }));
-    finishedProductIds = new Set(bomItems.map((b) => b.finishedProductId));
-    const allProducts = await db
-      .select({ id: productsTable.id, purchasePrice: productsTable.purchasePrice })
-      .from(productsTable)
-      .where(and(eq(productsTable.companyId, companyId), isNull(productsTable.deletedAt)));
-    manufacturingCosts = computeProductCosts(allProducts, bomItems);
-  }
+  // is run and can otherwise drift as raw material rates change. Billing
+  // also uses it as the cost to warn against when selling below cost.
+  const manufacturingCosts = await loadManufacturingCosts(companyId);
 
   res.json(products.map((p) => ({
     ...formatProduct(p),
-    manufacturingCost: finishedProductIds.has(p.id)
-      ? Math.round((manufacturingCosts.get(p.id) ?? 0) * 100) / 100
-      : null,
+    manufacturingCost: manufacturingCosts.get(p.id) ?? null,
   })));
 });
 

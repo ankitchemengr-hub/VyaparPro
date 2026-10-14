@@ -41,8 +41,9 @@ import {
 } from "@/components/ui/dialog";
 import {
   Trash2, Printer, Save, CheckCircle, Loader2, User, Phone, MapPin,
-  ArrowLeft, Search, Plus, Pencil, UserPlus, Share2, History,
+  ArrowLeft, Search, Plus, Pencil, UserPlus, Share2, History, AlertTriangle,
 } from "lucide-react";
+import { playWarningBeep } from "@/lib/notification-sound";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { clickableProps } from "@/components/ui/clickable";
 import { useQueryClient } from "@tanstack/react-query";
@@ -235,6 +236,26 @@ function RecentPriceHint({ productId, onPickRate }: { productId: number; onPickR
   );
 }
 
+// Red line under a Rate field whose net rate is at/below the product's
+// purchase price — the always-visible half of the cost warning (the beep +
+// toast fire once on blur, and the popup on save).
+type CostSource = "mfg" | "purchase";
+type CostWarning = { kind: "below" | "equal"; cost: number; net: number; source: CostSource };
+const COST_LABEL: Record<CostSource, string> = { mfg: "Mfg cost", purchase: "Purchase rate" };
+
+function CostWarningHint({ w, testId }: { w: CostWarning | null; testId: string }) {
+  if (!w) return null;
+  const label = w.source === "mfg" ? "Mfg cost" : "Purchase";
+  return (
+    <div className="mt-0.5 flex items-center justify-end gap-0.5 text-[10px] font-semibold leading-tight text-red-600" data-testid={testId}>
+      <AlertTriangle className="w-3 h-3 shrink-0" />
+      {w.kind === "below"
+        ? `Loss! ${label} ₹${w.cost.toLocaleString()}`
+        : `= ${label} ₹${w.cost.toLocaleString()}`}
+    </div>
+  );
+}
+
 function parseSearch(search: string) {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
   return {
@@ -296,6 +317,11 @@ export default function Billing() {
   // below, and hooks (this effect included) must run unconditionally before
   // those guards, so the effect can't close over it directly.
   const handleSaveRef = useRef<() => void>(() => {});
+  // "Rate at/below purchase price" warning popup shown on save, and the last
+  // net rate each row was already warned about (so leaving the Rate field
+  // again without changing it doesn't beep a second time).
+  const [costAlertOpen, setCostAlertOpen] = useState(false);
+  const warnedRatesRef = useRef<Map<number, string>>(new Map());
 
   // ── All data hooks ──
   const { data: products } = useListProducts({ forSale: true });
@@ -612,11 +638,72 @@ export default function Billing() {
   const roundOff = Math.round(grandTotal) - grandTotal;
   const finalTotal = Math.round(grandTotal);
 
+  // ── Selling below / at cost warning ──
+  // Cost = live BOM (manufacturing) cost for products we make, else the
+  // purchasePrice — the same figure the server snapshots as the line's
+  // cost_price for profit reports (lib/bom-cost.ts effectiveUnitCost). Uses
+  // the net rate per unit after the line discount, before GST (costs are pre-tax).
+  const costByProduct = new Map<number, { cost: number; source: CostSource }>((products ?? []).map((p: any) => {
+    const mfg = Number(p.manufacturingCost) || 0;
+    return [p.id, mfg > 0 ? { cost: mfg, source: "mfg" } : { cost: Number(p.purchasePrice) || 0, source: "purchase" }];
+  }));
+  const netUnitRate = (i: BillingItem) => {
+    const units = billedUnits(i);
+    if (!(units > 0)) return i.rate * (1 - i.discountPct / 100);
+    const base = units * i.rate;
+    const disc = i.discountAmt > 0 ? i.discountAmt : (base * i.discountPct / 100);
+    return (base - disc) / units;
+  };
+  const costWarning = (i: BillingItem): CostWarning | null => {
+    const c = costByProduct.get(i.productId);
+    if (!c || !(c.cost > 0)) return null; // no cost recorded — nothing to compare
+    const { cost, source } = c;
+    const net = Math.round(netUnitRate(i) * 100) / 100;
+    if (net < cost - 0.005) return { kind: "below", cost, net, source };
+    if (Math.abs(net - cost) <= 0.005) return { kind: "equal", cost, net, source };
+    return null;
+  };
+  const costWarnings = items
+    .map((item, idx) => ({ item, idx, w: costWarning(item) }))
+    .filter((x): x is { item: BillingItem; idx: number; w: CostWarning } => x.w !== null);
+
+  // Side notification + beep the moment a rate (or discount) leaves the line
+  // at/below cost — called when the field loses focus, so it fires once the
+  // biller has finished typing rather than on every keystroke.
+  const checkCostOnBlur = (idx: number) => {
+    const item = items[idx];
+    if (!item) return;
+    const w = costWarning(item);
+    const key = w ? `${w.kind}:${w.net}` : "";
+    if (warnedRatesRef.current.get(item.productId) === key) return;
+    warnedRatesRef.current.set(item.productId, key);
+    if (!w) return;
+    playWarningBeep();
+    const label = COST_LABEL[w.source];
+    toast({
+      title: w.kind === "below" ? `⚠ Rate is BELOW ${label.toLowerCase()}` : `⚠ Rate is SAME as ${label.toLowerCase()}`,
+      description: `${item.name}: selling at ₹${w.net.toLocaleString()} — ${label.toLowerCase()} ₹${w.cost.toLocaleString()}. Please check the rate.`,
+      variant: "destructive",
+    });
+  };
+
   const handleSave = () => {
     if (items.length === 0) {
       toast({ title: "No items", description: "Add at least one product before saving.", variant: "destructive" });
       return;
     }
+    // Rates at/below cost: stop and ask first. The biller decides — "Save
+    // anyway" in the popup goes ahead via saveInvoice().
+    if (costWarnings.length > 0) {
+      playWarningBeep();
+      setCostAlertOpen(true);
+      return;
+    }
+    saveInvoice();
+  };
+
+  const saveInvoice = () => {
+    setCostAlertOpen(false);
     const payload = {
       invoiceType, invoiceDate, placeOfSupply,
       customerId: customer?.id ?? undefined,
@@ -1016,9 +1103,11 @@ export default function Billing() {
                           <NumberInput min={0} value={item.rate}
                             onChange={(v) => updateItem(idx, "rate", v, { rateEdited: true })}
                             onKeyDown={(e) => lineItemKeyDown(e, idx, "rate")}
-                            className="w-24 text-right h-7 text-sm disabled:opacity-100 disabled:cursor-not-allowed"
+                            onBlur={() => checkCostOnBlur(idx)}
+                            className={`w-24 text-right h-7 text-sm disabled:opacity-100 disabled:cursor-not-allowed ${costWarning(item) ? "border-red-500 bg-red-50 text-red-700 focus-visible:ring-red-500" : ""}`}
                             data-testid={`input-rate-${idx}`} disabled={user?.role !== "admin"}
                             title={user?.role !== "admin" ? "Only admin can edit rate" : undefined} />
+                          <CostWarningHint w={costWarning(item)} testId={`hint-cost-warning-${idx}`} />
                           <RecentPriceHint
                             productId={item.productId}
                             onPickRate={user?.role === "admin" ? (r) => updateItem(idx, "rate", r, { rateEdited: true }) : undefined}
@@ -1036,6 +1125,7 @@ export default function Billing() {
                           <NumberInput min={0} max={100} value={item.discountPct}
                             onChange={(v) => updateItem(idx, "discountPct", v)}
                             onKeyDown={(e) => lineItemKeyDown(e, idx, "discount")}
+                            onBlur={() => checkCostOnBlur(idx)}
                             className="w-20 text-right h-7 text-sm" data-testid={`input-discount-${idx}`} />
                         </TableCell>
                         <TableCell className="text-right font-bold text-sm">₹{item.amount.toLocaleString()}</TableCell>
@@ -1101,9 +1191,11 @@ export default function Billing() {
                         <Label className="text-[11px] text-muted-foreground">Rate (₹)</Label>
                         <NumberInput min={0} value={item.rate}
                           onChange={(v) => updateItem(idx, "rate", v, { rateEdited: true })}
-                          className="h-8 text-sm disabled:opacity-100 disabled:cursor-not-allowed"
+                          onBlur={() => checkCostOnBlur(idx)}
+                          className={`h-8 text-sm disabled:opacity-100 disabled:cursor-not-allowed ${costWarning(item) ? "border-red-500 bg-red-50 text-red-700 focus-visible:ring-red-500" : ""}`}
                           data-testid={`input-rate-mobile-${idx}`} disabled={user?.role !== "admin"}
                           title={user?.role !== "admin" ? "Only admin can edit rate" : undefined} />
+                        <CostWarningHint w={costWarning(item)} testId={`hint-cost-warning-mobile-${idx}`} />
                         <RecentPriceHint
                           productId={item.productId}
                           onPickRate={user?.role === "admin" ? (r) => updateItem(idx, "rate", r, { rateEdited: true }) : undefined}
@@ -1124,6 +1216,7 @@ export default function Billing() {
                         <Label className="text-[11px] text-muted-foreground">Disc%</Label>
                         <NumberInput min={0} max={100} value={item.discountPct}
                           onChange={(v) => updateItem(idx, "discountPct", v)}
+                          onBlur={() => checkCostOnBlur(idx)}
                           className="h-8 text-sm" data-testid={`input-discount-mobile-${idx}`} />
                       </div>
                       <div className="space-y-1">
@@ -1254,6 +1347,81 @@ export default function Billing() {
         setShowCustomerEdit(false);
       }}
     />
+    {/* Save-time check: some lines are priced at/below purchase cost. The
+        safe choice ("Go back & check") has focus, so an absent-minded Enter
+        doesn't save the bill. */}
+    <Dialog open={costAlertOpen} onOpenChange={setCostAlertOpen}>
+      <DialogContent className="max-w-lg border-2 border-red-500" data-testid="dialog-cost-alert">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-red-600">
+            <AlertTriangle className="w-6 h-6" /> Alert — please check this bill
+          </DialogTitle>
+          <DialogDescription>
+            {costWarnings.length === 1 ? "1 item is" : `${costWarnings.length} items are`} priced at or below cost
+            (purchase rate, or manufacturing cost from the BOM for items you make). Is this a mistake?
+          </DialogDescription>
+        </DialogHeader>
+        <div className="max-h-[300px] overflow-y-auto rounded-md border">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 text-xs text-muted-foreground">
+              <tr>
+                <th className="text-left font-medium px-3 py-2">Item</th>
+                <th className="text-right font-medium px-3 py-2">Selling</th>
+                <th className="text-right font-medium px-3 py-2">Cost</th>
+                <th className="text-right font-medium px-3 py-2">Loss/unit</th>
+              </tr>
+            </thead>
+            <tbody>
+              {costWarnings.map(({ item, idx, w }) => (
+                <tr key={idx} className="border-t">
+                  <td className="px-3 py-2">
+                    <div className="font-medium leading-tight">{item.name}</div>
+                    <div className="text-[11px] text-red-600">
+                      {w.kind === "below" ? "Below" : "Same as"} {COST_LABEL[w.source].toLowerCase()}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums font-semibold text-red-600">₹{w.net.toLocaleString()}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    ₹{w.cost.toLocaleString()}
+                    <div className="text-[10px] text-muted-foreground">{COST_LABEL[w.source]}</div>
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {w.kind === "below" ? `₹${(Math.round((w.cost - w.net) * 100) / 100).toLocaleString()}` : "₹0"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button
+            autoFocus
+            variant="outline"
+            data-testid="button-cost-alert-back"
+            onClick={() => {
+              setCostAlertOpen(false);
+              const first = costWarnings[0];
+              if (first) {
+                requestAnimationFrame(() => {
+                  const el = document.querySelector<HTMLInputElement>(`[data-testid="input-rate-${first.idx}"]`);
+                  if (el && el.offsetParent !== null && !el.disabled) { el.focus(); el.select(); }
+                });
+              }
+            }}
+          >
+            Go back &amp; check
+          </Button>
+          <Button
+            variant="destructive"
+            data-testid="button-cost-alert-save"
+            disabled={createInvoice.isPending || updateInvoice.isPending}
+            onClick={saveInvoice}
+          >
+            Save anyway
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
     </>
   );
 }
