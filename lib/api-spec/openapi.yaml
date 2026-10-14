@@ -5561,7 +5561,7 @@ components:
           description: The first/primary invoice this payment touched, if any — see `allocations` for the full breakdown.
         source:
           type: string
-          enum: [payment, cashbook]
+          enum: [payment, cashbook, adjustment]
         allocations:
           type: array
           items:

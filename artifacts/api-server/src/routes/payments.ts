@@ -17,7 +17,7 @@ import { logger } from "../lib/logger";
 import { getCompanyId } from "../lib/tenant";
 import { isGstAccountant } from "../lib/gst-access";
 import { generateSeriesNumber } from "../lib/number-series";
-import { applyEntityPayment } from "../lib/entity-payment";
+import { applyEntityPayment, settleExcessInvoiceDues, NO_PAY_INVOICE_TYPES } from "../lib/entity-payment";
 
 // Thrown for a bad request caught mid-transaction (needs the ROLLBACK the
 // surrounding try/catch already does) — kept distinct from a genuine
@@ -283,7 +283,138 @@ router.get("/payment-receipts/:receiptNo", async (req, res): Promise<void> => {
     return;
   }
 
+  // Not a money receipt, but bills were still settled under this number: an
+  // advance/credit applied to a bill (ADV-…), a balance sync (SYNC-…), or a
+  // sales return credit (the return number). Shown from its allocations.
+  const { allocations } = await loadAllocationsAndBalance(pool, companyId, receiptNo, null);
+  if (allocations.length > 0) {
+    const metaRes = await pool.query(
+      `SELECT MIN(pa.created_at) AS created_at, MIN(i.customer_name) AS party_name
+       FROM payment_allocations pa
+       LEFT JOIN invoices i ON i.id = pa.invoice_id AND i.company_id = pa.company_id
+       WHERE pa.company_id = $1 AND pa.receipt_no = $2`,
+      [companyId, receiptNo],
+    );
+    const meta = metaRes.rows[0] ?? {};
+    const body = {
+      receiptNo,
+      date: meta.created_at?.toISOString?.() ?? meta.created_at,
+      partyName: meta.party_name ?? null,
+      mode: /^(ADV|SYNC)-/.test(receiptNo) ? "adjustment" : "sales_return",
+      amount: allocations.reduce((sum: number, a: { allocatedAmount: number }) => sum + a.allocatedAmount, 0),
+      direction: "in",
+      status: "completed",
+      invoiceNo: allocations[0]?.invoiceNo ?? null,
+      source: "adjustment",
+      allocations,
+      customerBalanceBefore: null,
+      customerBalanceAfter: null,
+    };
+    if (isGstAccountant(req)) {
+      const view = await gstOnlyReceipt(companyId, body, null);
+      if (!view) { res.status(404).json({ error: "Receipt not found" }); return; }
+      res.json(view);
+      return;
+    }
+    res.json(body);
+    return;
+  }
+
   res.status(404).json({ error: "Receipt not found" });
+});
+
+// ── Bill status ↔ party balance sync (admin) ──
+// One-off clean-up for bills whose paid status drifted from the party
+// balance (advances paid before the bill, receipts from before allocation
+// existed, old sales returns). For every customer whose open bills show more
+// due than they owe, the gap is settled newest-bill-first via
+// settleExcessInvoiceDues. Preview runs the exact same writes inside a
+// transaction and rolls back, so what it shows is what Apply will do.
+async function runPaymentSync(companyId: number, apply: boolean, session: any) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const custRes = await client.query(
+      `SELECT DISTINCT i.customer_id, e.name
+       FROM invoices i
+       JOIN entities e ON e.id = i.customer_id AND e.company_id = i.company_id
+       WHERE i.company_id = $1 AND i.customer_id IS NOT NULL
+         AND i.status != 'cancelled' AND i.balance_due > 0
+         AND i.invoice_type NOT IN (${NO_PAY_INVOICE_TYPES.map((t) => `'${t}'`).join(", ")})
+       ORDER BY e.name`,
+      [companyId],
+    );
+    const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const parties: any[] = [];
+    for (const c of custRes.rows) {
+      const r = await settleExcessInvoiceDues(client, {
+        companyId, customerId: c.customer_id, receiptNo: `SYNC-${stamp}-${c.customer_id}`,
+      });
+      if (r.allocations.length === 0) continue;
+      parties.push({
+        customerId: c.customer_id,
+        name: c.name,
+        balance: r.balance,
+        openDueBefore: r.openDueBefore,
+        settled: r.excess,
+        openDueAfter: Math.round((r.openDueBefore - r.excess) * 100) / 100,
+        invoices: r.allocations.map((a) => ({
+          invoiceId: a.invoiceId,
+          invoiceNo: a.invoiceNo,
+          invoiceAmount: a.invoiceAmount,
+          dueBefore: Math.round((a.allocatedAmount + a.balanceAfter) * 100) / 100,
+          settled: a.allocatedAmount,
+          dueAfter: a.balanceAfter,
+          status: a.status,
+        })),
+      });
+    }
+    const summary = {
+      partyCount: parties.length,
+      invoiceCount: parties.reduce((n, p) => n + p.invoices.length, 0),
+      totalSettled: Math.round(parties.reduce((s, p) => s + p.settled, 0) * 100) / 100,
+    };
+    if (apply && parties.length > 0) {
+      await client.query(
+        `INSERT INTO audit_log (company_id, action, description, user_id, user_name, metadata)
+         VALUES ($1, 'payment_sync', $2, $3, $4, $5)`,
+        [
+          companyId,
+          `Bill status synced with party balance: ${summary.invoiceCount} bills of ${summary.partyCount} parties, ₹${summary.totalSettled}`,
+          session?.userId ?? 1,
+          session?.name ?? "Unknown",
+          JSON.stringify({ ...summary, parties: parties.map((p) => ({ customerId: p.customerId, settled: p.settled, invoices: p.invoices.map((i: any) => [i.invoiceNo, i.settled]) })) }),
+        ],
+      );
+    }
+    await client.query(apply ? "COMMIT" : "ROLLBACK");
+    return { applied: apply, ...summary, parties };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+router.get("/payment-sync/preview", async (req, res): Promise<void> => {
+  if (!requirePaymentApprover(req, res)) return;
+  try {
+    res.json(await runPaymentSync(getCompanyId(req), false, (req as any).session));
+  } catch (err) {
+    logger.error({ err }, "Payment sync preview failed");
+    res.status(500).json({ error: "Could not check bills against party balances" });
+  }
+});
+
+router.post("/payment-sync/apply", async (req, res): Promise<void> => {
+  if (!requirePaymentApprover(req, res)) return;
+  try {
+    res.json(await runPaymentSync(getCompanyId(req), true, (req as any).session));
+  } catch (err) {
+    logger.error({ err }, "Payment sync apply failed");
+    res.status(500).json({ error: "Could not sync bills with party balances" });
+  }
 });
 
 // POST /payments

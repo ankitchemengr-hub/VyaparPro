@@ -27,6 +27,7 @@ import { generateSeriesNumber, type SeriesType } from "../lib/number-series";
 import { getCompanyId } from "../lib/tenant";
 import { isGstAccountant } from "../lib/gst-access";
 import { loadManufacturingCosts, effectiveUnitCost } from "../lib/bom-cost";
+import { settleExcessInvoiceDues, NO_PAY_INVOICE_TYPES } from "../lib/entity-payment";
 
 const router: IRouter = Router();
 
@@ -502,6 +503,13 @@ router.post("/invoices", async (req, res): Promise<void> => {
          VALUES ($1, $2, NOW(), $3, $4, 0, $5, 'invoice', $6, $7)`,
         [companyId, data.customerId, `Invoice ${invoiceNo}`, grandTotal, newBal, invRow.id, invoiceNo]
       );
+
+      // Advance already on the account (party had paid ahead / was in
+      // credit) is applied to this bill right away, so the bill's paid status
+      // always agrees with the party balance — see settleExcessInvoiceDues.
+      if (!NO_PAY_INVOICE_TYPES.includes(data.invoiceType)) {
+        await settleExcessInvoiceDues(client, { companyId, customerId: data.customerId, receiptNo: `ADV-${invoiceNo}` });
+      }
     }
 
     // ── Commission transaction ─────────────────────────────────────────────
@@ -1004,6 +1012,12 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
           [companyId, newCustomerId, `Invoice ${existing.invoice_no} (edited)`, newGrandTotal, newBal, invoiceId, existing.invoice_no]
         );
       }
+    }
+
+    // Same advance/credit catch-up as on create — an edit can move the bill to
+    // a customer who is in credit, or leave the party owing less than its bills.
+    if (newCustomerId && !NO_PAY_INVOICE_TYPES.includes(data.invoiceType ?? existing.invoice_type)) {
+      await settleExcessInvoiceDues(client, { companyId, customerId: newCustomerId, receiptNo: `ADV-${existing.invoice_no}` });
     }
 
     // 7. Audit log

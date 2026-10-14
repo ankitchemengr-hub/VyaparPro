@@ -1907,7 +1907,7 @@ export const GetPaymentReceiptResponse = zod.object({
   "direction": zod.enum(['in', 'out']),
   "status": zod.string().describe('approved\/pending\/rejected for a customer payment; \"completed\" for a Cash Book entry (no approval step).'),
   "invoiceNo": zod.string().nullish().describe('The first\/primary invoice this payment touched, if any — see `allocations` for the full breakdown.'),
-  "source": zod.enum(['payment', 'cashbook']),
+  "source": zod.enum(['payment', 'cashbook', 'adjustment']),
   "allocations": zod.array(zod.object({
   "invoiceId": zod.number(),
   "invoiceNo": zod.string(),

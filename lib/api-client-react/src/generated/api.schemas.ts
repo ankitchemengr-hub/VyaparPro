@@ -1695,6 +1695,7 @@ export type PaymentReceiptSource = typeof PaymentReceiptSource[keyof typeof Paym
 export const PaymentReceiptSource = {
   payment: 'payment',
   cashbook: 'cashbook',
+  adjustment: 'adjustment',
 } as const;
 
 export interface PaymentReceipt {

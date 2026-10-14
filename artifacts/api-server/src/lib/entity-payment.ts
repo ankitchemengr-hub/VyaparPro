@@ -10,7 +10,7 @@
 // negative balance is exactly how an advance/credit is represented (already
 // surfaced correctly in Khatabook).
 
-const NO_PAY_INVOICE_TYPES = ["quotation", "proforma_invoice", "sale_order", "delivery_challan"];
+export const NO_PAY_INVOICE_TYPES: readonly string[] = ["quotation", "proforma_invoice", "sale_order", "delivery_challan"];
 
 export interface PaymentAllocation {
   invoiceId: number;
@@ -205,4 +205,43 @@ export async function applyEntityPayment(
   }
 
   return { newBalance, allocations };
+}
+
+// Brings a customer's open bills in line with their account balance: if the
+// bills still show more due than the party actually owes (outstanding_balance,
+// floored at 0), the difference is settled against those bills newest-first —
+// exactly like a payment — and recorded in payment_allocations under
+// receiptNo. This covers money that reached the balance without ever being
+// applied to a bill: an advance paid before the bill existed, or receipts
+// taken before allocation was introduced.
+//
+// One direction only: it never re-opens a paid bill when the balance is
+// HIGHER than the open bills (that gap is an opening balance or other non-bill
+// debit, not a missing payment). Does not touch the balance or the ledger —
+// the money is already there; only the bills' paid/due figures move.
+export async function settleExcessInvoiceDues(
+  client: { query: (text: string, params?: any[]) => Promise<any> },
+  { companyId, customerId, receiptNo }: { companyId: number; customerId: number; receiptNo: string },
+): Promise<{ balance: number; openDueBefore: number; excess: number; allocations: PaymentAllocation[] }> {
+  const balRes = await client.query(
+    `SELECT outstanding_balance FROM entities WHERE id = $1 AND company_id = $2 FOR UPDATE`,
+    [customerId, companyId],
+  );
+  const balance = Number(balRes.rows[0]?.outstanding_balance ?? 0);
+  const dueRes = await client.query(
+    `SELECT COALESCE(SUM(balance_due), 0) AS due
+     FROM invoices
+     WHERE company_id = $1 AND customer_id = $2
+       AND status != 'cancelled' AND invoice_type NOT IN (${NO_PAY_TYPES_SQL}) AND balance_due > 0`,
+    [companyId, customerId],
+  );
+  const openDueBefore = Number(dueRes.rows[0]?.due ?? 0);
+  const excess = Math.round((openDueBefore - Math.max(0, balance)) * 100) / 100;
+  if (!(balRes.rows[0]) || excess <= 0.009) {
+    return { balance, openDueBefore, excess: 0, allocations: [] };
+  }
+  const allocations = await allocatePaymentAcrossInvoices(client, {
+    companyId, customerId, amount: excess, receiptNo,
+  });
+  return { balance, openDueBefore, excess, allocations };
 }

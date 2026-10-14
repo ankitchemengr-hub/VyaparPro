@@ -26,6 +26,8 @@ const MODE_LABELS: Record<string, string> = {
   cheque: "Cheque",
   bank_transfer: "Bank Transfer",
   other: "Other",
+  adjustment: "Advance / balance adjustment",
+  sales_return: "Sales return",
 };
 
 export interface InvoiceReceiptDialogProps {

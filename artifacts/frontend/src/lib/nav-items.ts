@@ -29,6 +29,7 @@ import {
   Sparkles,
   History,
   PhoneCall,
+  RefreshCw,
   type LucideIcon,
 } from "lucide-react";
 
@@ -87,6 +88,7 @@ export const moduleNavItems: NavItem[] = [
   { name: "User Accounts", href: "/users", icon: KeyRound, roles: ["admin"], description: "Manage logins" },
   { name: "Settings", href: "/settings", icon: Settings, roles: ["admin"], description: "Role permissions and config" },
   { name: "Backup & Restore", href: "/backup-restore", icon: DatabaseBackup, roles: ["admin"], description: "Backup, restore and reset data" },
+  { name: "Bill Payment Sync", href: "/payment-sync", icon: RefreshCw, roles: ["admin"], description: "Mark bills paid to match party balances (Khatabook / Cash Book payments)" },
   { name: "Recycle Bin", href: "/recycle-bin", icon: RotateCcw, roles: ["admin"], description: "Cancelled invoices — permanently delete or review" },
 ];
 
