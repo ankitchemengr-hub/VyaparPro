@@ -140,7 +140,7 @@ export default function Users() {
                           onError: (e: any) =>
                             toast({
                               title: "Update failed",
-                              description: e?.response?.data?.error ?? String(e),
+                              description: e?.data?.error ?? e?.message ?? String(e),
                               variant: "destructive",
                             }),
                         }
@@ -319,7 +319,7 @@ function EditUserDialog({
         onError: (e: any) =>
           toast({
             title: "Update failed",
-            description: e?.response?.data?.error ?? String(e),
+            description: e?.data?.error ?? e?.message ?? String(e),
             variant: "destructive",
           }),
       },
@@ -444,7 +444,10 @@ function AddUserDialog({
     },
   );
 
+  const [usernameSuggestion, setUsernameSuggestion] = useState<string | null>(null);
+
   const onSubmit = form.handleSubmit((values) => {
+    setUsernameSuggestion(null);
     const trimmedUser = values.username.trim();
     if (trimmedUser.length < 3) {
       form.setError("username", { message: "Username must be at least 3 characters" });
@@ -475,12 +478,17 @@ function AddUserDialog({
           form.reset();
           onCreated();
         },
-        onError: (e: any) =>
-          toast({
-            title: "Failed to create user",
-            description: e?.response?.data?.error ?? String(e),
-            variant: "destructive",
-          }),
+        onError: (e: any) => {
+          const msg = e?.data?.error ?? e?.message ?? String(e);
+          // Username taken (in any company) — show it on the field itself,
+          // with the server's free suggestion one tap away.
+          if (e?.status === 409) {
+            setUsernameSuggestion(typeof e?.data?.suggestion === "string" ? e.data.suggestion : null);
+            form.setError("username", { message: msg });
+            return;
+          }
+          toast({ title: "Failed to create user", description: msg, variant: "destructive" });
+        },
       },
     );
   });
@@ -550,9 +558,26 @@ function AddUserDialog({
                 <FormItem>
                   <FormLabel>Username</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g. salesman2" autoComplete="off" {...field} data-testid="input-username" />
+                    <Input placeholder="e.g. salesman2" autoComplete="off" autoCapitalize="none" {...field} data-testid="input-username" />
                   </FormControl>
                   <FormMessage />
+                  {usernameSuggestion && (
+                    <button
+                      type="button"
+                      className="text-xs text-primary underline underline-offset-2"
+                      onClick={() => {
+                        form.setValue("username", usernameSuggestion);
+                        form.clearErrors("username");
+                        setUsernameSuggestion(null);
+                      }}
+                      data-testid="button-use-username-suggestion"
+                    >
+                      Use "{usernameSuggestion}"
+                    </button>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Must be unique — not used by anyone in any company.
+                  </p>
                 </FormItem>
               )}
             />
@@ -656,7 +681,7 @@ function ResetPasswordDialog({
         onError: (e: any) =>
           toast({
             title: "Reset failed",
-            description: e?.response?.data?.error ?? String(e),
+            description: e?.data?.error ?? e?.message ?? String(e),
             variant: "destructive",
           }),
       },

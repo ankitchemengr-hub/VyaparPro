@@ -7,6 +7,7 @@ import {
 } from "@workspace/api-zod";
 import { getCompanyId } from "../lib/tenant";
 import { hashPassword } from "../lib/password";
+import { isUsernameTaken, suggestUsername, usernameTakenMessage } from "../lib/username";
 
 const router: IRouter = Router();
 
@@ -117,15 +118,12 @@ router.post("/users", requireAdmin, async (req, res): Promise<void> => {
     return;
   }
 
-  // Usernames are unique within a company, not globally. Two companies can both
-  // have a user named "admin" — they are different rows with different company_ids.
-  // Scope the duplicate check to this company only.
-  const [existing] = await db
-    .select({ id: usersTable.id })
-    .from(usersTable)
-    .where(and(eq(usersTable.companyId, companyId), eq(usersTable.username, username)));
-  if (existing) {
-    res.status(409).json({ error: "Username already taken within this company" });
+  // New usernames must be unique across ALL companies — staff log in without
+  // picking a company, so a second "accountant" anywhere makes login ambiguous.
+  if (await isUsernameTaken(pool, username)) {
+    const { rows } = await pool.query(`SELECT name FROM companies WHERE id = $1`, [companyId]);
+    const suggestion = await suggestUsername(pool, username, rows[0]?.name);
+    res.status(409).json({ error: usernameTakenMessage(username, suggestion), suggestion });
     return;
   }
 
