@@ -124,9 +124,10 @@ type BillingItem = {
   // printed on the invoice under the item name, separate from the
   // product's own catalog name/description.
   description: string;
-  // Set once the user types in the Rate field — stops the history auto-fill
-  // (this customer's last billed rate, else the last sale rate) from
-  // overwriting a rate they chose by hand.
+  // Set when the rate was typed by hand, picked from price history, or loaded
+  // from a saved invoice / scanned bill — such a rate is kept when the product
+  // list refreshes. Unset = straight from the price list, so it follows rate
+  // updates made elsewhere (Purchases, Price List, Inventory).
   rateEdited?: boolean;
 };
 
@@ -307,12 +308,12 @@ export default function Billing() {
   const [sharing, setSharing] = useState(false);
   const savedSheetRef = useRef<HTMLDivElement>(null);
   const [prefilled, setPrefilled] = useState(false);
-  // Prefilling an existing invoice sets docType/invoiceSubtype from the saved
-  // record, which changes `invoiceType` in the same batch as the saved item
-  // rates — that would otherwise re-trigger the price-list rate sync below
-  // and stomp the rates the user actually saved. This ref lets that sync
-  // skip the one render caused by prefill.
-  const skipRateSyncRef = useRef(false);
+  // The invoice-type + customer-pricing-tier combination the line rates were
+  // last priced for. The price-list rate sync below reprices only when this
+  // actually changes (the user toggles GST/Non-GST or picks a customer on a
+  // different tier). Prefill / bill-scan set it to the values they load, so
+  // loading a saved invoice never reprices the rates the user saved.
+  const pricingKeyRef = useRef<string | null>(null);
   // Keyboard shortcuts call through this ref instead of `handleSave` directly
   // — `handleSave` isn't defined until after the early-return role guards
   // below, and hooks (this effect included) must run unconditionally before
@@ -326,7 +327,9 @@ export default function Billing() {
   const warnedRatesRef = useRef<Map<number, string>>(new Map());
 
   // ── All data hooks ──
-  const { data: products } = useListProducts({ forSale: true });
+  // Always refetch on open (not served from a stale cache) so a rate updated
+  // a moment ago on Purchases / Price List / Inventory is what gets billed.
+  const { data: products } = useListProducts({ forSale: true }, { query: { refetchOnMount: "always" } as any });
   const { data: salesmanEntities } = useListEntities({ type: "salesman" } as any);
   // Only needed to match a scanned bill's customer — fetched when the scanner opens.
   const { data: customerEntities } = useListEntities({ type: "customer" } as any, { query: { enabled: scanOpen } as any });
@@ -368,9 +371,40 @@ export default function Billing() {
     }
   }, [customer?.id]);
 
+  // When the product list itself refreshes (e.g. a sale rate was just
+  // updated after a purchase), lines whose rate came straight from the price
+  // list follow the new rate. Hand-typed rates and rates loaded from a saved
+  // invoice or scanned bill (rateEdited) are never touched.
   useEffect(() => {
+    if (!products || items.length === 0) return;
+    setItems((prev) => {
+      let changed = false;
+      const next = prev.map((item) => {
+        if (item.rateEdited) return item;
+        const p = products.find((x: any) => x.id === item.productId);
+        if (!p) return item;
+        const newRate = getBaseRate(p, customer, invoiceType);
+        if (Math.abs(newRate - item.rate) < 0.0001) return item;
+        changed = true;
+        const amount = Math.round(billedUnits(item) * newRate * (1 + item.taxPct / 100) * 100) / 100;
+        return { ...item, rate: newRate, mrp: Number(p.mrp ?? item.mrp), amount };
+      });
+      return changed ? next : prev;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [products]);
+
+  // Deliberately NOT keyed on `products` (that's the effect above this one, which only
+  // touches price-list rates): the product list also carries stock, so it
+  // refetches whenever stock moved elsewhere — repricing every line on that
+  // used to stomp saved rates a moment after an edit form opened and wipe
+  // hand-typed rates on a new invoice when the window regained focus.
+  const pricingKey = `${invoiceType}|${customer?.pricingTier ?? ""}`;
+  useEffect(() => {
+  const prevKey = pricingKeyRef.current;
+  pricingKeyRef.current = pricingKey;
+  if (prevKey === null || prevKey === pricingKey) return;
   if (!products || items.length === 0) return;
-  if (skipRateSyncRef.current) { skipRateSyncRef.current = false; return; }
   setItems((prev) => prev.map((item) => {
     const p = products.find((x: any) => x.id === item.productId);
     if (!p) return item;
@@ -380,7 +414,7 @@ export default function Billing() {
     return { ...item, rate: newRate, taxPct, amount };
   }));
 // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [invoiceType, products, customer?.pricingTier]);
+}, [pricingKey]);
 
   useEffect(() => {
     if (!isEditMode || !existingInvoice || prefilled) return;
@@ -389,6 +423,8 @@ export default function Billing() {
     // above, silently reprice a wholesale customer's items if the invoice
     // type is later toggled while editing.
     if (existingInvoice.customerId && !existingCustomerEntity) return;
+    // Products give each line its box size / litres — wait for them too.
+    if (!products) return;
     const et = existingInvoice.invoiceType as string;
     if (et === "gst" || et === "non_gst") { setDocType("invoice"); setInvoiceSubtype(et); }
     else { setDocType(et); }
@@ -405,7 +441,12 @@ export default function Billing() {
         outstandingBalance: 0,
       });
     }
-    skipRateSyncRef.current = true;
+    // Mark the saved type/tier as already priced so the sync above leaves the
+    // saved rates alone.
+    const prefillTier = (existingInvoice.customerId || existingInvoice.customerName)
+      ? (existingCustomerEntity?.pricingTier ?? "retail")
+      : customer?.pricingTier;
+    pricingKeyRef.current = `${et}|${prefillTier ?? ""}`;
     setItems((existingInvoice.items ?? []).map((it: any) => {
       const prod = (products ?? []).find((x: any) => x.id === it.productId);
       return {
@@ -422,7 +463,7 @@ export default function Billing() {
       };
     }));
     setPrefilled(true);
-  }, [isEditMode, existingInvoice, existingCustomerEntity, prefilled]);
+  }, [isEditMode, existingInvoice, existingCustomerEntity, prefilled, products]);
 
   useEffect(() => {
     if (!params.cart || !products) return;
@@ -774,7 +815,7 @@ export default function Billing() {
     if (r.billDate) setInvoiceDate(r.billDate);
     setPlaceOfSupply(r.placeOfSupply || entity?.state || "Maharashtra");
     setFreight(Number(r.freight) || 0);
-    skipRateSyncRef.current = true;
+    pricingKeyRef.current = `${r.isGstBill ? "gst" : "non_gst"}|${(entity ?? customer)?.pricingTier ?? ""}`;
     setItems(r.lines.map((l) => {
       const p: any = (products ?? []).find((x: any) => x.id === l.productId);
       const taxPct = r.isGstBill ? l.taxPct : 0;

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { useListProducts } from "@workspace/api-client-react";
+import { useListProducts, getListProductsQueryKey } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/use-auth";
 import { homePathForRole } from "@/lib/nav-items";
 import { Input } from "@/components/ui/input";
@@ -216,7 +216,7 @@ export default function StockAdjustment() {
           title: "Stock updated",
           description: preview.productName + " adjusted from " + preview.systemStock + " → " + preview.physicalCount + ".",
         });
-        queryClient.invalidateQueries({ queryKey: ["products"] });
+        queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() });
         setShowConfirm(false);
         setSelectedProduct(null);
         setPhysicalCount("");
