@@ -119,59 +119,78 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   // accounts, so this is transparent to the user.
   // Case-insensitive username match — a phone/PC with caps-lock or
   // autocapitalize on ("ADMIN" vs stored "admin") must not fail login.
-  const usernameMatch = eq(sql`lower(${usersTable.username})`, username.toLowerCase());
+  const usernameMatch = eq(sql`lower(trim(${usersTable.username}))`, username.trim().toLowerCase());
+
+  // Usernames are only unique WITHIN a company, so the same name (e.g.
+  // "accountant") can exist in several companies. Among the rows a lookup
+  // returns, the one whose password verifies is the account being signed into.
+  // `failReason` records why nothing matched, for the audit log.
+  type FailReason = "unknown_user" | "wrong_password" | "ambiguous_username";
+  let failReason = "unknown_user" as FailReason;
+  const pickByPassword = (rows: (typeof usersTable.$inferSelect)[]) => {
+    if (rows.length === 0) return undefined;
+    const ok = rows.filter((r) => verifyPassword(password, r.passwordHash));
+    if (ok.length === 1) return ok[0];
+    failReason = ok.length > 1 ? "ambiguous_username" : "wrong_password";
+    return undefined;
+  };
 
   let user: typeof usersTable.$inferSelect | undefined;
+  // The company the login screen asked for. Cleared below when it turns out to
+  // be a stale leftover, so the session isn't flagged as a validated switch.
+  let effectiveSwitch: number | null = switchTarget;
   if (requestedCompanyId != null) {
-    const [found] = await db
+    const rows = await db
       .select()
       .from(usersTable)
       .where(and(usernameMatch, eq(usersTable.companyId, requestedCompanyId)));
-    user = found;
-  } else {
+    user = pickByPassword(rows);
+    // No such username in that company at all: the company id is most likely a
+    // stale login-screen selection remembered by this browser (the hidden
+    // super-admin switcher), not the user's choice — look the account up the
+    // normal way instead of failing every login from this device.
+    if (!user && rows.length === 0) effectiveSwitch = null;
+  }
+  if (!user && effectiveSwitch == null) {
     // No company selected — try super_admin (company_id IS NULL) first.
-    const [superAdminMatch] = await db
+    user = pickByPassword(await db
       .select()
       .from(usersTable)
-      .where(and(usernameMatch, isNull(usersTable.companyId)));
-    if (superAdminMatch) {
-      user = superAdminMatch;
-    } else {
+      .where(and(usernameMatch, isNull(usersTable.companyId))));
+    if (!user) {
       // Dedicated single-company installs have no company picker on the login
       // screen at all, so regular staff never send a companyId — fall back to
       // the deployment's locked-in company instead of failing the lookup.
       const defaultCompanyId = getDefaultCompanyId();
       if (defaultCompanyId != null) {
-        const [found] = await db
+        user = pickByPassword(await db
           .select()
           .from(usersTable)
-          .where(and(usernameMatch, eq(usersTable.companyId, defaultCompanyId)));
-        user = found;
+          .where(and(usernameMatch, eq(usersTable.companyId, defaultCompanyId))));
       }
 
-      // Shared multi-tenant mode: the login screen's only company picker is
-      // the hidden super-admin switcher, whose selection is remembered in the
-      // browser's localStorage — regular staff never see a picker at all and
-      // rely entirely on that leftover value. If it's missing (cleared cache,
-      // new device, PWA reinstall) every staff login fails here with no way
-      // to recover. Since usernames are scoped per company, a username that
-      // exists in exactly one company is an unambiguous match — use it.
+      // Shared multi-tenant mode: regular staff never see a company picker.
+      // Search every company; the password tells same-named accounts apart.
       if (!user) {
-        const candidates = await db
+        user = pickByPassword(await db
           .select()
           .from(usersTable)
-          .where(and(usernameMatch, isNotNull(usersTable.companyId)));
-        if (candidates.length === 1) {
-          user = candidates[0];
-        }
+          .where(and(usernameMatch, isNotNull(usersTable.companyId))));
       }
     }
   }
 
-  if (!user || !verifyPassword(password, user.passwordHash)) {
+  if (!user) {
     recordLoginFailure(rateLimitKey);
-    res.status(401).json({ error: "Invalid credentials" });
-    await writeLoginAudit({ username, companyId: auditCompanyId, ipAddress: ip, success: false, reason: "wrong_password" });
+    if (failReason === "ambiguous_username") {
+      // Same username AND same password in two companies — can't tell which.
+      res.status(409).json({
+        error: "This username is used in more than one company. Ask your admin to give you a different username.",
+      });
+    } else {
+      res.status(401).json({ error: "Invalid credentials" });
+    }
+    await writeLoginAudit({ username, companyId: auditCompanyId, ipAddress: ip, success: false, reason: failReason });
     return;
   }
   clearLoginAttempts(rateLimitKey);
@@ -193,12 +212,12 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   }
 
   // Login-screen "Switch Company" selection — must match the user's own company.
-  if (user.role !== "super_admin" && switchTarget != null) {
-    if (user.companyId == null || user.companyId !== switchTarget) {
+  if (user.role !== "super_admin" && effectiveSwitch != null) {
+    if (user.companyId == null || user.companyId !== effectiveSwitch) {
       res.status(403).json({
         error: "Your account does not belong to the selected company.",
       });
-      await writeLoginAudit({ username, companyId: switchTarget, ipAddress: ip, success: false, reason: "company_mismatch", userId: user.id, userName: user.name });
+      await writeLoginAudit({ username, companyId: effectiveSwitch, ipAddress: ip, success: false, reason: "company_mismatch", userId: user.id, userName: user.name });
       return;
     }
   } else if (!isAccountAllowedHere(user.role, user.companyId ?? null)) {
@@ -239,7 +258,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   const sessionCompanyId =
     user.role === "super_admin"
       ? null
-      : switchTarget ?? getDefaultCompanyId() ?? user.companyId ?? null;
+      : effectiveSwitch ?? getDefaultCompanyId() ?? user.companyId ?? null;
 
   (req as any).session = {
     userId: user.id,
@@ -249,7 +268,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     entityId: user.entityId ?? null,
     pricingTier: user.pricingTier ?? null,
     companyId: sessionCompanyId,
-    companySwitch: user.role !== "super_admin" && switchTarget != null,
+    companySwitch: user.role !== "super_admin" && effectiveSwitch != null,
   };
 
   const loginCompany = await getCurrentCompany(sessionCompanyId);

@@ -214,7 +214,7 @@ export default function Login() {
           // Rate-limit / dedicated-company messages are specific and useful —
           // show them as-is; anything else is a wrong username/password.
           const serverMsg = typeof err?.data?.error === "string" ? err.data.error : null;
-          const msg = err?.status === 429 || err?.status === 403
+          const msg = err?.status === 429 || err?.status === 403 || err?.status === 409
             ? (serverMsg ?? "Too many attempts. Please wait a few minutes.")
             : "Wrong username or password. Check the spelling and try again.";
           setLoginError(msg);
