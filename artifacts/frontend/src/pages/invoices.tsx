@@ -401,7 +401,14 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
                       {(() => {
                         const ps = getPayStatus(invoice);
                         if (ps === "paid") return <Badge className="bg-green-600 text-white hover:bg-green-700">Paid</Badge>;
-                        if (ps === "partial") return <Badge className="bg-amber-500 text-white hover:bg-amber-600">Partial</Badge>;
+                        if (ps === "partial") return (
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <Badge className="bg-amber-500 text-white hover:bg-amber-600">Partial</Badge>
+                            <span className="text-xs font-semibold whitespace-nowrap text-amber-700 dark:text-amber-300" data-testid={`text-balance-${invoice.id}`}>
+                              Bal ₹{Number(invoice.balanceDue).toLocaleString()}
+                            </span>
+                          </div>
+                        );
                         if (ps === "not_paid") return <Badge variant="destructive">Not Paid</Badge>;
                         if (ps === "cancelled") return <Badge variant="destructive">Cancelled</Badge>;
                         return <Badge variant="secondary">{invoice.status}</Badge>;
