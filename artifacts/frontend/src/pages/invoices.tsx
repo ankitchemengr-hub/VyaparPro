@@ -24,7 +24,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { format, startOfMonth, startOfDay, subDays } from "date-fns";
-import { Pencil, Trash2, Loader2, UserCircle2, Eye, CalendarIcon, X, IndianRupee, Filter } from "lucide-react";
+import { Pencil, Trash2, Loader2, UserCircle2, Eye, CalendarIcon, X, IndianRupee, Filter, AlertTriangle } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
@@ -36,6 +36,7 @@ type InvoiceFilters = {
   dateFrom: Date | undefined;
   dateTo: Date | undefined;
   createdByUserId: string;
+  lossOnly: boolean;
 };
 // Persists filters across mount/unmount of this component (e.g. viewing an
 // invoice and navigating back) for the lifetime of the page session.
@@ -68,11 +69,12 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
   const [dateFrom, setDateFrom] = useState<Date | undefined>(saved?.dateFrom);
   const [dateTo, setDateTo] = useState<Date | undefined>(saved?.dateTo);
   const [createdByUserId, setCreatedByUserId] = useState<string>(saved?.createdByUserId ?? "all");
+  const [lossOnly, setLossOnly] = useState<boolean>(saved?.lossOnly ?? false);
   const [deleting, setDeleting] = useState<{ id: number; invoiceNo: string; invoiceType: string } | null>(null);
 
   useEffect(() => {
-    filterStore.set(storeKey, { search, type, payStatus, dateFrom, dateTo, createdByUserId });
-  }, [storeKey, search, type, payStatus, dateFrom, dateTo, createdByUserId]);
+    filterStore.set(storeKey, { search, type, payStatus, dateFrom, dateTo, createdByUserId, lossOnly });
+  }, [storeKey, search, type, payStatus, dateFrom, dateTo, createdByUserId, lossOnly]);
 
   const isSalesman = user?.role === "salesman";
   const isAdmin = user?.role === "admin";
@@ -90,10 +92,10 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
 
   const clearFilters = () => {
     setSearch(""); setType("all"); setPayStatus("all");
-    setDateFrom(undefined); setDateTo(undefined); setCreatedByUserId("all");
+    setDateFrom(undefined); setDateTo(undefined); setCreatedByUserId("all"); setLossOnly(false);
   };
 
-  const hasFilters = !!search || type !== "all" || payStatus !== "all" || !!dateFrom || !!dateTo || createdByUserId !== "all";
+  const hasFilters = !!search || type !== "all" || payStatus !== "all" || !!dateFrom || !!dateTo || createdByUserId !== "all" || lossOnly;
 
   // Salesman scoping is enforced server-side from their session entity — no need
   // (and incorrect) to send user.id here, which is the user-account id, not the
@@ -125,10 +127,15 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
     if (paid > 0) return "partial";
     return "not_paid";
   };
-  const displayedInvoices = (invoices ?? []).filter((inv) => {
+  // Admin only: number of lines on this sale sold below cost (server-computed
+  // from the cost snapshotted at billing time). Absent for other roles.
+  const lossItems = (inv: any): number => (isAdmin ? Number(inv.lossItemCount ?? 0) : 0);
+  const payFiltered = (invoices ?? []).filter((inv) => {
     if (payStatus === "all" || payStatus === "cancelled") return true;
     return getPayStatus(inv) === payStatus;
   });
+  const lossInvoiceCount = payFiltered.filter((inv) => lossItems(inv) > 0).length;
+  const displayedInvoices = lossOnly ? payFiltered.filter((inv) => lossItems(inv) > 0) : payFiltered;
 
   const handleConfirmDelete = () => {
     if (!deleting) return;
@@ -294,6 +301,20 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
               </PopoverContent>
             </Popover>
 
+            {isAdmin && (lossInvoiceCount > 0 || lossOnly) && (
+              <Button
+                variant={lossOnly ? "destructive" : "outline"}
+                size="sm"
+                className={cn("shrink-0 gap-1", !lossOnly && "border-red-500 text-red-600 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/40")}
+                onClick={() => setLossOnly((v) => !v)}
+                title={lossOnly ? "Show all invoices" : "Show only invoices with items sold below cost"}
+                data-testid="button-loss-filter"
+              >
+                <AlertTriangle className="h-4 w-4" />
+                {lossInvoiceCount}<span className="hidden sm:inline"> below cost</span>
+              </Button>
+            )}
+
             <span className="shrink-0 text-sm text-muted-foreground" data-testid="text-result-count">
               {isLoading ? "Loading…" : `${displayedInvoices.length} invoice${displayedInvoices.length === 1 ? "" : "s"}`}
             </span>
@@ -329,14 +350,29 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
               ) : (
                 displayedInvoices.map((invoice) => {
                   const bySalesman = isAdmin && !!invoice.salesmanName;
+                  const loss = lossItems(invoice);
                   return (
                   <TableRow
                     key={invoice.id}
                     data-testid={`row-invoice-${invoice.id}`}
-                    className={bySalesman ? "bg-amber-50/60 dark:bg-amber-950/20 hover:bg-amber-100/60 dark:hover:bg-amber-950/30 border-l-2 border-l-amber-500" : undefined}
+                    className={
+                      loss > 0
+                        ? "bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50 border-l-4 border-l-red-600"
+                        : bySalesman ? "bg-amber-50/60 dark:bg-amber-950/20 hover:bg-amber-100/60 dark:hover:bg-amber-950/30 border-l-2 border-l-amber-500" : undefined
+                    }
                   >
                     <TableCell className={bySalesman ? "font-mono font-semibold italic text-amber-900 dark:text-amber-200" : "font-medium"}>
                       {invoice.invoiceNo}
+                      {loss > 0 && (
+                        <span
+                          className="mt-0.5 flex w-fit items-center gap-1 rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold not-italic font-sans text-white"
+                          title={`${loss} item${loss === 1 ? "" : "s"} sold below cost (purchase price / manufacturing cost)`}
+                          data-testid={`badge-loss-${invoice.id}`}
+                        >
+                          <AlertTriangle className="h-3 w-3 shrink-0" />
+                          Loss · {loss} item{loss === 1 ? "" : "s"}
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell className="hidden sm:table-cell">{format(new Date(invoice.invoiceDate), "MMM dd, yyyy")}</TableCell>
                     <TableCell className="hidden md:table-cell">

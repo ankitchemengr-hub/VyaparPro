@@ -218,7 +218,34 @@ router.get("/invoices", async (req, res): Promise<void> => {
     : [];
   const creatorNameById = new Map(creators.map((c) => [c.id, c.name]));
 
-  res.json(invoices.map((inv) => formatInvoice(inv, [], creatorNameById.get(inv.createdByUserId ?? -1) ?? null)));
+  // Admin only: how many lines of each sale were sold below cost, so the
+  // Invoices page can flag loss-making bills. Measured like the billing-time
+  // warning — net rate per unit after the line discount, before GST — against
+  // the cost_price snapshotted at sale time (BOM cost for made items, else
+  // purchase price). Quotations/challans/orders aren't sales and are skipped;
+  // rows from before cost_price existed (NULL) are never flagged.
+  const lossCountById = new Map<number, number>();
+  if (session?.role === "admin" && invoices.length > 0) {
+    const lossRows = await pool.query(
+      `SELECT ii.invoice_id, COUNT(*)::int AS loss_items
+       FROM invoice_items ii
+       JOIN invoices i ON i.id = ii.invoice_id AND i.company_id = ii.company_id
+       WHERE ii.company_id = $1
+         AND ii.invoice_id = ANY($2::int[])
+         AND i.invoice_type NOT IN ('quotation', 'proforma_invoice', 'sale_order', 'delivery_challan')
+         AND ii.cost_price > 0
+         AND ii.qty > 0
+         AND ROUND((ii.qty * ii.rate - ii.discount_amt) / ii.qty, 2) < ii.cost_price
+       GROUP BY ii.invoice_id`,
+      [companyId, invoices.map((i) => i.id)],
+    );
+    for (const r of lossRows.rows) lossCountById.set(r.invoice_id, r.loss_items);
+  }
+
+  res.json(invoices.map((inv) => ({
+    ...formatInvoice(inv, [], creatorNameById.get(inv.createdByUserId ?? -1) ?? null),
+    ...(session?.role === "admin" ? { lossItemCount: lossCountById.get(inv.id) ?? 0 } : {}),
+  })));
 });
 
 // POST /invoices
