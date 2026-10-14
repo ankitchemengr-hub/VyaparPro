@@ -256,6 +256,24 @@ function CostWarningHint({ w, testId }: { w: CostWarning | null; testId: string 
   );
 }
 
+// Stock on hand beside each product in the billing search dropdown, so the
+// biller sees how many are left before adding the line. Red at zero or
+// negative, amber at/below the product's low-stock threshold.
+function StockPill({ product, active }: { product: { currentStock: number; unit: string; minStockThreshold?: number | null }; active: boolean }) {
+  const stock = Number(product.currentStock) || 0;
+  const min = product.minStockThreshold != null ? Number(product.minStockThreshold) : null;
+  const tone = stock <= 0
+    ? "bg-red-600 text-white"
+    : min != null && stock <= min
+      ? "bg-amber-500 text-white"
+      : active ? "bg-primary-foreground/20 text-primary-foreground" : "bg-green-100 text-green-800 dark:bg-green-950/50 dark:text-green-300";
+  return (
+    <span className={`text-xs px-1.5 py-0.5 rounded font-semibold tabular-nums whitespace-nowrap ${tone}`} data-testid={`stock-pill-${(product as any).id}`}>
+      Stock: {stock.toLocaleString()} {product.unit}
+    </span>
+  );
+}
+
 function parseSearch(search: string) {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
   return {
@@ -1035,6 +1053,7 @@ export default function Billing() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
+                          <StockPill product={p} active={active} />
                           {alreadyAdded && <span className={`text-[10px] uppercase px-1.5 py-0.5 rounded font-medium ${active ? "bg-primary-foreground/20 text-primary-foreground" : "bg-primary/10 text-primary"}`}>Added</span>}
                           <Plus className={`w-4 h-4 ${active ? "text-primary-foreground" : "text-muted-foreground"}`} />
                         </div>
