@@ -40,6 +40,7 @@ function toPublic(u: typeof usersTable.$inferSelect) {
     entityId: u.entityId,
     pricingTier: u.pricingTier,
     isActive: u.isActive,
+    canEditRate: u.canEditRate,
     createdAt: u.createdAt.toISOString(),
   };
 }
@@ -295,6 +296,40 @@ router.patch("/users/:id", requireAdmin, async (req, res): Promise<void> => {
       ipAddress: ip,
     });
   }
+});
+
+// PUT /users/:id/rate-permission { canEditRate } — admin turns "may change
+// the rate while billing" on/off for a store user. Kept off the generated
+// UpdateUser schema so it's a single, auditable switch.
+router.put("/users/:id/rate-permission", requireAdmin, async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  const canEditRate = (req.body ?? {}).canEditRate;
+  if (!Number.isInteger(id) || typeof canEditRate !== "boolean") {
+    res.status(400).json({ error: "Send { canEditRate: true | false }" });
+    return;
+  }
+  const companyId = getCompanyId(req);
+  const [updated] = await db
+    .update(usersTable)
+    .set({ canEditRate })
+    .where(and(eq(usersTable.id, id), eq(usersTable.companyId, companyId)))
+    .returning();
+  if (!updated) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  const session = (req as any).session;
+  await writeAuditLog({
+    companyId,
+    action: "rate_permission_changed",
+    description: `Rate change while billing ${canEditRate ? "allowed" : "blocked"} for "${updated.username}"`,
+    actorId: session?.userId ?? 0,
+    actorName: session?.name ?? session?.username ?? "Unknown",
+    targetUsername: updated.username,
+    targetUserId: updated.id,
+    ipAddress: getClientIp(req),
+  });
+  res.json(toPublic(updated));
 });
 
 export default router;

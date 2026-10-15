@@ -159,10 +159,10 @@ type SaleHistory = {
 };
 
 // Opens right under a line while its Rate field has focus: what THIS customer
-// paid for this item on their last 4 bills (qty + rate), or — for a new
-// customer / cash sale — the last 3 sales of it to anyone. Read-only and never
-// focusable, so Enter keeps moving through the line exactly as before. Blinks
-// twice when it appears so it gets noticed.
+// paid for this item on their last 3 bills (date, qty, rate). Only this
+// customer's own rates — never other customers' or purchase prices. Read-only
+// and never focusable, so Enter keeps moving through the line exactly as
+// before. Blinks twice when it appears so it gets noticed.
 function RateHistoryPanel({ productId, customerId, customerName, excludeInvoiceId, unit }: {
   productId: number;
   customerId: number | null;
@@ -181,15 +181,14 @@ function RateHistoryPanel({ productId, customerId, customerName, excludeInvoiceI
       return r.json();
     },
     staleTime: 60_000,
+    enabled: !!customerId,
   });
 
-  const title = !data
-    ? "Sale history"
-    : data.forCustomer
+  const title = !customerId
+    ? "Past rates"
+    : data && data.rows.length > 0
       ? `${customerName ?? "This customer"} — last ${data.rows.length === 1 ? "bill" : `${data.rows.length} bills`}`
-      : customerName
-        ? `First time for ${customerName} — recent sales`
-        : "Recent sales of this item";
+      : `${customerName ?? "This customer"} — past rates`;
 
   return (
     <div
@@ -202,19 +201,20 @@ function RateHistoryPanel({ productId, customerId, customerName, excludeInvoiceI
       <div className="flex items-center gap-1.5 text-xs font-semibold text-primary mb-1">
         <History className="w-3.5 h-3.5" /> {title}
       </div>
-      {isLoading ? (
+      {!customerId ? (
+        <div className="text-xs text-muted-foreground py-1">Select the customer to see their past rates.</div>
+      ) : isLoading ? (
         <div className="text-xs text-muted-foreground py-1">Loading…</div>
       ) : isError ? (
         <div className="text-xs text-muted-foreground py-1">Couldn't load history.</div>
       ) : !data || data.rows.length === 0 ? (
-        <div className="text-xs text-muted-foreground py-1">Not sold yet — no previous rate.</div>
+        <div className="text-xs text-muted-foreground py-1">First time for this customer — no previous rate.</div>
       ) : (
         <table className="w-full text-sm tabular-nums">
           <tbody>
             {data.rows.map((r, i) => (
               <tr key={i} className={i === 0 ? "font-semibold" : "text-muted-foreground"}>
                 <td className="py-0.5 pr-3 whitespace-nowrap">{fmtHistDate(r.date)}</td>
-                {!data.forCustomer && <td className="py-0.5 pr-3 max-w-[140px] truncate">{r.party ?? "Cash"}</td>}
                 <td className="py-0.5 pr-3 text-right whitespace-nowrap">{r.qty.toLocaleString("en-IN")} {r.unit ?? unit}</td>
                 <td className="py-0.5 text-right whitespace-nowrap text-foreground">₹{r.rate.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</td>
               </tr>
@@ -239,6 +239,16 @@ const RATE_HIST_CSS = `
 type CostSource = "mfg" | "purchase";
 type CostWarning = { kind: "below" | "equal"; cost: number; net: number; source: CostSource };
 const COST_LABEL: Record<CostSource, string> = { mfg: "Mfg cost", purchase: "Purchase rate" };
+
+// Amber line under a Rate field a non-admin set below the price-list rate.
+function ListRateHint({ w, testId }: { w: { list: number; net: number } | null; testId: string }) {
+  if (!w) return null;
+  return (
+    <div className="text-[10px] leading-tight text-amber-700 dark:text-amber-400 mt-0.5" data-testid={testId}>
+      Below list ₹{w.list.toLocaleString()}
+    </div>
+  );
+}
 
 function CostWarningHint({ w, testId }: { w: CostWarning | null; testId: string }) {
   if (!w) return null;
@@ -323,6 +333,8 @@ export default function Billing() {
   // again without changing it doesn't beep a second time).
   const [costAlertOpen, setCostAlertOpen] = useState(false);
   const warnedRatesRef = useRef<Map<number, string>>(new Map());
+  // Same idea for the below-price-list warning (keyed by product → net rate).
+  const warnedListRef = useRef<Map<number, number>>(new Map());
 
   // ── All data hooks ──
   // Always refetch on open (not served from a stale cache) so a rate updated
@@ -710,12 +722,43 @@ export default function Billing() {
     .map((item, idx) => ({ item, idx, w: costWarning(item) }))
     .filter((x): x is { item: BillingItem; idx: number; w: CostWarning } => x.w !== null);
 
+  // Who may type in the Rate field: admin always; a store user only when the
+  // admin turned on "Can change rate while billing" in User Accounts.
+  const isAdminUser = user?.role === "admin";
+  const canEditRate = isAdminUser || (user?.role === "store" && (user as any)?.canEditRate === true);
+  // Non-admin billing a line below the price-list rate: beep on blur, ask on
+  // save (never blocks), and the server marks the invoice "Below rate" for
+  // the admin. Admin's own rates aren't second-guessed.
+  const listRateWarning = (i: BillingItem): { list: number; net: number } | null => {
+    if (isAdminUser) return null;
+    const p = (products ?? []).find((x: any) => x.id === i.productId);
+    if (!p) return null;
+    const list = Math.round(getBaseRate(p, customer, invoiceType) * 100) / 100;
+    const net = Math.round(netUnitRate(i) * 100) / 100;
+    return list > 0 && net < list - 0.005 ? { list, net } : null;
+  };
+  const listWarnings = items
+    .map((item, idx) => ({ item, idx, w: listRateWarning(item) }))
+    .filter((x): x is { item: BillingItem; idx: number; w: { list: number; net: number } } => x.w !== null);
+
   // Side notification + beep the moment a rate (or discount) leaves the line
   // at/below cost — called when the field loses focus, so it fires once the
   // biller has finished typing rather than on every keystroke.
   const checkCostOnBlur = (idx: number) => {
     const item = items[idx];
     if (!item) return;
+    const lw = listRateWarning(item);
+    if (lw && warnedListRef.current.get(item.productId) !== lw.net) {
+      warnedListRef.current.set(item.productId, lw.net);
+      playWarningBeep();
+      toast({
+        title: "⚠ Rate is BELOW the price list",
+        description: `${item.name}: ₹${lw.net.toLocaleString()} — price list ₹${lw.list.toLocaleString()}. This bill will be marked for the admin.`,
+        variant: "destructive",
+      });
+    } else if (!lw) {
+      warnedListRef.current.delete(item.productId);
+    }
     const w = costWarning(item);
     const key = w ? `${w.kind}:${w.net}` : "";
     if (warnedRatesRef.current.get(item.productId) === key) return;
@@ -737,7 +780,7 @@ export default function Billing() {
     }
     // Rates at/below cost: stop and ask first. The biller decides — "Save
     // anyway" in the popup goes ahead via saveInvoice().
-    if (costWarnings.length > 0) {
+    if (costWarnings.length > 0 || listWarnings.length > 0) {
       playWarningBeep();
       setCostAlertOpen(true);
       return;
@@ -1180,10 +1223,11 @@ export default function Billing() {
                             onKeyDown={(e) => lineItemKeyDown(e, idx, "rate")}
                             onFocus={() => setRateFocusIdx(idx)}
                             onBlur={() => { setRateFocusIdx((cur) => (cur === idx ? null : cur)); checkCostOnBlur(idx); }}
-                            className={`w-24 text-right h-7 text-sm disabled:opacity-100 disabled:cursor-not-allowed ${costWarning(item) ? "border-red-500 bg-red-50 text-red-700 focus-visible:ring-red-500" : ""}`}
-                            data-testid={`input-rate-${idx}`} disabled={user?.role !== "admin"}
-                            title={user?.role !== "admin" ? "Only admin can edit rate" : undefined} />
+                            className={`w-24 text-right h-7 text-sm disabled:opacity-100 disabled:cursor-not-allowed ${costWarning(item) ? "border-red-500 bg-red-50 text-red-700 focus-visible:ring-red-500" : listRateWarning(item) ? "border-amber-500 bg-amber-50 text-amber-800 focus-visible:ring-amber-500" : ""}`}
+                            data-testid={`input-rate-${idx}`} disabled={!canEditRate}
+                            title={!canEditRate ? "Rate change not allowed for your login" : undefined} />
                           <CostWarningHint w={costWarning(item)} testId={`hint-cost-warning-${idx}`} />
+                          <ListRateHint w={listRateWarning(item)} testId={`hint-list-rate-${idx}`} />
                         </TableCell>
                         {isGstInvoiceType(invoiceType) && (
                           <TableCell className="text-right">
@@ -1279,10 +1323,11 @@ export default function Billing() {
                           onChange={(v) => updateItem(idx, "rate", v, { rateEdited: true })}
                           onFocus={() => setRateFocusIdx(idx)}
                           onBlur={() => { setRateFocusIdx((cur) => (cur === idx ? null : cur)); checkCostOnBlur(idx); }}
-                          className={`h-8 text-sm disabled:opacity-100 disabled:cursor-not-allowed ${costWarning(item) ? "border-red-500 bg-red-50 text-red-700 focus-visible:ring-red-500" : ""}`}
-                          data-testid={`input-rate-mobile-${idx}`} disabled={user?.role !== "admin"}
-                          title={user?.role !== "admin" ? "Only admin can edit rate" : undefined} />
+                          className={`h-8 text-sm disabled:opacity-100 disabled:cursor-not-allowed ${costWarning(item) ? "border-red-500 bg-red-50 text-red-700 focus-visible:ring-red-500" : listRateWarning(item) ? "border-amber-500 bg-amber-50 text-amber-800 focus-visible:ring-amber-500" : ""}`}
+                          data-testid={`input-rate-mobile-${idx}`} disabled={!canEditRate}
+                          title={!canEditRate ? "Rate change not allowed for your login" : undefined} />
                         <CostWarningHint w={costWarning(item)} testId={`hint-cost-warning-mobile-${idx}`} />
+                        <ListRateHint w={listRateWarning(item)} testId={`hint-list-rate-mobile-${idx}`} />
                       </div>
                     </div>
 
@@ -1458,10 +1503,14 @@ export default function Billing() {
             <AlertTriangle className="w-6 h-6" /> Alert — please check this bill
           </DialogTitle>
           <DialogDescription>
-            {costWarnings.length === 1 ? "1 item is" : `${costWarnings.length} items are`} priced at or below cost
-            (purchase rate, or manufacturing cost from the BOM for items you make). Is this a mistake?
+            {costWarnings.length > 0
+              ? <>{costWarnings.length === 1 ? "1 item is" : `${costWarnings.length} items are`} priced at or below cost
+                (purchase rate, or manufacturing cost from the BOM for items you make). Is this a mistake?</>
+              : <>{listWarnings.length === 1 ? "1 item is" : `${listWarnings.length} items are`} priced below the price list.
+                If you save, this bill will be marked <b>Below rate</b> for the admin.</>}
           </DialogDescription>
         </DialogHeader>
+        {costWarnings.length > 0 && (
         <div className="max-h-[300px] overflow-y-auto rounded-md border">
           <table className="w-full text-sm">
             <thead className="bg-muted/50 text-xs text-muted-foreground">
@@ -1494,6 +1543,25 @@ export default function Billing() {
             </tbody>
           </table>
         </div>
+        )}
+        {listWarnings.length > 0 && (
+          <div className="max-h-[240px] overflow-y-auto rounded-md border border-amber-400" data-testid="list-rate-warnings">
+            <div className="px-3 py-1.5 text-xs font-semibold bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+              Below price list — will be marked for the admin
+            </div>
+            <table className="w-full text-sm">
+              <tbody>
+                {listWarnings.map(({ item, idx, w }) => (
+                  <tr key={idx} className="border-t">
+                    <td className="px-3 py-2 font-medium leading-tight">{item.name}</td>
+                    <td className="px-3 py-2 text-right tabular-nums font-semibold text-amber-700">₹{w.net.toLocaleString()}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">List ₹{w.list.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
         <DialogFooter className="gap-2 sm:gap-0">
           <Button
             autoFocus
@@ -1501,7 +1569,7 @@ export default function Billing() {
             data-testid="button-cost-alert-back"
             onClick={() => {
               setCostAlertOpen(false);
-              const first = costWarnings[0];
+              const first = costWarnings[0] ?? listWarnings[0];
               if (first) {
                 requestAnimationFrame(() => {
                   const el = document.querySelector<HTMLInputElement>(`[data-testid="input-rate-${first.idx}"]`);

@@ -26,6 +26,7 @@ import { logger } from "../lib/logger";
 import { generateSeriesNumber, type SeriesType } from "../lib/number-series";
 import { getCompanyId } from "../lib/tenant";
 import { isGstAccountant } from "../lib/gst-access";
+import { applyListRateFlags } from "../lib/list-rate";
 import { loadManufacturingCosts, effectiveUnitCost } from "../lib/bom-cost";
 
 const router: IRouter = Router();
@@ -215,6 +216,12 @@ router.get("/invoices", async (req, res): Promise<void> => {
     // status=cancelled to see them; any other explicit status filter above
     // already narrows to that one status regardless of this branch.
     conditions.push(ne(invoicesTable.status, "cancelled"));
+  }
+
+  // ?belowRate=1 — only invoices a non-admin billed below the price-list rate.
+  // Read off req.query directly: the generated query schema doesn't know it.
+  if ((req.query as Record<string, unknown>).belowRate === "1") {
+    conditions.push(eq(invoicesTable.belowListRate, true));
   }
 
   const invoices = conditions.length > 0
@@ -522,6 +529,10 @@ router.post("/invoices", async (req, res): Promise<void> => {
       }
     }
 
+    // Snapshot each line's price-list rate and flag a below-rate sale by a
+    // non-admin (e.g. a store user allowed to change rates).
+    await applyListRateFlags(client, companyId, invRow.id, session?.role);
+
     await client.query("COMMIT");
 
     // Fetch with items
@@ -598,6 +609,11 @@ router.get("/invoices/:id", async (req, res): Promise<void> => {
   const body = formatInvoice(inv, items, createdByName, customerBalance, customerMobile);
   // Purchase cost / margin is internal, not GST data.
   if (isGstAccountant(req)) body.items = body.items.map((it) => ({ ...it, costPrice: null }));
+  // A customer viewing their own bill sees neither our cost nor our audit marks.
+  if (session?.role === "customer") {
+    body.items = body.items.map((it) => ({ ...it, costPrice: null, listRate: null }));
+    body.belowListRate = false;
+  }
   res.json(body);
 });
 
@@ -1015,6 +1031,9 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
       ]
     );
 
+    // Re-check against the price list; an admin's edit clears the flag.
+    await applyListRateFlags(client, companyId, invoiceId, session?.role);
+
     await client.query("COMMIT");
 
     const [fullInv] = await db.select().from(invoicesTable).where(and(eq(invoicesTable.companyId, companyId), eq(invoicesTable.id, invoiceId)));
@@ -1314,6 +1333,7 @@ function formatInvoice(
     amountPaid: Number(inv.amountPaid),
     balanceDue: Number(inv.balanceDue),
     status: inv.status,
+    belowListRate: Boolean(inv.belowListRate),
     items: items.map(formatItem),
     createdAt: inv.createdAt?.toISOString?.() ?? inv.createdAt,
   };
@@ -1340,6 +1360,7 @@ function formatItem(i: any) {
     netPrice: Number(i.netPrice),
     amount: Number(i.amount),
     costPrice: i.costPrice != null ? Number(i.costPrice) : null,
+    listRate: i.listRate != null ? Number(i.listRate) : null,
   };
 }
 

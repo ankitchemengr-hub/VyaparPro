@@ -21,6 +21,9 @@ export const usersTable = pgTable("users", {
   // Tenant company this user belongs to. NULL only for platform super_admin.
   companyId: integer("company_id"),
   isActive: boolean("is_active").notNull().default(true),
+  // Store users only: may change the line rate while billing. A rate below
+  // the price-list rate still warns and flags the invoice (below_list_rate).
+  canEditRate: boolean("can_edit_rate").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (t) => [

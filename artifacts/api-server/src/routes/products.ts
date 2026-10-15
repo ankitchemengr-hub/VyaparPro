@@ -390,9 +390,9 @@ router.get("/products/:id/recent-prices", async (req, res): Promise<void> => {
 });
 
 // GET /products/:id/sale-history?customerId=&excludeInvoiceId= — shown under
-// the Rate field while billing. With a customer that has bought this product
-// before: their last 4 bills for it (forCustomer = true). Otherwise (new
-// customer / cash sale): the last 3 sales of it to anyone. Real bills only —
+// the Rate field while billing: the last 3 bills of this product to THIS
+// customer only (empty for a new customer or when no customer is selected —
+// other customers' rates are deliberately never shown). Real bills only —
 // quotations, proforma, challans and sale orders aren't sales. The invoice
 // being edited is excluded so it doesn't list itself.
 const NOT_A_SALE = ["quotation", "proforma_invoice", "delivery_challan", "sale_order"];
@@ -424,13 +424,10 @@ router.get("/products/:id/sale-history", async (req, res): Promise<void> => {
       [companyId, productId, NOT_A_SALE, Number.isInteger(excludeInvoiceId) ? excludeInvoiceId : 0, ...extraParams],
     );
 
-  let forCustomer = false;
-  let rows: any[] = [];
-  if (Number.isInteger(customerId) && customerId > 0) {
-    rows = (await query("AND i.customer_id = $5", [customerId], 4)).rows;
-    forCustomer = rows.length > 0;
-  }
-  if (!forCustomer) rows = (await query("", [], 3)).rows;
+  // Only ever THIS customer's own bills (last 3) — other customers' rates
+  // are never shown while billing. No customer selected ⇒ empty.
+  const forCustomer = Number.isInteger(customerId) && customerId > 0;
+  const rows: any[] = forCustomer ? (await query("AND i.customer_id = $5", [customerId], 3)).rows : [];
 
   res.json({
     forCustomer,

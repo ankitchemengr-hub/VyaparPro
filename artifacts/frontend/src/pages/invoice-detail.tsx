@@ -17,7 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { ArrowLeft, Printer, Loader2, LayoutTemplate, IndianRupee, MessageCircle, Share2 } from "lucide-react";
+import { ArrowLeft, Printer, Loader2, LayoutTemplate, IndianRupee, MessageCircle, Share2, AlertTriangle } from "lucide-react";
 import { shareInvoiceImage } from "@/lib/share-invoice";
 import { usePrintTitle } from "@/lib/print-with-title";
 import { useAuth } from "@/contexts/use-auth";
@@ -241,6 +241,38 @@ export default function InvoiceDetail() {
           </Button>
         </div>
       </div>
+
+      {/* Staff billed below the price list — admin sees which lines and by how much. */}
+      {isAdmin && (invoice as any).belowListRate && (() => {
+        const lines = (invoice.items ?? [])
+          .map((it: any) => {
+            const qty = Number(it.qty) || 0;
+            const net = qty > 0 ? (qty * Number(it.rate) - (Number(it.discountAmt) || 0)) / qty : Number(it.rate);
+            return { name: it.productName, net: Math.round(net * 100) / 100, list: it.listRate != null ? Number(it.listRate) : null, qty };
+          })
+          .filter((l: any) => l.list != null && l.net < l.list - 0.005);
+        return (
+          <div className="rounded-lg border-2 border-rose-400 bg-rose-50 dark:bg-rose-950/30 p-3 print:hidden no-print" data-testid="banner-below-rate">
+            <div className="flex items-center gap-2 font-semibold text-rose-700 dark:text-rose-300 text-sm">
+              <AlertTriangle className="w-4 h-4" /> Billed below price-list rate
+              {(invoice as any).createdByName && <span className="font-normal text-rose-600/80">· by {(invoice as any).createdByName}</span>}
+            </div>
+            <table className="mt-2 w-full text-sm tabular-nums">
+              <tbody>
+                {lines.map((l: any, i: number) => (
+                  <tr key={i} className="border-t border-rose-200 dark:border-rose-900">
+                    <td className="py-1 pr-3">{l.name}</td>
+                    <td className="py-1 pr-3 text-right font-semibold text-rose-700 dark:text-rose-300">₹{l.net.toLocaleString("en-IN")}</td>
+                    <td className="py-1 pr-3 text-right text-muted-foreground">List ₹{l.list.toLocaleString("en-IN")}</td>
+                    <td className="py-1 text-right text-muted-foreground">−₹{(Math.round((l.list - l.net) * l.qty * 100) / 100).toLocaleString("en-IN")} total</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="text-xs text-muted-foreground mt-1.5">Editing and saving this invoice yourself clears the mark.</p>
+          </div>
+        );
+      })()}
 
       {settingsLoading ? (
         <div className="py-12 flex justify-center">

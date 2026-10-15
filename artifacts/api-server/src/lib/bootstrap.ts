@@ -149,6 +149,12 @@ async function seedBusinessDataIfEmpty(client: pg.Client): Promise<void> {
  */
 async function applySchemaPatches(client: pg.Client): Promise<void> {
   const patches: string[] = [
+    // ── Store users allowed to change the rate while billing, and the audit
+    //    trail for invoices billed below the price-list rate ────────────────
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS can_edit_rate BOOLEAN NOT NULL DEFAULT false`,
+    `ALTER TABLE invoices ADD COLUMN IF NOT EXISTS below_list_rate BOOLEAN NOT NULL DEFAULT false`,
+    `ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS list_rate NUMERIC(12, 2)`,
+
     // ── Entities: salesman assignment ──────────────────────────────────────
     `ALTER TABLE entities ADD COLUMN IF NOT EXISTS assigned_salesman_id INTEGER`,
     `ALTER TABLE entities ADD COLUMN IF NOT EXISTS commission_expiry_date TIMESTAMP WITH TIME ZONE`,

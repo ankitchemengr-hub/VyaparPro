@@ -280,6 +280,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     name: user.name,
     customerId: user.entityId ?? null,
     pricingTier: user.pricingTier ?? null,
+    canEditRate: user.canEditRate ?? false,
     companyId: sessionCompanyId,
     company: loginCompany ? { name: loginCompany.name, logo: loginCompany.logo ?? null } : null,
   });
@@ -354,6 +355,9 @@ router.get("/auth/me", async (req, res): Promise<void> => {
     name: user.name,
     customerId: user.entityId ?? null,
     pricingTier: user.pricingTier ?? null,
+    // Read fresh from the DB on every /auth/me, so turning it on/off in User
+    // Accounts takes effect on the store user's next page load.
+    canEditRate: user.canEditRate ?? false,
     companyId: user.companyId ?? null,
     // Surface the super_admin's currently switched-into company so the SPA can
     // show the right company context and unlock ERP navigation. Null for normal
