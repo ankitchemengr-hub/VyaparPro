@@ -47,7 +47,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { shareInvoiceImage } from "@/lib/share-invoice";
 import { usePrintTitle } from "@/lib/print-with-title";
-import { BillScanDialog, ScanBillButton, type ScanApplyResult } from "@/components/bill-scan-dialog";
 
 type QtyMode = "unit" | "box";
 
@@ -122,7 +121,7 @@ type BillingItem = {
   // product's own catalog name/description.
   description: string;
   // Set when the rate was typed by hand, picked from price history, or loaded
-  // from a saved invoice / scanned bill — such a rate is kept when the product
+  // from a saved invoice — such a rate is kept when the product
   // list refreshes. Unset = straight from the price list, so it follows rate
   // updates made elsewhere (Purchases, Price List, Inventory).
   rateEdited?: boolean;
@@ -316,7 +315,7 @@ export default function Billing() {
   // The invoice-type + customer-pricing-tier combination the line rates were
   // last priced for. The price-list rate sync below reprices only when this
   // actually changes (the user toggles GST/Non-GST or picks a customer on a
-  // different tier). Prefill / bill-scan set it to the values they load, so
+  // different tier). Prefill sets it to the values it loads, so
   // loading a saved invoice never reprices the rates the user saved.
   const pricingKeyRef = useRef<string | null>(null);
   // Keyboard shortcuts call through this ref instead of `handleSave` directly
@@ -324,7 +323,6 @@ export default function Billing() {
   // below, and hooks (this effect included) must run unconditionally before
   // those guards, so the effect can't close over it directly.
   const handleSaveRef = useRef<() => void>(() => {});
-  const [scanOpen, setScanOpen] = useState(false);
   // Which line's Rate field has focus — that line shows the customer's past
   // rates for the item right underneath it.
   const [rateFocusIdx, setRateFocusIdx] = useState<number | null>(null);
@@ -341,8 +339,6 @@ export default function Billing() {
   // a moment ago on Purchases / Price List / Inventory is what gets billed.
   const { data: products } = useListProducts({ forSale: true }, { query: { refetchOnMount: "always" } as any });
   const { data: salesmanEntities } = useListEntities({ type: "salesman" } as any);
-  // Only needed to match a scanned bill's customer — fetched when the scanner opens.
-  const { data: customerEntities } = useListEntities({ type: "customer" } as any, { query: { enabled: scanOpen } as any });
   const { data: existingInvoice } = useGetInvoice(editId as number, { query: { enabled: isEditMode } as any });
   // Invoices don't store the customer's pricing tier, only a name/GSTIN
   // snapshot — fetched separately so editing an invoice for a wholesale
@@ -384,7 +380,7 @@ export default function Billing() {
   // When the product list itself refreshes (e.g. a sale rate was just
   // updated after a purchase), lines whose rate came straight from the price
   // list follow the new rate. Hand-typed rates and rates loaded from a saved
-  // invoice or scanned bill (rateEdited) are never touched.
+  // invoice (rateEdited) are never touched.
   useEffect(() => {
     if (!products || items.length === 0) return;
     setItems((prev) => {
@@ -845,36 +841,6 @@ export default function Billing() {
 
   handleSaveRef.current = handleSave;
 
-  // Scanned sale bill (e.g. a handwritten counter bill) → this invoice. The
-  // bill's own rates are kept (rateEdited) so price-list / history auto-fill
-  // doesn't overwrite what was actually charged.
-  const onScanApply = (r: ScanApplyResult) => {
-    const entity = r.party;
-    if (entity) setCustomer(entity);
-    setDocType("invoice");
-    setInvoiceSubtype(r.isGstBill ? "gst" : "non_gst");
-    if (r.billDate) setInvoiceDate(r.billDate);
-    setPlaceOfSupply(r.placeOfSupply || entity?.state || "Maharashtra");
-    setFreight(Number(r.freight) || 0);
-    pricingKeyRef.current = `${r.isGstBill ? "gst" : "non_gst"}|${(entity ?? customer)?.pricingTier ?? ""}`;
-    setItems(r.lines.map((l) => {
-      const p: any = (products ?? []).find((x: any) => x.id === l.productId);
-      const taxPct = r.isGstBill ? l.taxPct : 0;
-      const taxable = l.qty * l.rate * (1 - (l.discountPct || 0) / 100);
-      return {
-        productId: l.productId, name: p?.name ?? l.rawName, unit: p?.unit ?? (l.unit || "QTY"),
-        qty: l.qty, qtyMode: "unit" as QtyMode, unitsPerBox: resolvePack(p),
-        rate: l.rate, mrp: Number(p?.mrp ?? 0), taxPct,
-        discountPct: l.discountPct || 0, discountAmt: 0,
-        amount: Math.round(taxable * (1 + taxPct / 100) * 100) / 100,
-        litersPerBox: Number(p?.litersPerBox ?? 0) || 0,
-        packagingUnit: p?.packagingUnit?.trim() || "Box",
-        description: "",
-        rateEdited: true,
-      };
-    }));
-  };
-
   const handleShareInvoice = async () => {
     if (!savedInvoice) return;
     const sheetEl = savedSheetRef.current?.querySelector(".invoice-sheet") as HTMLElement | null;
@@ -1005,7 +971,6 @@ export default function Billing() {
           )}
         </div>
         <div className="flex flex-wrap gap-2">
-          {!isEditMode && <ScanBillButton onClick={() => setScanOpen(true)} />}
           <Select value={docType} onValueChange={setDocType}>
             <SelectTrigger className="w-[150px] sm:w-[170px]" data-testid="select-doc-type"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -1484,14 +1449,6 @@ export default function Billing() {
         if (updated?.state) setPlaceOfSupply(updated.state);
         setShowCustomerEdit(false);
       }}
-    />
-    <BillScanDialog
-      open={scanOpen}
-      onOpenChange={setScanOpen}
-      kind="sale"
-      products={products ?? []}
-      parties={customerEntities ?? []}
-      onApply={onScanApply}
     />
     {/* Save-time check: some lines are priced at/below purchase cost. The
         safe choice ("Go back & check") has focus, so an absent-minded Enter
