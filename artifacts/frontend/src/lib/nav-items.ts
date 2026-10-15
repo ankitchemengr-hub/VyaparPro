@@ -78,6 +78,7 @@ export const moduleNavItems: NavItem[] = [
   { name: "Rewards", href: "/rewards", icon: Award, roles: ["admin", "customer"], description: "Volume reward schemes" },
   { name: "Manufacturing", href: "/manufacturing", icon: Factory, roles: ["admin", "manufacturing"], description: "Production workload" },
   { name: "Bill of Materials", href: "/bom", icon: FileText, roles: ["admin"], description: "BOM master" },
+  { name: "Auto Manufacturing", href: "/auto-manufacture", icon: Factory, roles: ["admin"], description: "Made products never go negative on sale; fix existing negative stock" },
   { name: "Purchases", href: "/purchases", icon: Truck, roles: ["admin", "accountant", "gst_accountant", "store"], description: "Purchase bills" },
   { name: "Smart Order", href: "/smart-order", icon: Sparkles, roles: ["admin", "accountant", "store"], description: "Low-stock items ranked by sales pace, with a suggested reorder qty" },
   { name: "Workers", href: "/workers", icon: HardHat, roles: ["admin", "accountant"], description: "Worker attendance" },

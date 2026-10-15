@@ -28,6 +28,7 @@ import { getCompanyId } from "../lib/tenant";
 import { isGstAccountant } from "../lib/gst-access";
 import { loadManufacturingCosts, effectiveUnitCost } from "../lib/bom-cost";
 import { settleExcessInvoiceDues, NO_PAY_INVOICE_TYPES } from "../lib/entity-payment";
+import { autoManufactureForSale } from "../lib/auto-manufacture";
 
 const router: IRouter = Router();
 
@@ -470,6 +471,13 @@ router.post("/invoices", async (req, res): Promise<void> => {
       );
 
       if (!isQuotation) {
+        // A product we make is never sold into negative stock — the shortfall
+        // is covered from Ready Material / by auto-consuming its BOM first.
+        await autoManufactureForSale(client, {
+          companyId, productId: item.productId, qtyOut: Number(item.qty),
+          reason: `sale ${invoiceNo}`, userId: session?.userId ?? 1,
+        });
+
         // Stock movement (outward)
         await client.query(
           `INSERT INTO stock_movements (company_id, product_id, type, quantity, reason, reference_id, reference_type, user_id)
@@ -931,6 +939,10 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
         [companyId, invoiceId, item.productId, prodName, null, item.description ?? null, item.qty, item.qtyBoxesVal, item.totalLitersVal, item.unit, item.rate, item.mrp, item.discountPct, item.discountAmt, item.taxPct, item.cessPct, item.netPrice, item.amount, item.costPriceVal]
       );
       if (!isQuotationEdit) {
+        await autoManufactureForSale(client, {
+          companyId, productId: item.productId, qtyOut: Number(item.qty),
+          reason: `sale ${existing.invoice_no} (edited)`, userId: session?.userId ?? 1,
+        });
         await client.query(
           `INSERT INTO stock_movements (company_id, product_id, type, quantity, reason, reference_id, reference_type, user_id)
            VALUES ($1, $2, 'outward', $3, $4, $5, 'invoice_edit', $6)`,

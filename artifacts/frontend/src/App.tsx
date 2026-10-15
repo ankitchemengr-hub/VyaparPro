@@ -46,6 +46,7 @@ import SalesmanDashboard from "@/pages/salesman-dashboard";
 import MyStatement from "@/pages/my-statement";
 import BackupRestore from "@/pages/backup-restore";
 import PaymentSync from "@/pages/payment-sync";
+import AutoManufacture from "@/pages/auto-manufacture";
 import PriceList from "@/pages/price-list";
 import Quotations from "@/pages/quotations";
 import Transporters from "@/pages/transporters";
@@ -110,6 +111,7 @@ function ProtectedRoutes() {
         <Route path="/settings" component={Settings} />
         <Route path="/backup-restore" component={BackupRestore} />
         <Route path="/payment-sync" component={PaymentSync} />
+        <Route path="/auto-manufacture" component={AutoManufacture} />
         <Route path="/price-list" component={PriceList} />
         <Route path="/users" component={Users} />
         <Route path="/my-orders" component={MyOrders} />
