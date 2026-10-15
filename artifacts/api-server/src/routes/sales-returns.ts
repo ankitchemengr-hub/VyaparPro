@@ -333,7 +333,7 @@ router.post("/sales-returns", async (req, res): Promise<void> => {
         [companyId, inv.customer_id, `Sales return ${returnNo} (Inv ${inv.invoice_no})`, grandTotal, newBalance, returnRow.id, returnNo],
       );
       // The credit the return gave the party also comes off what's due on the
-      // bills — this invoice first, any remainder newest-first like a payment —
+      // bills — this invoice first, any remainder oldest-first like a payment —
       // so the bill's paid status keeps agreeing with the party balance.
       await allocatePaymentAcrossInvoices(client, {
         companyId,

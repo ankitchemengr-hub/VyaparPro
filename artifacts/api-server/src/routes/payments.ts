@@ -327,7 +327,7 @@ router.get("/payment-receipts/:receiptNo", async (req, res): Promise<void> => {
 // One-off clean-up for bills whose paid status drifted from the party
 // balance (advances paid before the bill, receipts from before allocation
 // existed, old sales returns). For every customer whose open bills show more
-// due than they owe, the gap is settled newest-bill-first via
+// due than they owe, the gap is settled oldest-bill-first via
 // settleExcessInvoiceDues. Preview runs the exact same writes inside a
 // transaction and rolls back, so what it shows is what Apply will do.
 async function runPaymentSync(companyId: number, apply: boolean, session: any) {
@@ -536,9 +536,9 @@ router.post("/payments", async (req, res): Promise<void> => {
 
       // If the payment names the invoice it was started from, make sure it's
       // a real, still-open bill for THIS customer. Note it gets no special
-      // priority — the allocator below settles the customer's newest bill
-      // first and works back through older ones, so this invoice is paid
-      // only when its date comes up in that order.
+      // priority — the allocator below settles the customer's oldest bill
+      // first and works forward through newer ones (FIFO), so this invoice
+      // is paid only when its date comes up in that order.
       if (parsed.data.invoiceId) {
         // customer_id IS NULL is a walk-in invoice (no specific customer
         // entity selected when it was billed) — this payment always

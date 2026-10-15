@@ -27,11 +27,11 @@ export interface AllocatePaymentParams {
   customerId: number;
   amount: number;
   /** The invoice the payment was started from, if any. By default it does
-   *  NOT jump the queue: the customer's bills are cleared newest-invoice
-   *  first and this invoice is settled in its natural newest-first position
-   *  along with the rest (this is what the ₹ "Record Payment" button wants —
-   *  the latest bill is knocked down first, the remainder rolls back to
-   *  older dues). A walk-in invoice (customer_id IS NULL) is always applied
+   *  NOT jump the queue: the customer's bills are cleared oldest-invoice
+   *  first (FIFO) and this invoice is settled in its natural date position
+   *  along with the rest — so taking a payment from today's bill still
+   *  clears the party's older dues first and today's bill stays open until
+   *  they are paid off. A walk-in invoice (customer_id IS NULL) is always applied
    *  to directly regardless — it isn't part of any customer's allocation
    *  pool. */
   startInvoiceId?: number | null;
@@ -44,13 +44,13 @@ export interface AllocatePaymentParams {
 
 const NO_PAY_TYPES_SQL = NO_PAY_INVOICE_TYPES.map((t) => `'${t}'`).join(", ");
 
-// Allocates `amount` across a customer's outstanding invoices, newest
-// invoice_date first (cancelled/quotation-like types excluded). A payment
-// always settles the customer's most recent bill before older ones, so
-// whatever they hand over lands on the latest invoice and only the
-// remainder rolls back to earlier dues. The invoice the payment was started
-// from (startInvoiceId) is NOT given priority by default — it just takes its
-// place in newest-first order with the rest. Two exceptions apply
+// Allocates `amount` across a customer's outstanding invoices, oldest
+// invoice_date first — FIFO (cancelled/quotation-like types excluded). A
+// payment always clears the customer's oldest dues before newer bills, so
+// the current bill only gets marked paid once everything before it is. The
+// invoice the payment was started from (startInvoiceId) is NOT given
+// priority by default — it just takes its place in date order with the
+// rest. Two exceptions apply
 // startInvoiceId first: a walk-in invoice (customer_id IS NULL, never in any
 // customer's allocation pool), and pinStartInvoice = true (the caller
 // explicitly asked to — Cash Book's "Start With Invoice" picker).
@@ -104,14 +104,14 @@ export async function allocatePaymentAcrossInvoices(
     remaining -= allocated;
   }
 
-  // startInvoiceId is settled before the newest-first pass in two cases:
+  // startInvoiceId is settled before the oldest-first pass in two cases:
   //  1. It's a walk-in invoice (customer_id IS NULL — billed with no specific
   //     customer). Walk-in bills aren't in any customer's allocation pool, so
   //     the caller named it explicitly and it's applied directly.
   //  2. pinStartInvoice is true — the caller (Cash Book's "Start With
   //     Invoice" picker) deliberately asked to knock this one down first.
   // Otherwise it stays in the pool and waits its turn in date order, i.e.
-  // the customer's latest bill is settled first and this one only when its
+  // the customer's oldest bill is settled first and this one only when its
   // date comes up.
   // The walk-in match must never leak into the pool: every walk-in
   // invoice shares customer_id NULL, so without the customer_id = $2 filter
@@ -141,7 +141,7 @@ export async function allocatePaymentAcrossInvoices(
        WHERE company_id = $1 AND customer_id = $2
          AND ($3::int IS NULL OR id != $3)
          AND status != 'cancelled' AND invoice_type NOT IN (${NO_PAY_TYPES_SQL}) AND balance_due > 0
-       ORDER BY invoice_date DESC, id DESC
+       ORDER BY invoice_date ASC, id ASC
        FOR UPDATE`,
       [companyId, customerId, preAllocatedId],
     );
@@ -161,16 +161,16 @@ export interface ApplyEntityPaymentParams {
   mode: string;
   receiptNo: string;
   referenceId: number;
-  /** True for a customer receipt — triggers newest-first invoice allocation
+  /** True for a customer receipt — triggers oldest-first invoice allocation
    *  (see allocatePaymentAcrossInvoices). False/omitted for a vendor payout
    *  or an unlinked payment, which never touch invoices. */
   isCustomerReceipt?: boolean;
   /** The invoice the receipt was started from, when isCustomerReceipt —
    *  ignored otherwise. Does not get payment priority unless pinStartInvoice;
-   *  latest bill first. See allocatePaymentAcrossInvoices. */
+   *  oldest bill first. See allocatePaymentAcrossInvoices. */
   startInvoiceId?: number | null;
   /** Settle startInvoiceId ahead of the rest (Cash Book "Start With
-   *  Invoice"). Omit for the default newest-first behaviour. */
+   *  Invoice"). Omit for the default oldest-first behaviour. */
   pinStartInvoice?: boolean;
   /** Defaults to "Payment received (<mode>)". Pass e.g. "Payment made (<mode>)" for a vendor payout. */
   description?: string;
@@ -209,7 +209,7 @@ export async function applyEntityPayment(
 
 // Brings a customer's open bills in line with their account balance: if the
 // bills still show more due than the party actually owes (outstanding_balance,
-// floored at 0), the difference is settled against those bills newest-first —
+// floored at 0), the difference is settled against those bills oldest-first —
 // exactly like a payment — and recorded in payment_allocations under
 // receiptNo. This covers money that reached the balance without ever being
 // applied to a bill: an advance paid before the bill existed, or receipts

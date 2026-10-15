@@ -95,9 +95,9 @@ export default function PaymentSync() {
         <CardHeader>
           <CardTitle className="text-base">How it works</CardTitle>
           <CardDescription>
-            For each party, the amount still due on their bills is brought down to their account balance. Newest bills are
-            marked paid first, so any amount the party still owes stays on the oldest bills — the same order a new payment
-            follows. Paid bills are never re-opened, and party balances and the ledger do not change.
+            For each party, the amount still due on their bills is brought down to their account balance. Oldest bills are
+            marked paid first, so any amount the party still owes stays on the latest bills — the same order (FIFO) a new
+            payment follows. Paid bills are never re-opened, and party balances and the ledger do not change.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
