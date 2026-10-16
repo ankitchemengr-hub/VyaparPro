@@ -108,7 +108,8 @@ export default function AutoManufacture() {
           <CardDescription>
             When a bill needs more of a manufactured product than is in stock, the shortfall is taken from Ready Material
             first; anything still short is treated as made right now — its raw materials are reduced as per the BOM and the
-            product stops at 0 instead of going negative. Bought-in items (no BOM) are not affected.
+            product stops at 0 instead of going negative. A product that is already negative (e.g. −28) is also brought
+            back to 0 on its next bill. Bought-in items (no BOM) are not affected.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex items-center gap-3">

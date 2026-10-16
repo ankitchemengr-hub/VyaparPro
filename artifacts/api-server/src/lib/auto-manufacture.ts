@@ -152,9 +152,11 @@ export async function coverManufacturedShortfall(
   };
 }
 
-// Called just before a sale deducts `qtyOut` of a product: covers only the
-// part of THIS sale that stock can't (an already-negative stock is left to
-// the one-time fix, not silently absorbed by the next sale).
+// Called just before a sale deducts `qtyOut` of a product: manufactures
+// whatever is needed so the product lands at exactly zero after the sale —
+// including any negative stock it already had (e.g. stock -28, sale 5 →
+// 33 made → 0 after the sale), so old minus balances clear themselves on the
+// next sale instead of lingering.
 export async function autoManufactureForSale(
   client: Client,
   params: { companyId: number; productId: number; qtyOut: number; reason: string; userId: number },
@@ -168,6 +170,7 @@ export async function autoManufactureForSale(
   );
   if (!r.rows[0]) return null;
   const stock = Number(r.rows[0].current_stock);
-  const shortfall = Math.min(qtyOut, qtyOut - Math.max(0, stock));
+  // Stock after this sale would be (stock - qtyOut); make up everything below 0.
+  const shortfall = qtyOut - stock;
   return coverManufacturedShortfall(client, { ...params, shortfall });
 }
