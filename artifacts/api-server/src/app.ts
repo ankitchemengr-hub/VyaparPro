@@ -115,7 +115,7 @@ app.use("/api", (_req, res) => {
 // inactive there (and in local dev, where Vite serves the frontend).
 const STATIC_DIR = process.env.FRONTEND_DIST
   ? path.resolve(process.env.FRONTEND_DIST)
-  : path.resolve(__dirname, "../../erp/dist/public");
+  : path.resolve(__dirname, "../../frontend/dist/public");
 const INDEX_HTML = path.join(STATIC_DIR, "index.html");
 
 if (fs.existsSync(INDEX_HTML)) {

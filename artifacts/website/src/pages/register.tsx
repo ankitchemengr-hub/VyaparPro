@@ -264,7 +264,10 @@ export default function PortalRegister() {
               <div className="flex items-start gap-2 pt-2">
                 <Checkbox id="agree" checked={form.agree} onCheckedChange={(v) => setForm({ ...form, agree: !!v })} />
                 <Label htmlFor="agree" className="text-xs font-normal text-slate-500 leading-snug">
-                  I agree to the Terms &amp; Conditions and Privacy Policy.
+                  I agree to the{" "}
+                  <a href="/terms" target="_blank" rel="noopener" className="text-blue-600 underline">Terms &amp; Conditions</a>,{" "}
+                  <a href="/privacy" target="_blank" rel="noopener" className="text-blue-600 underline">Privacy Policy</a> and{" "}
+                  <a href="/refund-policy" target="_blank" rel="noopener" className="text-blue-600 underline">Refund Policy</a>.
                 </Label>
               </div>
 

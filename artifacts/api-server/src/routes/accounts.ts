@@ -464,7 +464,7 @@ router.post("/account-transactions", async (req, res): Promise<void> => {
           startInvoiceId: isCustomerReceipt ? (invoiceId ?? null) : null,
           // Cash Book's "Start With Invoice" picker is an explicit choice to
           // settle that bill first — honour it here (the ₹ Record Payment
-          // button, by contrast, just wants newest-invoice-first).
+          // button, by contrast, just wants oldest-invoice-first / FIFO).
           pinStartInvoice: isCustomerReceipt && invoiceId != null,
           description: isVendorPayout ? `Payment made (${mode})` : `Payment received (${mode})`,
         });
@@ -630,7 +630,7 @@ router.patch("/account-transactions/:id", async (req, res): Promise<void> => {
     // true for a customer receipt), reverse every one of those allocations
     // using its own stored allocatedAmount — not the raw delta, since a
     // receipt can span several invoices — then re-run allocation fresh with
-    // the corrected amount. A plain newest-first re-run rather than an
+    // the corrected amount. A plain oldest-first re-run rather than an
     // attempt to reproduce the exact original split: this is a rare admin
     // correction, not the common path, and re-deriving from whatever is
     // currently outstanding is simpler and still correct.

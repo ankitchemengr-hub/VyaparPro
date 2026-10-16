@@ -38,6 +38,7 @@ import Expenses from "@/pages/expenses";
 import Bom from "@/pages/bom";
 import MyOrders from "@/pages/my-orders";
 import CustomerOrdersAdmin from "@/pages/customer-orders";
+import CustomerHome, { CustomerOrdersTrack } from "@/pages/customer-home";
 import Subscriptions from "@/pages/subscriptions";
 import Menu from "@/pages/menu";
 import SalesmanOrders from "@/pages/salesman-orders";
@@ -45,6 +46,8 @@ import Commission from "@/pages/commission";
 import SalesmanDashboard from "@/pages/salesman-dashboard";
 import MyStatement from "@/pages/my-statement";
 import BackupRestore from "@/pages/backup-restore";
+import PaymentSync from "@/pages/payment-sync";
+import AutoManufacture from "@/pages/auto-manufacture";
 import PriceList from "@/pages/price-list";
 import Quotations from "@/pages/quotations";
 import Transporters from "@/pages/transporters";
@@ -76,6 +79,8 @@ function ProtectedRoutes() {
       <Switch>
         <Route path="/" component={Dashboard} />
         <Route path="/menu" component={Menu} />
+        <Route path="/home" component={CustomerHome} />
+        <Route path="/track-orders" component={CustomerOrdersTrack} />
         <Route path="/catalog" component={Catalog} />
         <Route path="/salesman-orders" component={SalesmanOrders} />
         <Route path="/salesman-dashboard" component={SalesmanDashboard} />
@@ -108,6 +113,8 @@ function ProtectedRoutes() {
         <Route path="/expenses" component={Expenses} />
         <Route path="/settings" component={Settings} />
         <Route path="/backup-restore" component={BackupRestore} />
+        <Route path="/payment-sync" component={PaymentSync} />
+        <Route path="/auto-manufacture" component={AutoManufacture} />
         <Route path="/price-list" component={PriceList} />
         <Route path="/users" component={Users} />
         <Route path="/my-orders" component={MyOrders} />

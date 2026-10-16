@@ -3545,24 +3545,24 @@ paths:
         "401":
           description: Not authenticated
 
-  /portal/my-domain:
+  /portal/domain:
     get:
       operationId: getMyDomain
       tags: [portal]
-      summary: The signed-in company's preferred custom domain (not yet routed/SSL'd — just stored)
+      summary: The signed-in company's live custom domain, any pending change, and the DNS records to add
       responses:
         "200":
-          description: Domain
+          description: Domain state
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/MyDomain"
         "401":
           description: Not authenticated
-    patch:
+    post:
       operationId: setMyDomain
       tags: [portal]
-      summary: Set or clear (domain omitted/null) the signed-in company's preferred custom domain
+      summary: Add a custom domain, or start changing to a new one (the live one keeps working until the new one verifies)
       requestBody:
         required: true
         content:
@@ -3571,15 +3571,54 @@ paths:
               $ref: "#/components/schemas/SetDomainInput"
       responses:
         "200":
-          description: Domain saved
+          description: Domain state
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/MyDomain"
         "400":
-          description: Invalid domain format
-        "401":
-          description: Not authenticated
+          description: Invalid domain
+        "409":
+          description: Domain already connected to another account
+
+  /portal/domain/verify:
+    post:
+      operationId: verifyMyDomain
+      tags: [portal]
+      summary: Check the pending domain's DNS now; switches it live when every record matches
+      responses:
+        "200":
+          description: Domain state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MyDomain"
+        "404":
+          description: No domain added yet
+        "429":
+          description: Checked too recently
+
+  /portal/domain/{which}:
+    delete:
+      operationId: removeMyDomain
+      tags: [portal]
+      summary: Remove the live domain or cancel the pending change
+      parameters:
+        - name: which
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [pending, active]
+      responses:
+        "200":
+          description: Domain state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MyDomain"
+        "404":
+          description: Nothing to remove
 
   /portal/forgot-password:
     post:
@@ -3850,7 +3889,7 @@ components:
           type: string
         role:
           type: string
-          enum: [super_admin, admin, salesman, store, manufacturing, accountant, customer, counter]
+          enum: [super_admin, admin, salesman, store, manufacturing, accountant, gst_accountant, customer, counter]
         name:
           type: string
         customerId:
@@ -3930,7 +3969,7 @@ components:
           type: string
         role:
           type: string
-          enum: [admin, salesman, store, manufacturing, accountant, customer, counter]
+          enum: [admin, salesman, store, manufacturing, accountant, gst_accountant, customer, counter]
         entityId:
           type: ["integer", "null"]
         pricingTier:
@@ -3960,7 +3999,7 @@ components:
           type: string
         role:
           type: string
-          enum: [admin, salesman, store, manufacturing, accountant, customer, counter]
+          enum: [admin, salesman, store, manufacturing, accountant, gst_accountant, customer, counter]
         entityId:
           type: ["integer", "null"]
         pricingTier:
@@ -3975,7 +4014,7 @@ components:
           type: string
         role:
           type: string
-          enum: [admin, salesman, store, manufacturing, accountant, customer, counter]
+          enum: [admin, salesman, store, manufacturing, accountant, gst_accountant, customer, counter]
         pricingTier:
           type: ["string", "null"]
           enum: [retail, wholesale, null]
@@ -5522,7 +5561,7 @@ components:
           description: The first/primary invoice this payment touched, if any — see `allocations` for the full breakdown.
         source:
           type: string
-          enum: [payment, cashbook]
+          enum: [payment, cashbook, adjustment]
         allocations:
           type: array
           items:
@@ -7427,15 +7466,48 @@ components:
 
     MyDomain:
       type: object
-      required: [customDomain, status]
+      required: [active, pending, automatic, targetHost]
       properties:
-        customDomain: { type: ["string", "null"], description: "e.g. myshop.com — not yet routed/SSL'd, just stored" }
-        status: { type: ["string", "null"], enum: [pending, active, null], description: "pending until staff finish DNS/SSL setup and mark it active" }
+        active:
+          oneOf: [{ $ref: "#/components/schemas/DomainInfo" }, { type: "null" }]
+        pending:
+          oneOf: [{ $ref: "#/components/schemas/DomainInfo" }, { type: "null" }]
+        automatic: { type: boolean, description: "True when Railway automation is configured (domains go live on DNS verify)" }
+        targetHost: { type: ["string", "null"], description: "Fallback CNAME target when Railway gives no per-domain record" }
+
+    DomainInfo:
+      type: object
+      required: [domain, status, url, isRootDomain, dnsRecords, certificateStatus, lastCheckedAt, lastError, dnsVerifiedAt, activatedAt]
+      properties:
+        domain: { type: string }
+        status: { type: string, enum: [pending, active] }
+        url: { type: string }
+        isRootDomain: { type: boolean }
+        dnsRecords:
+          type: array
+          items:
+            $ref: "#/components/schemas/DnsRecord"
+        certificateStatus: { type: ["string", "null"] }
+        lastCheckedAt: { type: ["string", "null"], format: date-time }
+        lastError: { type: ["string", "null"] }
+        dnsVerifiedAt: { type: ["string", "null"], format: date-time }
+        activatedAt: { type: ["string", "null"], format: date-time }
+
+    DnsRecord:
+      type: object
+      required: [type, name, value, current, ok]
+      properties:
+        type: { type: string, description: "CNAME | TXT | A" }
+        name: { type: string, description: "Host label to enter at the registrar (@ = root)" }
+        value: { type: string }
+        current: { type: ["string", "null"], description: "What DNS returned at the last check" }
+        ok: { type: ["boolean", "null"], description: "null until checked" }
 
     SetDomainInput:
       type: object
+      required: [domain]
       properties:
-        domain: { type: ["string", "null"], description: "Omit or set null to clear" }
+        domain: { type: string, example: erp.myshop.com }
 
     ForgotPasswordInput:
       type: object

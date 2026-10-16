@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useAuth } from "@/contexts/use-auth";
 import {
   useGetAuditLog,
   useGetLedgerReport,
@@ -156,6 +157,9 @@ function SearchBox({ value, onChange, placeholder }: { value: string; onChange: 
 }
 
 export default function Reports() {
+  const { user } = useAuth();
+  // Read-only CA login: only the GST reports (the server refuses the rest anyway).
+  const gstOnly = user?.role === "gst_accountant";
   return (
     <div className="space-y-6">
       <div>
@@ -166,25 +170,25 @@ export default function Reports() {
       <Tabs defaultValue="sales" className="w-full">
         <TabsList className="flex flex-wrap h-auto justify-start gap-1">
           <TabsTrigger value="sales">Sales (GST)</TabsTrigger>
-          <TabsTrigger value="item-wise">Item-wise</TabsTrigger>
-          <TabsTrigger value="customer-wise">Customer-wise</TabsTrigger>
-          <TabsTrigger value="production">Production</TabsTrigger>
+          {!gstOnly && <TabsTrigger value="item-wise">Item-wise</TabsTrigger>}
+          {!gstOnly && <TabsTrigger value="customer-wise">Customer-wise</TabsTrigger>}
+          {!gstOnly && <TabsTrigger value="production">Production</TabsTrigger>}
           <TabsTrigger value="tax">Input / Output Tax</TabsTrigger>
-          <TabsTrigger value="pnl">Profit & Loss</TabsTrigger>
-          <TabsTrigger value="bill-wise-profit">Bill-wise Profit Margin</TabsTrigger>
-          <TabsTrigger value="ledger">Ledger</TabsTrigger>
-          <TabsTrigger value="audit">Audit Log</TabsTrigger>
+          {!gstOnly && <TabsTrigger value="pnl">Profit & Loss</TabsTrigger>}
+          {!gstOnly && <TabsTrigger value="bill-wise-profit">Bill-wise Profit Margin</TabsTrigger>}
+          {!gstOnly && <TabsTrigger value="ledger">Ledger</TabsTrigger>}
+          {!gstOnly && <TabsTrigger value="audit">Audit Log</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="sales" className="mt-6"><SalesTab /></TabsContent>
-        <TabsContent value="item-wise" className="mt-6"><ItemWiseTab /></TabsContent>
-        <TabsContent value="customer-wise" className="mt-6"><CustomerWiseTab /></TabsContent>
-        <TabsContent value="production" className="mt-6"><ProductionTab /></TabsContent>
+        {!gstOnly && <TabsContent value="item-wise" className="mt-6"><ItemWiseTab /></TabsContent>}
+        {!gstOnly && <TabsContent value="customer-wise" className="mt-6"><CustomerWiseTab /></TabsContent>}
+        {!gstOnly && <TabsContent value="production" className="mt-6"><ProductionTab /></TabsContent>}
         <TabsContent value="tax" className="mt-6"><TaxTab /></TabsContent>
-        <TabsContent value="pnl" className="mt-6"><PnLTab /></TabsContent>
-        <TabsContent value="bill-wise-profit" className="mt-6"><BillWiseProfitTab /></TabsContent>
-        <TabsContent value="ledger" className="mt-6"><LedgerTab /></TabsContent>
-        <TabsContent value="audit" className="mt-6"><AuditTab /></TabsContent>
+        {!gstOnly && <TabsContent value="pnl" className="mt-6"><PnLTab /></TabsContent>}
+        {!gstOnly && <TabsContent value="bill-wise-profit" className="mt-6"><BillWiseProfitTab /></TabsContent>}
+        {!gstOnly && <TabsContent value="ledger" className="mt-6"><LedgerTab /></TabsContent>}
+        {!gstOnly && <TabsContent value="audit" className="mt-6"><AuditTab /></TabsContent>}
       </Tabs>
     </div>
   );

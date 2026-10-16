@@ -7,9 +7,5 @@
  */
 
 export interface SetDomainInput {
-  /**
-     * Omit or set null to clear
-     * @nullable
-     */
-  domain?: string | null;
+  domain: string;
 }

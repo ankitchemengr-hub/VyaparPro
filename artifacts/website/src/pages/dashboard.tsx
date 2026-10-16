@@ -7,7 +7,7 @@ import { useAuth } from "@/contexts/use-auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, ExternalLink, RefreshCw, PlayCircle, Receipt, MessageCircle, Building2, LogOut } from "lucide-react";
+import { Loader2, ExternalLink, RefreshCw, PlayCircle, Receipt, MessageCircle, Building2, LogOut, Globe } from "lucide-react";
 
 const STATUS_TONE: Record<string, string> = {
   active: "bg-teal-100 text-teal-700 hover:bg-teal-100",
@@ -128,6 +128,14 @@ export default function PortalDashboard() {
                   <CardContent className="p-5 flex items-center gap-3">
                     <Receipt className="w-5 h-5 text-slate-600" />
                     <div><div className="font-medium">Payment History</div><div className="text-xs text-slate-500">View past payments</div></div>
+                  </CardContent>
+                </Card>
+              </Link>
+              <Link href="/domain">
+                <Card className="hover:border-blue-400 transition-colors cursor-pointer h-full">
+                  <CardContent className="p-5 flex items-center gap-3">
+                    <Globe className="w-5 h-5 text-indigo-600" />
+                    <div><div className="font-medium">My Domain</div><div className="text-xs text-slate-500">Open your ERP on your own web address</div></div>
                   </CardContent>
                 </Card>
               </Link>

@@ -18,7 +18,7 @@ import {
   BulkStockReconciliationBody,
 } from "@workspace/api-zod";
 import { getCompanyId, handleTenantError } from "../lib/tenant";
-import { computeProductCosts } from "../lib/bom-cost";
+import { loadManufacturingCosts } from "../lib/bom-cost";
 import { computeRecalculation, applyRecalculation } from "../lib/recalculate-prices";
 import { buildProductImageUrl, decodeProductImageDataUrl } from "../lib/product-image";
 
@@ -69,38 +69,13 @@ router.get("/products", async (req, res): Promise<void> => {
   // Live recipe-cost rollup for manufactured items, so Price List can show
   // what a BOM product actually costs to make right now — separate from
   // purchasePrice, which only gets synced to this when "Recalculate Prices"
-  // is run and can otherwise drift as raw material rates change. Costed
-  // against every company product (not just this filtered/searched page),
-  // since a recipe's raw materials may not themselves match the filter.
-  const bomRows = await pool.query(
-    `SELECT b.finished_product_id, b.output_quantity, bi.material_product_id, bi.quantity
-     FROM boms b
-     JOIN bom_items bi ON bi.bom_id = b.id AND bi.company_id = b.company_id
-     WHERE b.company_id = $1`,
-    [companyId],
-  );
-  let manufacturingCosts = new Map<number, number>();
-  let finishedProductIds = new Set<number>();
-  if (bomRows.rows.length > 0) {
-    const bomItems = bomRows.rows.map((r: any) => ({
-      finishedProductId: r.finished_product_id,
-      materialProductId: r.material_product_id,
-      quantity: r.quantity,
-      outputQuantity: r.output_quantity,
-    }));
-    finishedProductIds = new Set(bomItems.map((b) => b.finishedProductId));
-    const allProducts = await db
-      .select({ id: productsTable.id, purchasePrice: productsTable.purchasePrice })
-      .from(productsTable)
-      .where(and(eq(productsTable.companyId, companyId), isNull(productsTable.deletedAt)));
-    manufacturingCosts = computeProductCosts(allProducts, bomItems);
-  }
+  // is run and can otherwise drift as raw material rates change. Billing
+  // also uses it as the cost to warn against when selling below cost.
+  const manufacturingCosts = await loadManufacturingCosts(companyId);
 
   res.json(products.map((p) => ({
     ...formatProduct(p),
-    manufacturingCost: finishedProductIds.has(p.id)
-      ? Math.round((manufacturingCosts.get(p.id) ?? 0) * 100) / 100
-      : null,
+    manufacturingCost: manufacturingCosts.get(p.id) ?? null,
   })));
 });
 
@@ -411,6 +386,59 @@ router.get("/products/:id/recent-prices", async (req, res): Promise<void> => {
   res.json({
     lastSalePrices: salesRes.rows.map(toPoint),
     lastPurchasePrices: purchasesRes.rows.map(toPoint),
+  });
+});
+
+// GET /products/:id/sale-history?customerId=&excludeInvoiceId= — shown under
+// the Rate field while billing: the last 3 bills of this product to THIS
+// customer only (empty for a new customer or when no customer is selected —
+// other customers' rates are deliberately never shown). Real bills only —
+// quotations, proforma, challans and sale orders aren't sales. The invoice
+// being edited is excluded so it doesn't list itself.
+const NOT_A_SALE = ["quotation", "proforma_invoice", "delivery_challan", "sale_order"];
+router.get("/products/:id/sale-history", async (req, res): Promise<void> => {
+  const productId = Number(req.params.id);
+  if (!Number.isInteger(productId)) {
+    res.status(400).json({ error: "Invalid product id" });
+    return;
+  }
+  // Staff only — it shows other customers' names and the rates they paid.
+  const role = (req as any).session?.role;
+  if (!["admin", "store", "salesman", "accountant", "super_admin"].includes(role)) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  const customerId = Number(req.query.customerId);
+  const excludeInvoiceId = Number(req.query.excludeInvoiceId);
+  const companyId = getCompanyId(req);
+
+  const query = (extraWhere: string, extraParams: unknown[], limit: number) =>
+    pool.query(
+      `SELECT i.invoice_date AS date, i.invoice_no, i.customer_name AS party, ii.qty, ii.unit, ii.rate
+       FROM invoice_items ii
+       JOIN invoices i ON i.id = ii.invoice_id AND i.company_id = ii.company_id
+       WHERE ii.company_id = $1 AND ii.product_id = $2 AND i.status = 'saved'
+         AND i.invoice_type <> ALL($3) AND i.id <> $4 ${extraWhere}
+       ORDER BY i.invoice_date DESC, i.id DESC
+       LIMIT ${limit}`,
+      [companyId, productId, NOT_A_SALE, Number.isInteger(excludeInvoiceId) ? excludeInvoiceId : 0, ...extraParams],
+    );
+
+  // Only ever THIS customer's own bills (last 3) — other customers' rates
+  // are never shown while billing. No customer selected ⇒ empty.
+  const forCustomer = Number.isInteger(customerId) && customerId > 0;
+  const rows: any[] = forCustomer ? (await query("AND i.customer_id = $5", [customerId], 3)).rows : [];
+
+  res.json({
+    forCustomer,
+    rows: rows.map((r) => ({
+      date: new Date(r.date).toISOString(),
+      invoiceNo: r.invoice_no,
+      party: r.party ?? null,
+      qty: Number(r.qty),
+      unit: r.unit ?? null,
+      rate: Number(r.rate),
+    })),
   });
 });
 

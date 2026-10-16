@@ -12,6 +12,10 @@ import ResetPassword from "@/pages/reset-password";
 import Dashboard from "@/pages/dashboard";
 import Subscription from "@/pages/subscription";
 import Payments from "@/pages/payments";
+import Domain from "@/pages/domain";
+import Terms from "@/pages/terms";
+import Privacy from "@/pages/privacy";
+import RefundPolicy from "@/pages/refund-policy";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -33,6 +37,10 @@ function Router() {
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/subscription" component={Subscription} />
       <Route path="/payments" component={Payments} />
+      <Route path="/domain" component={Domain} />
+      <Route path="/terms" component={Terms} />
+      <Route path="/privacy" component={Privacy} />
+      <Route path="/refund-policy" component={RefundPolicy} />
       <Route component={NotFound} />
     </Switch>
   );

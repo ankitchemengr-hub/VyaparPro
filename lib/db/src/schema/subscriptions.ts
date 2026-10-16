@@ -19,6 +19,8 @@ export const companiesTable = pgTable("companies", {
   // 'pending' once a customer submits a domain, 'active' once staff have
   // manually pointed DNS/reverse-proxy/SSL at it. Null when no domain is set.
   customDomainStatus: text("custom_domain_status"),
+  // NOTE: both columns above are now a mirror kept in sync by the API's
+  // lib/custom-domains.ts — the real state is the company_domains table.
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

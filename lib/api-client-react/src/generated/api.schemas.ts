@@ -211,6 +211,7 @@ export const AuthSessionRole = {
   store: 'store',
   manufacturing: 'manufacturing',
   accountant: 'accountant',
+  gst_accountant: 'gst_accountant',
   customer: 'customer',
   counter: 'counter',
 } as const;
@@ -300,6 +301,7 @@ export const UserAccountRole = {
   store: 'store',
   manufacturing: 'manufacturing',
   accountant: 'accountant',
+  gst_accountant: 'gst_accountant',
   customer: 'customer',
   counter: 'counter',
 } as const;
@@ -337,6 +339,7 @@ export const CreateUserInputRole = {
   store: 'store',
   manufacturing: 'manufacturing',
   accountant: 'accountant',
+  gst_accountant: 'gst_accountant',
   customer: 'customer',
   counter: 'counter',
 } as const;
@@ -382,6 +385,7 @@ export const UpdateUserInputRole = {
   store: 'store',
   manufacturing: 'manufacturing',
   accountant: 'accountant',
+  gst_accountant: 'gst_accountant',
   customer: 'customer',
   counter: 'counter',
 } as const;
@@ -1691,6 +1695,7 @@ export type PaymentReceiptSource = typeof PaymentReceiptSource[keyof typeof Paym
 export const PaymentReceiptSource = {
   payment: 'payment',
   cashbook: 'cashbook',
+  adjustment: 'adjustment',
 } as const;
 
 export interface PaymentReceipt {
@@ -3282,37 +3287,64 @@ export interface MyPayment {
   createdAt: string;
 }
 
-/**
- * pending until staff finish DNS/SSL setup and mark it active
- * @nullable
- */
-export type MyDomainStatus = typeof MyDomainStatus[keyof typeof MyDomainStatus] | null;
+export type DomainInfoStatus = typeof DomainInfoStatus[keyof typeof DomainInfoStatus];
 
 
-export const MyDomainStatus = {
+export const DomainInfoStatus = {
   pending: 'pending',
   active: 'active',
 } as const;
 
+export interface DnsRecord {
+  /** CNAME | TXT | A */
+  type: string;
+  /** Host label to enter at the registrar (@ = root) */
+  name: string;
+  value: string;
+  /**
+     * What DNS returned at the last check
+     * @nullable
+     */
+  current: string | null;
+  /**
+     * null until checked
+     * @nullable
+     */
+  ok: boolean | null;
+}
+
+export interface DomainInfo {
+  domain: string;
+  status: DomainInfoStatus;
+  url: string;
+  isRootDomain: boolean;
+  dnsRecords: DnsRecord[];
+  /** @nullable */
+  certificateStatus: string | null;
+  /** @nullable */
+  lastCheckedAt: string | null;
+  /** @nullable */
+  lastError: string | null;
+  /** @nullable */
+  dnsVerifiedAt: string | null;
+  /** @nullable */
+  activatedAt: string | null;
+}
+
 export interface MyDomain {
+  active: DomainInfo | null;
+  pending: DomainInfo | null;
+  /** True when Railway automation is configured (domains go live on DNS verify) */
+  automatic: boolean;
   /**
-     * e.g. myshop.com — not yet routed/SSL'd, just stored
+     * Fallback CNAME target when Railway gives no per-domain record
      * @nullable
      */
-  customDomain: string | null;
-  /**
-     * pending until staff finish DNS/SSL setup and mark it active
-     * @nullable
-     */
-  status: MyDomainStatus;
+  targetHost: string | null;
 }
 
 export interface SetDomainInput {
-  /**
-     * Omit or set null to clear
-     * @nullable
-     */
-  domain?: string | null;
+  domain: string;
 }
 
 export interface ForgotPasswordInput {

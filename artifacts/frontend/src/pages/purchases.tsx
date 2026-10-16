@@ -1094,6 +1094,7 @@ function NewPurchaseTab({
 
       <RecalculatePricesDialog open={showRecalcPrompt} onOpenChange={setShowRecalcPrompt} />
 
+
       <UpdateSalePriceDialog
         open={showSalePricePrompt}
         onOpenChange={(v) => {

@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Response } from "express";
 import crypto from "node:crypto";
 import { pool } from "@workspace/db";
 import {
@@ -6,15 +6,16 @@ import {
   RegisterPortalCustomerBody,
   CreatePortalPaymentOrderBody,
   VerifyPortalPaymentBody,
-  SetMyDomainBody,
   ForgotPortalPasswordBody,
   ResetPortalPasswordBody,
 } from "@workspace/api-zod";
 import { hashPassword } from "../lib/password";
+import { isUsernameTaken } from "../lib/username";
 import { getCompanyId } from "../lib/tenant";
 import { logger } from "../lib/logger";
 import { sendMail, passwordResetEmail } from "../lib/mailer";
 import { PLAN_MONTHS, addMonths, daysBetween } from "./subscriptions";
+import { DomainError, getDomainState, requestDomain, verifyDomain, removeDomain } from "../lib/custom-domains";
 
 const router: IRouter = Router();
 
@@ -99,6 +100,13 @@ router.post("/portal/register", async (req, res): Promise<void> => {
     if (dupe.rows.length > 0) {
       await client.query("ROLLBACK");
       res.status(409).json({ error: "A company with this email or mobile is already registered" });
+      return;
+    }
+    // The admin login's username is this email/mobile — it must not already be
+    // someone's username in any company (lib/username.ts).
+    if (await isUsernameTaken(client, (d.email ?? d.mobile).trim())) {
+      await client.query("ROLLBACK");
+      res.status(409).json({ error: "An account with this email or mobile already exists. Please log in, or use a different one." });
       return;
     }
 
@@ -403,54 +411,50 @@ router.get("/portal/my-payments", async (req, res): Promise<void> => {
   })));
 });
 
-// GET /portal/my-domain — authenticated. Just the stored preference; no
-// actual DNS/routing/SSL is wired up to this yet (see bootstrap.ts's
-// custom_domain column comment).
-router.get("/portal/my-domain", async (req, res): Promise<void> => {
+// ── Custom domain (portal "My Domain" page) ────────────────────────────────
+// All authenticated via getCompanyId(). The logic — DNS records, Railway
+// attach, verification, safe switch-over — lives in lib/custom-domains.ts.
+
+async function domainRoute(res: Response, fn: () => Promise<unknown>): Promise<void> {
+  try {
+    res.json(await fn());
+  } catch (err) {
+    if (err instanceof DomainError) {
+      res.status(err.status).json({ error: err.message });
+      return;
+    }
+    throw err;
+  }
+}
+
+// GET /portal/domain — current active domain, pending change, DNS records.
+router.get("/portal/domain", async (req, res): Promise<void> => {
   const companyId = getCompanyId(req);
-  const { rows } = await pool.query(`SELECT custom_domain, custom_domain_status FROM companies WHERE id = $1`, [companyId]);
-  res.json({ customDomain: rows[0]?.custom_domain ?? null, status: rows[0]?.custom_domain_status ?? null });
+  await domainRoute(res, () => getDomainState(companyId));
 });
 
-// A conservative domain-format check (labels of letters/digits/hyphens,
-// dot-separated, 2+ letter TLD) — good enough to catch typos before saving,
-// not a full RFC 1035 validator.
-const DOMAIN_RE = /^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$/i;
-
-// PATCH /portal/my-domain — set or clear (domain: null) the customer's
-// preferred domain. Authenticated. Setting a domain starts it as 'pending' —
-// staff manually finish the DNS/reverse-proxy/SSL setup and mark it 'active'
-// from the platform admin console's "Domain Requests" tab (see
-// subscriptions.ts). An email nudges staff the moment a request comes in.
-router.patch("/portal/my-domain", async (req, res): Promise<void> => {
+// POST /portal/domain { domain } — add a domain, or start changing to a new
+// one (the current active domain keeps working until the new one verifies).
+router.post("/portal/domain", async (req, res): Promise<void> => {
   const companyId = getCompanyId(req);
-  const parsed = SetMyDomainBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+  await domainRoute(res, () => requestDomain(companyId, req.body?.domain));
+});
+
+// POST /portal/domain/verify — check the DNS records now; goes live if correct.
+router.post("/portal/domain/verify", async (req, res): Promise<void> => {
+  const companyId = getCompanyId(req);
+  await domainRoute(res, () => verifyDomain(companyId));
+});
+
+// DELETE /portal/domain/pending | /portal/domain/active
+router.delete("/portal/domain/:which", async (req, res): Promise<void> => {
+  const companyId = getCompanyId(req);
+  const which = req.params.which;
+  if (which !== "pending" && which !== "active") {
+    res.status(400).json({ error: "Use /pending or /active" });
     return;
   }
-  const domain = parsed.data.domain?.trim().toLowerCase() || null;
-  if (domain && !DOMAIN_RE.test(domain)) {
-    res.status(400).json({ error: "That doesn't look like a valid domain (e.g. myshop.com)" });
-    return;
-  }
-  const status = domain ? "pending" : null;
-  const { rows } = await pool.query(
-    `UPDATE companies SET custom_domain = $1, custom_domain_status = $2, updated_at = NOW() WHERE id = $3 RETURNING name`,
-    [domain, status, companyId],
-  );
-  if (domain) {
-    const adminEmail = process.env["SMTP_USER"];
-    if (adminEmail) {
-      void sendMail(
-        adminEmail,
-        `New domain request: ${domain}`,
-        `<p><strong>${rows[0]?.name ?? "A customer"}</strong> requested the custom domain <strong>${domain}</strong>.</p>
-         <p>Set up DNS/reverse-proxy/SSL for it, then mark it Active from the Subscriptions admin console → Domain Requests tab.</p>`,
-      );
-    }
-  }
-  res.json({ customDomain: domain, status });
+  await domainRoute(res, () => removeDomain(companyId, which));
 });
 
 // POST /portal/forgot-password — public. Always returns the same generic

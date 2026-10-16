@@ -149,6 +149,12 @@ async function seedBusinessDataIfEmpty(client: pg.Client): Promise<void> {
  */
 async function applySchemaPatches(client: pg.Client): Promise<void> {
   const patches: string[] = [
+    // ── Store users allowed to change the rate while billing, and the audit
+    //    trail for invoices billed below the price-list rate ────────────────
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS can_edit_rate BOOLEAN NOT NULL DEFAULT false`,
+    `ALTER TABLE invoices ADD COLUMN IF NOT EXISTS below_list_rate BOOLEAN NOT NULL DEFAULT false`,
+    `ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS list_rate NUMERIC(12, 2)`,
+
     // ── Entities: salesman assignment ──────────────────────────────────────
     `ALTER TABLE entities ADD COLUMN IF NOT EXISTS assigned_salesman_id INTEGER`,
     `ALTER TABLE entities ADD COLUMN IF NOT EXISTS commission_expiry_date TIMESTAMP WITH TIME ZONE`,
@@ -444,12 +450,36 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
       is_active   BOOLEAN NOT NULL DEFAULT TRUE,
       created_at  TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
     )`,
-    // The customer's own domain, collected via the portal's "Custom Domain"
-    // card — not wired up to any DNS/routing/SSL yet, just stored.
+    // Mirror of the company's current custom domain (active, else pending) —
+    // the real state lives in company_domains below (see lib/custom-domains.ts).
     `ALTER TABLE companies ADD COLUMN IF NOT EXISTS custom_domain TEXT`,
-    // 'pending' once submitted via the portal, 'active' once staff manually
-    // finish the DNS/reverse-proxy/SSL setup and mark it done.
     `ALTER TABLE companies ADD COLUMN IF NOT EXISTS custom_domain_status TEXT`,
+    // Customer custom domains: at most one 'active' and one 'pending' per
+    // company, so a change of domain never breaks the working one until the
+    // new one's DNS verifies.
+    `CREATE TABLE IF NOT EXISTS company_domains (
+      id                  SERIAL PRIMARY KEY,
+      company_id          INTEGER NOT NULL,
+      domain              TEXT NOT NULL UNIQUE,
+      status              TEXT NOT NULL DEFAULT 'pending',
+      railway_domain_id   TEXT,
+      dns_records         JSONB NOT NULL DEFAULT '[]',
+      certificate_status  TEXT,
+      last_checked_at     TIMESTAMP WITH TIME ZONE,
+      last_error          TEXT,
+      dns_verified_at     TIMESTAMP WITH TIME ZONE,
+      activated_at        TIMESTAMP WITH TIME ZONE,
+      created_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS company_domains_one_active ON company_domains(company_id) WHERE status = 'active'`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS company_domains_one_pending ON company_domains(company_id) WHERE status = 'pending'`,
+    // Carry over domains saved by the earlier "just store it" version. Safe to
+    // re-run: the companies columns are kept in sync with this table.
+    `INSERT INTO company_domains (company_id, domain, status, activated_at)
+     SELECT id, lower(custom_domain), COALESCE(custom_domain_status, 'pending'),
+            CASE WHEN custom_domain_status = 'active' THEN NOW() END
+       FROM companies WHERE custom_domain IS NOT NULL
+     ON CONFLICT DO NOTHING`,
     // Portal "Forgot password" — only a hash of the token is ever stored.
     `CREATE TABLE IF NOT EXISTS password_reset_tokens (
       id          SERIAL PRIMARY KEY,

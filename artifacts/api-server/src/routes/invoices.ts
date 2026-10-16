@@ -25,6 +25,11 @@ import {
 import { logger } from "../lib/logger";
 import { generateSeriesNumber, type SeriesType } from "../lib/number-series";
 import { getCompanyId } from "../lib/tenant";
+import { isGstAccountant } from "../lib/gst-access";
+import { loadManufacturingCosts, effectiveUnitCost } from "../lib/bom-cost";
+import { settleExcessInvoiceDues, NO_PAY_INVOICE_TYPES } from "../lib/entity-payment";
+import { autoManufactureForSale } from "../lib/auto-manufacture";
+import { applyListRateFlags } from "../lib/list-rate";
 
 const router: IRouter = Router();
 
@@ -154,9 +159,20 @@ router.get("/invoices", async (req, res): Promise<void> => {
     // Store users only see invoices they personally created (e.g. via the
     // catalog checkout flow), not the full company invoice list.
     conditions.push(eq(invoicesTable.createdByUserId, session.userId));
+  } else if (session?.role === "customer") {
+    // A customer (mechanic/retailer portal login) only ever sees their own
+    // bills, regardless of the customerId query param. No linked entity →
+    // nothing, rather than every customer's invoices.
+    if (!session.entityId) {
+      res.json([]);
+      return;
+    }
+    conditions.push(eq(invoicesTable.customerId, session.entityId));
   } else if (params.data.salesmanId) {
     conditions.push(eq(invoicesTable.salesmanId, params.data.salesmanId));
   }
+  // GST accountant only ever sees GST tax invoices, whatever `type` the client sends.
+  if (isGstAccountant(req)) conditions.push(eq(invoicesTable.invoiceType, "gst"));
   if (params.data.type) conditions.push(eq(invoicesTable.invoiceType, params.data.type));
   if (params.data.productId) {
     conditions.push(sql`EXISTS (
@@ -204,6 +220,12 @@ router.get("/invoices", async (req, res): Promise<void> => {
     conditions.push(ne(invoicesTable.status, "cancelled"));
   }
 
+  // ?belowRate=1 — only invoices a non-admin billed below the price-list rate.
+  // Read off req.query directly: the generated query schema doesn't know it.
+  if ((req.query as Record<string, unknown>).belowRate === "1") {
+    conditions.push(eq(invoicesTable.belowListRate, true));
+  }
+
   const invoices = conditions.length > 0
     ? await db.select().from(invoicesTable).where(and(...conditions)).orderBy(sql`${invoicesTable.createdAt} DESC`)
     : await db.select().from(invoicesTable).orderBy(sql`${invoicesTable.createdAt} DESC`);
@@ -214,7 +236,48 @@ router.get("/invoices", async (req, res): Promise<void> => {
     : [];
   const creatorNameById = new Map(creators.map((c) => [c.id, c.name]));
 
-  res.json(invoices.map((inv) => formatInvoice(inv, [], creatorNameById.get(inv.createdByUserId ?? -1) ?? null)));
+  // Admin only: how many lines of each sale were sold below cost, so the
+  // Invoices page can flag loss-making bills. Measured like the billing-time
+  // warning — net rate per unit after the line discount, before GST — against
+  // the cost_price snapshotted at sale time (BOM cost for made items, else
+  // purchase price). Quotations/challans/orders aren't sales and are skipped;
+  // rows from before cost_price existed (NULL) are never flagged.
+  const lossCountById = new Map<number, number>();
+  if (session?.role === "admin" && invoices.length > 0) {
+    const lossRows = await pool.query(
+      `SELECT ii.invoice_id, COUNT(*)::int AS loss_items
+       FROM invoice_items ii
+       JOIN invoices i ON i.id = ii.invoice_id AND i.company_id = ii.company_id
+       WHERE ii.company_id = $1
+         AND ii.invoice_id = ANY($2::int[])
+         AND i.invoice_type NOT IN ('quotation', 'proforma_invoice', 'sale_order', 'delivery_challan')
+         AND ii.cost_price > 0
+         AND ii.qty > 0
+         AND ROUND((ii.qty * ii.rate - ii.discount_amt) / ii.qty, 2) < ii.cost_price
+       GROUP BY ii.invoice_id`,
+      [companyId, invoices.map((i) => i.id)],
+    );
+    for (const r of lossRows.rows) lossCountById.set(r.invoice_id, r.loss_items);
+  }
+
+  // The party's whole account balance (same figure Khatabook shows) next to
+  // each bill, for the roles that can see Khatabook.
+  const showPartyBalance = ["admin", "super_admin", "accountant"].includes(session?.role);
+  const partyBalanceById = new Map<number, number>();
+  const partyIds = [...new Set(invoices.map((i) => i.customerId).filter((v): v is number => v != null))];
+  if (showPartyBalance && partyIds.length > 0) {
+    const balRows = await pool.query(
+      `SELECT id, outstanding_balance FROM entities WHERE company_id = $1 AND id = ANY($2::int[])`,
+      [companyId, partyIds],
+    );
+    for (const r of balRows.rows) partyBalanceById.set(r.id, Number(r.outstanding_balance));
+  }
+
+  res.json(invoices.map((inv) => ({
+    ...formatInvoice(inv, [], creatorNameById.get(inv.createdByUserId ?? -1) ?? null),
+    ...(session?.role === "admin" ? { lossItemCount: lossCountById.get(inv.id) ?? 0 } : {}),
+    ...(showPartyBalance && inv.customerId != null ? { partyBalance: partyBalanceById.get(inv.customerId) ?? null } : {}),
+  })));
 });
 
 // POST /invoices
@@ -265,6 +328,8 @@ router.post("/invoices", async (req, res): Promise<void> => {
           .where(and(eq(productsTable.companyId, companyId), inArray(productsTable.id, productIds)))
       : [];
     const productById = new Map(productRows.map((p) => [p.id, p]));
+    // Live BOM cost for manufactured items — snapshotted as cost_price below.
+    const manufacturingCosts = await loadManufacturingCosts(companyId);
 
     const processedItems = data.items.map((item) => {
       const qty = Number(item.qty);
@@ -299,10 +364,11 @@ router.post("/invoices", async (req, res): Promise<void> => {
       // QTY"). This feeds the commission calculation, so it must not depend
       // on qtyBoxes/box-mode being set.
       const litersPerBox = productById.get(item.productId)?.litersPerBox;
-      // costPrice snapshots the product's purchase price at sale time, so
-      // P&L/COGS reporting reflects what this sale actually cost rather than
-      // whatever the purchase price happens to be whenever the report runs.
-      const costPrice = productById.get(item.productId)?.purchasePrice;
+      // costPrice snapshots the product's cost at sale time — the live BOM
+      // (manufacturing) cost for products we make, else the purchase price —
+      // so P&L/COGS reporting reflects what this sale actually cost rather
+      // than whatever the cost happens to be whenever the report runs.
+      const costPrice = effectiveUnitCost(item.productId, productById.get(item.productId)?.purchasePrice, manufacturingCosts);
       return {
         ...item,
         qty: String(qty),
@@ -435,6 +501,13 @@ router.post("/invoices", async (req, res): Promise<void> => {
       );
 
       if (!isQuotation) {
+        // A product we make is never sold into negative stock — the shortfall
+        // is covered from Ready Material / by auto-consuming its BOM first.
+        await autoManufactureForSale(client, {
+          companyId, productId: item.productId, qtyOut: Number(item.qty),
+          reason: `sale ${invoiceNo}`, userId: session?.userId ?? 1,
+        });
+
         // Stock movement (outward)
         await client.query(
           `INSERT INTO stock_movements (company_id, product_id, type, quantity, reason, reference_id, reference_type, user_id)
@@ -468,6 +541,13 @@ router.post("/invoices", async (req, res): Promise<void> => {
          VALUES ($1, $2, NOW(), $3, $4, 0, $5, 'invoice', $6, $7)`,
         [companyId, data.customerId, `Invoice ${invoiceNo}`, grandTotal, newBal, invRow.id, invoiceNo]
       );
+
+      // Advance already on the account (party had paid ahead / was in
+      // credit) is applied to this bill right away, so the bill's paid status
+      // always agrees with the party balance — see settleExcessInvoiceDues.
+      if (!NO_PAY_INVOICE_TYPES.includes(data.invoiceType)) {
+        await settleExcessInvoiceDues(client, { companyId, customerId: data.customerId, receiptNo: `ADV-${invoiceNo}` });
+      }
     }
 
     // ── Commission transaction ─────────────────────────────────────────────
@@ -505,6 +585,10 @@ router.post("/invoices", async (req, res): Promise<void> => {
         );
       }
     }
+
+    // Snapshot each line's price-list rate and flag a below-rate sale by a
+    // non-admin (e.g. a store user allowed to change rates).
+    await applyListRateFlags(client, companyId, invRow.id, session?.role);
 
     await client.query("COMMIT");
 
@@ -557,6 +641,14 @@ router.get("/invoices/:id", async (req, res): Promise<void> => {
       res.status(404).json({ error: "Invoice not found" });
       return;
     }
+  } else if (session?.role === "customer") {
+    if (!session.entityId || inv.customerId !== session.entityId) {
+      res.status(404).json({ error: "Invoice not found" });
+      return;
+    }
+  } else if (isGstAccountant(req) && inv.invoiceType !== "gst") {
+    res.status(404).json({ error: "Invoice not found" });
+    return;
   }
 
   const items = await db.select().from(invoiceItemsTable).where(and(eq(invoiceItemsTable.companyId, companyId), eq(invoiceItemsTable.invoiceId, params.data.id)));
@@ -565,9 +657,21 @@ router.get("/invoices/:id", async (req, res): Promise<void> => {
     const [creator] = await db.select({ name: usersTable.name }).from(usersTable).where(eq(usersTable.id, inv.createdByUserId));
     createdByName = creator?.name ?? null;
   }
-  const customerBalance = await getCustomerBalanceSnapshot(companyId, inv.id, inv.customerId ?? null);
+  // The customer's running balance mixes in non-GST bills, so it's withheld
+  // from the GST accountant (this invoice's own amountPaid/balanceDue still show).
+  const customerBalance = isGstAccountant(req)
+    ? null
+    : await getCustomerBalanceSnapshot(companyId, inv.id, inv.customerId ?? null);
   const customerMobile = await getCustomerMobile(companyId, inv.customerId ?? null);
-  res.json(formatInvoice(inv, items, createdByName, customerBalance, customerMobile));
+  const body = formatInvoice(inv, items, createdByName, customerBalance, customerMobile);
+  // Purchase cost / margin is internal, not GST data.
+  if (isGstAccountant(req)) body.items = body.items.map((it) => ({ ...it, costPrice: null }));
+  // A customer viewing their own bill sees neither our cost nor our audit marks.
+  if (session?.role === "customer") {
+    body.items = body.items.map((it) => ({ ...it, costPrice: null, listRate: null }));
+    body.belowListRate = false;
+  }
+  res.json(body);
 });
 
 // GET /invoices/:id/payment-receipts — the receipt number(s) this invoice's
@@ -584,7 +688,7 @@ router.get("/invoices/:id/payment-receipts", async (req, res): Promise<void> => 
   }
 
   const companyId = getCompanyId(req);
-  const [inv] = await db.select({ id: invoicesTable.id, salesmanId: invoicesTable.salesmanId, createdByUserId: invoicesTable.createdByUserId })
+  const [inv] = await db.select({ id: invoicesTable.id, salesmanId: invoicesTable.salesmanId, createdByUserId: invoicesTable.createdByUserId, invoiceType: invoicesTable.invoiceType, customerId: invoicesTable.customerId })
     .from(invoicesTable)
     .where(and(eq(invoicesTable.companyId, companyId), eq(invoicesTable.id, params.data.id)));
   if (!inv) {
@@ -603,6 +707,14 @@ router.get("/invoices/:id/payment-receipts", async (req, res): Promise<void> => 
       res.status(404).json({ error: "Invoice not found" });
       return;
     }
+  } else if (session?.role === "customer") {
+    if (!session.entityId || inv.customerId !== session.entityId) {
+      res.status(404).json({ error: "Invoice not found" });
+      return;
+    }
+  } else if (isGstAccountant(req) && inv.invoiceType !== "gst") {
+    res.status(404).json({ error: "Invoice not found" });
+    return;
   }
 
   const rows = await pool.query(
@@ -756,6 +868,8 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
           .where(and(eq(productsTable.companyId, companyId), inArray(productsTable.id, productIds)))
       : [];
     const productById = new Map(productRows.map((p) => [p.id, p]));
+    // Live BOM cost for manufactured items — snapshotted as cost_price below.
+    const manufacturingCosts = await loadManufacturingCosts(companyId);
 
     const processedItems = data.items.map((item) => {
       const qty = Number(item.qty);
@@ -778,7 +892,8 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
       const litersPerBoxVal = productById.get(item.productId)?.litersPerBox;
       // total_liters = qty × liters-per-unit. Feeds the commission calculation.
       const totalLiters = litersPerBoxVal != null ? qty * Number(litersPerBoxVal) : null;
-      const costPriceVal = productById.get(item.productId)?.purchasePrice;
+      // Same cost snapshot as the create route (BOM cost for manufactured items).
+      const costPriceVal = effectiveUnitCost(item.productId, productById.get(item.productId)?.purchasePrice, manufacturingCosts);
       return {
         ...item,
         qty: String(qty), rate: String(rate), mrp: String(item.mrp),
@@ -873,6 +988,10 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
         [companyId, invoiceId, item.productId, prodName, null, item.description ?? null, item.qty, item.qtyBoxesVal, item.totalLitersVal, item.unit, item.rate, item.mrp, item.discountPct, item.discountAmt, item.taxPct, item.cessPct, item.netPrice, item.amount, item.costPriceVal]
       );
       if (!isQuotationEdit) {
+        await autoManufactureForSale(client, {
+          companyId, productId: item.productId, qtyOut: Number(item.qty),
+          reason: `sale ${existing.invoice_no} (edited)`, userId: session?.userId ?? 1,
+        });
         await client.query(
           `INSERT INTO stock_movements (company_id, product_id, type, quantity, reason, reference_id, reference_type, user_id)
            VALUES ($1, $2, 'outward', $3, $4, $5, 'invoice_edit', $6)`,
@@ -956,6 +1075,12 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
       }
     }
 
+    // Same advance/credit catch-up as on create — an edit can move the bill to
+    // a customer who is in credit, or leave the party owing less than its bills.
+    if (newCustomerId && !NO_PAY_INVOICE_TYPES.includes(data.invoiceType ?? existing.invoice_type)) {
+      await settleExcessInvoiceDues(client, { companyId, customerId: newCustomerId, receiptNo: `ADV-${existing.invoice_no}` });
+    }
+
     // 7. Audit log
     await client.query(
       `INSERT INTO audit_log (company_id, action, description, user_id, user_name, metadata)
@@ -972,6 +1097,9 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
         }),
       ]
     );
+
+    // Re-check against the price list; an admin's edit clears the flag.
+    await applyListRateFlags(client, companyId, invoiceId, session?.role);
 
     await client.query("COMMIT");
 
@@ -1272,6 +1400,7 @@ function formatInvoice(
     amountPaid: Number(inv.amountPaid),
     balanceDue: Number(inv.balanceDue),
     status: inv.status,
+    belowListRate: Boolean(inv.belowListRate),
     items: items.map(formatItem),
     createdAt: inv.createdAt?.toISOString?.() ?? inv.createdAt,
   };
@@ -1298,6 +1427,7 @@ function formatItem(i: any) {
     netPrice: Number(i.netPrice),
     amount: Number(i.amount),
     costPrice: i.costPrice != null ? Number(i.costPrice) : null,
+    listRate: i.listRate != null ? Number(i.listRate) : null,
   };
 }
 

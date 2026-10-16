@@ -8,7 +8,8 @@ import {
 } from "@workspace/api-zod";
 import { COMPANY_TABLES } from "../lib/company-data";
 import { hashPassword } from "../lib/password";
-import { sendMail } from "../lib/mailer";
+import { isUsernameTaken, suggestUsername, usernameTakenMessage } from "../lib/username";
+import { DomainError, listDomainRequests, adminSetDomainStatus } from "../lib/custom-domains";
 
 const router: IRouter = Router();
 
@@ -238,27 +239,16 @@ router.get("/subscriptions", async (req, res): Promise<void> => {
   res.json(rows.map(mapRow));
 });
 
-// GET /subscriptions/domain-requests — every company that has ever submitted
-// a custom domain via the portal (pending or already marked active).
-router.get("/subscriptions/domain-requests", async (req, res): Promise<void> => {
-  const { rows } = await pool.query(
-    `SELECT id, name, email, mobile, custom_domain, custom_domain_status, updated_at
-     FROM companies WHERE custom_domain IS NOT NULL ORDER BY updated_at DESC`,
-  );
-  res.json(rows.map((r) => ({
-    companyId: r.id,
-    companyName: r.name,
-    email: r.email ?? null,
-    mobile: r.mobile ?? null,
-    customDomain: r.custom_domain,
-    status: r.custom_domain_status ?? "pending",
-    updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : null,
-  })));
+// GET /subscriptions/domain-requests — one row per company with a custom
+// domain: its pending request if any (needs attention), else its active one.
+router.get("/subscriptions/domain-requests", async (_req, res): Promise<void> => {
+  res.json(await listDomainRequests());
 });
 
-// PUT /subscriptions/:companyId/domain-status — staff mark a domain
-// active once they've manually finished DNS/reverse-proxy/SSL for it (or
-// flip it back to pending). Emails the customer when it goes active.
+// PUT /subscriptions/:companyId/domain-status — manual override. "active"
+// switches the company's pending domain live (use when Railway automation
+// isn't configured and staff attached the domain by hand); "pending" takes
+// the active one offline. Emails the customer when a domain goes live.
 router.put("/subscriptions/:companyId/domain-status", async (req, res): Promise<void> => {
   const companyId = Number(req.params.companyId);
   const status = req.body?.status === "active" ? "active" : req.body?.status === "pending" ? "pending" : null;
@@ -266,33 +256,15 @@ router.put("/subscriptions/:companyId/domain-status", async (req, res): Promise<
     res.status(400).json({ error: "status must be 'pending' or 'active'" });
     return;
   }
-  const { rows } = await pool.query(
-    `UPDATE companies SET custom_domain_status = $1, updated_at = NOW()
-     WHERE id = $2 AND custom_domain IS NOT NULL
-     RETURNING id, name, email, mobile, custom_domain, custom_domain_status, updated_at`,
-    [status, companyId],
-  );
-  if (rows.length === 0) {
-    res.status(404).json({ error: "Company not found or has no custom domain" });
-    return;
+  try {
+    res.json(await adminSetDomainStatus(companyId, status));
+  } catch (err) {
+    if (err instanceof DomainError) {
+      res.status(err.status).json({ error: err.message });
+      return;
+    }
+    throw err;
   }
-  const r = rows[0];
-  if (status === "active" && r.email) {
-    void sendMail(
-      r.email,
-      "Your custom domain is now live",
-      `<p>Good news — <strong>${r.custom_domain}</strong> is now set up and pointing to your SHRADHA ERP account.</p>`,
-    );
-  }
-  res.json({
-    companyId: r.id,
-    companyName: r.name,
-    email: r.email ?? null,
-    mobile: r.mobile ?? null,
-    customDomain: r.custom_domain,
-    status: r.custom_domain_status,
-    updatedAt: new Date(r.updated_at).toISOString(),
-  });
 });
 
 // POST /subscriptions/create — create company + subscription (SERIALIZABLE money op)
@@ -325,6 +297,12 @@ router.post("/subscriptions/create", async (req, res): Promise<void> => {
   const adminPassword = body.adminPassword?.trim() || null;
   if ((adminUsername && !adminPassword) || (!adminUsername && adminPassword)) {
     res.status(400).json({ error: "Both admin username and password are required to create a login" });
+    return;
+  }
+  // Admin usernames are unique across all companies (see lib/username.ts).
+  if (adminUsername && await isUsernameTaken(pool, adminUsername)) {
+    const suggestion = await suggestUsername(pool, adminUsername, body.companyName);
+    res.status(409).json({ error: usernameTakenMessage(adminUsername, suggestion), suggestion });
     return;
   }
 

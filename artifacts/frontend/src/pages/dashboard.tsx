@@ -378,8 +378,8 @@ export default function Dashboard() {
       <div className="divide-y rounded-lg border overflow-hidden max-h-72 overflow-y-auto">
         {items.map((a: any) => (
           <div key={a.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm" data-testid={`low-stock-item-${a.id}`}>
-            <span className="font-medium truncate">{a.name}</span>
-            <span className="text-xs font-mono shrink-0 text-destructive">
+            <span className="font-medium min-w-0 break-words">{a.name}</span>
+            <span className="text-xs font-mono shrink-0 whitespace-nowrap text-destructive">
               {a.currentStock} / {a.minStockThreshold} {a.unit}
             </span>
           </div>
@@ -699,7 +699,7 @@ export default function Dashboard() {
 
       {/* Workload + low-stock stay on the dashboard — collapsed to a count,
           a tap expands the list inline (no navigating away). */}
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
         <Card
           className="cursor-pointer select-none transition-colors hover:bg-muted/40"
           {...clickableProps(() => setShowWorkload((v) => !v))}
@@ -739,7 +739,7 @@ export default function Dashboard() {
         </Card>
 
         <Card
-          className="cursor-pointer select-none transition-colors hover:bg-muted/40"
+          className="min-w-0 cursor-pointer select-none transition-colors hover:bg-muted/40"
           {...clickableProps(() => setShowLowStock((v) => !v))}
           aria-expanded={showLowStock}
           data-testid="card-low-stock-detail"

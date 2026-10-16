@@ -33,3 +33,32 @@ export function playNotificationSound() {
     // Web Audio unavailable/blocked — the toast still shows visually either way.
   }
 }
+
+// Three short, harsher beeps — deliberately unlike the friendly chime above,
+// so a "check this before saving" warning (e.g. a bill line priced at or
+// below purchase cost) is recognisable by ear alone.
+export function playWarningBeep() {
+  try {
+    const Ctx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    [0, 0.22, 0.44].forEach((start) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "square";
+      osc.frequency.value = 660;
+      const t0 = ctx.currentTime + start;
+      gain.gain.setValueAtTime(0.0001, t0);
+      gain.gain.exponentialRampToValueAtTime(0.12, t0 + 0.01);
+      gain.gain.setValueAtTime(0.12, t0 + 0.12);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.15);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t0);
+      osc.stop(t0 + 0.2);
+    });
+    setTimeout(() => ctx.close().catch(() => {}), 1000);
+  } catch {
+    // Web Audio unavailable/blocked — the popup/toast still shows visually.
+  }
+}

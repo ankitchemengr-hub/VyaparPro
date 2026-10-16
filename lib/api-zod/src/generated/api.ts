@@ -81,7 +81,7 @@ export const LoginBody = zod.object({
 export const LoginResponse = zod.object({
   "id": zod.number(),
   "username": zod.string(),
-  "role": zod.enum(['super_admin', 'admin', 'salesman', 'store', 'manufacturing', 'accountant', 'customer', 'counter']),
+  "role": zod.enum(['super_admin', 'admin', 'salesman', 'store', 'manufacturing', 'accountant', 'gst_accountant', 'customer', 'counter']),
   "name": zod.string(),
   "customerId": zod.number().nullish(),
   "companyId": zod.number().nullish(),
@@ -102,7 +102,7 @@ export const LogoutResponse = zod.void()
 export const GetMeResponse = zod.object({
   "id": zod.number(),
   "username": zod.string(),
-  "role": zod.enum(['super_admin', 'admin', 'salesman', 'store', 'manufacturing', 'accountant', 'customer', 'counter']),
+  "role": zod.enum(['super_admin', 'admin', 'salesman', 'store', 'manufacturing', 'accountant', 'gst_accountant', 'customer', 'counter']),
   "name": zod.string(),
   "customerId": zod.number().nullish(),
   "companyId": zod.number().nullish(),
@@ -449,7 +449,7 @@ export const ListUsersResponseItem = zod.object({
   "id": zod.number(),
   "username": zod.string(),
   "name": zod.string(),
-  "role": zod.enum(['admin', 'salesman', 'store', 'manufacturing', 'accountant', 'customer', 'counter']),
+  "role": zod.enum(['admin', 'salesman', 'store', 'manufacturing', 'accountant', 'gst_accountant', 'customer', 'counter']),
   "entityId": zod.number().nullish(),
   "pricingTier": zod.union([zod.literal('retail'),zod.literal('wholesale'),zod.literal(null)]).nullish(),
   "isActive": zod.boolean(),
@@ -472,7 +472,7 @@ export const CreateUserBody = zod.object({
   "username": zod.string().min(createUserBodyUsernameMin).max(createUserBodyUsernameMax),
   "password": zod.string().min(createUserBodyPasswordMin),
   "name": zod.string().optional(),
-  "role": zod.enum(['admin', 'salesman', 'store', 'manufacturing', 'accountant', 'customer', 'counter']),
+  "role": zod.enum(['admin', 'salesman', 'store', 'manufacturing', 'accountant', 'gst_accountant', 'customer', 'counter']),
   "entityId": zod.number().nullish(),
   "pricingTier": zod.union([zod.literal('retail'),zod.literal('wholesale'),zod.literal(null)]).nullish()
 }).describe('Creates a login account. `name` falls back to the linked entity\'s name when omitted\nand an `entityId` is provided. Link a salesman\/worker\/customer entity via `entityId`\nso the login is associated with their ledger and invoice attribution.\n')
@@ -481,7 +481,7 @@ export const CreateUserResponse = zod.object({
   "id": zod.number(),
   "username": zod.string(),
   "name": zod.string(),
-  "role": zod.enum(['admin', 'salesman', 'store', 'manufacturing', 'accountant', 'customer', 'counter']),
+  "role": zod.enum(['admin', 'salesman', 'store', 'manufacturing', 'accountant', 'gst_accountant', 'customer', 'counter']),
   "entityId": zod.number().nullish(),
   "pricingTier": zod.union([zod.literal('retail'),zod.literal('wholesale'),zod.literal(null)]).nullish(),
   "isActive": zod.boolean(),
@@ -502,7 +502,7 @@ export const updateUserBodyPasswordMin = 8;
 
 export const UpdateUserBody = zod.object({
   "name": zod.string().optional(),
-  "role": zod.enum(['admin', 'salesman', 'store', 'manufacturing', 'accountant', 'customer', 'counter']).optional(),
+  "role": zod.enum(['admin', 'salesman', 'store', 'manufacturing', 'accountant', 'gst_accountant', 'customer', 'counter']).optional(),
   "pricingTier": zod.union([zod.literal('retail'),zod.literal('wholesale'),zod.literal(null)]).nullish(),
   "isActive": zod.boolean().optional(),
   "entityId": zod.number().nullish(),
@@ -513,7 +513,7 @@ export const UpdateUserResponse = zod.object({
   "id": zod.number(),
   "username": zod.string(),
   "name": zod.string(),
-  "role": zod.enum(['admin', 'salesman', 'store', 'manufacturing', 'accountant', 'customer', 'counter']),
+  "role": zod.enum(['admin', 'salesman', 'store', 'manufacturing', 'accountant', 'gst_accountant', 'customer', 'counter']),
   "entityId": zod.number().nullish(),
   "pricingTier": zod.union([zod.literal('retail'),zod.literal('wholesale'),zod.literal(null)]).nullish(),
   "isActive": zod.boolean(),
@@ -1907,7 +1907,7 @@ export const GetPaymentReceiptResponse = zod.object({
   "direction": zod.enum(['in', 'out']),
   "status": zod.string().describe('approved\/pending\/rejected for a customer payment; \"completed\" for a Cash Book entry (no approval step).'),
   "invoiceNo": zod.string().nullish().describe('The first\/primary invoice this payment touched, if any — see `allocations` for the full breakdown.'),
-  "source": zod.enum(['payment', 'cashbook']),
+  "source": zod.enum(['payment', 'cashbook', 'adjustment']),
   "allocations": zod.array(zod.object({
   "invoiceId": zod.number(),
   "invoiceNo": zod.string(),
@@ -4864,24 +4864,190 @@ export const ListMyPaymentsResponse = zod.array(ListMyPaymentsResponseItem)
 
 
 /**
- * @summary The signed-in company's preferred custom domain (not yet routed/SSL'd — just stored)
+ * @summary The signed-in company's live custom domain, any pending change, and the DNS records to add
  */
 export const GetMyDomainResponse = zod.object({
-  "customDomain": zod.string().nullable().describe('e.g. myshop.com — not yet routed\/SSL\'d, just stored'),
-  "status": zod.union([zod.literal('pending'),zod.literal('active'),zod.literal(null)]).nullable().describe('pending until staff finish DNS\/SSL setup and mark it active')
+  "active": zod.union([zod.object({
+  "domain": zod.string(),
+  "status": zod.enum(['pending', 'active']),
+  "url": zod.string(),
+  "isRootDomain": zod.boolean(),
+  "dnsRecords": zod.array(zod.object({
+  "type": zod.string().describe('CNAME | TXT | A'),
+  "name": zod.string().describe('Host label to enter at the registrar (@ = root)'),
+  "value": zod.string(),
+  "current": zod.string().nullable().describe('What DNS returned at the last check'),
+  "ok": zod.boolean().nullable().describe('null until checked')
+})),
+  "certificateStatus": zod.string().nullable(),
+  "lastCheckedAt": zod.coerce.date().nullable(),
+  "lastError": zod.string().nullable(),
+  "dnsVerifiedAt": zod.coerce.date().nullable(),
+  "activatedAt": zod.coerce.date().nullable()
+}),zod.null()]),
+  "pending": zod.union([zod.object({
+  "domain": zod.string(),
+  "status": zod.enum(['pending', 'active']),
+  "url": zod.string(),
+  "isRootDomain": zod.boolean(),
+  "dnsRecords": zod.array(zod.object({
+  "type": zod.string().describe('CNAME | TXT | A'),
+  "name": zod.string().describe('Host label to enter at the registrar (@ = root)'),
+  "value": zod.string(),
+  "current": zod.string().nullable().describe('What DNS returned at the last check'),
+  "ok": zod.boolean().nullable().describe('null until checked')
+})),
+  "certificateStatus": zod.string().nullable(),
+  "lastCheckedAt": zod.coerce.date().nullable(),
+  "lastError": zod.string().nullable(),
+  "dnsVerifiedAt": zod.coerce.date().nullable(),
+  "activatedAt": zod.coerce.date().nullable()
+}),zod.null()]),
+  "automatic": zod.boolean().describe('True when Railway automation is configured (domains go live on DNS verify)'),
+  "targetHost": zod.string().nullable().describe('Fallback CNAME target when Railway gives no per-domain record')
 })
 
 
 /**
- * @summary Set or clear (domain omitted/null) the signed-in company's preferred custom domain
+ * @summary Add a custom domain, or start changing to a new one (the live one keeps working until the new one verifies)
  */
 export const SetMyDomainBody = zod.object({
-  "domain": zod.string().nullish().describe('Omit or set null to clear')
+  "domain": zod.string()
 })
 
 export const SetMyDomainResponse = zod.object({
-  "customDomain": zod.string().nullable().describe('e.g. myshop.com — not yet routed\/SSL\'d, just stored'),
-  "status": zod.union([zod.literal('pending'),zod.literal('active'),zod.literal(null)]).nullable().describe('pending until staff finish DNS\/SSL setup and mark it active')
+  "active": zod.union([zod.object({
+  "domain": zod.string(),
+  "status": zod.enum(['pending', 'active']),
+  "url": zod.string(),
+  "isRootDomain": zod.boolean(),
+  "dnsRecords": zod.array(zod.object({
+  "type": zod.string().describe('CNAME | TXT | A'),
+  "name": zod.string().describe('Host label to enter at the registrar (@ = root)'),
+  "value": zod.string(),
+  "current": zod.string().nullable().describe('What DNS returned at the last check'),
+  "ok": zod.boolean().nullable().describe('null until checked')
+})),
+  "certificateStatus": zod.string().nullable(),
+  "lastCheckedAt": zod.coerce.date().nullable(),
+  "lastError": zod.string().nullable(),
+  "dnsVerifiedAt": zod.coerce.date().nullable(),
+  "activatedAt": zod.coerce.date().nullable()
+}),zod.null()]),
+  "pending": zod.union([zod.object({
+  "domain": zod.string(),
+  "status": zod.enum(['pending', 'active']),
+  "url": zod.string(),
+  "isRootDomain": zod.boolean(),
+  "dnsRecords": zod.array(zod.object({
+  "type": zod.string().describe('CNAME | TXT | A'),
+  "name": zod.string().describe('Host label to enter at the registrar (@ = root)'),
+  "value": zod.string(),
+  "current": zod.string().nullable().describe('What DNS returned at the last check'),
+  "ok": zod.boolean().nullable().describe('null until checked')
+})),
+  "certificateStatus": zod.string().nullable(),
+  "lastCheckedAt": zod.coerce.date().nullable(),
+  "lastError": zod.string().nullable(),
+  "dnsVerifiedAt": zod.coerce.date().nullable(),
+  "activatedAt": zod.coerce.date().nullable()
+}),zod.null()]),
+  "automatic": zod.boolean().describe('True when Railway automation is configured (domains go live on DNS verify)'),
+  "targetHost": zod.string().nullable().describe('Fallback CNAME target when Railway gives no per-domain record')
+})
+
+
+/**
+ * @summary Check the pending domain's DNS now; switches it live when every record matches
+ */
+export const VerifyMyDomainResponse = zod.object({
+  "active": zod.union([zod.object({
+  "domain": zod.string(),
+  "status": zod.enum(['pending', 'active']),
+  "url": zod.string(),
+  "isRootDomain": zod.boolean(),
+  "dnsRecords": zod.array(zod.object({
+  "type": zod.string().describe('CNAME | TXT | A'),
+  "name": zod.string().describe('Host label to enter at the registrar (@ = root)'),
+  "value": zod.string(),
+  "current": zod.string().nullable().describe('What DNS returned at the last check'),
+  "ok": zod.boolean().nullable().describe('null until checked')
+})),
+  "certificateStatus": zod.string().nullable(),
+  "lastCheckedAt": zod.coerce.date().nullable(),
+  "lastError": zod.string().nullable(),
+  "dnsVerifiedAt": zod.coerce.date().nullable(),
+  "activatedAt": zod.coerce.date().nullable()
+}),zod.null()]),
+  "pending": zod.union([zod.object({
+  "domain": zod.string(),
+  "status": zod.enum(['pending', 'active']),
+  "url": zod.string(),
+  "isRootDomain": zod.boolean(),
+  "dnsRecords": zod.array(zod.object({
+  "type": zod.string().describe('CNAME | TXT | A'),
+  "name": zod.string().describe('Host label to enter at the registrar (@ = root)'),
+  "value": zod.string(),
+  "current": zod.string().nullable().describe('What DNS returned at the last check'),
+  "ok": zod.boolean().nullable().describe('null until checked')
+})),
+  "certificateStatus": zod.string().nullable(),
+  "lastCheckedAt": zod.coerce.date().nullable(),
+  "lastError": zod.string().nullable(),
+  "dnsVerifiedAt": zod.coerce.date().nullable(),
+  "activatedAt": zod.coerce.date().nullable()
+}),zod.null()]),
+  "automatic": zod.boolean().describe('True when Railway automation is configured (domains go live on DNS verify)'),
+  "targetHost": zod.string().nullable().describe('Fallback CNAME target when Railway gives no per-domain record')
+})
+
+
+/**
+ * @summary Remove the live domain or cancel the pending change
+ */
+export const RemoveMyDomainParams = zod.object({
+  "which": zod.enum(['pending', 'active'])
+})
+
+export const RemoveMyDomainResponse = zod.object({
+  "active": zod.union([zod.object({
+  "domain": zod.string(),
+  "status": zod.enum(['pending', 'active']),
+  "url": zod.string(),
+  "isRootDomain": zod.boolean(),
+  "dnsRecords": zod.array(zod.object({
+  "type": zod.string().describe('CNAME | TXT | A'),
+  "name": zod.string().describe('Host label to enter at the registrar (@ = root)'),
+  "value": zod.string(),
+  "current": zod.string().nullable().describe('What DNS returned at the last check'),
+  "ok": zod.boolean().nullable().describe('null until checked')
+})),
+  "certificateStatus": zod.string().nullable(),
+  "lastCheckedAt": zod.coerce.date().nullable(),
+  "lastError": zod.string().nullable(),
+  "dnsVerifiedAt": zod.coerce.date().nullable(),
+  "activatedAt": zod.coerce.date().nullable()
+}),zod.null()]),
+  "pending": zod.union([zod.object({
+  "domain": zod.string(),
+  "status": zod.enum(['pending', 'active']),
+  "url": zod.string(),
+  "isRootDomain": zod.boolean(),
+  "dnsRecords": zod.array(zod.object({
+  "type": zod.string().describe('CNAME | TXT | A'),
+  "name": zod.string().describe('Host label to enter at the registrar (@ = root)'),
+  "value": zod.string(),
+  "current": zod.string().nullable().describe('What DNS returned at the last check'),
+  "ok": zod.boolean().nullable().describe('null until checked')
+})),
+  "certificateStatus": zod.string().nullable(),
+  "lastCheckedAt": zod.coerce.date().nullable(),
+  "lastError": zod.string().nullable(),
+  "dnsVerifiedAt": zod.coerce.date().nullable(),
+  "activatedAt": zod.coerce.date().nullable()
+}),zod.null()]),
+  "automatic": zod.boolean().describe('True when Railway automation is configured (domains go live on DNS verify)'),
+  "targetHost": zod.string().nullable().describe('Fallback CNAME target when Railway gives no per-domain record')
 })
 
 

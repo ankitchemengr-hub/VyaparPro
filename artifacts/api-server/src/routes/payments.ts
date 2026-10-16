@@ -15,8 +15,9 @@ import {
 } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
 import { getCompanyId } from "../lib/tenant";
+import { isGstAccountant } from "../lib/gst-access";
 import { generateSeriesNumber } from "../lib/number-series";
-import { applyEntityPayment } from "../lib/entity-payment";
+import { applyEntityPayment, settleExcessInvoiceDues, NO_PAY_INVOICE_TYPES } from "../lib/entity-payment";
 
 // Thrown for a bad request caught mid-transaction (needs the ROLLBACK the
 // surrounding try/catch already does) — kept distinct from a genuine
@@ -117,6 +118,47 @@ async function loadAllocationsAndBalance(
   return { allocations, customerBalanceBefore, customerBalanceAfter };
 }
 
+// GST-accountant view of a receipt: keep only the allocations against GST
+// invoices and report just that portion as the amount. The customer's running
+// balance (which mixes in non-GST bills) is withheld. Returns null when the
+// receipt touches no GST invoice at all, so the caller 404s.
+async function gstOnlyReceipt(
+  companyId: number,
+  receipt: { amount: number; invoiceNo: string | null; allocations: any[]; customerBalanceBefore: number | null; customerBalanceAfter: number | null },
+  directInvoiceId: number | null,
+) {
+  const ids = [...new Set([
+    ...receipt.allocations.map((a) => a.invoiceId),
+    ...(directInvoiceId != null ? [directInvoiceId] : []),
+  ].filter((v): v is number => v != null))];
+  const gst = ids.length === 0 ? [] : (await pool.query(
+    `SELECT id, invoice_no FROM invoices WHERE company_id = $1 AND id = ANY($2) AND invoice_type = 'gst'`,
+    [companyId, ids],
+  )).rows;
+  const gstIds = new Set(gst.map((r: any) => r.id));
+  const allocations = receipt.allocations.filter((a) => gstIds.has(a.invoiceId));
+  if (allocations.length > 0) {
+    return {
+      ...receipt,
+      amount: allocations.reduce((sum, a) => sum + a.allocatedAmount, 0),
+      invoiceNo: allocations[0].invoiceNo ?? null,
+      allocations,
+      customerBalanceBefore: null,
+      customerBalanceAfter: null,
+    };
+  }
+  // Older payments recorded against a single invoice, before allocations existed.
+  if (receipt.allocations.length === 0 && directInvoiceId != null && gstIds.has(directInvoiceId)) {
+    return {
+      ...receipt,
+      invoiceNo: gst.find((r: any) => r.id === directInvoiceId)?.invoice_no ?? null,
+      customerBalanceBefore: null,
+      customerBalanceAfter: null,
+    };
+  }
+  return null;
+}
+
 const router: IRouter = Router();
 
 // GET /payments
@@ -129,8 +171,32 @@ router.get("/payments", async (req, res): Promise<void> => {
 
   const companyId = getCompanyId(req);
   const conditions: any[] = [eq(paymentsTable.companyId, companyId)];
-  if (params.data.customerId) conditions.push(eq(paymentsTable.customerId, params.data.customerId));
+  const session = (req as any).session;
+  if (session?.role === "customer") {
+    // Customer portal login: only their own payments, whatever is asked for.
+    if (!session.entityId) {
+      res.json([]);
+      return;
+    }
+    conditions.push(eq(paymentsTable.customerId, session.entityId));
+  } else if (params.data.customerId) conditions.push(eq(paymentsTable.customerId, params.data.customerId));
   if (params.data.status) conditions.push(eq(paymentsTable.status, params.data.status));
+  if (isGstAccountant(req)) {
+    // Only payments settled purely against GST invoices. A receipt that also
+    // covers non-GST bills is left out here (its GST share still shows under
+    // each GST invoice's payment-receipts), so no non-GST amount leaks.
+    const linkedInvoices = (invoiceTypeCheck: ReturnType<typeof sql>) => sql`EXISTS (
+      SELECT 1 FROM invoices i
+      WHERE i.company_id = ${paymentsTable.companyId}
+        AND (i.id = ${paymentsTable.invoiceId} OR i.id IN (
+          SELECT pa.invoice_id FROM payment_allocations pa
+          WHERE pa.company_id = ${paymentsTable.companyId} AND pa.receipt_no = ${paymentsTable.receiptId}
+        ))
+        AND ${invoiceTypeCheck}
+    )`;
+    conditions.push(linkedInvoices(sql`i.invoice_type = 'gst'`));
+    conditions.push(sql`NOT ${linkedInvoices(sql`i.invoice_type <> 'gst'`)}`);
+  }
 
   const payments = await db
     .select()
@@ -158,7 +224,7 @@ router.get("/payment-receipts/:receiptNo", async (req, res): Promise<void> => {
   const { receiptNo } = params.data;
 
   const paymentRes = await pool.query(
-    `SELECT p.receipt_id, p.created_at, p.customer_id, p.customer_name, p.mode, p.amount, p.status, i.invoice_no
+    `SELECT p.receipt_id, p.created_at, p.customer_id, p.customer_name, p.mode, p.amount, p.status, p.invoice_id, i.invoice_no
      FROM payments p
      LEFT JOIN invoices i ON i.id = p.invoice_id AND i.company_id = p.company_id
      WHERE p.receipt_id = $1 AND p.company_id = $2`,
@@ -168,7 +234,7 @@ router.get("/payment-receipts/:receiptNo", async (req, res): Promise<void> => {
     const r = paymentRes.rows[0];
     const { allocations, customerBalanceBefore, customerBalanceAfter } =
       await loadAllocationsAndBalance(pool, companyId, receiptNo, r.customer_id ?? null);
-    res.json({
+    const body = {
       receiptNo: r.receipt_id,
       date: r.created_at?.toISOString?.() ?? r.created_at,
       partyName: r.customer_name ?? null,
@@ -181,7 +247,14 @@ router.get("/payment-receipts/:receiptNo", async (req, res): Promise<void> => {
       allocations,
       customerBalanceBefore,
       customerBalanceAfter,
-    });
+    };
+    if (isGstAccountant(req)) {
+      const view = await gstOnlyReceipt(companyId, body, r.invoice_id ?? null);
+      if (!view) { res.status(404).json({ error: "Receipt not found" }); return; }
+      res.json(view);
+      return;
+    }
+    res.json(body);
     return;
   }
 
@@ -194,7 +267,7 @@ router.get("/payment-receipts/:receiptNo", async (req, res): Promise<void> => {
     const r = txnRes.rows[0];
     const { allocations, customerBalanceBefore, customerBalanceAfter } =
       await loadAllocationsAndBalance(pool, companyId, receiptNo, r.party_entity_id ?? null);
-    res.json({
+    const body = {
       receiptNo: r.receipt_no,
       date: r.created_at?.toISOString?.() ?? r.created_at,
       partyName: r.party_name ?? null,
@@ -207,11 +280,149 @@ router.get("/payment-receipts/:receiptNo", async (req, res): Promise<void> => {
       allocations,
       customerBalanceBefore,
       customerBalanceAfter,
-    });
+    };
+    if (isGstAccountant(req)) {
+      const view = await gstOnlyReceipt(companyId, body, null);
+      if (!view) { res.status(404).json({ error: "Receipt not found" }); return; }
+      res.json(view);
+      return;
+    }
+    res.json(body);
+    return;
+  }
+
+  // Not a money receipt, but bills were still settled under this number: an
+  // advance/credit applied to a bill (ADV-…), a balance sync (SYNC-…), or a
+  // sales return credit (the return number). Shown from its allocations.
+  const { allocations } = await loadAllocationsAndBalance(pool, companyId, receiptNo, null);
+  if (allocations.length > 0) {
+    const metaRes = await pool.query(
+      `SELECT MIN(pa.created_at) AS created_at, MIN(i.customer_name) AS party_name
+       FROM payment_allocations pa
+       LEFT JOIN invoices i ON i.id = pa.invoice_id AND i.company_id = pa.company_id
+       WHERE pa.company_id = $1 AND pa.receipt_no = $2`,
+      [companyId, receiptNo],
+    );
+    const meta = metaRes.rows[0] ?? {};
+    const body = {
+      receiptNo,
+      date: meta.created_at?.toISOString?.() ?? meta.created_at,
+      partyName: meta.party_name ?? null,
+      mode: /^(ADV|SYNC)-/.test(receiptNo) ? "adjustment" : "sales_return",
+      amount: allocations.reduce((sum: number, a: { allocatedAmount: number }) => sum + a.allocatedAmount, 0),
+      direction: "in",
+      status: "completed",
+      invoiceNo: allocations[0]?.invoiceNo ?? null,
+      source: "adjustment",
+      allocations,
+      customerBalanceBefore: null,
+      customerBalanceAfter: null,
+    };
+    if (isGstAccountant(req)) {
+      const view = await gstOnlyReceipt(companyId, body, null);
+      if (!view) { res.status(404).json({ error: "Receipt not found" }); return; }
+      res.json(view);
+      return;
+    }
+    res.json(body);
     return;
   }
 
   res.status(404).json({ error: "Receipt not found" });
+});
+
+// ── Bill status ↔ party balance sync (admin) ──
+// One-off clean-up for bills whose paid status drifted from the party
+// balance (advances paid before the bill, receipts from before allocation
+// existed, old sales returns). For every customer whose open bills show more
+// due than they owe, the gap is settled oldest-bill-first via
+// settleExcessInvoiceDues. Preview runs the exact same writes inside a
+// transaction and rolls back, so what it shows is what Apply will do.
+async function runPaymentSync(companyId: number, apply: boolean, session: any) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const custRes = await client.query(
+      `SELECT DISTINCT i.customer_id, e.name
+       FROM invoices i
+       JOIN entities e ON e.id = i.customer_id AND e.company_id = i.company_id
+       WHERE i.company_id = $1 AND i.customer_id IS NOT NULL
+         AND i.status != 'cancelled' AND i.balance_due > 0
+         AND i.invoice_type NOT IN (${NO_PAY_INVOICE_TYPES.map((t) => `'${t}'`).join(", ")})
+       ORDER BY e.name`,
+      [companyId],
+    );
+    const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const parties: any[] = [];
+    for (const c of custRes.rows) {
+      const r = await settleExcessInvoiceDues(client, {
+        companyId, customerId: c.customer_id, receiptNo: `SYNC-${stamp}-${c.customer_id}`,
+      });
+      if (r.allocations.length === 0) continue;
+      parties.push({
+        customerId: c.customer_id,
+        name: c.name,
+        balance: r.balance,
+        openDueBefore: r.openDueBefore,
+        settled: r.excess,
+        openDueAfter: Math.round((r.openDueBefore - r.excess) * 100) / 100,
+        invoices: r.allocations.map((a) => ({
+          invoiceId: a.invoiceId,
+          invoiceNo: a.invoiceNo,
+          invoiceAmount: a.invoiceAmount,
+          dueBefore: Math.round((a.allocatedAmount + a.balanceAfter) * 100) / 100,
+          settled: a.allocatedAmount,
+          dueAfter: a.balanceAfter,
+          status: a.status,
+        })),
+      });
+    }
+    const summary = {
+      partyCount: parties.length,
+      invoiceCount: parties.reduce((n, p) => n + p.invoices.length, 0),
+      totalSettled: Math.round(parties.reduce((s, p) => s + p.settled, 0) * 100) / 100,
+    };
+    if (apply && parties.length > 0) {
+      await client.query(
+        `INSERT INTO audit_log (company_id, action, description, user_id, user_name, metadata)
+         VALUES ($1, 'payment_sync', $2, $3, $4, $5)`,
+        [
+          companyId,
+          `Bill status synced with party balance: ${summary.invoiceCount} bills of ${summary.partyCount} parties, ₹${summary.totalSettled}`,
+          session?.userId ?? 1,
+          session?.name ?? "Unknown",
+          JSON.stringify({ ...summary, parties: parties.map((p) => ({ customerId: p.customerId, settled: p.settled, invoices: p.invoices.map((i: any) => [i.invoiceNo, i.settled]) })) }),
+        ],
+      );
+    }
+    await client.query(apply ? "COMMIT" : "ROLLBACK");
+    return { applied: apply, ...summary, parties };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+router.get("/payment-sync/preview", async (req, res): Promise<void> => {
+  if (!requirePaymentApprover(req, res)) return;
+  try {
+    res.json(await runPaymentSync(getCompanyId(req), false, (req as any).session));
+  } catch (err) {
+    logger.error({ err }, "Payment sync preview failed");
+    res.status(500).json({ error: "Could not check bills against party balances" });
+  }
+});
+
+router.post("/payment-sync/apply", async (req, res): Promise<void> => {
+  if (!requirePaymentApprover(req, res)) return;
+  try {
+    res.json(await runPaymentSync(getCompanyId(req), true, (req as any).session));
+  } catch (err) {
+    logger.error({ err }, "Payment sync apply failed");
+    res.status(500).json({ error: "Could not sync bills with party balances" });
+  }
 });
 
 // POST /payments
@@ -333,9 +544,9 @@ router.post("/payments", async (req, res): Promise<void> => {
 
       // If the payment names the invoice it was started from, make sure it's
       // a real, still-open bill for THIS customer. Note it gets no special
-      // priority — the allocator below settles the customer's newest bill
-      // first and works back through older ones, so this invoice is paid
-      // only when its date comes up in that order.
+      // priority — the allocator below settles the customer's oldest bill
+      // first and works forward through newer ones (FIFO), so this invoice
+      // is paid only when its date comes up in that order.
       if (parsed.data.invoiceId) {
         // customer_id IS NULL is a walk-in invoice (no specific customer
         // entity selected when it was billed) — this payment always

@@ -9,6 +9,7 @@ import {
 import { logger } from "../lib/logger";
 import { getCompanyId } from "../lib/tenant";
 import { generateSeriesNumber } from "../lib/number-series";
+import { allocatePaymentAcrossInvoices } from "../lib/entity-payment";
 
 const router: IRouter = Router();
 
@@ -331,6 +332,17 @@ router.post("/sales-returns", async (req, res): Promise<void> => {
          VALUES ($1, $2, NOW(), $3, 0, $4, $5, 'sales_return', $6, $7)`,
         [companyId, inv.customer_id, `Sales return ${returnNo} (Inv ${inv.invoice_no})`, grandTotal, newBalance, returnRow.id, returnNo],
       );
+      // The credit the return gave the party also comes off what's due on the
+      // bills — this invoice first, any remainder oldest-first like a payment —
+      // so the bill's paid status keeps agreeing with the party balance.
+      await allocatePaymentAcrossInvoices(client, {
+        companyId,
+        customerId: inv.customer_id,
+        amount: grandTotal,
+        startInvoiceId: inv.id,
+        pinStartInvoice: true,
+        receiptNo: returnNo,
+      });
     }
 
     // ── Commission clawback ────────────────────────────────────────────────

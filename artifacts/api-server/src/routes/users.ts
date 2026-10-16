@@ -7,6 +7,7 @@ import {
 } from "@workspace/api-zod";
 import { getCompanyId } from "../lib/tenant";
 import { hashPassword } from "../lib/password";
+import { isUsernameTaken, suggestUsername, usernameTakenMessage } from "../lib/username";
 
 const router: IRouter = Router();
 
@@ -39,6 +40,7 @@ function toPublic(u: typeof usersTable.$inferSelect) {
     entityId: u.entityId,
     pricingTier: u.pricingTier,
     isActive: u.isActive,
+    canEditRate: u.canEditRate,
     createdAt: u.createdAt.toISOString(),
   };
 }
@@ -117,15 +119,12 @@ router.post("/users", requireAdmin, async (req, res): Promise<void> => {
     return;
   }
 
-  // Usernames are unique within a company, not globally. Two companies can both
-  // have a user named "admin" — they are different rows with different company_ids.
-  // Scope the duplicate check to this company only.
-  const [existing] = await db
-    .select({ id: usersTable.id })
-    .from(usersTable)
-    .where(and(eq(usersTable.companyId, companyId), eq(usersTable.username, username)));
-  if (existing) {
-    res.status(409).json({ error: "Username already taken within this company" });
+  // New usernames must be unique across ALL companies — staff log in without
+  // picking a company, so a second "accountant" anywhere makes login ambiguous.
+  if (await isUsernameTaken(pool, username)) {
+    const { rows } = await pool.query(`SELECT name FROM companies WHERE id = $1`, [companyId]);
+    const suggestion = await suggestUsername(pool, username, rows[0]?.name);
+    res.status(409).json({ error: usernameTakenMessage(username, suggestion), suggestion });
     return;
   }
 
@@ -297,6 +296,40 @@ router.patch("/users/:id", requireAdmin, async (req, res): Promise<void> => {
       ipAddress: ip,
     });
   }
+});
+
+// PUT /users/:id/rate-permission { canEditRate } — admin turns "may change
+// the rate while billing" on/off for a store user. Kept off the generated
+// UpdateUser schema so it's a single, auditable switch.
+router.put("/users/:id/rate-permission", requireAdmin, async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  const canEditRate = (req.body ?? {}).canEditRate;
+  if (!Number.isInteger(id) || typeof canEditRate !== "boolean") {
+    res.status(400).json({ error: "Send { canEditRate: true | false }" });
+    return;
+  }
+  const companyId = getCompanyId(req);
+  const [updated] = await db
+    .update(usersTable)
+    .set({ canEditRate })
+    .where(and(eq(usersTable.id, id), eq(usersTable.companyId, companyId)))
+    .returning();
+  if (!updated) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  const session = (req as any).session;
+  await writeAuditLog({
+    companyId,
+    action: "rate_permission_changed",
+    description: `Rate change while billing ${canEditRate ? "allowed" : "blocked"} for "${updated.username}"`,
+    actorId: session?.userId ?? 0,
+    actorName: session?.name ?? session?.username ?? "Unknown",
+    targetUsername: updated.username,
+    targetUserId: updated.id,
+    ipAddress: getClientIp(req),
+  });
+  res.json(toPublic(updated));
 });
 
 export default router;

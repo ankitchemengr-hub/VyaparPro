@@ -5,17 +5,16 @@
  * Shradha Oil Center ERP API
  * OpenAPI spec version: 0.1.0
  */
-import type { MyDomainStatus } from './myDomainStatus';
+import type { DomainInfo } from './domainInfo';
 
 export interface MyDomain {
+  active: DomainInfo | null;
+  pending: DomainInfo | null;
+  /** True when Railway automation is configured (domains go live on DNS verify) */
+  automatic: boolean;
   /**
-     * e.g. myshop.com — not yet routed/SSL'd, just stored
+     * Fallback CNAME target when Railway gives no per-domain record
      * @nullable
      */
-  customDomain: string | null;
-  /**
-     * pending until staff finish DNS/SSL setup and mark it active
-     * @nullable
-     */
-  status: MyDomainStatus;
+  targetHost: string | null;
 }

@@ -38,6 +38,9 @@ export const invoicesTable = pgTable("invoices", {
   amountPaid: numeric("amount_paid", { precision: 12, scale: 2 }).notNull().default("0"),
   balanceDue: numeric("balance_due", { precision: 12, scale: 2 }).notNull().default("0"),
   status: text("status").notNull().default("saved"), // draft, saved, cancelled
+  // Saved by a non-admin with at least one line below the price-list rate
+  // (see lib/list-rate.ts). Shown as "Below rate" in the invoice list.
+  belowListRate: boolean("below_list_rate").notNull().default(false),
   createdByUserId: integer("created_by_user_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
@@ -78,6 +81,9 @@ export const invoiceItemsTable = pgTable("invoice_items", {
   // purchase price. Null on rows created before this column existed; reports
   // fall back to the current product price for those.
   costPrice: numeric("cost_price", { precision: 12, scale: 2 }),
+  // Price-list rate for this customer/invoice type at save time — what the
+  // line's rate is compared against for the below-rate flag.
+  listRate: numeric("list_rate", { precision: 12, scale: 2 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   index("invoice_items_company_idx").on(t.companyId),

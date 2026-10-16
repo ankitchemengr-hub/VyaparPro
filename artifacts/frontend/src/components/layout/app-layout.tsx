@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Sidebar } from "./sidebar";
+import { CustomerShell } from "./customer-shell";
 import { CompanySwitcher } from "./company-switcher";
 import { useAuth } from "@/contexts/use-auth";
 import { Redirect, useLocation } from "wouter";
@@ -53,6 +54,13 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   if (!isAuthenticated) {
     return <Redirect to="/login" />;
+  }
+
+  // Mechanic / retailer portal login gets its own simple app frame instead of
+  // the staff ERP chrome. Staff-only landing pages bounce to their Home.
+  if (user?.role === "customer") {
+    if (location === "/" || location === "/menu") return <Redirect to="/home" />;
+    return <CustomerShell>{children}</CustomerShell>;
   }
 
   return (

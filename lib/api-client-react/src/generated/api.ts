@@ -13484,11 +13484,11 @@ export const getGetMyDomainUrl = () => {
 
 
 
-  return `/api/portal/my-domain`
+  return `/api/portal/domain`
 }
 
 /**
- * @summary The signed-in company's preferred custom domain (not yet routed/SSL'd — just stored)
+ * @summary The signed-in company's live custom domain, any pending change, and the DNS records to add
  */
 export const getMyDomain = async ( options?: RequestInit): Promise<MyDomain> => {
 
@@ -13507,7 +13507,7 @@ export const getMyDomain = async ( options?: RequestInit): Promise<MyDomain> => 
 
 export const getGetMyDomainQueryKey = () => {
     return [
-    `/api/portal/my-domain`
+    `/api/portal/domain`
     ] as const;
     }
 
@@ -13535,7 +13535,7 @@ export type GetMyDomainQueryError = ErrorType<void>
 
 
 /**
- * @summary The signed-in company's preferred custom domain (not yet routed/SSL'd — just stored)
+ * @summary The signed-in company's live custom domain, any pending change, and the DNS records to add
  */
 
 export function useGetMyDomain<TData = Awaited<ReturnType<typeof getMyDomain>>, TError = ErrorType<void>>(
@@ -13561,18 +13561,18 @@ export const getSetMyDomainUrl = () => {
 
 
 
-  return `/api/portal/my-domain`
+  return `/api/portal/domain`
 }
 
 /**
- * @summary Set or clear (domain omitted/null) the signed-in company's preferred custom domain
+ * @summary Add a custom domain, or start changing to a new one (the live one keeps working until the new one verifies)
  */
 export const setMyDomain = async (setDomainInput: SetDomainInput, options?: RequestInit): Promise<MyDomain> => {
 
   return customFetch<MyDomain>(getSetMyDomainUrl(),
   {
     ...options,
-    method: 'PATCH',
+    method: 'POST',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(setDomainInput)
   }
@@ -13613,7 +13613,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type SetMyDomainMutationError = ErrorType<void>
 
     /**
- * @summary Set or clear (domain omitted/null) the signed-in company's preferred custom domain
+ * @summary Add a custom domain, or start changing to a new one (the live one keeps working until the new one verifies)
  */
 export const useSetMyDomain = <TError = ErrorType<void>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setMyDomain>>, TError,{data: BodyType<SetDomainInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -13624,6 +13624,146 @@ export const useSetMyDomain = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getSetMyDomainMutationOptions(options));
+    }
+
+export const getVerifyMyDomainUrl = () => {
+
+
+
+
+  return `/api/portal/domain/verify`
+}
+
+/**
+ * @summary Check the pending domain's DNS now; switches it live when every record matches
+ */
+export const verifyMyDomain = async ( options?: RequestInit): Promise<MyDomain> => {
+
+  return customFetch<MyDomain>(getVerifyMyDomainUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getVerifyMyDomainMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyMyDomain>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof verifyMyDomain>>, TError,void, TContext> => {
+
+const mutationKey = ['verifyMyDomain'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof verifyMyDomain>>, void> = () => {
+
+
+          return  verifyMyDomain(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type VerifyMyDomainMutationResult = NonNullable<Awaited<ReturnType<typeof verifyMyDomain>>>
+
+    export type VerifyMyDomainMutationError = ErrorType<void>
+
+    /**
+ * @summary Check the pending domain's DNS now; switches it live when every record matches
+ */
+export const useVerifyMyDomain = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyMyDomain>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof verifyMyDomain>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getVerifyMyDomainMutationOptions(options));
+    }
+
+export const getRemoveMyDomainUrl = (which: 'pending' | 'active',) => {
+
+
+
+
+  return `/api/portal/domain/${which}`
+}
+
+/**
+ * @summary Remove the live domain or cancel the pending change
+ */
+export const removeMyDomain = async (which: 'pending' | 'active', options?: RequestInit): Promise<MyDomain> => {
+
+  return customFetch<MyDomain>(getRemoveMyDomainUrl(which),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getRemoveMyDomainMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeMyDomain>>, TError,{which: 'pending' | 'active'}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof removeMyDomain>>, TError,{which: 'pending' | 'active'}, TContext> => {
+
+const mutationKey = ['removeMyDomain'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof removeMyDomain>>, {which: 'pending' | 'active'}> = (props) => {
+          const {which} = props ?? {};
+
+          return  removeMyDomain(which,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RemoveMyDomainMutationResult = NonNullable<Awaited<ReturnType<typeof removeMyDomain>>>
+
+    export type RemoveMyDomainMutationError = ErrorType<void>
+
+    /**
+ * @summary Remove the live domain or cancel the pending change
+ */
+export const useRemoveMyDomain = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeMyDomain>>, TError,{which: 'pending' | 'active'}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof removeMyDomain>>,
+        TError,
+        {which: 'pending' | 'active'},
+        TContext
+      > => {
+      return useMutation(getRemoveMyDomainMutationOptions(options));
     }
 
 export const getForgotPortalPasswordUrl = () => {

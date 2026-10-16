@@ -14,6 +14,7 @@ import paymentsRouter from "./payments";
 import rewardsRouter from "./rewards";
 import manufacturingRouter from "./manufacturing";
 import materialTransfersRouter from "./material-transfers";
+import autoManufactureRouter from "./auto-manufacture";
 import dashboardRouter from "./dashboard";
 import accountsRouter from "./accounts";
 import workersRouter from "./workers";
@@ -31,6 +32,7 @@ import khatabookRouter from "./khatabook";
 import systemAdminRouter from "./system-admin";
 import portalRouter from "./portal";
 import { requireAuth } from "../lib/tenant";
+import { restrictGstAccountant } from "../lib/gst-access";
 
 const router: IRouter = Router();
 
@@ -38,6 +40,10 @@ const router: IRouter = Router();
 router.use(healthRouter);
 router.use(systemRouter);
 router.use(authRouter);
+// Read-only GST-only CA login: allowlist of GET endpoints, everything else 403.
+// Mounted before portalRouter too, since several of its authenticated routes
+// (custom domain, subscription) have no role check of their own.
+router.use(restrictGstAccountant);
 // Mostly public (marketing site + self-serve signup + payment webhooks) —
 // its two "my-*" routes check auth themselves via getCompanyId(req), same
 // as every route below the requireAuth gate does internally.
@@ -60,6 +66,7 @@ router.use(paymentsRouter);
 router.use(rewardsRouter);
 router.use(manufacturingRouter);
 router.use(materialTransfersRouter);
+router.use(autoManufactureRouter);
 router.use(dashboardRouter);
 router.use(accountsRouter);
 router.use(workersRouter);

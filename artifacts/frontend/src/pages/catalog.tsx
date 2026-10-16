@@ -242,12 +242,14 @@ export default function Catalog() {
       {
         onSuccess: (order: any) => {
           toast({
-            title: "Order placed",
-            description: `Your order ${order.orderNo ?? ""} has been submitted.`,
+            title: "Order placed · ऑर्डर हो गया",
+            description: `Your order ${order.orderNo ?? ""} has been submitted. Track it under My Orders.`,
           });
           setCart({});
           queryClient.invalidateQueries({ queryKey: getListCustomerOrdersQueryKey() });
-          setLocation("/my-orders");
+          // Customers land on their order tracker (not the bills list, where a
+          // fresh order wouldn't appear until it's billed).
+          setLocation(isB2B ? "/track-orders" : "/my-orders");
         },
         onError: (err: any) => {
           toast({
