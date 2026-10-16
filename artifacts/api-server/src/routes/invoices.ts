@@ -260,9 +260,23 @@ router.get("/invoices", async (req, res): Promise<void> => {
     for (const r of lossRows.rows) lossCountById.set(r.invoice_id, r.loss_items);
   }
 
+  // The party's whole account balance (same figure Khatabook shows) next to
+  // each bill, for the roles that can see Khatabook.
+  const showPartyBalance = ["admin", "super_admin", "accountant"].includes(session?.role);
+  const partyBalanceById = new Map<number, number>();
+  const partyIds = [...new Set(invoices.map((i) => i.customerId).filter((v): v is number => v != null))];
+  if (showPartyBalance && partyIds.length > 0) {
+    const balRows = await pool.query(
+      `SELECT id, outstanding_balance FROM entities WHERE company_id = $1 AND id = ANY($2::int[])`,
+      [companyId, partyIds],
+    );
+    for (const r of balRows.rows) partyBalanceById.set(r.id, Number(r.outstanding_balance));
+  }
+
   res.json(invoices.map((inv) => ({
     ...formatInvoice(inv, [], creatorNameById.get(inv.createdByUserId ?? -1) ?? null),
     ...(session?.role === "admin" ? { lossItemCount: lossCountById.get(inv.id) ?? 0 } : {}),
+    ...(showPartyBalance && inv.customerId != null ? { partyBalance: partyBalanceById.get(inv.customerId) ?? null } : {}),
   })));
 });
 

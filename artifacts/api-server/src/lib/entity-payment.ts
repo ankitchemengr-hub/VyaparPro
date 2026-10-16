@@ -180,6 +180,37 @@ export async function applyEntityPayment(
   client: { query: (text: string, params?: any[]) => Promise<any> },
   { companyId, entityId, amount, mode, receiptNo, referenceId, isCustomerReceipt, startInvoiceId, pinStartInvoice, description }: ApplyEntityPaymentParams,
 ): Promise<{ newBalance: number; allocations: PaymentAllocation[] }> {
+  // Old dues that sit on the account but on no open bill (opening balance,
+  // bills settled outside the allocator, challans…) are the OLDEST money owed,
+  // so a customer receipt pays those off before it touches any bill — the
+  // current bill only gets marked paid once everything older is cleared.
+  // Skipped when the caller explicitly pinned a bill (Cash Book "Start With
+  // Invoice") or the bill is a walk-in sale, which isn't on any account.
+  let billAmount = amount;
+  if (isCustomerReceipt && !pinStartInvoice) {
+    const walkIn = startInvoiceId != null
+      ? (await client.query(
+          `SELECT 1 FROM invoices WHERE id = $1 AND company_id = $2 AND customer_id IS NULL`,
+          [startInvoiceId, companyId],
+        )).rows.length > 0
+      : false;
+    if (!walkIn) {
+      const preRes = await client.query(
+        `SELECT e.outstanding_balance,
+                (SELECT COALESCE(SUM(i.balance_due), 0) FROM invoices i
+                  WHERE i.company_id = e.company_id AND i.customer_id = e.id
+                    AND i.status != 'cancelled' AND i.invoice_type NOT IN (${NO_PAY_TYPES_SQL}) AND i.balance_due > 0) AS open_due
+         FROM entities e WHERE e.id = $1 AND e.company_id = $2 FOR UPDATE OF e`,
+        [entityId, companyId],
+      );
+      const pre = preRes.rows[0];
+      if (pre) {
+        const unbilledOldDue = Math.max(0, Number(pre.outstanding_balance) - Number(pre.open_due));
+        billAmount = Math.max(0, Math.round((amount - unbilledOldDue) * 100) / 100);
+      }
+    }
+  }
+
   await client.query(
     `UPDATE entities SET outstanding_balance = outstanding_balance - $1 WHERE id = $2 AND company_id = $3`,
     [amount, entityId, companyId],
@@ -198,9 +229,9 @@ export async function applyEntityPayment(
   );
 
   let allocations: PaymentAllocation[] = [];
-  if (isCustomerReceipt) {
+  if (isCustomerReceipt && billAmount > 0.009) {
     allocations = await allocatePaymentAcrossInvoices(client, {
-      companyId, customerId: entityId, amount, startInvoiceId, pinStartInvoice, receiptNo,
+      companyId, customerId: entityId, amount: billAmount, startInvoiceId, pinStartInvoice, receiptNo,
     });
   }
 
