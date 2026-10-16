@@ -4,16 +4,18 @@
 // site goes live. Have a CA / lawyer review the final pages once.
 export const LEGAL = {
   brand: "SHRADHA ERP",
-  legalName: "[Your registered business name, e.g. Shradha Enterprises]",
-  address: "[Full registered address, City, State – PIN]",
-  email: "[support@yourdomain.com]",
-  phone: "[+91 XXXXX XXXXX]",
-  gstin: "[Your GSTIN]",
+  legalName: "Yash Enterprises",
+  address: "03, Ganesh Nagar, Bale, Solapur – 413255, Maharashtra",
+  email: "support@shradhaerp.com",
+  phone: "+91 98607 99449",
+  // Digits only, with country code — for tel: and WhatsApp links.
+  phoneDigits: "919860799449",
+  gstin: "27BFTPC0657J1Z5",
   // IT Rules, 2021 — a named grievance officer who replies within the stated time.
-  grievanceOfficer: "[Name of grievance officer]",
-  grievanceEmail: "[grievance@yourdomain.com]",
+  grievanceOfficer: "Ankit Chourasiya",
+  grievanceEmail: "support@shradhaerp.com",
   // Courts whose jurisdiction applies to disputes.
-  jurisdictionCity: "[Your city]",
+  jurisdictionCity: "Solapur",
   // Bump whenever the wording of any of the three pages changes.
   lastUpdated: "16 October 2026",
 } as const;

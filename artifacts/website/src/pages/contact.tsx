@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, Phone, Mail, MessageCircle, CheckCircle2 } from "lucide-react";
 import { SiteHeader } from "@/components/site/site-header";
 import { SiteFooter } from "@/components/site/site-footer";
+import { LEGAL } from "@/lib/legal";
 
 export default function SiteContact() {
   const { toast } = useToast();
@@ -52,9 +53,9 @@ export default function SiteContact() {
           <p className="mt-2 text-slate-500">See SHRADHA ERP in action — tell us a bit about your business and we'll reach out.</p>
 
           <div className="mt-8 space-y-4 text-sm">
-            <div className="flex items-center gap-3"><Phone className="w-5 h-5 text-blue-600" /> +91 99999 00000</div>
-            <div className="flex items-center gap-3"><Mail className="w-5 h-5 text-blue-600" /> support@shradhaerp.com</div>
-            <div className="flex items-center gap-3"><MessageCircle className="w-5 h-5 text-teal-600" /> WhatsApp us for a quick response</div>
+            <a href={`tel:+${LEGAL.phoneDigits}`} className="flex items-center gap-3 hover:text-blue-700"><Phone className="w-5 h-5 text-blue-600" /> {LEGAL.phone}</a>
+            <a href={`mailto:${LEGAL.email}`} className="flex items-center gap-3 hover:text-blue-700"><Mail className="w-5 h-5 text-blue-600" /> {LEGAL.email}</a>
+            <a href={`https://wa.me/${LEGAL.phoneDigits}`} target="_blank" rel="noopener" className="flex items-center gap-3 hover:text-teal-700"><MessageCircle className="w-5 h-5 text-teal-600" /> WhatsApp us for a quick response</a>
           </div>
         </div>
 
