@@ -788,7 +788,7 @@ router.post("/products/stock-reconciliation", async (req, res): Promise<void> =>
 
   const companyId = getCompanyId(req);
   const userId = session?.userId ?? 1;
-  const items = parsed.data.items.filter((i) => i.countedStock != null);
+  const items = parsed.data.items.filter((i): i is typeof i & { countedStock: number } => i.countedStock != null);
 
   if (items.length === 0) {
     res.json({ adjustments: [] });

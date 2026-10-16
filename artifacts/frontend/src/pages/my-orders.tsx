@@ -44,7 +44,7 @@ export default function MyOrders() {
 
   const totalAmount = list.reduce((s, inv) => s + Number(inv.grandTotal ?? 0), 0);
   const pendingAmount = list
-    .filter((inv) => inv.status !== "paid" && inv.status !== "cancelled")
+    .filter((inv) => inv.status !== "cancelled" && Number(inv.balanceDue ?? 0) > 0)
     .reduce((s, inv) => s + Number(inv.balanceDue ?? 0), 0);
 
   return (

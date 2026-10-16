@@ -366,7 +366,7 @@ router.put("/number-series/:seriesType", requireAdmin, async (req, res): Promise
       b.startNumber ?? d.startNumber,
       b.nextNumber ?? d.startNumber,
       resetRule,
-      b.formatString ?? d.formatString,
+      (b as { formatString?: string }).formatString ?? d.formatString,
       periodKey,
     ],
   );
