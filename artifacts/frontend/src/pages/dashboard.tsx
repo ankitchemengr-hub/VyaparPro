@@ -1,9 +1,18 @@
 import React from "react";
 import { Redirect } from "wouter";
+import { PieChart, Pie, Cell } from "recharts";
 import { useAuth } from "@/contexts/use-auth";
 import { homePathForRole } from "@/lib/nav-items";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { clickableProps } from "@/components/ui/clickable";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  ChartLegend,
+  ChartLegendContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
 import {
   useGetDashboardSummary,
   useGetLowStockAlerts,
@@ -13,6 +22,12 @@ import {
   getGetLitersSoldQueryKey,
   useGetLitersBalance,
   getGetLitersBalanceQueryKey,
+  useGetAppSettings,
+  getGetAppSettingsQueryKey,
+  useGetStockBreakdown,
+  getGetStockBreakdownQueryKey,
+  useGetFinanceOverview,
+  getGetFinanceOverviewQueryKey,
   useListWorkloadCards,
   useGetProfitLossReport,
   getGetProfitLossReportQueryKey,
@@ -28,8 +43,164 @@ import {
   Factory,
   Droplets,
   ChevronDown,
+  PieChartIcon,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+
+// Fixed, colorblind-validated categorical order (see index.css --stock-pie-*)
+// — never cycled arbitrarily, so a given slot always sits next to the same
+// neighbors regardless of which company's data is rendered. "Other" is
+// deliberately excluded from this list and painted with --muted-foreground
+// instead, so the rolled-up bucket never reads as a real category.
+const STOCK_PIE_COLORS = [
+  "var(--stock-pie-1)",
+  "var(--stock-pie-2)",
+  "var(--stock-pie-3)",
+  "var(--stock-pie-4)",
+  "var(--stock-pie-5)",
+];
+const STOCK_PIE_OTHER_COLOR = "hsl(var(--muted-foreground))";
+
+const STOCK_BREAKDOWN_LABELS: Record<string, string> = {
+  brand: "Stock Value by Brand",
+  category: "Stock Value by Category",
+  product: "Stock Value by Product",
+};
+
+const fmtRupee = (v: number) => `₹${v.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+
+// Shared chrome for every dashboard pie (stock breakdowns + finance
+// overview): same loading/empty states, same tooltip/legend behavior, same
+// "Total" footer. Callers just supply a title, icon, and pre-colored items.
+function PieValueCard({
+  title,
+  icon: Icon,
+  items,
+  totalValue,
+  isLoading,
+  emptyMessage,
+  testId,
+}: {
+  title: string;
+  icon: typeof PieChartIcon;
+  items: { label: string; value: number; fill: string }[];
+  totalValue: number;
+  isLoading: boolean;
+  emptyMessage: string;
+  testId: string;
+}) {
+  const config: ChartConfig = {};
+  items.forEach((item) => {
+    config[item.label] = { label: item.label, color: item.fill };
+  });
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+        <Icon className="h-4 w-4 text-blue-500" />
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="h-56 w-full bg-muted rounded animate-pulse" />
+        ) : items.length === 0 ? (
+          <p className="text-xs text-muted-foreground py-10 text-center">{emptyMessage}</p>
+        ) : (
+          <>
+            <ChartContainer config={config} className="mx-auto aspect-square max-h-56">
+              <PieChart>
+                <ChartTooltip
+                  content={
+                    <ChartTooltipContent
+                      nameKey="label"
+                      formatter={(value, name, item) => (
+                        <div className="flex w-full items-center gap-2">
+                          <div
+                            className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
+                            style={{ background: (item.payload as any).fill }}
+                          />
+                          <span className="flex-1 text-muted-foreground">{name}</span>
+                          <span className="font-mono font-medium tabular-nums text-foreground">
+                            {fmtRupee(Number(value))}
+                          </span>
+                        </div>
+                      )}
+                    />
+                  }
+                />
+                <Pie data={items} dataKey="value" nameKey="label" innerRadius={48} outerRadius={80} strokeWidth={2} stroke="hsl(var(--card))">
+                  {items.map((item) => (
+                    <Cell key={item.label} fill={item.fill} />
+                  ))}
+                </Pie>
+                <ChartLegend content={<ChartLegendContent nameKey="label" />} />
+              </PieChart>
+            </ChartContainer>
+            <div className="mt-1 text-xs text-muted-foreground text-right" data-testid={testId}>
+              Total: {fmtRupee(totalValue)}
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// One admin-configurable "stock by ..." pie (Settings > Dashboard picks
+// which of these render, and in what order). Sorted-descending, top 5 plus
+// an "Other" bucket — the API already caps it there, so the pie never
+// exceeds ~6 slices (part-to-whole only reads at a glance up to about that
+// many).
+function StockBreakdownPie({ by }: { by: "brand" | "category" | "product" }) {
+  const params = { by };
+  const { data, isLoading } = useGetStockBreakdown(params, {
+    query: { queryKey: getGetStockBreakdownQueryKey(params) },
+  });
+
+  const items = (data?.items ?? []).map((item, i) => ({
+    ...item,
+    fill: item.label === "Other" ? STOCK_PIE_OTHER_COLOR : STOCK_PIE_COLORS[i % STOCK_PIE_COLORS.length],
+  }));
+
+  return (
+    <PieValueCard
+      title={STOCK_BREAKDOWN_LABELS[by]}
+      icon={PieChartIcon}
+      items={items}
+      totalValue={data?.totalValue ?? 0}
+      isLoading={isLoading || !data}
+      emptyMessage="No stock on hand yet."
+      testId={`text-stock-breakdown-total-${by}`}
+    />
+  );
+}
+
+// Optional "Total Purchase / Total Sale / Due" pie — a whole-business
+// snapshot rather than a stock breakdown, so it draws from its own endpoint.
+// Off by default (an empty dashboardStockCharts selection); the admin turns
+// it on from Settings > Dashboard when they want it.
+function FinanceOverviewPie() {
+  const { data, isLoading } = useGetFinanceOverview({
+    query: { queryKey: getGetFinanceOverviewQueryKey() },
+  });
+
+  const items = (data?.items ?? []).map((item, i) => ({
+    ...item,
+    fill: STOCK_PIE_COLORS[i % STOCK_PIE_COLORS.length],
+  }));
+
+  return (
+    <PieValueCard
+      title="Purchase vs Sale vs Due"
+      icon={PieChartIcon}
+      items={items}
+      totalValue={data?.totalValue ?? 0}
+      isLoading={isLoading || !data}
+      emptyMessage="No purchase or sales activity yet."
+      testId="text-finance-overview-total"
+    />
+  );
+}
 
 // All-time liters flow as a ring: the whole circle is what's been purchased,
 // the blue arc is the share still on hand (purchased − sold), and the empty
@@ -112,6 +283,13 @@ export default function Dashboard() {
   const { data: litersBalance, isLoading: isLoadingLitersBalance } = useGetLitersBalance({
     query: { queryKey: getGetLitersBalanceQueryKey(), enabled: isAdmin },
   });
+  // Which "stock by ..." pies to show, and in what order — set in Settings >
+  // Dashboard. Empty/not-yet-loaded means none render (no layout jump once
+  // it does load, since this card block is additive below the fixed ones).
+  const { data: appSettings } = useGetAppSettings({
+    query: { queryKey: getGetAppSettingsQueryKey(), enabled: isAdmin },
+  });
+  const dashboardStockCharts = appSettings?.dashboardStockCharts ?? [];
 
   // Formats a Date using ITS OWN local fields (year/month/day), not
   // .toISOString() — that converts to UTC first, which silently rolls a
@@ -439,6 +617,16 @@ export default function Dashboard() {
             )}
           </CardContent>
         </Card>
+      )}
+
+      {isAdmin && dashboardStockCharts.length > 0 && (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {dashboardStockCharts.map((by) =>
+            by === "finance"
+              ? <FinanceOverviewPie key={by} />
+              : <StockBreakdownPie key={by} by={by as "brand" | "category" | "product"} />
+          )}
+        </div>
       )}
 
       {isLoadingSummary ? (

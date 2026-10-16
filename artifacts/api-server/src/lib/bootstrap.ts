@@ -444,6 +444,22 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
       is_active   BOOLEAN NOT NULL DEFAULT TRUE,
       created_at  TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
     )`,
+    // The customer's own domain, collected via the portal's "Custom Domain"
+    // card — not wired up to any DNS/routing/SSL yet, just stored.
+    `ALTER TABLE companies ADD COLUMN IF NOT EXISTS custom_domain TEXT`,
+    // 'pending' once submitted via the portal, 'active' once staff manually
+    // finish the DNS/reverse-proxy/SSL setup and mark it done.
+    `ALTER TABLE companies ADD COLUMN IF NOT EXISTS custom_domain_status TEXT`,
+    // Portal "Forgot password" — only a hash of the token is ever stored.
+    `CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      id          SERIAL PRIMARY KEY,
+      user_id     INTEGER NOT NULL,
+      token_hash  TEXT NOT NULL UNIQUE,
+      expires_at  TIMESTAMP WITH TIME ZONE NOT NULL,
+      used_at     TIMESTAMP WITH TIME ZONE,
+      created_at  TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    )`,
+    `CREATE INDEX IF NOT EXISTS password_reset_tokens_user_idx ON password_reset_tokens(user_id)`,
   ];
 
   for (const sql of patches) {

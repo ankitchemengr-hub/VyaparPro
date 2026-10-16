@@ -6,10 +6,14 @@ import {
   RegisterPortalCustomerBody,
   CreatePortalPaymentOrderBody,
   VerifyPortalPaymentBody,
+  SetMyDomainBody,
+  ForgotPortalPasswordBody,
+  ResetPortalPasswordBody,
 } from "@workspace/api-zod";
 import { hashPassword } from "../lib/password";
 import { getCompanyId } from "../lib/tenant";
 import { logger } from "../lib/logger";
+import { sendMail, passwordResetEmail } from "../lib/mailer";
 import { PLAN_MONTHS, addMonths, daysBetween } from "./subscriptions";
 
 const router: IRouter = Router();
@@ -397,6 +401,114 @@ router.get("/portal/my-payments", async (req, res): Promise<void> => {
     razorpayPaymentId: r.razorpay_payment_id ?? null,
     createdAt: r.created_at.toISOString(),
   })));
+});
+
+// GET /portal/my-domain — authenticated. Just the stored preference; no
+// actual DNS/routing/SSL is wired up to this yet (see bootstrap.ts's
+// custom_domain column comment).
+router.get("/portal/my-domain", async (req, res): Promise<void> => {
+  const companyId = getCompanyId(req);
+  const { rows } = await pool.query(`SELECT custom_domain, custom_domain_status FROM companies WHERE id = $1`, [companyId]);
+  res.json({ customDomain: rows[0]?.custom_domain ?? null, status: rows[0]?.custom_domain_status ?? null });
+});
+
+// A conservative domain-format check (labels of letters/digits/hyphens,
+// dot-separated, 2+ letter TLD) — good enough to catch typos before saving,
+// not a full RFC 1035 validator.
+const DOMAIN_RE = /^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$/i;
+
+// PATCH /portal/my-domain — set or clear (domain: null) the customer's
+// preferred domain. Authenticated. Setting a domain starts it as 'pending' —
+// staff manually finish the DNS/reverse-proxy/SSL setup and mark it 'active'
+// from the platform admin console's "Domain Requests" tab (see
+// subscriptions.ts). An email nudges staff the moment a request comes in.
+router.patch("/portal/my-domain", async (req, res): Promise<void> => {
+  const companyId = getCompanyId(req);
+  const parsed = SetMyDomainBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const domain = parsed.data.domain?.trim().toLowerCase() || null;
+  if (domain && !DOMAIN_RE.test(domain)) {
+    res.status(400).json({ error: "That doesn't look like a valid domain (e.g. myshop.com)" });
+    return;
+  }
+  const status = domain ? "pending" : null;
+  const { rows } = await pool.query(
+    `UPDATE companies SET custom_domain = $1, custom_domain_status = $2, updated_at = NOW() WHERE id = $3 RETURNING name`,
+    [domain, status, companyId],
+  );
+  if (domain) {
+    const adminEmail = process.env["SMTP_USER"];
+    if (adminEmail) {
+      void sendMail(
+        adminEmail,
+        `New domain request: ${domain}`,
+        `<p><strong>${rows[0]?.name ?? "A customer"}</strong> requested the custom domain <strong>${domain}</strong>.</p>
+         <p>Set up DNS/reverse-proxy/SSL for it, then mark it Active from the Subscriptions admin console → Domain Requests tab.</p>`,
+      );
+    }
+  }
+  res.json({ customDomain: domain, status });
+});
+
+// POST /portal/forgot-password — public. Always returns the same generic
+// message regardless of whether the email exists, so this endpoint can't be
+// used to enumerate registered companies. Only email-based accounts can
+// reset this way — a portal account whose username is a mobile number
+// (registered with no email) has no recovery channel yet.
+router.post("/portal/forgot-password", async (req, res): Promise<void> => {
+  const parsed = ForgotPortalPasswordBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const email = parsed.data.email.trim().toLowerCase();
+
+  const { rows } = await pool.query(
+    `SELECT id, username FROM users WHERE lower(username) = $1 AND company_id IS NOT NULL AND is_active = true`,
+    [email],
+  );
+  const user = rows[0];
+  if (user) {
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+    await pool.query(
+      `INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)`,
+      [user.id, tokenHash, expiresAt],
+    );
+    const baseUrl = process.env["PORTAL_APPLICATION_URL"] ?? "http://localhost:3002";
+    const resetUrl = `${baseUrl}/reset-password?token=${rawToken}`;
+    const { subject, html } = passwordResetEmail(resetUrl);
+    void sendMail(user.username, subject, html);
+  }
+  res.json({ message: "If that email is registered, a password reset link has been sent." });
+});
+
+// POST /portal/reset-password — public (the token IS the capability). One-time
+// use: a token is marked used_at the moment it's consumed, so a reused/leaked
+// link doesn't grant a second reset.
+router.post("/portal/reset-password", async (req, res): Promise<void> => {
+  const parsed = ResetPortalPasswordBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const { token, newPassword } = parsed.data;
+  const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+
+  const { rows } = await pool.query(`SELECT * FROM password_reset_tokens WHERE token_hash = $1`, [tokenHash]);
+  const record = rows[0];
+  if (!record || record.used_at || new Date(record.expires_at) < new Date()) {
+    res.status(400).json({ error: "This reset link is invalid or has expired" });
+    return;
+  }
+
+  await pool.query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [hashPassword(newPassword), record.user_id]);
+  await pool.query(`UPDATE password_reset_tokens SET used_at = NOW() WHERE id = $1`, [record.id]);
+  res.json({ message: "Password reset successfully — you can now log in with your new password." });
 });
 
 function formatMySubscription(r: any) {

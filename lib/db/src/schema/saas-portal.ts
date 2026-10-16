@@ -69,7 +69,22 @@ export const faqsTable = pgTable("faqs", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Forgot-password tokens for the customer portal login. Only the SHA-256
+// hash of the token is stored (never the raw value) so a DB read alone can't
+// be used to reset someone's password — same principle as password_hash.
+export const passwordResetTokensTable = pgTable("password_reset_tokens", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  tokenHash: text("token_hash").notNull().unique(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("password_reset_tokens_user_idx").on(t.userId),
+]);
+
 export type SubscriptionPlan = typeof subscriptionPlansTable.$inferSelect;
 export type SubscriptionPayment = typeof subscriptionPaymentsTable.$inferSelect;
 export type DemoRequest = typeof demoRequestsTable.$inferSelect;
 export type Faq = typeof faqsTable.$inferSelect;
+export type PasswordResetToken = typeof passwordResetTokensTable.$inferSelect;

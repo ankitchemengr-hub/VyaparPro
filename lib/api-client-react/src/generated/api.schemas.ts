@@ -429,13 +429,36 @@ export interface RolePermissionsUpdate {
   permissions: RolePermissionsUpdatePermissionsItem[];
 }
 
+export type AppSettingsDashboardStockChartsItem = typeof AppSettingsDashboardStockChartsItem[keyof typeof AppSettingsDashboardStockChartsItem];
+
+
+export const AppSettingsDashboardStockChartsItem = {
+  brand: 'brand',
+  category: 'category',
+  product: 'product',
+  finance: 'finance',
+} as const;
+
 export interface AppSettings {
   /** @nullable */
   defaultInvoiceTemplate: string | null;
+  /** Which optional dashboard pie charts the admin has chosen to show, and in what order — "brand"/"category"/"product" are stock-value breakdowns, "finance" is the Total Purchase / Total Sale / Due overview. Empty array means none. */
+  dashboardStockCharts: AppSettingsDashboardStockChartsItem[];
 }
+
+export type AppSettingsUpdateDashboardStockChartsItem = typeof AppSettingsUpdateDashboardStockChartsItem[keyof typeof AppSettingsUpdateDashboardStockChartsItem];
+
+
+export const AppSettingsUpdateDashboardStockChartsItem = {
+  brand: 'brand',
+  category: 'category',
+  product: 'product',
+  finance: 'finance',
+} as const;
 
 export interface AppSettingsUpdate {
   defaultInvoiceTemplate?: string;
+  dashboardStockCharts?: AppSettingsUpdateDashboardStockChartsItem[];
 }
 
 export type RestoreBackupInputCounts = { [key: string]: unknown };
@@ -1269,6 +1292,11 @@ export type InvoiceInvoiceType = typeof InvoiceInvoiceType[keyof typeof InvoiceI
 export const InvoiceInvoiceType = {
   gst: 'gst',
   non_gst: 'non_gst',
+  quotation: 'quotation',
+  proforma_invoice: 'proforma_invoice',
+  bill_of_supply: 'bill_of_supply',
+  delivery_challan: 'delivery_challan',
+  sale_order: 'sale_order',
 } as const;
 
 export type InvoiceStatus = typeof InvoiceStatus[keyof typeof InvoiceStatus];
@@ -1380,6 +1408,11 @@ export type InvoiceInputInvoiceType = typeof InvoiceInputInvoiceType[keyof typeo
 export const InvoiceInputInvoiceType = {
   gst: 'gst',
   non_gst: 'non_gst',
+  quotation: 'quotation',
+  proforma_invoice: 'proforma_invoice',
+  bill_of_supply: 'bill_of_supply',
+  delivery_challan: 'delivery_challan',
+  sale_order: 'sale_order',
 } as const;
 
 export interface InvoiceItemInput {
@@ -1434,6 +1467,11 @@ export type InvoiceUpdateInvoiceType = typeof InvoiceUpdateInvoiceType[keyof typ
 export const InvoiceUpdateInvoiceType = {
   gst: 'gst',
   non_gst: 'non_gst',
+  quotation: 'quotation',
+  proforma_invoice: 'proforma_invoice',
+  bill_of_supply: 'bill_of_supply',
+  delivery_challan: 'delivery_challan',
+  sale_order: 'sale_order',
 } as const;
 
 /**
@@ -2658,6 +2696,33 @@ export interface LitersBalance {
   sold: number;
 }
 
+export interface StockBreakdownItem {
+  label: string;
+  /** Stock value in rupees (current_stock x purchase_price), summed across the group */
+  value: number;
+}
+
+export type StockBreakdownBy = typeof StockBreakdownBy[keyof typeof StockBreakdownBy];
+
+
+export const StockBreakdownBy = {
+  brand: 'brand',
+  category: 'category',
+  product: 'product',
+} as const;
+
+export interface StockBreakdown {
+  by: StockBreakdownBy;
+  items: StockBreakdownItem[];
+  totalValue: number;
+}
+
+export interface FinanceOverview {
+  /** Always exactly 3 items, in order — Total Purchase, Total Sale, Due. */
+  items: StockBreakdownItem[];
+  totalValue: number;
+}
+
 export interface SalesTrendPoint {
   /** ISO date (YYYY-MM-DD) for this trend point */
   date: string;
@@ -3217,6 +3282,86 @@ export interface MyPayment {
   createdAt: string;
 }
 
+/**
+ * pending until staff finish DNS/SSL setup and mark it active
+ * @nullable
+ */
+export type MyDomainStatus = typeof MyDomainStatus[keyof typeof MyDomainStatus] | null;
+
+
+export const MyDomainStatus = {
+  pending: 'pending',
+  active: 'active',
+} as const;
+
+export interface MyDomain {
+  /**
+     * e.g. myshop.com — not yet routed/SSL'd, just stored
+     * @nullable
+     */
+  customDomain: string | null;
+  /**
+     * pending until staff finish DNS/SSL setup and mark it active
+     * @nullable
+     */
+  status: MyDomainStatus;
+}
+
+export interface SetDomainInput {
+  /**
+     * Omit or set null to clear
+     * @nullable
+     */
+  domain?: string | null;
+}
+
+export interface ForgotPasswordInput {
+  email: string;
+}
+
+export interface ResetPasswordInput {
+  token: string;
+  /** @minLength 6 */
+  newPassword: string;
+}
+
+export interface MessageResult {
+  message: string;
+}
+
+export type DomainRequestStatus = typeof DomainRequestStatus[keyof typeof DomainRequestStatus];
+
+
+export const DomainRequestStatus = {
+  pending: 'pending',
+  active: 'active',
+} as const;
+
+export interface DomainRequest {
+  companyId: number;
+  companyName: string;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  mobile?: string | null;
+  customDomain: string;
+  status: DomainRequestStatus;
+  /** @nullable */
+  updatedAt?: string | null;
+}
+
+export type SetDomainRequestStatusInputStatus = typeof SetDomainRequestStatusInputStatus[keyof typeof SetDomainRequestStatusInputStatus];
+
+
+export const SetDomainRequestStatusInputStatus = {
+  pending: 'pending',
+  active: 'active',
+} as const;
+
+export interface SetDomainRequestStatusInput {
+  status: SetDomainRequestStatusInputStatus;
+}
+
 export type LookupGstinParams = {
 gstin: string;
 };
@@ -3411,6 +3556,19 @@ days?: number;
 export type SetCustomerReminder200 = {
   remindAfter: string;
 };
+
+export type GetStockBreakdownParams = {
+by: GetStockBreakdownBy;
+};
+
+export type GetStockBreakdownBy = typeof GetStockBreakdownBy[keyof typeof GetStockBreakdownBy];
+
+
+export const GetStockBreakdownBy = {
+  brand: 'brand',
+  category: 'category',
+  product: 'product',
+} as const;
 
 export type GetLedgerReportParams = {
 entityId?: number;

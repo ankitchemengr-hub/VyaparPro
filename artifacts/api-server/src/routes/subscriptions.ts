@@ -8,6 +8,7 @@ import {
 } from "@workspace/api-zod";
 import { COMPANY_TABLES } from "../lib/company-data";
 import { hashPassword } from "../lib/password";
+import { sendMail } from "../lib/mailer";
 
 const router: IRouter = Router();
 
@@ -235,6 +236,63 @@ router.get("/subscriptions", async (req, res): Promise<void> => {
     params
   );
   res.json(rows.map(mapRow));
+});
+
+// GET /subscriptions/domain-requests — every company that has ever submitted
+// a custom domain via the portal (pending or already marked active).
+router.get("/subscriptions/domain-requests", async (req, res): Promise<void> => {
+  const { rows } = await pool.query(
+    `SELECT id, name, email, mobile, custom_domain, custom_domain_status, updated_at
+     FROM companies WHERE custom_domain IS NOT NULL ORDER BY updated_at DESC`,
+  );
+  res.json(rows.map((r) => ({
+    companyId: r.id,
+    companyName: r.name,
+    email: r.email ?? null,
+    mobile: r.mobile ?? null,
+    customDomain: r.custom_domain,
+    status: r.custom_domain_status ?? "pending",
+    updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : null,
+  })));
+});
+
+// PUT /subscriptions/:companyId/domain-status — staff mark a domain
+// active once they've manually finished DNS/reverse-proxy/SSL for it (or
+// flip it back to pending). Emails the customer when it goes active.
+router.put("/subscriptions/:companyId/domain-status", async (req, res): Promise<void> => {
+  const companyId = Number(req.params.companyId);
+  const status = req.body?.status === "active" ? "active" : req.body?.status === "pending" ? "pending" : null;
+  if (!status) {
+    res.status(400).json({ error: "status must be 'pending' or 'active'" });
+    return;
+  }
+  const { rows } = await pool.query(
+    `UPDATE companies SET custom_domain_status = $1, updated_at = NOW()
+     WHERE id = $2 AND custom_domain IS NOT NULL
+     RETURNING id, name, email, mobile, custom_domain, custom_domain_status, updated_at`,
+    [status, companyId],
+  );
+  if (rows.length === 0) {
+    res.status(404).json({ error: "Company not found or has no custom domain" });
+    return;
+  }
+  const r = rows[0];
+  if (status === "active" && r.email) {
+    void sendMail(
+      r.email,
+      "Your custom domain is now live",
+      `<p>Good news — <strong>${r.custom_domain}</strong> is now set up and pointing to your SHRADHA ERP account.</p>`,
+    );
+  }
+  res.json({
+    companyId: r.id,
+    companyName: r.name,
+    email: r.email ?? null,
+    mobile: r.mobile ?? null,
+    customDomain: r.custom_domain,
+    status: r.custom_domain_status,
+    updatedAt: new Date(r.updated_at).toISOString(),
+  });
 });
 
 // POST /subscriptions/create — create company + subscription (SERIALIZABLE money op)

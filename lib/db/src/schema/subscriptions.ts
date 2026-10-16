@@ -12,6 +12,13 @@ export const companiesTable = pgTable("companies", {
   // Optional brand logo shown on the login screen in dedicated-company mode.
   // Stored as a base64 data URL (same convention as other uploaded images).
   logo: text("logo"),
+  // The customer's own domain (e.g. "myshop.com") they'd like their ERP
+  // reachable at once deployed — collected via the portal, not wired up to
+  // any actual DNS/routing/SSL yet (that's real infra work at deploy time).
+  customDomain: text("custom_domain"),
+  // 'pending' once a customer submits a domain, 'active' once staff have
+  // manually pointed DNS/reverse-proxy/SSL at it. Null when no domain is set.
+  customDomainStatus: text("custom_domain_status"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

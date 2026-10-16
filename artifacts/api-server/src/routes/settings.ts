@@ -20,6 +20,7 @@ const ALL_SERIES_TYPES: SeriesType[] = [
 ];
 
 const DEFAULT_TEMPLATE_KEY = "default_invoice_template";
+const DASHBOARD_STOCK_CHARTS_KEY = "dashboard_stock_charts";
 
 const DEFAULT_PRINT_SETTINGS = {
   defaultTemplate: "minimal-a5",
@@ -115,7 +116,29 @@ function mapSeries(r: any) {
   };
 }
 
-// GET /settings — app settings (default invoice template).
+function parseDashboardStockCharts(raw: string | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((v) => typeof v === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+async function loadAppSettings(companyId: number): Promise<{ defaultInvoiceTemplate: string | null; dashboardStockCharts: string[] }> {
+  const r = await pool.query(
+    `SELECT key, value FROM app_settings WHERE company_id = $1 AND key = ANY($2)`,
+    [companyId, [DEFAULT_TEMPLATE_KEY, DASHBOARD_STOCK_CHARTS_KEY]],
+  );
+  const byKey = new Map(r.rows.map((row: any) => [row.key, row.value]));
+  return {
+    defaultInvoiceTemplate: byKey.get(DEFAULT_TEMPLATE_KEY) ?? null,
+    dashboardStockCharts: parseDashboardStockCharts(byKey.get(DASHBOARD_STOCK_CHARTS_KEY)),
+  };
+}
+
+// GET /settings — app settings (default invoice template, dashboard chart picks).
 router.get("/settings", async (req, res): Promise<void> => {
   const session = (req as any).session;
   if (!session?.userId) {
@@ -123,8 +146,7 @@ router.get("/settings", async (req, res): Promise<void> => {
     return;
   }
   const companyId = getCompanyId(req);
-  const r = await pool.query(`SELECT value FROM app_settings WHERE company_id = $1 AND key = $2`, [companyId, DEFAULT_TEMPLATE_KEY]);
-  res.json({ defaultInvoiceTemplate: r.rows[0]?.value ?? null });
+  res.json(await loadAppSettings(companyId));
 });
 
 // PUT /settings — update app settings (admin only).
@@ -154,8 +176,25 @@ router.put("/settings", requireAdmin, async (req, res): Promise<void> => {
       ],
     );
   }
-  const r = await pool.query(`SELECT value FROM app_settings WHERE company_id = $1 AND key = $2`, [companyId, DEFAULT_TEMPLATE_KEY]);
-  res.json({ defaultInvoiceTemplate: r.rows[0]?.value ?? null });
+  if (parsed.data.dashboardStockCharts !== undefined) {
+    await pool.query(
+      `INSERT INTO app_settings (company_id, key, value) VALUES ($1, $2, $3)
+       ON CONFLICT (company_id, key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+      [companyId, DASHBOARD_STOCK_CHARTS_KEY, JSON.stringify(parsed.data.dashboardStockCharts)],
+    );
+    await pool.query(
+      `INSERT INTO audit_log (company_id, action, description, user_id, user_name, metadata)
+       VALUES ($1, 'settings_updated', $2, $3, $4, $5)`,
+      [
+        companyId,
+        `Dashboard stock charts set to ${parsed.data.dashboardStockCharts.join(", ") || "none"}`,
+        session?.userId ?? 1,
+        session?.name ?? "Unknown",
+        JSON.stringify({ dashboardStockCharts: parsed.data.dashboardStockCharts }),
+      ],
+    );
+  }
+  res.json(await loadAppSettings(companyId));
 });
 
 // GET /print-settings

@@ -3,6 +3,7 @@ import { Link, Redirect } from "wouter";
 import {
   useGetMySubscription, getGetMySubscriptionQueryKey, useListPortalPlans,
   useCreatePortalPaymentOrder, useVerifyPortalPayment,
+  useGetMyDomain, getGetMyDomainQueryKey, useSetMyDomain,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/use-auth";
@@ -10,8 +11,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Loader2, Building2 } from "lucide-react";
+import { ArrowLeft, Loader2, Building2, Globe, ExternalLink } from "lucide-react";
 
 declare global {
   interface Window { Razorpay: any; }
@@ -29,6 +32,113 @@ function useRazorpayScript() {
     return () => { document.body.removeChild(script); };
   }, []);
   return ready;
+}
+
+const REGISTRARS = [
+  { name: "GoDaddy", price: "₹99 – ₹999/yr (.com renews higher)", url: "https://www.godaddy.com/en-in/domains" },
+  { name: "Namecheap", price: "₹700 – ₹1,000/yr for .com", url: "https://www.namecheap.com/domains/" },
+  { name: "BigRock", price: "₹99 first year, India-based support", url: "https://www.bigrock.in/domain-registration" },
+  { name: "Hostinger", price: "Often bundled free with hosting plans", url: "https://www.hostinger.in/domain-name-search" },
+];
+
+function DomainCard() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data, isLoading } = useGetMyDomain({ query: { queryKey: getGetMyDomainQueryKey() } });
+  const setDomain = useSetMyDomain();
+  const [mode, setMode] = useState<"have" | "need">("have");
+  const [value, setValue] = useState("");
+  const [editing, setEditing] = useState(false);
+
+  useEffect(() => {
+    if (data?.customDomain) setValue(data.customDomain);
+  }, [data?.customDomain]);
+
+  const handleSave = () => {
+    setDomain.mutate(
+      { data: { domain: value.trim() || null } },
+      {
+        onSuccess: (res) => {
+          queryClient.setQueryData(getGetMyDomainQueryKey(), res);
+          setEditing(false);
+          toast({ title: res.customDomain ? "Domain saved" : "Domain cleared" });
+        },
+        onError: (err: any) => {
+          toast({ title: "Could not save domain", description: err?.body?.error ?? "Check the format and try again.", variant: "destructive" });
+        },
+      },
+    );
+  };
+
+  return (
+    <Card>
+      <CardHeader><CardTitle className="flex items-center gap-2"><Globe className="w-5 h-5 text-blue-600" /> Custom Domain</CardTitle></CardHeader>
+      <CardContent className="space-y-4">
+        {isLoading ? (
+          <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
+        ) : data?.customDomain && !editing ? (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <div>
+                <span className="text-sm text-slate-500">Your domain</span>
+                <div className="font-medium">{data.customDomain}</div>
+              </div>
+              <Badge variant={data.status === "active" ? "default" : "outline"} className={data.status === "active" ? "bg-green-600 hover:bg-green-600" : ""}>
+                {data.status === "active" ? "Active" : "Pending setup"}
+              </Badge>
+            </div>
+            {data.status === "active" ? (
+              <div className="rounded-md bg-green-50 border border-green-200 p-3 text-sm text-green-800">
+                Your domain is live and pointing to your SHRADHA ERP account.
+              </div>
+            ) : (
+              <div className="rounded-md bg-slate-50 border p-3 text-sm text-slate-600">
+                We've received your request. Our team sets up domains manually — this is usually done within <strong>24 hours</strong>, and we'll email you once it's live.
+              </div>
+            )}
+            <Button variant="outline" size="sm" onClick={() => setEditing(true)}>Change Domain</Button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex gap-2">
+              <Button size="sm" variant={mode === "have" ? "default" : "outline"} onClick={() => setMode("have")}>I already have a domain</Button>
+              <Button size="sm" variant={mode === "need" ? "default" : "outline"} onClick={() => setMode("need")}>I need to buy one</Button>
+            </div>
+
+            {mode === "have" ? (
+              <div className="space-y-2">
+                <Label htmlFor="domain">Your domain</Label>
+                <div className="flex gap-2">
+                  <Input id="domain" placeholder="myshop.com" value={value} onChange={(e) => setValue(e.target.value)} />
+                  <Button onClick={handleSave} disabled={setDomain.isPending || !value.trim()}>
+                    {setDomain.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Save
+                  </Button>
+                  {editing && <Button variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>}
+                </div>
+                <p className="text-xs text-slate-500">Our team will manually set this up — usually within 24 hours — and email you once it's live.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-sm text-slate-600">Pick a registrar, buy your domain, then come back and enter it above under "I already have a domain".</p>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  {REGISTRARS.map((r) => (
+                    <a key={r.name} href={r.url} target="_blank" rel="noopener noreferrer"
+                      className="flex items-center justify-between rounded-md border p-3 text-sm hover:border-blue-400 hover:bg-blue-50 transition-colors">
+                      <div>
+                        <div className="font-medium text-slate-900">{r.name}</div>
+                        <div className="text-slate-500">{r.price}</div>
+                      </div>
+                      <ExternalLink className="w-4 h-4 text-slate-400 shrink-0" />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function PortalSubscription() {
@@ -140,6 +250,12 @@ export default function PortalSubscription() {
               )}
             </CardContent>
           </Card>
+        )}
+
+        {!isLoading && sub && (
+          <div className="mt-6">
+            <DomainCard />
+          </div>
         )}
       </main>
     </div>

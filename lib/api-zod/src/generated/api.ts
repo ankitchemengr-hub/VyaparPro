@@ -147,7 +147,8 @@ export const UpdateRolePermissionsResponse = zod.array(UpdateRolePermissionsResp
  * @summary Get application settings (default invoice template, etc.)
  */
 export const GetAppSettingsResponse = zod.object({
-  "defaultInvoiceTemplate": zod.string().nullable()
+  "defaultInvoiceTemplate": zod.string().nullable(),
+  "dashboardStockCharts": zod.array(zod.enum(['brand', 'category', 'product', 'finance'])).describe('Which optional dashboard pie charts the admin has chosen to show, and in what order — \"brand\"\/\"category\"\/\"product\" are stock-value breakdowns, \"finance\" is the Total Purchase \/ Total Sale \/ Due overview. Empty array means none.\n')
 })
 
 
@@ -155,11 +156,13 @@ export const GetAppSettingsResponse = zod.object({
  * @summary Update application settings (admin only)
  */
 export const UpdateAppSettingsBody = zod.object({
-  "defaultInvoiceTemplate": zod.string().optional()
+  "defaultInvoiceTemplate": zod.string().optional(),
+  "dashboardStockCharts": zod.array(zod.enum(['brand', 'category', 'product', 'finance'])).optional()
 })
 
 export const UpdateAppSettingsResponse = zod.object({
-  "defaultInvoiceTemplate": zod.string().nullable()
+  "defaultInvoiceTemplate": zod.string().nullable(),
+  "dashboardStockCharts": zod.array(zod.enum(['brand', 'category', 'product', 'finance'])).describe('Which optional dashboard pie charts the admin has chosen to show, and in what order — \"brand\"\/\"category\"\/\"product\" are stock-value breakdowns, \"finance\" is the Total Purchase \/ Total Sale \/ Due overview. Empty array means none.\n')
 })
 
 
@@ -1317,7 +1320,7 @@ export const ListInvoicesResponseItem = zod.object({
   "invoiceNo": zod.string(),
   "invoiceDate": zod.string(),
   "dueDate": zod.string().nullish(),
-  "invoiceType": zod.enum(['gst', 'non_gst']),
+  "invoiceType": zod.enum(['gst', 'non_gst', 'quotation', 'proforma_invoice', 'bill_of_supply', 'delivery_challan', 'sale_order']),
   "customerId": zod.number().nullable(),
   "customerName": zod.string().nullish(),
   "customerMobile": zod.string().nullish().describe('Looked up live from the customer entity (not snapshotted at invoice time), so it reflects their current number on a reprint.'),
@@ -1375,7 +1378,7 @@ export const ListInvoicesResponse = zod.array(ListInvoicesResponseItem)
  * @summary Create invoice
  */
 export const CreateInvoiceBody = zod.object({
-  "invoiceType": zod.enum(['gst', 'non_gst']),
+  "invoiceType": zod.enum(['gst', 'non_gst', 'quotation', 'proforma_invoice', 'bill_of_supply', 'delivery_challan', 'sale_order']),
   "invoiceDate": zod.string(),
   "dueDate": zod.string().optional(),
   "customerId": zod.number().optional(),
@@ -1412,7 +1415,7 @@ export const CreateInvoiceResponse = zod.object({
   "invoiceNo": zod.string(),
   "invoiceDate": zod.string(),
   "dueDate": zod.string().nullish(),
-  "invoiceType": zod.enum(['gst', 'non_gst']),
+  "invoiceType": zod.enum(['gst', 'non_gst', 'quotation', 'proforma_invoice', 'bill_of_supply', 'delivery_challan', 'sale_order']),
   "customerId": zod.number().nullable(),
   "customerName": zod.string().nullish(),
   "customerMobile": zod.string().nullish().describe('Looked up live from the customer entity (not snapshotted at invoice time), so it reflects their current number on a reprint.'),
@@ -1477,7 +1480,7 @@ export const GetInvoiceResponse = zod.object({
   "invoiceNo": zod.string(),
   "invoiceDate": zod.string(),
   "dueDate": zod.string().nullish(),
-  "invoiceType": zod.enum(['gst', 'non_gst']),
+  "invoiceType": zod.enum(['gst', 'non_gst', 'quotation', 'proforma_invoice', 'bill_of_supply', 'delivery_challan', 'sale_order']),
   "customerId": zod.number().nullable(),
   "customerName": zod.string().nullish(),
   "customerMobile": zod.string().nullish().describe('Looked up live from the customer entity (not snapshotted at invoice time), so it reflects their current number on a reprint.'),
@@ -1540,7 +1543,7 @@ export const UpdateInvoiceParams = zod.object({
 export const UpdateInvoiceBody = zod.object({
   "status": zod.enum(['draft', 'saved', 'cancelled']).optional(),
   "dueDate": zod.string().optional(),
-  "invoiceType": zod.enum(['gst', 'non_gst']).optional(),
+  "invoiceType": zod.enum(['gst', 'non_gst', 'quotation', 'proforma_invoice', 'bill_of_supply', 'delivery_challan', 'sale_order']).optional(),
   "invoiceDate": zod.string().optional(),
   "customerId": zod.number().nullish(),
   "customerName": zod.string().nullish(),
@@ -1575,7 +1578,7 @@ export const UpdateInvoiceResponse = zod.object({
   "invoiceNo": zod.string(),
   "invoiceDate": zod.string(),
   "dueDate": zod.string().nullish(),
-  "invoiceType": zod.enum(['gst', 'non_gst']),
+  "invoiceType": zod.enum(['gst', 'non_gst', 'quotation', 'proforma_invoice', 'bill_of_supply', 'delivery_challan', 'sale_order']),
   "customerId": zod.number().nullable(),
   "customerName": zod.string().nullish(),
   "customerMobile": zod.string().nullish().describe('Looked up live from the customer entity (not snapshotted at invoice time), so it reflects their current number on a reprint.'),
@@ -3451,6 +3454,37 @@ export const GetLitersBalanceResponse = zod.object({
 
 
 /**
+ * @summary Admin-only current stock value broken down by brand, category (product group), or individual product — the data behind the dashboard's configurable stock pie charts (see Settings > Dashboard). Sorted descending by value; past the top slots the remainder is folded into a single "Other" bucket so the chart never exceeds ~6 slices.
+
+ */
+export const GetStockBreakdownQueryParams = zod.object({
+  "by": zod.enum(['brand', 'category', 'product'])
+})
+
+export const GetStockBreakdownResponse = zod.object({
+  "by": zod.enum(['brand', 'category', 'product']),
+  "items": zod.array(zod.object({
+  "label": zod.string(),
+  "value": zod.number().describe('Stock value in rupees (current_stock x purchase_price), summed across the group')
+})),
+  "totalValue": zod.number()
+})
+
+
+/**
+ * @summary Admin-only all-time Total Purchase / Total Sale / Due (customer outstanding) — the data behind the dashboard's optional "Purchase vs Sale vs Due" pie chart (see Settings > Dashboard).
+
+ */
+export const GetFinanceOverviewResponse = zod.object({
+  "items": zod.array(zod.object({
+  "label": zod.string(),
+  "value": zod.number().describe('Stock value in rupees (current_stock x purchase_price), summed across the group')
+})).describe('Always exactly 3 items, in order — Total Purchase, Total Sale, Due.'),
+  "totalValue": zod.number()
+})
+
+
+/**
  * @summary Ledger report
  */
 export const GetLedgerReportQueryParams = zod.object({
@@ -4593,6 +4627,43 @@ export const ActivateSubscriptionResponse = zod.object({
 
 
 /**
+ * @summary Every company that has ever submitted a custom domain (pending or active)
+ */
+export const ListDomainRequestsResponseItem = zod.object({
+  "companyId": zod.number(),
+  "companyName": zod.string(),
+  "email": zod.string().nullish(),
+  "mobile": zod.string().nullish(),
+  "customDomain": zod.string(),
+  "status": zod.enum(['pending', 'active']),
+  "updatedAt": zod.coerce.date().nullish()
+})
+export const ListDomainRequestsResponse = zod.array(ListDomainRequestsResponseItem)
+
+
+/**
+ * @summary Mark a company's custom domain pending/active once staff finish (or undo) the manual DNS/SSL setup
+ */
+export const SetDomainRequestStatusParams = zod.object({
+  "companyId": zod.coerce.number()
+})
+
+export const SetDomainRequestStatusBody = zod.object({
+  "status": zod.enum(['pending', 'active'])
+})
+
+export const SetDomainRequestStatusResponse = zod.object({
+  "companyId": zod.number(),
+  "companyName": zod.string(),
+  "email": zod.string().nullish(),
+  "mobile": zod.string().nullish(),
+  "customDomain": zod.string(),
+  "status": zod.enum(['pending', 'active']),
+  "updatedAt": zod.coerce.date().nullish()
+})
+
+
+/**
  * @summary Edit a tenant company and its subscription details
  */
 export const UpdateSubscriptionParams = zod.object({
@@ -4790,5 +4861,56 @@ export const ListMyPaymentsResponseItem = zod.object({
   "createdAt": zod.coerce.date()
 })
 export const ListMyPaymentsResponse = zod.array(ListMyPaymentsResponseItem)
+
+
+/**
+ * @summary The signed-in company's preferred custom domain (not yet routed/SSL'd — just stored)
+ */
+export const GetMyDomainResponse = zod.object({
+  "customDomain": zod.string().nullable().describe('e.g. myshop.com — not yet routed\/SSL\'d, just stored'),
+  "status": zod.union([zod.literal('pending'),zod.literal('active'),zod.literal(null)]).nullable().describe('pending until staff finish DNS\/SSL setup and mark it active')
+})
+
+
+/**
+ * @summary Set or clear (domain omitted/null) the signed-in company's preferred custom domain
+ */
+export const SetMyDomainBody = zod.object({
+  "domain": zod.string().nullish().describe('Omit or set null to clear')
+})
+
+export const SetMyDomainResponse = zod.object({
+  "customDomain": zod.string().nullable().describe('e.g. myshop.com — not yet routed\/SSL\'d, just stored'),
+  "status": zod.union([zod.literal('pending'),zod.literal('active'),zod.literal(null)]).nullable().describe('pending until staff finish DNS\/SSL setup and mark it active')
+})
+
+
+/**
+ * @summary Request a password reset email — always returns the same message so this can't enumerate registered accounts
+ */
+export const ForgotPortalPasswordBody = zod.object({
+  "email": zod.string().email()
+})
+
+export const ForgotPortalPasswordResponse = zod.object({
+  "message": zod.string()
+})
+
+
+/**
+ * @summary Complete a password reset using the token from the email link
+ */
+export const resetPortalPasswordBodyNewPasswordMin = 6;
+
+
+
+export const ResetPortalPasswordBody = zod.object({
+  "token": zod.string(),
+  "newPassword": zod.string().min(resetPortalPasswordBodyNewPasswordMin)
+})
+
+export const ResetPortalPasswordResponse = zod.object({
+  "message": zod.string()
+})
 
 

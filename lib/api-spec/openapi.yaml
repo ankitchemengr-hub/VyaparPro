@@ -2478,6 +2478,53 @@ paths:
         "403":
           description: Forbidden
 
+  /dashboard/stock-breakdown:
+    get:
+      operationId: getStockBreakdown
+      tags: [dashboard]
+      summary: >
+        Admin-only current stock value broken down by brand, category (product
+        group), or individual product — the data behind the dashboard's
+        configurable stock pie charts (see Settings > Dashboard). Sorted
+        descending by value; past the top slots the remainder is folded into a
+        single "Other" bucket so the chart never exceeds ~6 slices.
+      parameters:
+        - name: by
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [brand, category, product]
+      responses:
+        "200":
+          description: Stock value grouped by the requested dimension
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockBreakdown"
+        "400":
+          description: Invalid "by" value
+        "403":
+          description: Forbidden
+
+  /dashboard/finance-overview:
+    get:
+      operationId: getFinanceOverview
+      tags: [dashboard]
+      summary: >
+        Admin-only all-time Total Purchase / Total Sale / Due (customer
+        outstanding) — the data behind the dashboard's optional "Purchase vs
+        Sale vs Due" pie chart (see Settings > Dashboard).
+      responses:
+        "200":
+          description: All-time purchase, sale, and due totals
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FinanceOverview"
+        "403":
+          description: Forbidden
+
   # REPORTS
   /reports/ledger:
     get:
@@ -3260,6 +3307,48 @@ paths:
               schema:
                 $ref: "#/components/schemas/SubscriptionListItem"
 
+  /subscriptions/domain-requests:
+    get:
+      operationId: listDomainRequests
+      tags: [subscriptions]
+      summary: Every company that has ever submitted a custom domain (pending or active)
+      responses:
+        "200":
+          description: Domain requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DomainRequest"
+
+  /subscriptions/{companyId}/domain-status:
+    put:
+      operationId: setDomainRequestStatus
+      tags: [subscriptions]
+      summary: Mark a company's custom domain pending/active once staff finish (or undo) the manual DNS/SSL setup
+      parameters:
+        - name: companyId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetDomainRequestStatusInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DomainRequest"
+        "404":
+          description: Company not found or has no custom domain
+
   /subscriptions/{id}:
     put:
       operationId: updateSubscription
@@ -3455,6 +3544,84 @@ paths:
                   $ref: "#/components/schemas/MyPayment"
         "401":
           description: Not authenticated
+
+  /portal/my-domain:
+    get:
+      operationId: getMyDomain
+      tags: [portal]
+      summary: The signed-in company's preferred custom domain (not yet routed/SSL'd — just stored)
+      responses:
+        "200":
+          description: Domain
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MyDomain"
+        "401":
+          description: Not authenticated
+    patch:
+      operationId: setMyDomain
+      tags: [portal]
+      summary: Set or clear (domain omitted/null) the signed-in company's preferred custom domain
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetDomainInput"
+      responses:
+        "200":
+          description: Domain saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MyDomain"
+        "400":
+          description: Invalid domain format
+        "401":
+          description: Not authenticated
+
+  /portal/forgot-password:
+    post:
+      operationId: forgotPortalPassword
+      tags: [portal]
+      summary: Request a password reset email — always returns the same message so this can't enumerate registered accounts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ForgotPasswordInput"
+      responses:
+        "200":
+          description: Request accepted (regardless of whether the email exists)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResult"
+        "400":
+          description: Invalid input
+
+  /portal/reset-password:
+    post:
+      operationId: resetPortalPassword
+      tags: [portal]
+      summary: Complete a password reset using the token from the email link
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResetPasswordInput"
+      responses:
+        "200":
+          description: Password reset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResult"
+        "400":
+          description: Invalid, expired, or already-used token
 
 components:
   schemas:
@@ -3852,16 +4019,31 @@ components:
 
     AppSettings:
       type: object
-      required: [defaultInvoiceTemplate]
+      required: [defaultInvoiceTemplate, dashboardStockCharts]
       properties:
         defaultInvoiceTemplate:
           type: ["string", "null"]
+        dashboardStockCharts:
+          type: array
+          description: >
+            Which optional dashboard pie charts the admin has chosen to show,
+            and in what order — "brand"/"category"/"product" are stock-value
+            breakdowns, "finance" is the Total Purchase / Total Sale / Due
+            overview. Empty array means none.
+          items:
+            type: string
+            enum: [brand, category, product, finance]
 
     AppSettingsUpdate:
       type: object
       properties:
         defaultInvoiceTemplate:
           type: string
+        dashboardStockCharts:
+          type: array
+          items:
+            type: string
+            enum: [brand, category, product, finance]
 
     RestoreBackupInput:
       type: object
@@ -4858,7 +5040,7 @@ components:
           type: ["string", "null"]
         invoiceType:
           type: string
-          enum: [gst, non_gst]
+          enum: [gst, non_gst, quotation, proforma_invoice, bill_of_supply, delivery_challan, sale_order]
         customerId:
           type: ["integer", "null"]
         customerName:
@@ -4976,7 +5158,7 @@ components:
       properties:
         invoiceType:
           type: string
-          enum: [gst, non_gst]
+          enum: [gst, non_gst, quotation, proforma_invoice, bill_of_supply, delivery_challan, sale_order]
         invoiceDate:
           type: string
         dueDate:
@@ -5059,7 +5241,7 @@ components:
           type: string
         invoiceType:
           type: string
-          enum: [gst, non_gst]
+          enum: [gst, non_gst, quotation, proforma_invoice, bill_of_supply, delivery_challan, sale_order]
         invoiceDate:
           type: string
         customerId:
@@ -6535,6 +6717,42 @@ components:
           type: number
           description: All-time liters sold (saved invoices only)
 
+    StockBreakdownItem:
+      type: object
+      required: [label, value]
+      properties:
+        label:
+          type: string
+        value:
+          type: number
+          description: Stock value in rupees (current_stock x purchase_price), summed across the group
+
+    StockBreakdown:
+      type: object
+      required: [by, items, totalValue]
+      properties:
+        by:
+          type: string
+          enum: [brand, category, product]
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/StockBreakdownItem"
+        totalValue:
+          type: number
+
+    FinanceOverview:
+      type: object
+      required: [items, totalValue]
+      properties:
+        items:
+          type: array
+          description: Always exactly 3 items, in order — Total Purchase, Total Sale, Due.
+          items:
+            $ref: "#/components/schemas/StockBreakdownItem"
+        totalValue:
+          type: number
+
     SalesTrendPoint:
       type: object
       required: [date, totalSales, invoiceCount]
@@ -7206,3 +7424,52 @@ components:
         status: { type: string }
         razorpayPaymentId: { type: ["string", "null"] }
         createdAt: { type: string, format: date-time }
+
+    MyDomain:
+      type: object
+      required: [customDomain, status]
+      properties:
+        customDomain: { type: ["string", "null"], description: "e.g. myshop.com — not yet routed/SSL'd, just stored" }
+        status: { type: ["string", "null"], enum: [pending, active, null], description: "pending until staff finish DNS/SSL setup and mark it active" }
+
+    SetDomainInput:
+      type: object
+      properties:
+        domain: { type: ["string", "null"], description: "Omit or set null to clear" }
+
+    ForgotPasswordInput:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+
+    ResetPasswordInput:
+      type: object
+      required: [token, newPassword]
+      properties:
+        token: { type: string }
+        newPassword: { type: string, minLength: 6 }
+
+    MessageResult:
+      type: object
+      required: [message]
+      properties:
+        message: { type: string }
+
+    DomainRequest:
+      type: object
+      required: [companyId, companyName, customDomain, status]
+      properties:
+        companyId: { type: integer }
+        companyName: { type: string }
+        email: { type: ["string", "null"] }
+        mobile: { type: ["string", "null"] }
+        customDomain: { type: string }
+        status: { type: string, enum: [pending, active] }
+        updatedAt: { type: ["string", "null"], format: date-time }
+
+    SetDomainRequestStatusInput:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [pending, active] }

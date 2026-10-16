@@ -5,8 +5,11 @@
  * Shradha Oil Center ERP API
  * OpenAPI spec version: 0.1.0
  */
+import type { AppSettingsDashboardStockChartsItem } from './appSettingsDashboardStockChartsItem';
 
 export interface AppSettings {
   /** @nullable */
   defaultInvoiceTemplate: string | null;
+  /** Which optional dashboard pie charts the admin has chosen to show, and in what order — "brand"/"category"/"product" are stock-value breakdowns, "finance" is the Total Purchase / Total Sale / Due overview. Empty array means none. */
+  dashboardStockCharts: AppSettingsDashboardStockChartsItem[];
 }

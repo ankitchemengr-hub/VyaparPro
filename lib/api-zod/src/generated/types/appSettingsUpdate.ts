@@ -5,7 +5,9 @@
  * Shradha Oil Center ERP API
  * OpenAPI spec version: 0.1.0
  */
+import type { AppSettingsUpdateDashboardStockChartsItem } from './appSettingsUpdateDashboardStockChartsItem';
 
 export interface AppSettingsUpdate {
   defaultInvoiceTemplate?: string;
+  dashboardStockCharts?: AppSettingsUpdateDashboardStockChartsItem[];
 }
