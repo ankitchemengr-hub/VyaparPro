@@ -78,6 +78,8 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
 
   const isSalesman = user?.role === "salesman";
   const isAdmin = user?.role === "admin";
+  // Party's whole Khatabook balance beside each bill — same roles as Khatabook.
+  const showPartyBalance = isAdmin || user?.role === "accountant";
   const isStore = user?.role === "store";
 
   const { data: staffUsers } = useListUsers({ query: { enabled: isAdmin, queryKey: getListUsersQueryKey() } });
@@ -335,17 +337,18 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
                 {isAdmin && <TableHead className="hidden lg:table-cell">Salesman</TableHead>}
                 <TableHead className="text-right">Total</TableHead>
                 <TableHead>Status</TableHead>
+                {showPartyBalance && <TableHead className="text-right whitespace-nowrap">Khata Bal</TableHead>}
                 <TableHead className="text-right w-24 sm:w-32">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={isAdmin ? 9 : 7} className="text-center py-8">Loading...</TableCell>
+                  <TableCell colSpan={(isAdmin ? 9 : 7) + (showPartyBalance ? 1 : 0)} className="text-center py-8">Loading...</TableCell>
                 </TableRow>
               ) : displayedInvoices.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={isAdmin ? 9 : 7} className="text-center py-8">No invoices found.</TableCell>
+                  <TableCell colSpan={(isAdmin ? 9 : 7) + (showPartyBalance ? 1 : 0)} className="text-center py-8">No invoices found.</TableCell>
                 </TableRow>
               ) : (
                 displayedInvoices.map((invoice) => {
@@ -414,6 +417,17 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
                         return <Badge variant="secondary">{invoice.status}</Badge>;
                       })()}
                     </TableCell>
+                    {showPartyBalance && (
+                      <TableCell className="text-right whitespace-nowrap text-xs font-semibold" data-testid={`text-party-balance-${invoice.id}`}>
+                        {(() => {
+                          const bal = (invoice as any).partyBalance;
+                          if (bal == null) return <span className="text-muted-foreground font-normal">—</span>;
+                          if (bal < -0.009) return <span className="text-green-700 dark:text-green-400">Adv ₹{Math.abs(bal).toLocaleString()}</span>;
+                          if (bal <= 0.009) return <span className="text-green-700 dark:text-green-400">₹0</span>;
+                          return <span className="text-red-600 dark:text-red-400">₹{Number(bal).toLocaleString()}</span>;
+                        })()}
+                      </TableCell>
+                    )}
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
                         <Button

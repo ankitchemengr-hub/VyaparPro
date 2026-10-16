@@ -392,11 +392,11 @@ export function RecordPaymentDialog({
               {maxAmount != null ? (
                 <p className="text-xs text-muted-foreground">
                   Balance due: ₹{Number(maxAmount).toLocaleString()}{totalAmount != null ? ` of ₹${Number(totalAmount).toLocaleString()}` : ""}
-                  {" — payment settles this customer's oldest outstanding bill first, then newer ones — this bill is paid only after older dues are cleared."}
+                  {" — payment first clears this customer's old balance (opening / older dues), then the oldest bill, then newer ones — this bill is paid only after everything older is cleared."}
                 </p>
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  Not tied to a specific invoice — applies to this customer's oldest outstanding invoice first, then newer ones; any amount beyond what's owed becomes advance credit.
+                  Not tied to a specific invoice — clears this customer's old balance first, then the oldest outstanding invoice, then newer ones; any amount beyond what's owed becomes advance credit.
                 </p>
               )}
             </div>
