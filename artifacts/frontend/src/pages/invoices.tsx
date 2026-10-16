@@ -37,6 +37,7 @@ type InvoiceFilters = {
   dateTo: Date | undefined;
   createdByUserId: string;
   lossOnly: boolean;
+  belowRateOnly?: boolean;
 };
 // Persists filters across mount/unmount of this component (e.g. viewing an
 // invoice and navigating back) for the lifetime of the page session.
@@ -69,12 +70,15 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
   const [dateFrom, setDateFrom] = useState<Date | undefined>(saved?.dateFrom);
   const [dateTo, setDateTo] = useState<Date | undefined>(saved?.dateTo);
   const [createdByUserId, setCreatedByUserId] = useState<string>(saved?.createdByUserId ?? "all");
+  // Admin: only invoices with items sold below cost.
   const [lossOnly, setLossOnly] = useState<boolean>(saved?.lossOnly ?? false);
+  // Admin: only invoices a non-admin billed below the price-list rate.
+  const [belowRateOnly, setBelowRateOnly] = useState<boolean>(saved?.belowRateOnly ?? false);
   const [deleting, setDeleting] = useState<{ id: number; invoiceNo: string; invoiceType: string } | null>(null);
 
   useEffect(() => {
-    filterStore.set(storeKey, { search, type, payStatus, dateFrom, dateTo, createdByUserId, lossOnly });
-  }, [storeKey, search, type, payStatus, dateFrom, dateTo, createdByUserId, lossOnly]);
+    filterStore.set(storeKey, { search, type, payStatus, dateFrom, dateTo, createdByUserId, lossOnly, belowRateOnly });
+  }, [storeKey, search, type, payStatus, dateFrom, dateTo, createdByUserId, lossOnly, belowRateOnly]);
 
   const isSalesman = user?.role === "salesman";
   const isAdmin = user?.role === "admin";
@@ -92,10 +96,10 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
 
   const clearFilters = () => {
     setSearch(""); setType("all"); setPayStatus("all");
-    setDateFrom(undefined); setDateTo(undefined); setCreatedByUserId("all"); setLossOnly(false);
+    setDateFrom(undefined); setDateTo(undefined); setCreatedByUserId("all"); setLossOnly(false); setBelowRateOnly(false);
   };
 
-  const hasFilters = !!search || type !== "all" || payStatus !== "all" || !!dateFrom || !!dateTo || createdByUserId !== "all" || lossOnly;
+  const hasFilters = !!search || type !== "all" || payStatus !== "all" || !!dateFrom || !!dateTo || createdByUserId !== "all" || lossOnly || belowRateOnly;
 
   // Salesman scoping is enforced server-side from their session entity — no need
   // (and incorrect) to send user.id here, which is the user-account id, not the
@@ -107,7 +111,9 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
     dateFrom: dateFrom ? format(dateFrom, "yyyy-MM-dd") : undefined,
     dateTo: dateTo ? format(dateTo, "yyyy-MM-dd") : undefined,
     createdByUserId: createdByUserId !== "all" ? Number(createdByUserId) : undefined,
-  });
+    // Not in the generated params type; the URL builder passes it through.
+    ...(isAdmin && belowRateOnly ? { belowRate: "1" } : {}),
+  } as any);
 
   const deleteInvoice = useDeleteInvoice();
 
@@ -315,6 +321,19 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
               </Button>
             )}
 
+            {isAdmin && (
+              <Button
+                variant={belowRateOnly ? "destructive" : "outline"}
+                size="sm"
+                className="shrink-0 h-9"
+                onClick={() => setBelowRateOnly((v) => !v)}
+                data-testid="button-filter-below-rate"
+                title="Invoices billed below the price-list rate by staff"
+              >
+                <AlertTriangle className="h-4 w-4 mr-1.5" /> Below rate
+              </Button>
+            )}
+
             <span className="shrink-0 text-sm text-muted-foreground" data-testid="text-result-count">
               {isLoading ? "Loading…" : `${displayedInvoices.length} invoice${displayedInvoices.length === 1 ? "" : "s"}`}
             </span>
@@ -351,6 +370,8 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
                 displayedInvoices.map((invoice) => {
                   const bySalesman = isAdmin && !!invoice.salesmanName;
                   const loss = lossItems(invoice);
+                  // Billed below the price list by staff.
+                  const belowRate = isAdmin && !!(invoice as any).belowListRate;
                   return (
                   <TableRow
                     key={invoice.id}
@@ -358,11 +379,18 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
                     className={
                       loss > 0
                         ? "bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50 border-l-4 border-l-red-600"
-                        : bySalesman ? "bg-amber-50/60 dark:bg-amber-950/20 hover:bg-amber-100/60 dark:hover:bg-amber-950/30 border-l-2 border-l-amber-500" : undefined
+                        : belowRate
+                          ? "bg-rose-50 dark:bg-rose-950/25 hover:bg-rose-100/70 dark:hover:bg-rose-950/40 border-l-4 border-l-rose-500"
+                          : bySalesman ? "bg-amber-50/60 dark:bg-amber-950/20 hover:bg-amber-100/60 dark:hover:bg-amber-950/30 border-l-2 border-l-amber-500" : undefined
                     }
                   >
                     <TableCell className={bySalesman ? "font-mono font-semibold italic text-amber-900 dark:text-amber-200" : "font-medium"}>
                       {invoice.invoiceNo}
+                      {belowRate && (
+                        <Badge className="ml-2 bg-rose-600 text-white border-transparent hover:bg-rose-700 text-[10px] px-1.5 py-0" data-testid={`badge-below-rate-${invoice.id}`}>
+                          <AlertTriangle className="w-3 h-3 mr-0.5" /> Below rate
+                        </Badge>
+                      )}
                       {loss > 0 && (
                         <span
                           className="mt-0.5 flex w-fit items-center gap-1 rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold not-italic font-sans text-white"

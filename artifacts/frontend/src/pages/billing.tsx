@@ -1,10 +1,8 @@
-import { useState, useEffect, useRef } from "react";
+import { Fragment, useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/use-auth";
 import {
   useListProducts,
-  useGetProductRecentPrices,
-  getGetProductRecentPricesQueryKey,
   useCreateInvoice,
   useUpdateInvoice,
   useGetInvoice,
@@ -45,8 +43,7 @@ import {
 } from "lucide-react";
 import { playWarningBeep } from "@/lib/notification-sound";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { clickableProps } from "@/components/ui/clickable";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { shareInvoiceImage } from "@/lib/share-invoice";
 import { usePrintTitle } from "@/lib/print-with-title";
@@ -123,9 +120,10 @@ type BillingItem = {
   // printed on the invoice under the item name, separate from the
   // product's own catalog name/description.
   description: string;
-  // Set once the user types in the Rate field — stops the history auto-fill
-  // (this customer's last billed rate, else the last sale rate) from
-  // overwriting a rate they chose by hand.
+  // Set when the rate was typed by hand, picked from price history, or loaded
+  // from a saved invoice — such a rate is kept when the product
+  // list refreshes. Unset = straight from the price list, so it follows rate
+  // updates made elsewhere (Purchases, Price List, Inventory).
   rateEdited?: boolean;
 };
 
@@ -154,87 +152,85 @@ const fmtHistDate = (iso: string) => {
   return isNaN(d.getTime()) ? "—" : d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" });
 };
 
-// Shown under the Rate input while billing: the last few prices this product
-// actually sold/bought at, and — behind a "history" button — the full
-// date / party / qty / rate breakdown, mirroring the reference lookup in
-// Hitech. Clicking a row copies that rate into the line. Separate cached
-// query per product so switching a row's product doesn't wait on every
-// other row's history.
-function RecentPriceHint({ productId, onPickRate }: { productId: number; onPickRate?: (rate: number) => void }) {
-  const { data } = useGetProductRecentPrices(productId, {
-    query: { queryKey: getGetProductRecentPricesQueryKey(productId), enabled: !!productId, staleTime: 5 * 60 * 1000 },
-  });
-  if (!data) return null;
-  const sales = data.lastSalePrices ?? [];
-  const purchases = data.lastPurchasePrices ?? [];
-  const sold = sales.map((p) => `₹${Number(p.rate).toLocaleString()}`).join(", ");
-  const bought = purchases.map((p) => `₹${Number(p.rate).toLocaleString()}`).join(", ");
-  if (!sold && !bought) return null;
+type SaleHistory = {
+  forCustomer: boolean;
+  rows: { date: string; invoiceNo: string; party: string | null; qty: number; unit: string | null; rate: number }[];
+};
 
-  const renderHist = (rows: typeof sales, kind: "Sale" | "Purchase") => {
-    if (rows.length === 0) return null;
-    return (
-      <div key={kind}>
-        <div className="px-2 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Recent {kind}s
-        </div>
-        <table className="w-full text-[11px]">
-          <thead>
-            <tr className="border-b text-muted-foreground">
-              <th className="text-left font-normal px-2 py-1">Date</th>
-              <th className="text-left font-normal px-2 py-1">{kind === "Sale" ? "Customer" : "Vendor"}</th>
-              <th className="text-right font-normal px-2 py-1">Qty</th>
-              <th className="text-right font-normal px-2 py-1">Rate</th>
-            </tr>
-          </thead>
+// Opens right under a line while its Rate field has focus: what THIS customer
+// paid for this item on their last 3 bills (date, qty, rate). Only this
+// customer's own rates — never other customers' or purchase prices. Read-only
+// and never focusable, so Enter keeps moving through the line exactly as
+// before. Blinks twice when it appears so it gets noticed.
+function RateHistoryPanel({ productId, customerId, customerName, excludeInvoiceId, unit }: {
+  productId: number;
+  customerId: number | null;
+  customerName: string | null;
+  excludeInvoiceId: number | null;
+  unit: string;
+}) {
+  const { data, isLoading, isError } = useQuery<SaleHistory>({
+    queryKey: ["/api/products/sale-history", productId, customerId ?? 0, excludeInvoiceId ?? 0],
+    queryFn: async () => {
+      const qs = new URLSearchParams();
+      if (customerId) qs.set("customerId", String(customerId));
+      if (excludeInvoiceId) qs.set("excludeInvoiceId", String(excludeInvoiceId));
+      const r = await fetch(`/api/products/${productId}/sale-history?${qs}`, { credentials: "include" });
+      if (!r.ok) throw new Error("Failed to load sale history");
+      return r.json();
+    },
+    staleTime: 60_000,
+    enabled: !!customerId,
+  });
+
+  const title = !customerId
+    ? "Past rates"
+    : data && data.rows.length > 0
+      ? `${customerName ?? "This customer"} — last ${data.rows.length === 1 ? "bill" : `${data.rows.length} bills`}`
+      : `${customerName ?? "This customer"} — past rates`;
+
+  return (
+    <div
+      className="rate-hist-panel rounded-lg border-2 border-primary/50 bg-primary/5 px-3 py-2 text-left max-w-md ml-auto"
+      // Never steal focus from the Rate field if it's clicked.
+      onMouseDown={(e) => e.preventDefault()}
+      data-testid={`rate-history-${productId}`}
+    >
+      <style>{RATE_HIST_CSS}</style>
+      <div className="flex items-center gap-1.5 text-xs font-semibold text-primary mb-1">
+        <History className="w-3.5 h-3.5" /> {title}
+      </div>
+      {!customerId ? (
+        <div className="text-xs text-muted-foreground py-1">Select the customer to see their past rates.</div>
+      ) : isLoading ? (
+        <div className="text-xs text-muted-foreground py-1">Loading…</div>
+      ) : isError ? (
+        <div className="text-xs text-muted-foreground py-1">Couldn't load history.</div>
+      ) : !data || data.rows.length === 0 ? (
+        <div className="text-xs text-muted-foreground py-1">First time for this customer — no previous rate.</div>
+      ) : (
+        <table className="w-full text-sm tabular-nums">
           <tbody>
-            {rows.map((r, i) => (
-              <tr
-                key={i}
-                className={`border-b border-dashed last:border-0 ${onPickRate ? "hover:bg-accent cursor-pointer" : ""}`}
-                {...(onPickRate ? clickableProps(() => onPickRate(Number(r.rate))) : {})}
-                title={onPickRate ? "Use this rate" : undefined}
-              >
-                <td className="px-2 py-1 whitespace-nowrap">{fmtHistDate(r.date)}</td>
-                <td className="px-2 py-1 max-w-[130px] truncate">{r.party ?? "—"}</td>
-                <td className="px-2 py-1 text-right whitespace-nowrap">
-                  {r.qty != null ? Number(r.qty).toLocaleString() : "—"}
-                  {r.unit ? ` ${r.unit}` : ""}
-                </td>
-                <td className="px-2 py-1 text-right font-medium tabular-nums">₹{Number(r.rate).toLocaleString()}</td>
+            {data.rows.map((r, i) => (
+              <tr key={i} className={i === 0 ? "font-semibold" : "text-muted-foreground"}>
+                <td className="py-0.5 pr-3 whitespace-nowrap">{fmtHistDate(r.date)}</td>
+                <td className="py-0.5 pr-3 text-right whitespace-nowrap">{r.qty.toLocaleString("en-IN")} {r.unit ?? unit}</td>
+                <td className="py-0.5 text-right whitespace-nowrap text-foreground">₹{r.rate.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</td>
               </tr>
             ))}
           </tbody>
         </table>
-      </div>
-    );
-  };
-
-  return (
-    <div className="text-[9px] leading-tight text-muted-foreground">
-      <Popover>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            className="inline-flex items-center gap-0.5 text-[9px] text-primary hover:underline"
-            data-testid={`button-price-history-${productId}`}
-          >
-            <History className="w-2.5 h-2.5" /> Price history
-          </button>
-        </PopoverTrigger>
-        <PopoverContent align="end" className="w-72 p-0 max-h-[300px] overflow-y-auto">
-          {renderHist(sales, "Sale")}
-          {renderHist(purchases, "Purchase")}
-          {onPickRate && (
-            <div className="px-2 py-1.5 text-[10px] text-muted-foreground border-t">Click a row to use that rate.</div>
-          )}
-        </PopoverContent>
-      </Popover>
-      {sold && <div>Sold: {sold}</div>}
-      {bought && <div>Bought: {bought}</div>}
+      )}
     </div>
   );
 }
+
+const RATE_HIST_CSS = `
+.rate-hist-panel { animation: rateHistIn .18s ease-out, rateHistBlink .55s ease-in-out .2s 2; }
+@keyframes rateHistIn { from { opacity: 0; transform: translateY(-4px) } to { opacity: 1; transform: none } }
+@keyframes rateHistBlink { 0%,100% { box-shadow: 0 0 0 0 hsl(var(--primary) / 0) } 50% { box-shadow: 0 0 0 5px hsl(var(--primary) / .35) } }
+@media (prefers-reduced-motion: reduce) { .rate-hist-panel { animation: none } }
+`;
 
 // Red line under a Rate field whose net rate is at/below the product's
 // purchase price — the always-visible half of the cost warning (the beep +
@@ -242,6 +238,16 @@ function RecentPriceHint({ productId, onPickRate }: { productId: number; onPickR
 type CostSource = "mfg" | "purchase";
 type CostWarning = { kind: "below" | "equal"; cost: number; net: number; source: CostSource };
 const COST_LABEL: Record<CostSource, string> = { mfg: "Mfg cost", purchase: "Purchase rate" };
+
+// Amber line under a Rate field a non-admin set below the price-list rate.
+function ListRateHint({ w, testId }: { w: { list: number; net: number } | null; testId: string }) {
+  if (!w) return null;
+  return (
+    <div className="text-[10px] leading-tight text-amber-700 dark:text-amber-400 mt-0.5" data-testid={testId}>
+      Below list ₹{w.list.toLocaleString()}
+    </div>
+  );
+}
 
 function CostWarningHint({ w, testId }: { w: CostWarning | null; testId: string }) {
   if (!w) return null;
@@ -324,25 +330,32 @@ export default function Billing() {
   const [sharing, setSharing] = useState(false);
   const savedSheetRef = useRef<HTMLDivElement>(null);
   const [prefilled, setPrefilled] = useState(false);
-  // Prefilling an existing invoice sets docType/invoiceSubtype from the saved
-  // record, which changes `invoiceType` in the same batch as the saved item
-  // rates — that would otherwise re-trigger the price-list rate sync below
-  // and stomp the rates the user actually saved. This ref lets that sync
-  // skip the one render caused by prefill.
-  const skipRateSyncRef = useRef(false);
+  // The invoice-type + customer-pricing-tier combination the line rates were
+  // last priced for. The price-list rate sync below reprices only when this
+  // actually changes (the user toggles GST/Non-GST or picks a customer on a
+  // different tier). Prefill sets it to the values it loads, so
+  // loading a saved invoice never reprices the rates the user saved.
+  const pricingKeyRef = useRef<string | null>(null);
   // Keyboard shortcuts call through this ref instead of `handleSave` directly
   // — `handleSave` isn't defined until after the early-return role guards
   // below, and hooks (this effect included) must run unconditionally before
   // those guards, so the effect can't close over it directly.
   const handleSaveRef = useRef<() => void>(() => {});
+  // Which line's Rate field has focus — that line shows the customer's past
+  // rates for the item right underneath it.
+  const [rateFocusIdx, setRateFocusIdx] = useState<number | null>(null);
   // "Rate at/below purchase price" warning popup shown on save, and the last
   // net rate each row was already warned about (so leaving the Rate field
   // again without changing it doesn't beep a second time).
   const [costAlertOpen, setCostAlertOpen] = useState(false);
   const warnedRatesRef = useRef<Map<number, string>>(new Map());
+  // Same idea for the below-price-list warning (keyed by product → net rate).
+  const warnedListRef = useRef<Map<number, number>>(new Map());
 
   // ── All data hooks ──
-  const { data: products } = useListProducts({ forSale: true });
+  // Always refetch on open (not served from a stale cache) so a rate updated
+  // a moment ago on Purchases / Price List / Inventory is what gets billed.
+  const { data: products } = useListProducts({ forSale: true }, { query: { refetchOnMount: "always" } as any });
   const { data: salesmanEntities } = useListEntities({ type: "salesman" } as any);
   const { data: existingInvoice } = useGetInvoice(editId as number, { query: { enabled: isEditMode } as any });
   // Invoices don't store the customer's pricing tier, only a name/GSTIN
@@ -382,9 +395,40 @@ export default function Billing() {
     }
   }, [customer?.id]);
 
+  // When the product list itself refreshes (e.g. a sale rate was just
+  // updated after a purchase), lines whose rate came straight from the price
+  // list follow the new rate. Hand-typed rates and rates loaded from a saved
+  // invoice (rateEdited) are never touched.
   useEffect(() => {
+    if (!products || items.length === 0) return;
+    setItems((prev) => {
+      let changed = false;
+      const next = prev.map((item) => {
+        if (item.rateEdited) return item;
+        const p = products.find((x: any) => x.id === item.productId);
+        if (!p) return item;
+        const newRate = getBaseRate(p, customer, invoiceType);
+        if (Math.abs(newRate - item.rate) < 0.0001) return item;
+        changed = true;
+        const amount = Math.round(billedUnits(item) * newRate * (1 + item.taxPct / 100) * 100) / 100;
+        return { ...item, rate: newRate, mrp: Number(p.mrp ?? item.mrp), amount };
+      });
+      return changed ? next : prev;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [products]);
+
+  // Deliberately NOT keyed on `products` (that's the effect above this one, which only
+  // touches price-list rates): the product list also carries stock, so it
+  // refetches whenever stock moved elsewhere — repricing every line on that
+  // used to stomp saved rates a moment after an edit form opened and wipe
+  // hand-typed rates on a new invoice when the window regained focus.
+  const pricingKey = `${invoiceType}|${customer?.pricingTier ?? ""}`;
+  useEffect(() => {
+  const prevKey = pricingKeyRef.current;
+  pricingKeyRef.current = pricingKey;
+  if (prevKey === null || prevKey === pricingKey) return;
   if (!products || items.length === 0) return;
-  if (skipRateSyncRef.current) { skipRateSyncRef.current = false; return; }
   setItems((prev) => prev.map((item) => {
     const p = products.find((x: any) => x.id === item.productId);
     if (!p) return item;
@@ -394,7 +438,7 @@ export default function Billing() {
     return { ...item, rate: newRate, taxPct, amount };
   }));
 // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [invoiceType, products, customer?.pricingTier]);
+}, [pricingKey]);
 
   useEffect(() => {
     if (!isEditMode || !existingInvoice || prefilled) return;
@@ -403,6 +447,8 @@ export default function Billing() {
     // above, silently reprice a wholesale customer's items if the invoice
     // type is later toggled while editing.
     if (existingInvoice.customerId && !existingCustomerEntity) return;
+    // Products give each line its box size / litres — wait for them too.
+    if (!products) return;
     const et = existingInvoice.invoiceType as string;
     if (et === "gst" || et === "non_gst") { setDocType("invoice"); setInvoiceSubtype(et); }
     else { setDocType(et); }
@@ -419,7 +465,12 @@ export default function Billing() {
         outstandingBalance: 0,
       });
     }
-    skipRateSyncRef.current = true;
+    // Mark the saved type/tier as already priced so the sync above leaves the
+    // saved rates alone.
+    const prefillTier = (existingInvoice.customerId || existingInvoice.customerName)
+      ? (existingCustomerEntity?.pricingTier ?? "retail")
+      : customer?.pricingTier;
+    pricingKeyRef.current = `${et}|${prefillTier ?? ""}`;
     setItems((existingInvoice.items ?? []).map((it: any) => {
       const prod = (products ?? []).find((x: any) => x.id === it.productId);
       return {
@@ -436,7 +487,7 @@ export default function Billing() {
       };
     }));
     setPrefilled(true);
-  }, [isEditMode, existingInvoice, existingCustomerEntity, prefilled]);
+  }, [isEditMode, existingInvoice, existingCustomerEntity, prefilled, products]);
 
   useEffect(() => {
     if (!params.cart || !products) return;
@@ -685,12 +736,43 @@ export default function Billing() {
     .map((item, idx) => ({ item, idx, w: costWarning(item) }))
     .filter((x): x is { item: BillingItem; idx: number; w: CostWarning } => x.w !== null);
 
+  // Who may type in the Rate field: admin always; a store user only when the
+  // admin turned on "Can change rate while billing" in User Accounts.
+  const isAdminUser = user?.role === "admin";
+  const canEditRate = isAdminUser || (user?.role === "store" && (user as any)?.canEditRate === true);
+  // Non-admin billing a line below the price-list rate: beep on blur, ask on
+  // save (never blocks), and the server marks the invoice "Below rate" for
+  // the admin. Admin's own rates aren't second-guessed.
+  const listRateWarning = (i: BillingItem): { list: number; net: number } | null => {
+    if (isAdminUser) return null;
+    const p = (products ?? []).find((x: any) => x.id === i.productId);
+    if (!p) return null;
+    const list = Math.round(getBaseRate(p, customer, invoiceType) * 100) / 100;
+    const net = Math.round(netUnitRate(i) * 100) / 100;
+    return list > 0 && net < list - 0.005 ? { list, net } : null;
+  };
+  const listWarnings = items
+    .map((item, idx) => ({ item, idx, w: listRateWarning(item) }))
+    .filter((x): x is { item: BillingItem; idx: number; w: { list: number; net: number } } => x.w !== null);
+
   // Side notification + beep the moment a rate (or discount) leaves the line
   // at/below cost — called when the field loses focus, so it fires once the
   // biller has finished typing rather than on every keystroke.
   const checkCostOnBlur = (idx: number) => {
     const item = items[idx];
     if (!item) return;
+    const lw = listRateWarning(item);
+    if (lw && warnedListRef.current.get(item.productId) !== lw.net) {
+      warnedListRef.current.set(item.productId, lw.net);
+      playWarningBeep();
+      toast({
+        title: "⚠ Rate is BELOW the price list",
+        description: `${item.name}: ₹${lw.net.toLocaleString()} — price list ₹${lw.list.toLocaleString()}. This bill will be marked for the admin.`,
+        variant: "destructive",
+      });
+    } else if (!lw) {
+      warnedListRef.current.delete(item.productId);
+    }
     const w = costWarning(item);
     const key = w ? `${w.kind}:${w.net}` : "";
     if (warnedRatesRef.current.get(item.productId) === key) return;
@@ -712,7 +794,7 @@ export default function Billing() {
     }
     // Rates at/below cost: stop and ask first. The biller decides — "Save
     // anyway" in the popup goes ahead via saveInvoice().
-    if (costWarnings.length > 0) {
+    if (costWarnings.length > 0 || listWarnings.length > 0) {
       playWarningBeep();
       setCostAlertOpen(true);
       return;
@@ -1083,7 +1165,8 @@ export default function Billing() {
                     {items.length === 0 ? (
                       <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground text-sm">No items — search above to add products</TableCell></TableRow>
                     ) : items.map((item, idx) => (
-                      <TableRow key={idx} data-testid={`billing-row-${idx}`}>
+                      <Fragment key={idx}>
+                      <TableRow data-testid={`billing-row-${idx}`}>
                         <TableCell>
                           <div className="font-medium text-sm leading-tight">{item.name}</div>
                           <div className="text-xs text-muted-foreground">{item.unit}</div>
@@ -1122,15 +1205,13 @@ export default function Billing() {
                           <NumberInput min={0} value={item.rate}
                             onChange={(v) => updateItem(idx, "rate", v, { rateEdited: true })}
                             onKeyDown={(e) => lineItemKeyDown(e, idx, "rate")}
-                            onBlur={() => checkCostOnBlur(idx)}
-                            className={`w-24 text-right h-7 text-sm disabled:opacity-100 disabled:cursor-not-allowed ${costWarning(item) ? "border-red-500 bg-red-50 text-red-700 focus-visible:ring-red-500" : ""}`}
-                            data-testid={`input-rate-${idx}`} disabled={user?.role !== "admin"}
-                            title={user?.role !== "admin" ? "Only admin can edit rate" : undefined} />
+                            onFocus={() => setRateFocusIdx(idx)}
+                            onBlur={() => { setRateFocusIdx((cur) => (cur === idx ? null : cur)); checkCostOnBlur(idx); }}
+                            className={`w-24 text-right h-7 text-sm disabled:opacity-100 disabled:cursor-not-allowed ${costWarning(item) ? "border-red-500 bg-red-50 text-red-700 focus-visible:ring-red-500" : listRateWarning(item) ? "border-amber-500 bg-amber-50 text-amber-800 focus-visible:ring-amber-500" : ""}`}
+                            data-testid={`input-rate-${idx}`} disabled={!canEditRate}
+                            title={!canEditRate ? "Rate change not allowed for your login" : undefined} />
                           <CostWarningHint w={costWarning(item)} testId={`hint-cost-warning-${idx}`} />
-                          <RecentPriceHint
-                            productId={item.productId}
-                            onPickRate={user?.role === "admin" ? (r) => updateItem(idx, "rate", r, { rateEdited: true }) : undefined}
-                          />
+                          <ListRateHint w={listRateWarning(item)} testId={`hint-list-rate-${idx}`} />
                         </TableCell>
                         {isGstInvoiceType(invoiceType) && (
                           <TableCell className="text-right">
@@ -1155,6 +1236,20 @@ export default function Billing() {
                           </Button>
                         </TableCell>
                       </TableRow>
+                      {rateFocusIdx === idx && (
+                        <TableRow className="hover:bg-transparent border-0">
+                          <TableCell colSpan={isGstInvoiceType(invoiceType) ? 8 : 7} className="pt-0 pb-2">
+                            <RateHistoryPanel
+                              productId={item.productId}
+                              customerId={customer?.id ?? null}
+                              customerName={customer?.name ?? null}
+                              excludeInvoiceId={isEditMode ? editId : null}
+                              unit={item.unit}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      )}
+                      </Fragment>
                     ))}
                   </TableBody>
                 </Table>
@@ -1210,17 +1305,25 @@ export default function Billing() {
                         <Label className="text-[11px] text-muted-foreground">Rate (₹)</Label>
                         <NumberInput min={0} value={item.rate}
                           onChange={(v) => updateItem(idx, "rate", v, { rateEdited: true })}
-                          onBlur={() => checkCostOnBlur(idx)}
-                          className={`h-8 text-sm disabled:opacity-100 disabled:cursor-not-allowed ${costWarning(item) ? "border-red-500 bg-red-50 text-red-700 focus-visible:ring-red-500" : ""}`}
-                          data-testid={`input-rate-mobile-${idx}`} disabled={user?.role !== "admin"}
-                          title={user?.role !== "admin" ? "Only admin can edit rate" : undefined} />
+                          onFocus={() => setRateFocusIdx(idx)}
+                          onBlur={() => { setRateFocusIdx((cur) => (cur === idx ? null : cur)); checkCostOnBlur(idx); }}
+                          className={`h-8 text-sm disabled:opacity-100 disabled:cursor-not-allowed ${costWarning(item) ? "border-red-500 bg-red-50 text-red-700 focus-visible:ring-red-500" : listRateWarning(item) ? "border-amber-500 bg-amber-50 text-amber-800 focus-visible:ring-amber-500" : ""}`}
+                          data-testid={`input-rate-mobile-${idx}`} disabled={!canEditRate}
+                          title={!canEditRate ? "Rate change not allowed for your login" : undefined} />
                         <CostWarningHint w={costWarning(item)} testId={`hint-cost-warning-mobile-${idx}`} />
-                        <RecentPriceHint
-                          productId={item.productId}
-                          onPickRate={user?.role === "admin" ? (r) => updateItem(idx, "rate", r, { rateEdited: true }) : undefined}
-                        />
+                        <ListRateHint w={listRateWarning(item)} testId={`hint-list-rate-mobile-${idx}`} />
                       </div>
                     </div>
+
+                    {rateFocusIdx === idx && (
+                      <RateHistoryPanel
+                        productId={item.productId}
+                        customerId={customer?.id ?? null}
+                        customerName={customer?.name ?? null}
+                        excludeInvoiceId={isEditMode ? editId : null}
+                        unit={item.unit}
+                      />
+                    )}
 
                     <div className={`grid gap-2 ${isGstInvoiceType(invoiceType) ? "grid-cols-3" : "grid-cols-2"}`}>
                       {isGstInvoiceType(invoiceType) && (
@@ -1376,10 +1479,14 @@ export default function Billing() {
             <AlertTriangle className="w-6 h-6" /> Alert — please check this bill
           </DialogTitle>
           <DialogDescription>
-            {costWarnings.length === 1 ? "1 item is" : `${costWarnings.length} items are`} priced at or below cost
-            (purchase rate, or manufacturing cost from the BOM for items you make). Is this a mistake?
+            {costWarnings.length > 0
+              ? <>{costWarnings.length === 1 ? "1 item is" : `${costWarnings.length} items are`} priced at or below cost
+                (purchase rate, or manufacturing cost from the BOM for items you make). Is this a mistake?</>
+              : <>{listWarnings.length === 1 ? "1 item is" : `${listWarnings.length} items are`} priced below the price list.
+                If you save, this bill will be marked <b>Below rate</b> for the admin.</>}
           </DialogDescription>
         </DialogHeader>
+        {costWarnings.length > 0 && (
         <div className="max-h-[300px] overflow-y-auto rounded-md border">
           <table className="w-full text-sm">
             <thead className="bg-muted/50 text-xs text-muted-foreground">
@@ -1412,6 +1519,25 @@ export default function Billing() {
             </tbody>
           </table>
         </div>
+        )}
+        {listWarnings.length > 0 && (
+          <div className="max-h-[240px] overflow-y-auto rounded-md border border-amber-400" data-testid="list-rate-warnings">
+            <div className="px-3 py-1.5 text-xs font-semibold bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+              Below price list — will be marked for the admin
+            </div>
+            <table className="w-full text-sm">
+              <tbody>
+                {listWarnings.map(({ item, idx, w }) => (
+                  <tr key={idx} className="border-t">
+                    <td className="px-3 py-2 font-medium leading-tight">{item.name}</td>
+                    <td className="px-3 py-2 text-right tabular-nums font-semibold text-amber-700">₹{w.net.toLocaleString()}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">List ₹{w.list.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
         <DialogFooter className="gap-2 sm:gap-0">
           <Button
             autoFocus
@@ -1419,7 +1545,7 @@ export default function Billing() {
             data-testid="button-cost-alert-back"
             onClick={() => {
               setCostAlertOpen(false);
-              const first = costWarnings[0];
+              const first = costWarnings[0] ?? listWarnings[0];
               if (first) {
                 requestAnimationFrame(() => {
                   const el = document.querySelector<HTMLInputElement>(`[data-testid="input-rate-${first.idx}"]`);

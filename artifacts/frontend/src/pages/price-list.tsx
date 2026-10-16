@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/use-auth";
+import { getListProductsQueryKey } from "@workspace/api-client-react";
 import { Redirect } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -184,6 +185,9 @@ export default function PriceList() {
     mutationFn: bulkUpdatePrices,
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
+      // Also the shared product list Billing / Catalog / Purchases read rates
+      // from — otherwise they keep billing at the old rate until it goes stale.
+      queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() });
       setEdits({});
       setSelected(new Set());
       setManualPrice(new Set());

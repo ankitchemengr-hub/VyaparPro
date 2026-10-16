@@ -8,6 +8,7 @@ import {
 } from "@workspace/api-zod";
 import { COMPANY_TABLES } from "../lib/company-data";
 import { hashPassword } from "../lib/password";
+import { isUsernameTaken, suggestUsername, usernameTakenMessage } from "../lib/username";
 import { DomainError, listDomainRequests, adminSetDomainStatus } from "../lib/custom-domains";
 
 const router: IRouter = Router();
@@ -296,6 +297,12 @@ router.post("/subscriptions/create", async (req, res): Promise<void> => {
   const adminPassword = body.adminPassword?.trim() || null;
   if ((adminUsername && !adminPassword) || (!adminUsername && adminPassword)) {
     res.status(400).json({ error: "Both admin username and password are required to create a login" });
+    return;
+  }
+  // Admin usernames are unique across all companies (see lib/username.ts).
+  if (adminUsername && await isUsernameTaken(pool, adminUsername)) {
+    const suggestion = await suggestUsername(pool, adminUsername, body.companyName);
+    res.status(409).json({ error: usernameTakenMessage(adminUsername, suggestion), suggestion });
     return;
   }
 

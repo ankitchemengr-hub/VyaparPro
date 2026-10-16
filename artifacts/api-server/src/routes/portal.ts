@@ -10,6 +10,7 @@ import {
   ResetPortalPasswordBody,
 } from "@workspace/api-zod";
 import { hashPassword } from "../lib/password";
+import { isUsernameTaken } from "../lib/username";
 import { getCompanyId } from "../lib/tenant";
 import { logger } from "../lib/logger";
 import { sendMail, passwordResetEmail } from "../lib/mailer";
@@ -99,6 +100,13 @@ router.post("/portal/register", async (req, res): Promise<void> => {
     if (dupe.rows.length > 0) {
       await client.query("ROLLBACK");
       res.status(409).json({ error: "A company with this email or mobile is already registered" });
+      return;
+    }
+    // The admin login's username is this email/mobile — it must not already be
+    // someone's username in any company (lib/username.ts).
+    if (await isUsernameTaken(client, (d.email ?? d.mobile).trim())) {
+      await client.query("ROLLBACK");
+      res.status(409).json({ error: "An account with this email or mobile already exists. Please log in, or use a different one." });
       return;
     }
 

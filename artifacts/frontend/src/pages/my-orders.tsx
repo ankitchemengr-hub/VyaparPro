@@ -31,7 +31,10 @@ function StatusBadge({ status }: { status: string }) {
 
 export default function MyOrders() {
   const { user } = useAuth();
-  const navigate = useLocation();
+  const [, navigate] = useLocation();
+  // Same page serves the salesman ("my customers' orders") and the customer
+  // portal login ("my bills") — the server scopes the list for each.
+  const isCustomer = user?.role === "customer";
   const [search, setSearch] = useState("");
 
   // Backend auto-scopes to this salesman's invoices (last 7 days) when role=salesman
@@ -50,9 +53,11 @@ export default function MyOrders() {
       <div className="flex items-center gap-3">
         <ShoppingBag className="w-6 h-6 text-primary" />
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">My Customer Orders</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{isCustomer ? "My Bills" : "My Customer Orders"}</h1>
           <p className="text-sm text-muted-foreground">
-            {user?.name ? `Orders assigned to ${user.name}` : "Your customer invoices (last 7 days)"}
+            {isCustomer
+              ? "Every bill made in your name · आपके नाम के सभी बिल"
+              : user?.name ? `Orders assigned to ${user.name}` : "Your customer invoices (last 7 days)"}
           </p>
         </div>
       </div>
@@ -61,31 +66,31 @@ export default function MyOrders() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Orders</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">{isCustomer ? "Bills" : "Total Orders"}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{list.length}</div>
-            <p className="text-xs text-muted-foreground mt-1">Last 7 days</p>
+            <p className="text-xs text-muted-foreground mt-1">{isCustomer ? "बिल की गिनती" : "Last 7 days"}</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Sales</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">{isCustomer ? "Total billed" : "Total Sales"}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-primary">{fmt(totalAmount)}</div>
-            <p className="text-xs text-muted-foreground mt-1">Grand total across all orders</p>
+            <p className="text-xs text-muted-foreground mt-1">{isCustomer ? "कुल बिल रकम" : "Grand total across all orders"}</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Pending Amount</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">{isCustomer ? "Still to pay" : "Pending Amount"}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-amber-600">{fmt(pendingAmount)}</div>
-            <p className="text-xs text-muted-foreground mt-1">Balance due from customers</p>
+            <p className="text-xs text-muted-foreground mt-1">{isCustomer ? "इन बिलों का बाकी" : "Balance due from customers"}</p>
           </CardContent>
         </Card>
       </div>
@@ -95,13 +100,13 @@ export default function MyOrders() {
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <CardTitle>Orders</CardTitle>
-              <CardDescription>Customer invoices linked to your account</CardDescription>
+              <CardTitle>{isCustomer ? "Bills" : "Orders"}</CardTitle>
+              <CardDescription>{isCustomer ? "Tap 👁 to open and download a bill" : "Customer invoices linked to your account"}</CardDescription>
             </div>
             <div className="relative w-full sm:w-64">
               <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Search invoice / customer..."
+                placeholder={isCustomer ? "Search bill no..." : "Search invoice / customer..."}
                 className="pl-8"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -117,7 +122,7 @@ export default function MyOrders() {
           ) : list.length === 0 ? (
             <div className="text-center py-10 text-muted-foreground">
               <ShoppingBag className="w-10 h-10 mx-auto mb-2 opacity-30" />
-              <p>No orders found in the last 7 days.</p>
+              <p>{isCustomer ? "No bills yet." : "No orders found in the last 7 days."}</p>
             </div>
           ) : (
             <div className="border rounded-md overflow-x-auto">
@@ -126,7 +131,7 @@ export default function MyOrders() {
                   <TableRow>
                     <TableHead>Invoice No</TableHead>
                     <TableHead>Date</TableHead>
-                    <TableHead>Customer</TableHead>
+                    {!isCustomer && <TableHead>Customer</TableHead>}
                     <TableHead>Type</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
                     <TableHead className="text-right">Balance Due</TableHead>
@@ -143,7 +148,7 @@ export default function MyOrders() {
                           ? new Date(inv.invoiceDate).toLocaleDateString("en-IN")
                           : "—"}
                       </TableCell>
-                      <TableCell className="text-sm">{inv.customerName ?? "—"}</TableCell>
+                      {!isCustomer && <TableCell className="text-sm">{inv.customerName ?? "—"}</TableCell>}
                       <TableCell className="text-xs uppercase text-muted-foreground">
                         {inv.invoiceType?.replace("_", " ")}
                       </TableCell>

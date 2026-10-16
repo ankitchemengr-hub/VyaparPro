@@ -29,6 +29,7 @@ import { isGstAccountant } from "../lib/gst-access";
 import { loadManufacturingCosts, effectiveUnitCost } from "../lib/bom-cost";
 import { settleExcessInvoiceDues, NO_PAY_INVOICE_TYPES } from "../lib/entity-payment";
 import { autoManufactureForSale } from "../lib/auto-manufacture";
+import { applyListRateFlags } from "../lib/list-rate";
 
 const router: IRouter = Router();
 
@@ -158,6 +159,15 @@ router.get("/invoices", async (req, res): Promise<void> => {
     // Store users only see invoices they personally created (e.g. via the
     // catalog checkout flow), not the full company invoice list.
     conditions.push(eq(invoicesTable.createdByUserId, session.userId));
+  } else if (session?.role === "customer") {
+    // A customer (mechanic/retailer portal login) only ever sees their own
+    // bills, regardless of the customerId query param. No linked entity →
+    // nothing, rather than every customer's invoices.
+    if (!session.entityId) {
+      res.json([]);
+      return;
+    }
+    conditions.push(eq(invoicesTable.customerId, session.entityId));
   } else if (params.data.salesmanId) {
     conditions.push(eq(invoicesTable.salesmanId, params.data.salesmanId));
   }
@@ -208,6 +218,12 @@ router.get("/invoices", async (req, res): Promise<void> => {
     // status=cancelled to see them; any other explicit status filter above
     // already narrows to that one status regardless of this branch.
     conditions.push(ne(invoicesTable.status, "cancelled"));
+  }
+
+  // ?belowRate=1 — only invoices a non-admin billed below the price-list rate.
+  // Read off req.query directly: the generated query schema doesn't know it.
+  if ((req.query as Record<string, unknown>).belowRate === "1") {
+    conditions.push(eq(invoicesTable.belowListRate, true));
   }
 
   const invoices = conditions.length > 0
@@ -556,6 +572,10 @@ router.post("/invoices", async (req, res): Promise<void> => {
       }
     }
 
+    // Snapshot each line's price-list rate and flag a below-rate sale by a
+    // non-admin (e.g. a store user allowed to change rates).
+    await applyListRateFlags(client, companyId, invRow.id, session?.role);
+
     await client.query("COMMIT");
 
     // Fetch with items
@@ -607,6 +627,11 @@ router.get("/invoices/:id", async (req, res): Promise<void> => {
       res.status(404).json({ error: "Invoice not found" });
       return;
     }
+  } else if (session?.role === "customer") {
+    if (!session.entityId || inv.customerId !== session.entityId) {
+      res.status(404).json({ error: "Invoice not found" });
+      return;
+    }
   } else if (isGstAccountant(req) && inv.invoiceType !== "gst") {
     res.status(404).json({ error: "Invoice not found" });
     return;
@@ -627,6 +652,11 @@ router.get("/invoices/:id", async (req, res): Promise<void> => {
   const body = formatInvoice(inv, items, createdByName, customerBalance, customerMobile);
   // Purchase cost / margin is internal, not GST data.
   if (isGstAccountant(req)) body.items = body.items.map((it) => ({ ...it, costPrice: null }));
+  // A customer viewing their own bill sees neither our cost nor our audit marks.
+  if (session?.role === "customer") {
+    body.items = body.items.map((it) => ({ ...it, costPrice: null, listRate: null }));
+    body.belowListRate = false;
+  }
   res.json(body);
 });
 
@@ -644,7 +674,7 @@ router.get("/invoices/:id/payment-receipts", async (req, res): Promise<void> => 
   }
 
   const companyId = getCompanyId(req);
-  const [inv] = await db.select({ id: invoicesTable.id, salesmanId: invoicesTable.salesmanId, createdByUserId: invoicesTable.createdByUserId, invoiceType: invoicesTable.invoiceType })
+  const [inv] = await db.select({ id: invoicesTable.id, salesmanId: invoicesTable.salesmanId, createdByUserId: invoicesTable.createdByUserId, invoiceType: invoicesTable.invoiceType, customerId: invoicesTable.customerId })
     .from(invoicesTable)
     .where(and(eq(invoicesTable.companyId, companyId), eq(invoicesTable.id, params.data.id)));
   if (!inv) {
@@ -660,6 +690,11 @@ router.get("/invoices/:id/payment-receipts", async (req, res): Promise<void> => 
     }
   } else if (session?.role === "store") {
     if (inv.createdByUserId !== session.userId) {
+      res.status(404).json({ error: "Invoice not found" });
+      return;
+    }
+  } else if (session?.role === "customer") {
+    if (!session.entityId || inv.customerId !== session.entityId) {
       res.status(404).json({ error: "Invoice not found" });
       return;
     }
@@ -1049,6 +1084,9 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
       ]
     );
 
+    // Re-check against the price list; an admin's edit clears the flag.
+    await applyListRateFlags(client, companyId, invoiceId, session?.role);
+
     await client.query("COMMIT");
 
     const [fullInv] = await db.select().from(invoicesTable).where(and(eq(invoicesTable.companyId, companyId), eq(invoicesTable.id, invoiceId)));
@@ -1348,6 +1386,7 @@ function formatInvoice(
     amountPaid: Number(inv.amountPaid),
     balanceDue: Number(inv.balanceDue),
     status: inv.status,
+    belowListRate: Boolean(inv.belowListRate),
     items: items.map(formatItem),
     createdAt: inv.createdAt?.toISOString?.() ?? inv.createdAt,
   };
@@ -1374,6 +1413,7 @@ function formatItem(i: any) {
     netPrice: Number(i.netPrice),
     amount: Number(i.amount),
     costPrice: i.costPrice != null ? Number(i.costPrice) : null,
+    listRate: i.listRate != null ? Number(i.listRate) : null,
   };
 }
 

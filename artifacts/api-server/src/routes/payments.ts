@@ -171,7 +171,15 @@ router.get("/payments", async (req, res): Promise<void> => {
 
   const companyId = getCompanyId(req);
   const conditions: any[] = [eq(paymentsTable.companyId, companyId)];
-  if (params.data.customerId) conditions.push(eq(paymentsTable.customerId, params.data.customerId));
+  const session = (req as any).session;
+  if (session?.role === "customer") {
+    // Customer portal login: only their own payments, whatever is asked for.
+    if (!session.entityId) {
+      res.json([]);
+      return;
+    }
+    conditions.push(eq(paymentsTable.customerId, session.entityId));
+  } else if (params.data.customerId) conditions.push(eq(paymentsTable.customerId, params.data.customerId));
   if (params.data.status) conditions.push(eq(paymentsTable.status, params.data.status));
   if (isGstAccountant(req)) {
     // Only payments settled purely against GST invoices. A receipt that also
