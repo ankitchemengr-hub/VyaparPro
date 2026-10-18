@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/use-auth";
 import { topNavItems, moduleNavItems, type Role } from "@/lib/nav-items";
+import { useRoleFeature } from "@/lib/permissions";
 import {
   CommandDialog,
   CommandInput,
@@ -52,6 +53,7 @@ export function CommandPalette({
 }) {
   const [, setLocation] = useLocation();
   const { hasRole } = useAuth();
+  const allows = useRoleFeature();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResults | null>(null);
 
@@ -89,11 +91,11 @@ export function CommandPalette({
   const navItems = useMemo(() => {
     const seen = new Set<string>();
     return [...topNavItems, ...moduleNavItems].filter((item) => {
-      if (seen.has(item.href) || !hasRole(item.roles as any)) return false;
+      if (seen.has(item.href) || !hasRole(item.roles as any) || (item.feature && !allows(item.feature))) return false;
       seen.add(item.href);
       return true;
     });
-  }, [hasRole]);
+  }, [hasRole, allows]);
 
   const actions = QUICK_ACTIONS.filter((a) => hasRole(a.roles as any));
   const customers = (results?.entities ?? []).filter((e) => e.type === "customer");

@@ -258,7 +258,13 @@ export default function Settings() {
   }, [permissions, hasChanges]);
 
   const roles = ["admin", "salesman", "store", "manufacturing", "accountant", "customer"];
-  const features = ["catalog_view", "catalog_edit", "billing", "inventory_edit", "payments_approve", "manufacturing_edit"];
+  const features = ["billing_rate_edit", "material_receive", "catalog_view", "catalog_edit", "billing", "inventory_edit", "payments_approve", "manufacturing_edit"];
+  // The first two are enforced by the app (billing Rate field, Material
+  // Received page + API); the rest are saved here but not yet enforced.
+  const FEATURE_INFO: Record<string, { label: string; hint?: string }> = {
+    billing_rate_edit: { label: "Billing — change rate", hint: "Can edit the Rate field while billing (store)" },
+    material_receive: { label: "Material Received — add", hint: "Can add finished goods received from manufacturing (add only, no edit/delete)" },
+  };
 
   const handleToggle = (role: string, feature: string, checked: boolean) => {
     setLocalPerms(prev => ({
@@ -354,7 +360,10 @@ export default function Settings() {
                     {features.map(feature => (
                       <tr key={feature} className="border-b hover:bg-muted/20 transition-colors">
                         <td className="px-4 py-3 font-medium text-foreground">
-                          {feature.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                          {FEATURE_INFO[feature]?.label ?? feature.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                          {FEATURE_INFO[feature]?.hint && (
+                            <div className="text-xs font-normal text-muted-foreground mt-0.5">{FEATURE_INFO[feature].hint}</div>
+                          )}
                         </td>
                         {roles.map(role => (
                           <td key={`${role}-${feature}`} className="px-4 py-3 text-center">

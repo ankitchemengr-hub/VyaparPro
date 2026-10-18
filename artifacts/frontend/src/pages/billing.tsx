@@ -47,6 +47,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { shareInvoiceImage } from "@/lib/share-invoice";
 import { usePrintTitle } from "@/lib/print-with-title";
+import { useRoleFeature, FEATURE_BILLING_RATE_EDIT } from "@/lib/permissions";
 
 type QtyMode = "unit" | "box";
 
@@ -293,6 +294,7 @@ function parseSearch(search: string) {
 export default function Billing() {
   const [, setLocation] = useLocation();
   const { user, hasRole } = useAuth();
+  const allowsFeature = useRoleFeature();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -739,7 +741,9 @@ export default function Billing() {
   // Who may type in the Rate field: admin always; a store user only when the
   // admin turned on "Can change rate while billing" in User Accounts.
   const isAdminUser = user?.role === "admin";
-  const canEditRate = isAdminUser || (user?.role === "store" && (user as any)?.canEditRate === true);
+  // Store user: allowed per user (User Accounts switch) or for the whole
+  // store role (Settings > Permissions "Billing Rate Edit").
+  const canEditRate = isAdminUser || (user?.role === "store" && ((user as any)?.canEditRate === true || allowsFeature(FEATURE_BILLING_RATE_EDIT)));
   // Non-admin billing a line below the price-list rate: beep on blur, ask on
   // save (never blocks), and the server marks the invoice "Below rate" for
   // the admin. Admin's own rates aren't second-guessed.

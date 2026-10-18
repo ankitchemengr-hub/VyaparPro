@@ -1,6 +1,11 @@
 import { Router, type IRouter } from "express";
 import { pool } from "@workspace/db";
 import { getCompanyId } from "../lib/tenant";
+import { roleAllows, ROLE_FEATURES } from "../lib/role-permission";
+
+// Production roles manage transfers fully; a store user may only ADD one,
+// and only when Settings > Permissions gives the store role "Material Receive".
+const TRANSFER_MANAGERS = new Set(["admin", "super_admin", "manufacturing"]);
 
 const router: IRouter = Router();
 
@@ -193,6 +198,10 @@ router.get("/material-transfers/:id", async (req, res): Promise<void> => {
 router.post("/material-transfers", async (req, res): Promise<void> => {
   const companyId = getCompanyId(req);
   const auth = (req as any).session;
+  if (!TRANSFER_MANAGERS.has(auth?.role) && !(await roleAllows(companyId, auth?.role, ROLE_FEATURES.materialReceive))) {
+    res.status(403).json({ error: "You don't have permission to add material received entries" });
+    return;
+  }
   const userId = auth?.userId ?? 1;
   const body = req.body as {
     transferDate?: string;
@@ -332,6 +341,10 @@ router.post("/material-transfers", async (req, res): Promise<void> => {
 router.patch("/material-transfers/:id", async (req, res): Promise<void> => {
   const companyId = getCompanyId(req);
   const auth = (req as any).session;
+  if (!TRANSFER_MANAGERS.has(auth?.role)) {
+    res.status(403).json({ error: "Only admin or manufacturing can edit a material transfer" });
+    return;
+  }
   const userId = auth?.userId ?? 1;
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) {

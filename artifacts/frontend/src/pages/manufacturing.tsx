@@ -2044,7 +2044,7 @@ function TransferItemsEditor({
   );
 }
 
-function MaterialTransferTab() {
+export function MaterialTransferTab({ canEdit = true }: { canEdit?: boolean } = {}) {
   const { data: transfers, isLoading } = useListMaterialTransfers();
   const { data: products } = useListProducts();
   const { user } = useAuth();
@@ -2330,6 +2330,7 @@ function MaterialTransferTab() {
                     >
                       <Eye className="h-3.5 w-3.5" />
                     </Button>
+                    {canEdit && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -2339,6 +2340,7 @@ function MaterialTransferTab() {
                     >
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
+                    )}
                     <Button
                       variant="outline"
                       size="sm"
@@ -2394,6 +2396,7 @@ function MaterialTransferTab() {
                     <Eye className="h-3.5 w-3.5 mr-1.5" />
                     View
                   </Button>
+                  {canEdit && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -2404,6 +2407,7 @@ function MaterialTransferTab() {
                     <Pencil className="h-3.5 w-3.5 mr-1.5" />
                     Edit
                   </Button>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"

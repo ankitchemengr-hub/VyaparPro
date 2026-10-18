@@ -474,6 +474,11 @@ router.patch("/workload/:id", async (req, res): Promise<void> => {
 // transaction. Prevents orphan workload cards on partial failure.
 router.post("/manufacturing/assemble", async (req, res): Promise<void> => {
   const companyId = getCompanyId(req);
+  const assembleRole = (req as any).session?.role;
+  if (assembleRole !== "admin" && assembleRole !== "super_admin" && assembleRole !== "manufacturing") {
+    res.status(403).json({ error: "Only admin or manufacturing can assemble" });
+    return;
+  }
   const parsed = AssembleItemBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });

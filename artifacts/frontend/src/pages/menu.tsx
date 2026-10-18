@@ -9,6 +9,7 @@ import {
   useListEntities, getListEntitiesQueryKey,
 } from "@workspace/api-client-react";
 import { moduleNavItems } from "@/lib/nav-items";
+import { useRoleFeature } from "@/lib/permissions";
 
 // Cycled per tile so the module grid reads as colorful/scannable at a glance
 // instead of every icon box sharing one flat brand-orange tint. Each entry is
@@ -31,10 +32,11 @@ const TILE_COLORS = [
 
 export default function Menu() {
   const { hasRole } = useAuth();
+  const allows = useRoleFeature();
   const [query, setQuery] = React.useState("");
   const trimmed = query.trim();
 
-  const modules = moduleNavItems.filter((item) => hasRole(item.roles as any));
+  const modules = moduleNavItems.filter((item) => hasRole(item.roles as any) && (!item.feature || allows(item.feature)));
   const filteredModules = trimmed
     ? modules.filter((item) => item.name.toLowerCase().includes(trimmed.toLowerCase()))
     : modules;
