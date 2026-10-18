@@ -201,14 +201,15 @@ router.post("/portal/register", async (req, res): Promise<void> => {
 
     await client.query("COMMIT");
     res.status(201).json({ companyId, subscriptionId: subRes.rows[0].id, requiresPayment: !onTrial });
+    // After the response — a slow mail server never delays signup. Only on a
+    // successful signup (these values don't exist on the early-return paths).
+    void sendWelcomeEmail({ companyId, planSlug: plan.slug, onTrial, trialEnd: end, loginUsername: username });
   } catch (err) {
     await client.query("ROLLBACK");
     logger.error({ err }, "Portal registration failed");
     res.status(500).json({ error: "Registration failed" });
   } finally {
     client.release();
-    // After the response — a slow mail server never delays signup.
-    void sendWelcomeEmail({ companyId, planSlug: plan.slug, onTrial, trialEnd: end, loginUsername: username });
   }
 });
 
