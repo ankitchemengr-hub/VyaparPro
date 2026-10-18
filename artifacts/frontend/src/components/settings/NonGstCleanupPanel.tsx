@@ -1,6 +1,6 @@
 // Settings → Data Management → Non-GST Data Cleanup. Two independent tabs
-// (Sales, Purchase), each with its own delete-by-date-range flow, automatic
-// schedule, deleted-bills list and history. "Delete" hides bills from every
+// (Sales, Purchase), each with its own delete-by-date-range flow and
+// automatic schedule. "Delete" hides bills from every
 // list and from non-admins; their amounts keep counting in reports, stock and
 // ledgers (see api-server lib/non-gst-cleanup.ts).
 
@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Trash2, Search, RotateCcw, CalendarClock, History, ShieldAlert, Lock } from "lucide-react";
+import { Loader2, Trash2, Search, CalendarClock, ShieldAlert, Lock } from "lucide-react";
 
 type Category = "sales" | "purchase";
 type Preset = "daily" | "weekly" | "monthly" | "yearly" | "custom";
@@ -54,7 +54,6 @@ interface Settings {
   enabled: boolean; frequency: "daily" | "weekly" | "monthly" | "yearly"; minAgeDays: number;
   nextRunAt: string | null; lastRunAt: string | null; lastJob: Job | null; retentionYears: number;
 }
-interface DeletedBill { id: number; recordNo: string; recordDate: string; partyName: string | null; amount: number; deletedAt: string; deletedBy: string | null; jobId: number | null }
 
 const inr = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const ymd = (d: Date) => format(d, "yyyy-MM-dd");
@@ -92,7 +91,7 @@ export function NonGstCleanupPanel() {
       <div className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground flex gap-2">
         <ShieldAlert className="w-4 h-4 mt-0.5 shrink-0 text-primary" />
         <div>
-          Deleting removes Non-GST bills from every Sales and Purchase list. Only admins can see or restore them.
+          Deleting removes Non-GST bills from every Sales and Purchase list.
           Their amounts keep counting in P&amp;L, Sales, Purchase, COGS, stock, party ledgers and the dashboard, so no total changes.
           GST bills are never touched.
         </div>
@@ -116,8 +115,6 @@ function CategoryCleanup({ category }: { category: Category }) {
     <div className="space-y-4">
       <DeleteCard category={category} onDone={refresh} />
       <ScheduleCard category={category} refreshTick={refreshTick} />
-      <DeletedBillsCard category={category} refreshTick={refreshTick} onChange={refresh} />
-      <HistoryCard category={category} refreshTick={refreshTick} onChange={refresh} />
     </div>
   );
 }
@@ -287,7 +284,7 @@ function DeleteCard({ category, onDone }: { category: Category; onDone: () => vo
               </div>
               <div className="text-muted-foreground">
                 Period {fmtDate(preview.dateFrom)} – {fmtDate(preview.dateTo)}. These bills disappear from the {category === "sales" ? "Sales" : "Purchase"} lists
-                and from non-admin users. P&amp;L, reports, stock and ledgers stay the same. You can restore them later from this page.
+                and from non-admin users. P&amp;L, reports, stock and ledgers stay the same.
               </div>
               <div className="space-y-1">
                 <Label htmlFor={`${category}-confirm`}>Type <span className="font-mono font-semibold">DELETE</span> to confirm</Label>
@@ -434,232 +431,6 @@ function ScheduleCard({ category, refreshTick }: { category: Category; refreshTi
           <Lock className="w-3 h-3" /> Permanent erasure is locked: accounting records must be kept for {settings.retentionYears} financial years, and erasing them would change past report totals.
         </div>
       </CardContent>
-    </Card>
-  );
-}
-
-// ── Deleted bills (admin-only recovery) ─────────────────────────────────
-
-function DeletedBillsCard({ category, refreshTick, onChange }: { category: Category; refreshTick: number; onChange: () => void }) {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const [rows, setRows] = useState<DeletedBill[] | null>(null);
-  const [search, setSearch] = useState("");
-  const [busyId, setBusyId] = useState<number | null>(null);
-
-  const load = useCallback(() => {
-    const q = new URLSearchParams(search ? { search } : {});
-    api<DeletedBill[]>(`/api/non-gst-cleanup/${category}/deleted?${q}`)
-      .then(setRows)
-      .catch((e) => toast({ title: "Could not load deleted bills", description: e.message, variant: "destructive" }));
-  }, [category, search, toast]);
-
-  useEffect(() => { load(); }, [load, refreshTick]);
-
-  const restore = async (bill: DeletedBill) => {
-    setBusyId(bill.id);
-    try {
-      await api(`/api/non-gst-cleanup/${category}/restore`, { method: "POST", body: JSON.stringify({ ids: [bill.id], idempotencyKey: newKey() }) });
-      toast({ title: `${bill.recordNo} restored` });
-      queryClient.invalidateQueries();
-      onChange();
-    } catch (e: any) {
-      toast({ title: "Restore failed", description: e.message, variant: "destructive" });
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2"><RotateCcw className="w-5 h-5" /> Deleted bills</CardTitle>
-        <CardDescription>Only admins can see this list. Restoring puts a bill back in the normal lists.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <Input placeholder={`Search ${LABEL[category].bill.toLowerCase()} no. or ${LABEL[category].party.toLowerCase()}`} value={search}
-          onChange={(e) => setSearch(e.target.value)} className="max-w-sm" />
-        <div className="max-h-80 overflow-auto rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>No.</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>{LABEL[category].party}</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-                <TableHead>Deleted</TableHead>
-                <TableHead />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows === null ? (
-                <TableRow><TableCell colSpan={6} className="text-center py-4"><Loader2 className="w-4 h-4 animate-spin inline" /></TableCell></TableRow>
-              ) : rows.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-4">No deleted bills.</TableCell></TableRow>
-              ) : rows.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell className="font-mono text-xs">
-                    {category === "sales" ? <a className="underline" href={`/invoices/${r.id}`}>{r.recordNo}</a> : r.recordNo}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">{fmtDate(r.recordDate)}</TableCell>
-                  <TableCell>{r.partyName ?? "—"}</TableCell>
-                  <TableCell className="text-right tabular-nums">{inr(r.amount)}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{fmtDateTime(r.deletedAt)}{r.deletedBy ? ` · ${r.deletedBy}` : " · scheduled"}</TableCell>
-                  <TableCell className="text-right">
-                    <Button size="sm" variant="outline" className="h-7" disabled={busyId === r.id} onClick={() => restore(r)}>
-                      {busyId === r.id ? <Loader2 className="w-3 h-3 animate-spin" /> : "Restore"}
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-// ── History / audit ─────────────────────────────────────────────────────
-
-function HistoryCard({ category, refreshTick, onChange }: { category: Category; refreshTick: number; onChange: () => void }) {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const [jobs, setJobs] = useState<Job[] | null>(null);
-  const [detail, setDetail] = useState<(Job & { items: any[] }) | null>(null);
-  const [restoring, setRestoring] = useState(false);
-
-  useEffect(() => {
-    api<Job[]>(`/api/non-gst-cleanup/${category}/jobs`)
-      .then(setJobs)
-      .catch((e) => toast({ title: "Could not load history", description: e.message, variant: "destructive" }));
-  }, [category, refreshTick, toast]);
-
-  const openJob = async (id: number) => {
-    try {
-      setDetail(await api(`/api/non-gst-cleanup/${category}/jobs/${id}`));
-    } catch (e: any) {
-      toast({ title: "Could not load job", description: e.message, variant: "destructive" });
-    }
-  };
-
-  const restoreJob = async (job: Job) => {
-    setRestoring(true);
-    try {
-      const { job: r } = await api<{ job: Job }>(`/api/non-gst-cleanup/${category}/restore`, {
-        method: "POST", body: JSON.stringify({ jobId: job.id, idempotencyKey: newKey() }),
-      });
-      toast({ title: `${r.processedCount} bill(s) restored` });
-      setDetail(null);
-      queryClient.invalidateQueries();
-      onChange();
-    } catch (e: any) {
-      toast({ title: "Restore failed", description: e.message, variant: "destructive" });
-    } finally {
-      setRestoring(false);
-    }
-  };
-
-  const statusVariant = (s: string) => (s === "succeeded" ? "secondary" : s === "failed" ? "destructive" : "outline") as any;
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2"><History className="w-5 h-5" /> History</CardTitle>
-        <CardDescription>Every delete and restore, manual or scheduled, with who ran it and what happened.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="max-h-80 overflow-auto rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Job</TableHead>
-                <TableHead>When</TableHead>
-                <TableHead>Action</TableHead>
-                <TableHead>Period</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Bills</TableHead>
-                <TableHead className="text-right">Value</TableHead>
-                <TableHead>By</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {jobs === null ? (
-                <TableRow><TableCell colSpan={8} className="text-center py-4"><Loader2 className="w-4 h-4 animate-spin inline" /></TableCell></TableRow>
-              ) : jobs.length === 0 ? (
-                <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-4">Nothing yet.</TableCell></TableRow>
-              ) : jobs.map((j) => (
-                <TableRow key={j.id} className="cursor-pointer" onClick={() => openJob(j.id)}>
-                  <TableCell className="font-mono text-xs">#{j.id}</TableCell>
-                  <TableCell className="whitespace-nowrap text-xs">{fmtDateTime(j.startedAt)}</TableCell>
-                  <TableCell className="capitalize">{j.action} <span className="text-xs text-muted-foreground">({j.trigger})</span></TableCell>
-                  <TableCell className="whitespace-nowrap text-xs">{j.action === "delete" ? `${j.dateFrom ? fmtDate(j.dateFrom) : "Start"} – ${fmtDate(j.dateTo)}` : "—"}</TableCell>
-                  <TableCell>
-                    <Badge variant={statusVariant(j.status)}>{j.status}</Badge>
-                    {j.error && <div className="text-xs text-destructive mt-0.5 max-w-xs truncate" title={j.error}>{j.error}</div>}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">{j.processedCount}{j.excludedCount > 0 && <span className="text-muted-foreground"> (+{j.excludedCount} left)</span>}</TableCell>
-                  <TableCell className="text-right tabular-nums">{inr(j.totalValue)}</TableCell>
-                  <TableCell className="text-xs">{j.operatorName ?? "—"}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      </CardContent>
-
-      <Dialog open={detail != null} onOpenChange={(o) => !o && setDetail(null)}>
-        <DialogContent className="max-w-3xl">
-          {detail && (
-            <>
-              <DialogHeader>
-                <DialogTitle>Job #{detail.id} · <span className="capitalize">{detail.action}</span> ({detail.trigger})</DialogTitle>
-                <DialogDescription>
-                  {fmtDateTime(detail.startedAt)} by {detail.operatorName ?? "—"} · {detail.status}
-                  {detail.error ? ` · ${detail.error}` : ""}
-                </DialogDescription>
-              </DialogHeader>
-              <div className="max-h-96 overflow-auto rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>No.</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead>{LABEL[category].party}</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
-                      <TableHead>Outcome</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {detail.items.length === 0 ? (
-                      <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-4">No bills.</TableCell></TableRow>
-                    ) : detail.items.map((it: any, idx: number) => (
-                      <TableRow key={idx}>
-                        <TableCell className="font-mono text-xs">{it.recordNo}</TableCell>
-                        <TableCell className="whitespace-nowrap">{fmtDate(it.recordDate)}</TableCell>
-                        <TableCell>{it.partyName ?? "—"}</TableCell>
-                        <TableCell className="text-right tabular-nums">{inr(it.amount)}</TableCell>
-                        <TableCell className="text-xs">
-                          <span className="capitalize">{it.outcome}</span>
-                          {it.reason && <span className="text-amber-700 dark:text-amber-400"> — {it.reason}</span>}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-              {detail.action === "delete" && detail.status === "succeeded" && detail.processedCount > 0 && (
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => restoreJob(detail)} disabled={restoring}>
-                    {restoring ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RotateCcw className="w-4 h-4 mr-2" />}
-                    Restore bills from this job that are still deleted
-                  </Button>
-                </DialogFooter>
-              )}
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
     </Card>
   );
 }

@@ -269,7 +269,7 @@ export default function InvoiceDetail() {
             <AlertTriangle className="w-4 h-4" /> Deleted on {format(new Date((invoice as any).deletedAt), "dd-MM-yyyy")} by Non-GST Data Cleanup
           </div>
           <p className="mt-1 text-amber-800/80 dark:text-amber-300/80">
-            Hidden from lists and from non-admin users. Its amounts still count in reports, stock and ledgers. Restore it from Settings → Data Management.
+            Hidden from lists and from non-admin users. Its amounts still count in reports, stock and ledgers.
           </p>
         </div>
       )}
