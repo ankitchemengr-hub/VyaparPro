@@ -267,6 +267,64 @@ router.put("/subscriptions/:companyId/domain-status", async (req, res): Promise<
   }
 });
 
+// ── Demo leads ("Book a Demo" form on the website) ─────────────────────────
+
+const LEAD_STATUSES = ["new", "contacted", "converted", "not_interested"] as const;
+
+function mapLead(r: any) {
+  return {
+    id: r.id,
+    name: r.name,
+    businessName: r.business_name ?? null,
+    mobile: r.mobile,
+    email: r.email ?? null,
+    businessType: r.business_type ?? null,
+    numUsers: r.num_users ?? null,
+    message: r.message ?? null,
+    status: r.status,
+    notes: r.notes ?? null,
+    createdAt: new Date(r.created_at).toISOString(),
+    updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : null,
+  };
+}
+
+// GET /subscriptions/demo-requests — every lead, newest first.
+router.get("/subscriptions/demo-requests", async (_req, res): Promise<void> => {
+  const { rows } = await pool.query(`SELECT * FROM demo_requests ORDER BY created_at DESC LIMIT 1000`);
+  res.json(rows.map(mapLead));
+});
+
+// PUT /subscriptions/demo-requests/:id { status?, notes? } — follow-up tracking.
+router.put("/subscriptions/demo-requests/:id", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  const { status, notes } = req.body ?? {};
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  if (status !== undefined && !LEAD_STATUSES.includes(status)) {
+    res.status(400).json({ error: `status must be one of ${LEAD_STATUSES.join(", ")}` });
+    return;
+  }
+  if (notes !== undefined && notes !== null && typeof notes !== "string") {
+    res.status(400).json({ error: "notes must be text" });
+    return;
+  }
+  const { rows } = await pool.query(
+    `UPDATE demo_requests
+       SET status = COALESCE($1, status),
+           notes = CASE WHEN $2::boolean THEN $3 ELSE notes END,
+           updated_at = NOW()
+     WHERE id = $4 RETURNING *`,
+    [status ?? null, notes !== undefined, notes === undefined ? null : (notes?.trim() || null), id],
+  );
+  if (rows.length === 0) {
+    res.status(404).json({ error: "Lead not found" });
+    return;
+  }
+  res.json(mapLead(rows[0]));
+});
+
 // POST /subscriptions/create — create company + subscription (SERIALIZABLE money op)
 router.post("/subscriptions/create", async (req, res): Promise<void> => {
 

@@ -4642,6 +4642,54 @@ export const ListDomainRequestsResponse = zod.array(ListDomainRequestsResponseIt
 
 
 /**
+ * @summary Every "Book a Demo" lead from the website, newest first
+ */
+export const ListDemoLeadsResponseItem = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "businessName": zod.string().nullable(),
+  "mobile": zod.string(),
+  "email": zod.string().nullable(),
+  "businessType": zod.string().nullable(),
+  "numUsers": zod.number().nullable(),
+  "message": zod.string().nullable(),
+  "status": zod.enum(['new', 'contacted', 'converted', 'not_interested']),
+  "notes": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date().nullable()
+})
+export const ListDemoLeadsResponse = zod.array(ListDemoLeadsResponseItem)
+
+
+/**
+ * @summary Update a demo lead's follow-up status and/or note
+ */
+export const UpdateDemoLeadParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateDemoLeadBody = zod.object({
+  "status": zod.enum(['new', 'contacted', 'converted', 'not_interested']).optional(),
+  "notes": zod.string().nullish()
+})
+
+export const UpdateDemoLeadResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "businessName": zod.string().nullable(),
+  "mobile": zod.string(),
+  "email": zod.string().nullable(),
+  "businessType": zod.string().nullable(),
+  "numUsers": zod.number().nullable(),
+  "message": zod.string().nullable(),
+  "status": zod.enum(['new', 'contacted', 'converted', 'not_interested']),
+  "notes": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date().nullable()
+})
+
+
+/**
  * @summary Mark a company's custom domain pending/active once staff finish (or undo) the manual DNS/SSL setup
  */
 export const SetDomainRequestStatusParams = zod.object({

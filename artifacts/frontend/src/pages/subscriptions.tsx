@@ -14,7 +14,9 @@ import {
   useListDomainRequests,
   useSetDomainRequestStatus,
   getListDomainRequestsQueryKey,
+  useListDemoLeads,
 } from "@workspace/api-client-react";
+import { DemoLeadsPanel } from "@/components/demo-leads-panel";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -194,6 +196,9 @@ export default function Subscriptions() {
   const alerts = useGetSubscriptionAlerts();
   const domainRequests = useListDomainRequests();
   const setDomainStatus = useSetDomainRequestStatus();
+  // Same query the Demo Leads tab uses — here only for the "(n new)" count.
+  const demoLeads = useListDemoLeads();
+  const newLeadCount = (demoLeads.data ?? []).filter((l) => l.status === "new").length;
   const list = useListSubscriptions({
     search: search || undefined,
     status: statusFilter === "all" ? undefined : statusFilter,
@@ -493,7 +498,17 @@ export default function Subscriptions() {
           <TabsTrigger value="domains">
             Domain Requests {domainRequests.data?.filter((r) => r.status === "pending").length ? `(${domainRequests.data.filter((r) => r.status === "pending").length})` : ""}
           </TabsTrigger>
+          <TabsTrigger value="leads" data-testid="tab-demo-leads">
+            Demo Leads
+            {newLeadCount > 0 && (
+              <span className="ml-1.5 rounded-full bg-blue-600 px-1.5 text-[10px] font-semibold text-white">{newLeadCount} new</span>
+            )}
+          </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="leads">
+          <DemoLeadsPanel />
+        </TabsContent>
 
         {/* SUBSCRIPTIONS TABLE */}
         <TabsContent value="subscriptions" className="space-y-4">

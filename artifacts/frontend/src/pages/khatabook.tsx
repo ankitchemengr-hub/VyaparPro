@@ -1,9 +1,9 @@
-import { useMemo, useState } from "react";
-import { Redirect, useLocation } from "wouter";
+import { useEffect, useMemo, useState } from "react";
+import { Redirect, useLocation, useSearch } from "wouter";
 import { useAuth } from "@/contexts/use-auth";
 import {
   useListKhatabook, useGetEntityLedger, getGetEntityLedgerQueryKey, getListKhatabookQueryKey,
-  useGetPaymentReceipt, getGetPaymentReceiptQueryKey, useListAccounts,
+  useGetPaymentReceipt, getGetPaymentReceiptQueryKey, useListAccounts, useCreateLedgerAdjustment,
   type AccountTransaction,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -18,7 +18,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Search, BookOpen, Printer, MessageCircle, Loader2, Phone, Receipt,
-  ArrowDownCircle, ArrowUpCircle,
+  ArrowDownCircle, ArrowUpCircle, ArrowLeft, ChevronRight, PlusCircle, MinusCircle, SlidersHorizontal,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { CashEntryDialog } from "@/components/cash-entry-dialog";
@@ -29,12 +29,45 @@ const formatRs = (n: number) =>
 
 type StatusFilter = "all" | "you_will_get" | "you_will_give" | "settled" | "due_today" | "upcoming" | "no_due_date";
 type SortBy = "highest" | "oldest" | "least";
+type PartyType = "customer" | "vendor";
 
+// Search / filter / sort per tab, kept for the page session so coming back
+// from a customer (or an invoice) shows the list exactly as it was left.
+const listStateStore = new Map<PartyType, { search: string; status: StatusFilter; sortBy: SortBy }>();
+
+// Set when a row is opened from the list, so the party page's Back can simply
+// step back in history (restoring scroll) instead of stacking a new entry.
+let openedFromList = false;
+
+export const khatabookListUrl = (type: PartyType) => `/khatabook?tab=${type}`;
+export const khatabookPartyUrl = (type: PartyType, id: number) => `/khatabook?tab=${type}&party=${id}`;
+
+// Flow: Khatabook list (every party's balance) → party page (balance, actions,
+// ledger; "Back to Khatabook" on top) → invoice (its Back returns to the party).
+// The open tab and party live in the URL, so the browser / phone Back button
+// follows the same path and a refresh keeps you where you were.
 export default function Khatabook() {
   const { hasRole } = useAuth();
-  const [tab, setTab] = useState<"customer" | "vendor">("customer");
+  const [, setLocation] = useLocation();
+  const params = new URLSearchParams(useSearch());
+  const tab: PartyType = params.get("tab") === "vendor" ? "vendor" : "customer";
+  const partyId = Number(params.get("party")) || null;
 
   if (!hasRole(["admin", "accountant"])) return <Redirect to="/" />;
+
+  if (partyId) {
+    return (
+      <KhatabookPartyPage
+        key={`${tab}-${partyId}`}
+        partyId={partyId}
+        type={tab}
+        onBack={() => {
+          if (openedFromList) { openedFromList = false; window.history.back(); }
+          else setLocation(khatabookListUrl(tab), { replace: true });
+        }}
+      />
+    );
+  }
 
   return (
     <div className="p-4 sm:p-6 space-y-4 print:hidden">
@@ -42,7 +75,7 @@ export default function Khatabook() {
         <BookOpen className="w-6 h-6 text-primary" />
         <h1 className="text-2xl font-bold tracking-tight">Khatabook</h1>
       </div>
-      <Tabs value={tab} onValueChange={(v) => setTab(v as "customer" | "vendor")}>
+      <Tabs value={tab} onValueChange={(v) => setLocation(khatabookListUrl(v as PartyType), { replace: true })}>
         <TabsList>
           <TabsTrigger value="customer" data-testid="tab-khatabook-customer">Customer</TabsTrigger>
           <TabsTrigger value="vendor" data-testid="tab-khatabook-vendor">Supplier</TabsTrigger>
@@ -58,12 +91,16 @@ export default function Khatabook() {
   );
 }
 
-function KhatabookTab({ type }: { type: "customer" | "vendor" }) {
+function KhatabookTab({ type }: { type: PartyType }) {
   const { data, isLoading } = useListKhatabook({ type });
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<StatusFilter>("all");
-  const [sortBy, setSortBy] = useState<SortBy>("highest");
-  const [selected, setSelected] = useState<{ id: number; name: string; mobile: string } | null>(null);
+  const [, setLocation] = useLocation();
+  const saved = listStateStore.get(type);
+  const [search, setSearch] = useState(saved?.search ?? "");
+  const [status, setStatus] = useState<StatusFilter>(saved?.status ?? "all");
+  const [sortBy, setSortBy] = useState<SortBy>(saved?.sortBy ?? "highest");
+  useEffect(() => {
+    listStateStore.set(type, { search, status, sortBy });
+  }, [type, search, status, sortBy]);
 
   const today = new Date().toISOString().slice(0, 10);
   const partyLabel = type === "customer" ? "Customer" : "Supplier";
@@ -175,7 +212,7 @@ function KhatabookTab({ type }: { type: "customer" | "vendor" }) {
                   key={e.id}
                   type="button"
                   className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/50 text-left"
-                  onClick={() => setSelected({ id: e.id, name: e.name, mobile: e.mobile })}
+                  onClick={() => { openedFromList = true; setLocation(khatabookPartyUrl(type, e.id)); }}
                   data-testid={`row-khatabook-${type}-${e.id}`}
                 >
                   <div className="min-w-0 flex-1">
@@ -188,24 +225,23 @@ function KhatabookTab({ type }: { type: "customer" | "vendor" }) {
                     </div>
                     {e.nextDueDate && <div className="text-[10px] text-muted-foreground">Due {e.nextDueDate}</div>}
                   </div>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
                 </button>
               ))}
             </div>
           )}
         </CardContent>
       </Card>
-
-      <KhatabookDetailDialog party={selected} type={type} onOpenChange={(open) => { if (!open) setSelected(null); }} />
     </div>
   );
 }
 
-function KhatabookDetailDialog({
-  party, type, onOpenChange,
+function KhatabookPartyPage({
+  partyId, type, onBack,
 }: {
-  party: { id: number; name: string; mobile: string } | null;
-  type: "customer" | "vendor";
-  onOpenChange: (open: boolean) => void;
+  partyId: number;
+  type: PartyType;
+  onBack: () => void;
 }) {
   const sign = type === "vendor" ? -1 : 1;
   const [, setLocation] = useLocation();
@@ -217,10 +253,20 @@ function KhatabookDetailDialog({
   const [viewingReceiptNo, setViewingReceiptNo] = useState<string | null>(null);
   const [entryDirection, setEntryDirection] = useState<"in" | "out" | null>(null);
   const [receiptTxn, setReceiptTxn] = useState<AccountTransaction | null>(null);
+  const [adjustOpen, setAdjustOpen] = useState(false);
 
-  const { data: ledger, isLoading } = useGetEntityLedger(party?.id ?? 0, {
-    query: { enabled: !!party, queryKey: getGetEntityLedgerQueryKey(party?.id ?? 0) },
+  const { data: ledger, isLoading } = useGetEntityLedger(partyId, {
+    query: { queryKey: getGetEntityLedgerQueryKey(partyId) },
   });
+  // Name/mobile from the (usually already cached) list, else from the ledger.
+  const { data: list } = useListKhatabook({ type });
+  const fromList = (list ?? []).find((e) => e.id === partyId);
+  const party = fromList
+    ? { id: fromList.id, name: fromList.name, mobile: fromList.mobile }
+    : ledger?.entity
+      ? { id: partyId, name: (ledger.entity as any).name ?? "", mobile: (ledger.entity as any).mobile ?? "" }
+      : null;
+  const partyLabel = type === "customer" ? "Customer" : "Supplier";
   const { data: accounts } = useListAccounts();
   const activeAccounts = (accounts ?? []).filter((a) => a.isActive);
 
@@ -264,12 +310,17 @@ function KhatabookDetailDialog({
 
   return (
     <>
-    <Dialog open={!!party} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto">
-        <DialogHeader className="print:hidden">
-          <DialogTitle>{party?.name}</DialogTitle>
-          <DialogDescription>Date-wise ledger entries.</DialogDescription>
-        </DialogHeader>
+    <div className="p-4 sm:p-6 space-y-4 max-w-4xl">
+        <div className="flex items-center gap-3 print:hidden">
+          <Button variant="outline" size="sm" onClick={onBack} data-testid="button-khatabook-back">
+            <ArrowLeft className="w-4 h-4 mr-1.5" /> Back to Khatabook
+          </Button>
+        </div>
+        <div className="print:hidden">
+          <div className="text-xs text-muted-foreground">{partyLabel}</div>
+          <h1 className="text-2xl font-bold tracking-tight">{party?.name ?? "…"}</h1>
+          {party?.mobile && <div className="text-sm text-muted-foreground">{party.mobile}</div>}
+        </div>
 
         <div className="hidden print:block mb-2">
           <h1 className="text-xl font-bold">{party?.name} — Ledger Report</h1>
@@ -295,6 +346,9 @@ function KhatabookDetailDialog({
               onClick={() => setEntryDirection("out")} data-testid="button-khatabook-payment-out"
             >
               <ArrowUpCircle className="w-4 h-4 mr-1.5" /> Payment Out
+            </Button>
+            <Button variant="outline" size="sm" className="flex-1 sm:flex-none" onClick={() => setAdjustOpen(true)} data-testid="button-khatabook-adjust">
+              <SlidersHorizontal className="w-4 h-4 mr-1.5" /> ± Adjust
             </Button>
             <Button variant="outline" size="sm" className="flex-1 sm:flex-none" onClick={openWaDialog} data-testid="button-whatsapp-reminder">
               <MessageCircle className="w-4 h-4 mr-1.5" /> Remind
@@ -337,7 +391,7 @@ function KhatabookDetailDialog({
                         <button
                           type="button"
                           className="truncate text-left text-primary hover:underline print:no-underline print:text-inherit"
-                          onClick={() => setLocation(`/invoices/${entry.referenceId}`)}
+                          onClick={() => setLocation(`/invoices/${entry.referenceId}?from=${encodeURIComponent(khatabookPartyUrl(type, partyId))}`)}
                           data-testid={`link-ledger-invoice-${entry.id}`}
                         >
                           {entry.description}
@@ -365,8 +419,7 @@ function KhatabookDetailDialog({
             </Table>
           </div>
         )}
-      </DialogContent>
-    </Dialog>
+    </div>
 
     <Dialog open={waOpen} onOpenChange={setWaOpen}>
       <DialogContent className="max-w-sm">
@@ -396,7 +449,151 @@ function KhatabookDetailDialog({
       onCreated={handleEntryCreated}
     />
     <CashReceiptDialog txn={receiptTxn} onClose={() => setReceiptTxn(null)} />
+    <AdjustmentDialog
+      open={adjustOpen}
+      onOpenChange={setAdjustOpen}
+      partyId={partyId}
+      partyName={party?.name ?? ""}
+      type={type}
+      outstanding={ledger?.outstandingBalance ?? 0}
+    />
     </>
+  );
+}
+
+// Manual +/- correction to a party's khata (opening balance, rounding,
+// settlement discount, a missed entry…). Posts a ledger "adjustment" entry —
+// shown in the ledger with its reason — and moves the balance immediately.
+//   Plus  → the party's balance goes up   (customer owes more / we owe the supplier more)
+//   Minus → the party's balance goes down (customer owes less / we owe the supplier less)
+function AdjustmentDialog({
+  open, onOpenChange, partyId, partyName, type, outstanding,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  partyId: number;
+  partyName: string;
+  type: PartyType;
+  outstanding: number;
+}) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const createAdjustment = useCreateLedgerAdjustment();
+  const [mode, setMode] = useState<"plus" | "minus">("plus");
+  const [amount, setAmount] = useState("");
+  const [reason, setReason] = useState("");
+
+  useEffect(() => {
+    if (open) { setMode("plus"); setAmount(""); setReason(""); }
+  }, [open]);
+
+  const sign = type === "vendor" ? -1 : 1;
+  const amt = Number(amount) || 0;
+  const after = outstanding + (mode === "plus" ? amt : -amt);
+  const label = (raw: number) => {
+    const b = raw * sign;
+    return `${formatRs(b)} ${b > 0 ? "(You Will Get)" : b < 0 ? "(You Will Give)" : "(Settled)"}`;
+  };
+  const plusText = type === "customer" ? "Customer owes more" : "We owe supplier more";
+  const minusText = type === "customer" ? "Customer owes less" : "We owe supplier less";
+
+  const save = async () => {
+    if (!(amt > 0)) {
+      toast({ title: "Enter an amount", variant: "destructive" });
+      return;
+    }
+    if (!reason.trim()) {
+      toast({ title: "Write a reason", description: "It is shown in the ledger next to this entry.", variant: "destructive" });
+      return;
+    }
+    try {
+      await createAdjustment.mutateAsync({
+        id: partyId,
+        data: {
+          direction: mode === "plus" ? "debit" : "credit",
+          amount: amt,
+          notes: `Adjustment (${mode === "plus" ? "+" : "−"}): ${reason.trim()}`,
+          attachmentUrl: null,
+        },
+      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: getGetEntityLedgerQueryKey(partyId) }),
+        queryClient.invalidateQueries({ queryKey: getListKhatabookQueryKey({ type }) }),
+        queryClient.invalidateQueries({ queryKey: ["ledger", partyId] }),
+      ]);
+      toast({ title: "Adjustment saved", description: `${partyName}: ${mode === "plus" ? "+" : "−"}${formatRs(amt)}. New balance ${label(after)}.` });
+      onOpenChange(false);
+    } catch (err: any) {
+      const msg = err?.data?.error ?? err?.message ?? "Could not save the adjustment.";
+      toast({ title: "Failed", description: msg, variant: "destructive" });
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Balance adjustment — {partyName}</DialogTitle>
+          <DialogDescription>Correct the khata by adding or reducing an amount. It is recorded in the ledger with your reason.</DialogDescription>
+        </DialogHeader>
+
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setMode("plus")}
+            className={`rounded-lg border-2 p-3 text-left transition-colors ${mode === "plus" ? "border-emerald-600 bg-emerald-50 dark:bg-emerald-950/30" : "border-border hover:bg-muted/50"}`}
+            data-testid="button-adjust-plus"
+          >
+            <div className="flex items-center gap-1.5 font-semibold text-emerald-700 dark:text-emerald-400"><PlusCircle className="w-4 h-4" /> Plus</div>
+            <div className="text-xs text-muted-foreground mt-0.5">{plusText}</div>
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("minus")}
+            className={`rounded-lg border-2 p-3 text-left transition-colors ${mode === "minus" ? "border-rose-600 bg-rose-50 dark:bg-rose-950/30" : "border-border hover:bg-muted/50"}`}
+            data-testid="button-adjust-minus"
+          >
+            <div className="flex items-center gap-1.5 font-semibold text-rose-700 dark:text-rose-400"><MinusCircle className="w-4 h-4" /> Minus</div>
+            <div className="text-xs text-muted-foreground mt-0.5">{minusText}</div>
+          </button>
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">Amount (₹)</label>
+          <Input
+            type="number" inputMode="decimal" min="0" step="0.01" autoFocus
+            value={amount} onChange={(e) => setAmount(e.target.value)}
+            placeholder="0.00" data-testid="input-adjust-amount"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">Reason</label>
+          <Input
+            value={reason} onChange={(e) => setReason(e.target.value)}
+            placeholder="e.g. Opening balance, rounding off, settlement discount"
+            maxLength={200} data-testid="input-adjust-reason"
+          />
+        </div>
+
+        <div className="rounded-md bg-muted/50 p-3 text-sm space-y-1">
+          <div className="flex justify-between gap-3"><span className="text-muted-foreground">Now</span><span className="font-mono">{label(outstanding)}</span></div>
+          <div className="flex justify-between gap-3 font-semibold"><span>After</span><span className="font-mono">{label(after)}</span></div>
+        </div>
+
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={createAdjustment.isPending}>Cancel</Button>
+          <Button
+            onClick={save}
+            disabled={createAdjustment.isPending}
+            className={mode === "plus" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-rose-600 hover:bg-rose-700"}
+            data-testid="button-adjust-save"
+          >
+            {createAdjustment.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+            Save {mode === "plus" ? "+" : "−"}{amt > 0 ? formatRs(amt) : ""}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

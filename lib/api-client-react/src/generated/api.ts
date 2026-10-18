@@ -67,6 +67,8 @@ import type {
   CustomerWiseSalesReport,
   DashboardSummary,
   DeleteSubscriptionResult,
+  DemoLead,
+  DemoLeadUpdate,
   DemoRequestInput,
   DomainRequest,
   Entity,
@@ -12678,6 +12680,154 @@ export function useListDomainRequests<TData = Awaited<ReturnType<typeof listDoma
 
 
 
+
+export const getListDemoLeadsUrl = () => {
+
+
+
+
+  return `/api/subscriptions/demo-requests`
+}
+
+/**
+ * @summary Every "Book a Demo" lead from the website, newest first
+ */
+export const listDemoLeads = async ( options?: RequestInit): Promise<DemoLead[]> => {
+
+  return customFetch<DemoLead[]>(getListDemoLeadsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListDemoLeadsQueryKey = () => {
+    return [
+    `/api/subscriptions/demo-requests`
+    ] as const;
+    }
+
+
+export const getListDemoLeadsQueryOptions = <TData = Awaited<ReturnType<typeof listDemoLeads>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDemoLeads>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListDemoLeadsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listDemoLeads>>> = ({ signal }) => listDemoLeads({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listDemoLeads>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListDemoLeadsQueryResult = NonNullable<Awaited<ReturnType<typeof listDemoLeads>>>
+export type ListDemoLeadsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Every "Book a Demo" lead from the website, newest first
+ */
+
+export function useListDemoLeads<TData = Awaited<ReturnType<typeof listDemoLeads>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDemoLeads>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListDemoLeadsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateDemoLeadUrl = (id: number,) => {
+
+
+
+
+  return `/api/subscriptions/demo-requests/${id}`
+}
+
+/**
+ * @summary Update a demo lead's follow-up status and/or note
+ */
+export const updateDemoLead = async (id: number,
+    demoLeadUpdate: DemoLeadUpdate, options?: RequestInit): Promise<DemoLead> => {
+
+  return customFetch<DemoLead>(getUpdateDemoLeadUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(demoLeadUpdate)
+  }
+);}
+
+
+
+
+export const getUpdateDemoLeadMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateDemoLead>>, TError,{id: number;data: BodyType<DemoLeadUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateDemoLead>>, TError,{id: number;data: BodyType<DemoLeadUpdate>}, TContext> => {
+
+const mutationKey = ['updateDemoLead'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateDemoLead>>, {id: number;data: BodyType<DemoLeadUpdate>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateDemoLead(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateDemoLeadMutationResult = NonNullable<Awaited<ReturnType<typeof updateDemoLead>>>
+    export type UpdateDemoLeadMutationBody = BodyType<DemoLeadUpdate>
+    export type UpdateDemoLeadMutationError = ErrorType<void>
+
+    /**
+ * @summary Update a demo lead's follow-up status and/or note
+ */
+export const useUpdateDemoLead = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateDemoLead>>, TError,{id: number;data: BodyType<DemoLeadUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateDemoLead>>,
+        TError,
+        {id: number;data: BodyType<DemoLeadUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateDemoLeadMutationOptions(options));
+    }
 
 export const getSetDomainRequestStatusUrl = (companyId: number,) => {
 

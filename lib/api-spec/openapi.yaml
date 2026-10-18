@@ -3322,6 +3322,48 @@ paths:
                 items:
                   $ref: "#/components/schemas/DomainRequest"
 
+  /subscriptions/demo-requests:
+    get:
+      operationId: listDemoLeads
+      tags: [subscriptions]
+      summary: Every "Book a Demo" lead from the website, newest first
+      responses:
+        "200":
+          description: Demo leads
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DemoLead"
+
+  /subscriptions/demo-requests/{id}:
+    put:
+      operationId: updateDemoLead
+      tags: [subscriptions]
+      summary: Update a demo lead's follow-up status and/or note
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DemoLeadUpdate"
+      responses:
+        "200":
+          description: Updated lead
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DemoLead"
+        "404":
+          description: Lead not found
+
   /subscriptions/{companyId}/domain-status:
     put:
       operationId: setDomainRequestStatus
@@ -7373,6 +7415,29 @@ components:
         businessType: { type: string }
         numUsers: { type: integer }
         message: { type: string }
+
+    DemoLead:
+      type: object
+      required: [id, name, businessName, mobile, email, businessType, numUsers, message, status, notes, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        businessName: { type: ["string", "null"] }
+        mobile: { type: string }
+        email: { type: ["string", "null"] }
+        businessType: { type: ["string", "null"] }
+        numUsers: { type: ["integer", "null"] }
+        message: { type: ["string", "null"] }
+        status: { type: string, enum: [new, contacted, converted, not_interested] }
+        notes: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: ["string", "null"], format: date-time }
+
+    DemoLeadUpdate:
+      type: object
+      properties:
+        status: { type: string, enum: [new, contacted, converted, not_interested] }
+        notes: { type: ["string", "null"] }
 
     PortalRegisterInput:
       type: object

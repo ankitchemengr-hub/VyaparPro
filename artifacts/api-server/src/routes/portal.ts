@@ -53,11 +53,38 @@ router.get("/portal/faqs", async (_req, res): Promise<void> => {
   res.json(rows.map((r) => ({ id: r.id, question: r.question, answer: r.answer })));
 });
 
-// POST /portal/demo-requests — "Book a Demo" / contact form.
+// Public form → cap submissions per IP so a bot can't flood the leads list
+// (or the admin's inbox). In-memory is enough for a single API instance.
+const DEMO_LIMIT_PER_HOUR = 5;
+const demoHits = new Map<string, number[]>();
+function demoRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const recent = (demoHits.get(ip) ?? []).filter((t) => now - t < 60 * 60 * 1000);
+  if (recent.length >= DEMO_LIMIT_PER_HOUR) {
+    demoHits.set(ip, recent);
+    return true;
+  }
+  recent.push(now);
+  demoHits.set(ip, recent);
+  return false;
+}
+
+const escapeHtml = (s: string) =>
+  s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+
+// POST /portal/demo-requests — "Book a Demo" / contact form. Saved as a lead
+// (Subscriptions admin console → Demo Leads tab) and emailed to the admin
+// straight away so it's followed up while the prospect is still interested.
 router.post("/portal/demo-requests", async (req, res): Promise<void> => {
   const parsed = CreateDemoRequestBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const forwarded = req.headers["x-forwarded-for"];
+  const ip = typeof forwarded === "string" ? forwarded.split(",")[0]!.trim() : (req.ip ?? "unknown");
+  if (demoRateLimited(ip)) {
+    res.status(429).json({ error: "Too many requests — please try again later or call us directly." });
     return;
   }
   const d = parsed.data;
@@ -66,6 +93,20 @@ router.post("/portal/demo-requests", async (req, res): Promise<void> => {
      VALUES ($1, $2, $3, $4, $5, $6, $7)`,
     [d.name, d.businessName ?? null, d.mobile, d.email ?? null, d.businessType ?? null, d.numUsers ?? null, d.message ?? null],
   );
+
+  const adminEmail = process.env["SMTP_USER"];
+  if (adminEmail) {
+    const row = (label: string, value: string | number | null | undefined) =>
+      value == null || value === "" ? "" : `<tr><td style="padding:2px 12px 2px 0;color:#666">${label}</td><td><b>${escapeHtml(String(value))}</b></td></tr>`;
+    void sendMail(
+      adminEmail,
+      `New demo request: ${d.name}${d.businessName ? ` (${d.businessName})` : ""}`.slice(0, 150),
+      `<p>A new "Book a Demo" request came in from the website:</p>
+       <table>${row("Name", d.name)}${row("Business", d.businessName)}${row("Mobile", d.mobile)}${row("Email", d.email)}${row("Business type", d.businessType)}${row("Users", d.numUsers)}</table>
+       ${d.message ? `<p style="white-space:pre-wrap">${escapeHtml(d.message)}</p>` : ""}
+       <p>See all leads in the Subscriptions admin console → Demo Leads.</p>`,
+    );
+  }
   res.status(201).end();
 });
 
