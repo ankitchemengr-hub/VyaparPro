@@ -442,6 +442,9 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
       status         TEXT NOT NULL DEFAULT 'new',
       created_at     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
     )`,
+    // Demo Leads tab: a follow-up note per lead and when it last changed.
+    `ALTER TABLE demo_requests ADD COLUMN IF NOT EXISTS notes TEXT`,
+    `ALTER TABLE demo_requests ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE`,
     `CREATE TABLE IF NOT EXISTS faqs (
       id          SERIAL PRIMARY KEY,
       question    TEXT NOT NULL,

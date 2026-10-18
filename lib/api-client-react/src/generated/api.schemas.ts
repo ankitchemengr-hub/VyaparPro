@@ -3193,6 +3193,54 @@ export interface DemoRequestInput {
   message?: string;
 }
 
+export type DemoLeadStatus = typeof DemoLeadStatus[keyof typeof DemoLeadStatus];
+
+
+export const DemoLeadStatus = {
+  new: 'new',
+  contacted: 'contacted',
+  converted: 'converted',
+  not_interested: 'not_interested',
+} as const;
+
+export interface DemoLead {
+  id: number;
+  name: string;
+  /** @nullable */
+  businessName: string | null;
+  mobile: string;
+  /** @nullable */
+  email: string | null;
+  /** @nullable */
+  businessType: string | null;
+  /** @nullable */
+  numUsers: number | null;
+  /** @nullable */
+  message: string | null;
+  status: DemoLeadStatus;
+  /** @nullable */
+  notes: string | null;
+  createdAt: string;
+  /** @nullable */
+  updatedAt: string | null;
+}
+
+export type DemoLeadUpdateStatus = typeof DemoLeadUpdateStatus[keyof typeof DemoLeadUpdateStatus];
+
+
+export const DemoLeadUpdateStatus = {
+  new: 'new',
+  contacted: 'contacted',
+  converted: 'converted',
+  not_interested: 'not_interested',
+} as const;
+
+export interface DemoLeadUpdate {
+  status?: DemoLeadUpdateStatus;
+  /** @nullable */
+  notes?: string | null;
+}
+
 export type PortalRegisterInputBillingCycle = typeof PortalRegisterInputBillingCycle[keyof typeof PortalRegisterInputBillingCycle];
 
 
