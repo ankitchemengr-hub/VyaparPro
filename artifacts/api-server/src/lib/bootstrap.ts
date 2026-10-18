@@ -493,6 +493,65 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
       created_at  TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
     )`,
     `CREATE INDEX IF NOT EXISTS password_reset_tokens_user_idx ON password_reset_tokens(user_id)`,
+    // ── Non-GST Data Cleanup (lib/non-gst-cleanup.ts) ──
+    // A "deleted" bill keeps status 'saved' so every report total is unchanged;
+    // deleted_at only hides it from lists and from non-admins.
+    `ALTER TABLE invoices ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE`,
+    `ALTER TABLE invoices ADD COLUMN IF NOT EXISTS deleted_by_user_id INTEGER`,
+    `ALTER TABLE invoices ADD COLUMN IF NOT EXISTS delete_job_id INTEGER`,
+    `ALTER TABLE invoices ADD COLUMN IF NOT EXISTS legal_hold BOOLEAN NOT NULL DEFAULT false`,
+    `ALTER TABLE purchases ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE`,
+    `ALTER TABLE purchases ADD COLUMN IF NOT EXISTS deleted_by_user_id INTEGER`,
+    `ALTER TABLE purchases ADD COLUMN IF NOT EXISTS delete_job_id INTEGER`,
+    `ALTER TABLE purchases ADD COLUMN IF NOT EXISTS legal_hold BOOLEAN NOT NULL DEFAULT false`,
+    `CREATE TABLE IF NOT EXISTS non_gst_cleanup_settings (
+      id            SERIAL PRIMARY KEY,
+      company_id    INTEGER NOT NULL,
+      category      TEXT NOT NULL,
+      enabled       BOOLEAN NOT NULL DEFAULT false,
+      frequency     TEXT NOT NULL DEFAULT 'monthly',
+      min_age_days  INTEGER NOT NULL DEFAULT 90,
+      next_run_at   TIMESTAMP WITH TIME ZONE,
+      last_run_at   TIMESTAMP WITH TIME ZONE,
+      last_job_id   INTEGER,
+      updated_at    TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+      CONSTRAINT non_gst_cleanup_settings_company_category_unique UNIQUE (company_id, category)
+    )`,
+    `CREATE TABLE IF NOT EXISTS non_gst_cleanup_jobs (
+      id               SERIAL PRIMARY KEY,
+      company_id       INTEGER NOT NULL,
+      category         TEXT NOT NULL,
+      trigger          TEXT NOT NULL,
+      action           TEXT NOT NULL,
+      date_from        TEXT,
+      date_to          TEXT,
+      status           TEXT NOT NULL DEFAULT 'running',
+      eligible_count   INTEGER NOT NULL DEFAULT 0,
+      processed_count  INTEGER NOT NULL DEFAULT 0,
+      excluded_count   INTEGER NOT NULL DEFAULT 0,
+      total_value      NUMERIC(14, 2) NOT NULL DEFAULT 0,
+      idempotency_key  TEXT NOT NULL,
+      operator_user_id INTEGER,
+      operator_name    TEXT,
+      error            TEXT,
+      started_at       TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+      finished_at      TIMESTAMP WITH TIME ZONE,
+      CONSTRAINT non_gst_cleanup_jobs_idempotency_unique UNIQUE (company_id, idempotency_key)
+    )`,
+    `CREATE INDEX IF NOT EXISTS non_gst_cleanup_jobs_company_idx ON non_gst_cleanup_jobs(company_id, category)`,
+    `CREATE TABLE IF NOT EXISTS non_gst_cleanup_job_items (
+      id          SERIAL PRIMARY KEY,
+      company_id  INTEGER NOT NULL,
+      job_id      INTEGER NOT NULL REFERENCES non_gst_cleanup_jobs(id) ON DELETE CASCADE,
+      record_id   INTEGER NOT NULL,
+      record_no   TEXT NOT NULL,
+      record_date TIMESTAMP WITH TIME ZONE,
+      party_name  TEXT,
+      amount      NUMERIC(12, 2) NOT NULL DEFAULT 0,
+      outcome     TEXT NOT NULL,
+      reason      TEXT
+    )`,
+    `CREATE INDEX IF NOT EXISTS non_gst_cleanup_job_items_job_idx ON non_gst_cleanup_job_items(job_id)`,
   ];
 
   for (const sql of patches) {

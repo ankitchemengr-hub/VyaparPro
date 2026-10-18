@@ -265,9 +265,12 @@ function SalesTab() {
                 <TableRow><TableCell colSpan={12} className="text-center py-8">Loading…</TableCell></TableRow>
               ) : items.length === 0 ? (
                 <TableRow><TableCell colSpan={12} className="text-center py-8 text-muted-foreground">No invoices in this range.</TableCell></TableRow>
-              ) : items.map(i => (
-                <TableRow key={i.id}>
-                  <TableCell className="font-mono text-xs">{i.invoiceNo}</TableCell>
+              ) : items.map((i, idx) => (
+                <TableRow key={i.id ?? `deleted-${idx}`}>
+                  <TableCell className="font-mono text-xs">
+                    {i.invoiceNo}
+                    {(i as any).deleted && <Badge variant="outline" className="ml-1.5 text-[10px] text-muted-foreground">Deleted</Badge>}
+                  </TableCell>
                   <TableCell className="whitespace-nowrap">{format(new Date(i.invoiceDate), "dd-MM-yyyy")}</TableCell>
                   <TableCell>
                     <Badge variant={i.invoiceType === "gst" ? "default" : "secondary"} className="uppercase">{i.invoiceType.replace("_", " ")}</Badge>
@@ -926,9 +929,12 @@ function BillWiseProfitTab() {
                 <TableRow><TableCell colSpan={8} className="text-center py-8">Loading…</TableCell></TableRow>
               ) : items.length === 0 ? (
                 <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No invoices in this range.</TableCell></TableRow>
-              ) : items.map(i => (
-                <TableRow key={i.id}>
-                  <TableCell className="font-mono text-xs">{i.invoiceNo}</TableCell>
+              ) : items.map((i, idx) => (
+                <TableRow key={i.id ?? `deleted-${idx}`}>
+                  <TableCell className="font-mono text-xs">
+                    {i.invoiceNo}
+                    {(i as any).deleted && <Badge variant="outline" className="ml-1.5 text-[10px] text-muted-foreground">Deleted</Badge>}
+                  </TableCell>
                   <TableCell className="whitespace-nowrap">{format(new Date(i.invoiceDate), "dd-MM-yyyy")}</TableCell>
                   <TableCell>
                     <Badge variant={i.invoiceType === "gst" ? "default" : "secondary"} className="uppercase">{i.invoiceType.replace("_", " ")}</Badge>

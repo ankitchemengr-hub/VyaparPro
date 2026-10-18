@@ -18,6 +18,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { ArrowLeft, Printer, Loader2, LayoutTemplate, IndianRupee, MessageCircle, Share2, AlertTriangle } from "lucide-react";
+import { format } from "date-fns";
 import { shareInvoiceImage } from "@/lib/share-invoice";
 import { usePrintTitle } from "@/lib/print-with-title";
 import { useAuth } from "@/contexts/use-auth";
@@ -260,6 +261,18 @@ export default function InvoiceDetail() {
           </Button>
         </div>
       </div>
+
+      {/* Removed by Settings → Data Management → Non-GST Data Cleanup — only admins can open it. */}
+      {(invoice as any).deletedAt && (
+        <div className="rounded-lg border-2 border-amber-400 bg-amber-50 dark:bg-amber-950/30 p-3 text-sm print:hidden no-print" data-testid="banner-deleted">
+          <div className="flex items-center gap-2 font-semibold text-amber-800 dark:text-amber-300">
+            <AlertTriangle className="w-4 h-4" /> Deleted on {format(new Date((invoice as any).deletedAt), "dd-MM-yyyy")} by Non-GST Data Cleanup
+          </div>
+          <p className="mt-1 text-amber-800/80 dark:text-amber-300/80">
+            Hidden from lists and from non-admin users. Its amounts still count in reports, stock and ledgers. Restore it from Settings → Data Management.
+          </p>
+        </div>
+      )}
 
       {/* Staff billed below the price list — admin sees which lines and by how much. */}
       {isAdmin && (invoice as any).belowListRate && (() => {

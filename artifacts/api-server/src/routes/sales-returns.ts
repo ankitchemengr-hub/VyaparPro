@@ -71,7 +71,7 @@ router.get("/invoices/:id/returnable-items", async (req, res): Promise<void> => 
   try {
     const invRes = await pool.query(
       `SELECT id, invoice_no, invoice_date, invoice_type, customer_id, customer_name, status
-       FROM invoices WHERE id = $1 AND company_id = $2`,
+       FROM invoices WHERE id = $1 AND company_id = $2 AND deleted_at IS NULL`,
       [parsed.data.id, companyId],
     );
     const inv = invRes.rows[0];
@@ -177,7 +177,7 @@ router.post("/sales-returns", async (req, res): Promise<void> => {
 
     const invRes = await client.query(
       `SELECT id, invoice_no, invoice_type, customer_id, customer_name, status, salesman_id, salesman_name
-       FROM invoices WHERE id = $1 AND company_id = $2 FOR UPDATE`,
+       FROM invoices WHERE id = $1 AND company_id = $2 AND deleted_at IS NULL FOR UPDATE`,
       [data.invoiceId, companyId],
     );
     const inv = invRes.rows[0];

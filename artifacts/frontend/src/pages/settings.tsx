@@ -10,10 +10,11 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { ShieldCheck, Save, Printer, Hash, RefreshCw, Loader2, Building2, PieChart } from "lucide-react";
+import { ShieldCheck, Save, Printer, Hash, RefreshCw, Loader2, Building2, PieChart, Database } from "lucide-react";
 import { PrintSettingsPanel } from "@/components/settings/PrintSettingsPanel";
 import { CompanyProfilePanel } from "@/components/settings/CompanyProfilePanel";
 import { DashboardChartsPanel } from "@/components/settings/DashboardChartsPanel";
+import { NonGstCleanupPanel } from "@/components/settings/NonGstCleanupPanel";
 
 const TYPE_LABELS: Record<string, string> = {
   invoice: "Invoice",
@@ -313,6 +314,9 @@ export default function Settings() {
           <TabsTrigger value="dashboard" data-testid="tab-dashboard">
             <PieChart className="mr-2 h-4 w-4" /> Dashboard
           </TabsTrigger>
+          <TabsTrigger value="data-management" data-testid="tab-data-management">
+            <Database className="mr-2 h-4 w-4" /> Data Management
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="sequences" className="space-y-4 mt-4">
@@ -376,6 +380,10 @@ export default function Settings() {
 
         <TabsContent value="company" className="mt-4">
           <CompanyProfilePanel />
+        </TabsContent>
+
+        <TabsContent value="data-management" className="mt-4">
+          <NonGstCleanupPanel />
         </TabsContent>
 
         <TabsContent value="dashboard" className="mt-4">

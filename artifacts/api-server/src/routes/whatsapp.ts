@@ -117,7 +117,7 @@ router.post("/whatsapp/send/invoice", async (req, res): Promise<void> => {
        FROM invoices i
        LEFT JOIN entities e ON e.id = i.customer_id AND e.company_id = i.company_id
        LEFT JOIN companies c ON c.id = i.company_id
-       WHERE i.company_id = $1 AND i.id = $2`,
+       WHERE i.company_id = $1 AND i.id = $2 AND i.deleted_at IS NULL`,
       [companyId, invoiceId],
     );
     if (invRes.rows.length === 0) { res.status(404).json({ error: "Invoice not found" }); return; }
@@ -157,7 +157,7 @@ router.post("/whatsapp/send/payment-reminder", async (req, res): Promise<void> =
          FROM invoices i
          LEFT JOIN entities e ON e.id = i.customer_id AND e.company_id = i.company_id
          LEFT JOIN companies c ON c.id = i.company_id
-         WHERE i.company_id = $1 AND i.id = $2`,
+         WHERE i.company_id = $1 AND i.id = $2 AND i.deleted_at IS NULL`,
         [companyId, invoiceId],
       );
       if (invRes.rows[0]) {

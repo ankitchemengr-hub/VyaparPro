@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, numeric, index, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, numeric, boolean, index, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { entitiesTable } from "./entities";
@@ -30,6 +30,11 @@ export const purchasesTable = pgTable("purchases", {
   balanceDue: numeric("balance_due", { precision: 12, scale: 2 }).notNull().default("0"),
   status: text("status").notNull().default("saved"),
   createdByUserId: integer("created_by_user_id"),
+  // Non-GST Data Cleanup — same meaning as on invoices.
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  deletedByUserId: integer("deleted_by_user_id"),
+  deleteJobId: integer("delete_job_id"),
+  legalHold: boolean("legal_hold").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (t) => [

@@ -42,6 +42,14 @@ export const invoicesTable = pgTable("invoices", {
   // (see lib/list-rate.ts). Shown as "Below rate" in the invoice list.
   belowListRate: boolean("below_list_rate").notNull().default(false),
   createdByUserId: integer("created_by_user_id"),
+  // Non-GST Data Cleanup "delete" (see lib/non-gst-cleanup.ts): the bill is
+  // hidden from every list and from non-admins, but status stays 'saved' so
+  // reports, P&L, stock and ledgers keep counting it exactly as before.
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  deletedByUserId: integer("deleted_by_user_id"),
+  deleteJobId: integer("delete_job_id"),
+  // Blocks the cleanup from ever deleting this bill.
+  legalHold: boolean("legal_hold").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (t) => [

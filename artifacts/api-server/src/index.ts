@@ -3,6 +3,7 @@ import { ensureDatabaseReady } from "./lib/bootstrap";
 import { logger } from "./lib/logger";
 import { startSubscriptionScheduler } from "./lib/subscription-scheduler";
 import { startBackupScheduler, registerShutdownBackup } from "./lib/backup-scheduler";
+import { startNonGstCleanupScheduler } from "./lib/non-gst-cleanup-scheduler";
 import { isMultiCompanyMode, getDefaultCompanyId } from "./lib/system-config";
 import { getCurrentCompany } from "./lib/company";
 
@@ -29,6 +30,7 @@ async function start(): Promise<void> {
   startBackupScheduler();
   registerShutdownBackup();
   startSubscriptionScheduler();
+  startNonGstCleanupScheduler();
 }
 
 // Execute the start function

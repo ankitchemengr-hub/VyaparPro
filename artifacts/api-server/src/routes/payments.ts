@@ -554,7 +554,7 @@ router.post("/payments", async (req, res): Promise<void> => {
         // when none was passed), so a strict equality check here would wrongly
         // reject linking a walk-in payment to its own walk-in invoice.
         const invCheck = await client.query(
-          `SELECT id FROM invoices WHERE id = $1 AND company_id = $2 AND (customer_id = $3 OR customer_id IS NULL) AND status != 'cancelled'`,
+          `SELECT id FROM invoices WHERE id = $1 AND company_id = $2 AND (customer_id = $3 OR customer_id IS NULL) AND status != 'cancelled' AND deleted_at IS NULL`,
           [parsed.data.invoiceId, companyId, customerId]
         );
         if (invCheck.rowCount === 0) {

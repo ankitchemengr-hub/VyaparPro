@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, ilike, sql, or, ne, inArray } from "drizzle-orm";
+import { eq, and, ilike, sql, or, ne, inArray, isNull } from "drizzle-orm";
 import { db, pool } from "@workspace/db";
 import {
   invoicesTable,
@@ -139,7 +139,9 @@ router.get("/invoices", async (req, res): Promise<void> => {
 
   const companyId = getCompanyId(req);
   const session = (req as any).session;
-  const conditions: any[] = [eq(invoicesTable.companyId, companyId)];
+  // Bills removed by Non-GST Data Cleanup never show in any list — admins
+  // see them only under Settings → Data Management.
+  const conditions: any[] = [eq(invoicesTable.companyId, companyId), isNull(invoicesTable.deletedAt)];
   if (params.data.customerId) conditions.push(eq(invoicesTable.customerId, params.data.customerId));
 
   // Server-side scoping: a salesman can only ever see invoices linked to their own
@@ -618,7 +620,8 @@ router.get("/invoices/:id", async (req, res): Promise<void> => {
 
   const companyId = getCompanyId(req);
   const [inv] = await db.select().from(invoicesTable).where(and(eq(invoicesTable.companyId, companyId), eq(invoicesTable.id, params.data.id)));
-  if (!inv) {
+  // A bill deleted by Non-GST Data Cleanup is visible to admins only.
+  if (!inv || (inv.deletedAt && (req as any).session?.role !== "admin")) {
     res.status(404).json({ error: "Invoice not found" });
     return;
   }
@@ -688,10 +691,10 @@ router.get("/invoices/:id/payment-receipts", async (req, res): Promise<void> => 
   }
 
   const companyId = getCompanyId(req);
-  const [inv] = await db.select({ id: invoicesTable.id, salesmanId: invoicesTable.salesmanId, createdByUserId: invoicesTable.createdByUserId, invoiceType: invoicesTable.invoiceType, customerId: invoicesTable.customerId })
+  const [inv] = await db.select({ id: invoicesTable.id, salesmanId: invoicesTable.salesmanId, createdByUserId: invoicesTable.createdByUserId, invoiceType: invoicesTable.invoiceType, customerId: invoicesTable.customerId, deletedAt: invoicesTable.deletedAt })
     .from(invoicesTable)
     .where(and(eq(invoicesTable.companyId, companyId), eq(invoicesTable.id, params.data.id)));
-  if (!inv) {
+  if (!inv || (inv.deletedAt && (req as any).session?.role !== "admin")) {
     res.status(404).json({ error: "Invoice not found" });
     return;
   }
@@ -761,6 +764,14 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
   const data = parsed.data;
   const isFullEdit = Array.isArray(data.items);
 
+  // A deleted bill is read-only until it's restored from Data Management.
+  const [deletedCheck] = await db.select({ deletedAt: invoicesTable.deletedAt }).from(invoicesTable)
+    .where(and(eq(invoicesTable.companyId, companyId), eq(invoicesTable.id, invoiceId)));
+  if (deletedCheck?.deletedAt) {
+    res.status(409).json({ error: "This bill was deleted by Non-GST Data Cleanup. Restore it before editing." });
+    return;
+  }
+
   // ─────────────── Mode 1: header-only patch ───────────────
   if (!isFullEdit) {
     const updates: Record<string, unknown> = {};
@@ -810,6 +821,11 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
     if (existing.status === "cancelled") {
       await client.query("ROLLBACK");
       res.status(409).json({ error: "Cannot edit a cancelled invoice" });
+      return;
+    }
+    if (existing.deleted_at) {
+      await client.query("ROLLBACK");
+      res.status(409).json({ error: "This bill was deleted by Non-GST Data Cleanup. Restore it before editing." });
       return;
     }
     // Block edits when payment has already been collected — changing the customer or
@@ -1139,12 +1155,17 @@ router.delete("/invoices/:id", async (req, res): Promise<void> => {
     // (exists but already cancelled). Read inside the txn client so it
     // participates in the SERIALIZABLE snapshot.
     const existsRes = await client.query(
-      `SELECT id FROM invoices WHERE id = $1 AND company_id = $2`,
+      `SELECT id, deleted_at FROM invoices WHERE id = $1 AND company_id = $2`,
       [params.data.id, companyId]
     );
     if (existsRes.rowCount === 0) {
       await client.query("ROLLBACK");
       res.status(404).json({ error: "Invoice not found" });
+      return;
+    }
+    if (existsRes.rows[0].deleted_at) {
+      await client.query("ROLLBACK");
+      res.status(409).json({ error: "This bill was deleted by Non-GST Data Cleanup. Restore it before cancelling." });
       return;
     }
 
@@ -1401,6 +1422,7 @@ function formatInvoice(
     balanceDue: Number(inv.balanceDue),
     status: inv.status,
     belowListRate: Boolean(inv.belowListRate),
+    deletedAt: inv.deletedAt ? (inv.deletedAt?.toISOString?.() ?? inv.deletedAt) : null,
     items: items.map(formatItem),
     createdAt: inv.createdAt?.toISOString?.() ?? inv.createdAt,
   };

@@ -203,7 +203,7 @@ router.get("/dashboard/recent-invoices", async (req, res): Promise<void> => {
   const companyId = getCompanyId(req);
   const rows = await queryMany(
     `SELECT id, invoice_no, invoice_date, customer_name, grand_total, status
-     FROM invoices WHERE company_id = $1 AND status = 'saved' ORDER BY created_at DESC LIMIT 10`,
+     FROM invoices WHERE company_id = $1 AND status = 'saved' AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 10`,
     [companyId]
   );
 
@@ -558,7 +558,7 @@ router.get("/search", async (req, res): Promise<void> => {
     queryMany(
       `SELECT id, invoice_no, invoice_date, customer_name, grand_total, status
        FROM invoices
-       WHERE company_id = $1 AND (invoice_no ILIKE $2 OR customer_name ILIKE $2)
+       WHERE company_id = $1 AND deleted_at IS NULL AND (invoice_no ILIKE $2 OR customer_name ILIKE $2)
        ORDER BY created_at DESC LIMIT 5`,
       [companyId, pattern]
     ),

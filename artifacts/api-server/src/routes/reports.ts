@@ -26,6 +26,17 @@ function requireAdmin(req: any, res: any, allowGstAccountant = false): boolean {
   return true;
 }
 
+// Bills deleted by Non-GST Data Cleanup stay in every report (status is still
+// 'saved'), so totals never change. Only an admin may see which bill a row
+// is; anyone else gets the amounts with the bill's identity masked.
+function maskDeletedBill<T extends { id: number | null; invoiceNo: string; customerId: number | null; customerName: string | null }>(
+  req: any, row: T, deletedAt: unknown,
+): T & { deleted: boolean } {
+  if (!deletedAt) return { ...row, deleted: false };
+  if (req.session?.role === "admin") return { ...row, deleted: true };
+  return { ...row, id: null, invoiceNo: "Deleted bill", customerId: null, customerName: null, deleted: true };
+}
+
 function dateRange(req: any): { from: Date | null; to: Date | null; clauses: string[]; params: any[] } {
   const params: any[] = [];
   const clauses: string[] = [];
@@ -58,21 +69,21 @@ router.get("/reports/sales", async (req, res): Promise<void> => {
   const rows = await queryMany(
     `SELECT id, invoice_no, invoice_date, invoice_type, customer_id, customer_name,
             customer_gstin, place_of_supply, subtotal, total_discount, total_tax,
-            cgst, sgst, igst, freight, round_off, grand_total, amount_paid, balance_due, status
+            cgst, sgst, igst, freight, round_off, grand_total, amount_paid, balance_due, status, deleted_at
      FROM invoices
      WHERE ${where.join(" AND ")}
      ORDER BY invoice_date DESC, id DESC
      LIMIT 1000`, params
   );
 
-  const items = rows.map(r => ({
+  const items = rows.map(r => maskDeletedBill(req, {
     id: r.id,
     invoiceNo: r.invoice_no,
     invoiceDate: new Date(r.invoice_date).toISOString(),
     invoiceType: r.invoice_type,
     customerId: r.customer_id,
     customerName: r.customer_name,
-    customerGstin: r.customer_gstin,
+    customerGstin: r.deleted_at && (req as any).session?.role !== "admin" ? null : r.customer_gstin,
     placeOfSupply: r.place_of_supply,
     subtotal: Number(r.subtotal),
     totalDiscount: Number(r.total_discount),
@@ -86,7 +97,7 @@ router.get("/reports/sales", async (req, res): Promise<void> => {
     amountPaid: Number(r.amount_paid),
     balanceDue: Number(r.balance_due),
     status: r.status,
-  }));
+  }, r.deleted_at));
 
   const totals = items.reduce((acc, it) => {
     acc.subtotal += it.subtotal;
@@ -432,13 +443,13 @@ router.get("/reports/bill-wise-profit", async (req, res): Promise<void> => {
     // margin, falling back to the product's current purchase price for
     // rows saved before cost_price existed.
     `SELECT i.id, i.invoice_no, i.invoice_date, i.invoice_type, i.customer_id, i.customer_name,
-            i.subtotal, i.grand_total,
+            i.subtotal, i.grand_total, i.deleted_at,
             COALESCE(SUM(ii.qty * COALESCE(ii.cost_price, prod.purchase_price, 0)), 0) AS cogs
      FROM invoices i
      JOIN invoice_items ii ON ii.invoice_id = i.id
      JOIN products prod ON prod.id = ii.product_id
      WHERE ${where.join(" AND ")}
-     GROUP BY i.id, i.invoice_no, i.invoice_date, i.invoice_type, i.customer_id, i.customer_name, i.subtotal, i.grand_total
+     GROUP BY i.id, i.invoice_no, i.invoice_date, i.invoice_type, i.customer_id, i.customer_name, i.subtotal, i.grand_total, i.deleted_at
      ORDER BY i.invoice_date DESC, i.id DESC
      LIMIT 1000`, params
   );
@@ -447,7 +458,7 @@ router.get("/reports/bill-wise-profit", async (req, res): Promise<void> => {
     const revenue = Number(r.subtotal);
     const cogs = Number(r.cogs);
     const profit = revenue - cogs;
-    return {
+    return maskDeletedBill(req, {
       id: r.id,
       invoiceNo: r.invoice_no,
       invoiceDate: new Date(r.invoice_date).toISOString(),
@@ -459,7 +470,7 @@ router.get("/reports/bill-wise-profit", async (req, res): Promise<void> => {
       profit,
       marginPct: revenue > 0 ? (profit / revenue) * 100 : 0,
       grandTotal: Number(r.grand_total),
-    };
+    }, r.deleted_at);
   });
 
   const totals = items.reduce((acc, it) => {

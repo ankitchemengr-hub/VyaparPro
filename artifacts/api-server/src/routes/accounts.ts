@@ -390,7 +390,7 @@ router.post("/account-transactions", async (req, res): Promise<void> => {
       // customer entity selected) — still valid to link if the party this
       // Cash Book entry is linked to is the customer it's actually for.
       const invRes = await client.query(
-        `SELECT id FROM invoices WHERE id = $1 AND company_id = $2 AND (customer_id = $3 OR customer_id IS NULL) AND status != 'cancelled'`,
+        `SELECT id FROM invoices WHERE id = $1 AND company_id = $2 AND (customer_id = $3 OR customer_id IS NULL) AND status != 'cancelled' AND deleted_at IS NULL`,
         [invoiceId, companyId, partyEntityId],
       );
       if (invRes.rowCount === 0) {

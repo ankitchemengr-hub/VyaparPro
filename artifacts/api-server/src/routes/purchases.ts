@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, isNull } from "drizzle-orm";
 import { db, pool } from "@workspace/db";
 import {
   purchasesTable,
@@ -219,7 +219,8 @@ router.get("/purchases", async (req, res): Promise<void> => {
     return;
   }
   const companyId = getCompanyId(req);
-  const conditions: any[] = [eq(purchasesTable.companyId, companyId)];
+  // Bills removed by Non-GST Data Cleanup never show in any list.
+  const conditions: any[] = [eq(purchasesTable.companyId, companyId), isNull(purchasesTable.deletedAt)];
   if (parsed.data.vendorId) conditions.push(eq(purchasesTable.vendorId, parsed.data.vendorId));
   if (parsed.data.status) conditions.push(eq(purchasesTable.status, parsed.data.status));
   if (isGstAccountant(req)) conditions.push(eq(purchasesTable.billType, "gst"));
@@ -260,7 +261,7 @@ router.get("/purchases/report", async (req, res): Promise<void> => {
   try {
     const result = await pool.query(
       `SELECT p.id as purchase_id, p.bill_date, p.vendor_name, p.bill_no, p.vendor_bill_no,
-              p.grand_total, p.bill_type,
+              p.grand_total, p.bill_type, p.deleted_at,
               pi.product_id, pi.product_name, pi.qty, pi.unit,
               pi.rate, pi.tax_pct, pi.discount_pct, pi.amount
        FROM purchases p
@@ -269,12 +270,15 @@ router.get("/purchases/report", async (req, res): Promise<void> => {
        ORDER BY p.bill_date DESC, p.id DESC, pi.id ASC`,
       params,
     );
+    // Bills deleted by Non-GST Data Cleanup stay in the report so its totals
+    // never change; non-admins see the amounts but not which bill it was.
+    const isAdmin = auth.role === "admin";
     res.json(result.rows.map((r: any) => ({
-      purchaseId: r.purchase_id,
+      ...(r.deleted_at && !isAdmin
+        ? { purchaseId: null, vendorName: "—", billNo: "Deleted bill", vendorBillNo: "—" }
+        : { purchaseId: r.purchase_id, vendorName: r.vendor_name ?? "—", billNo: r.bill_no, vendorBillNo: r.vendor_bill_no ?? "—" }),
+      deleted: r.deleted_at != null,
       billDate: r.bill_date,
-      vendorName: r.vendor_name ?? "—",
-      billNo: r.bill_no,
-      vendorBillNo: r.vendor_bill_no ?? "—",
       productName: r.product_name,
       productId: r.product_id,
       qty: String(r.qty),
@@ -302,7 +306,8 @@ router.get("/purchases/:id", async (req, res): Promise<void> => {
   }
   const companyId = getCompanyId(req);
   const [row] = await db.select().from(purchasesTable).where(and(eq(purchasesTable.companyId, companyId), eq(purchasesTable.id, parsed.data.id)));
-  if (!row || (isGstAccountant(req) && row.billType !== "gst")) {
+  // A bill deleted by Non-GST Data Cleanup is visible to admins only.
+  if (!row || (isGstAccountant(req) && row.billType !== "gst") || (row.deletedAt && (req as any).session?.role !== "admin")) {
     res.status(404).json({ error: "Purchase not found" });
     return;
   }
@@ -600,6 +605,11 @@ router.put("/purchases/:id", async (req, res): Promise<void> => {
       return;
     }
     const old = oldRes.rows[0];
+    if (old.deleted_at) {
+      await client.query("ROLLBACK");
+      res.status(409).json({ error: "This bill was deleted by Non-GST Data Cleanup. Restore it first." });
+      return;
+    }
 
     // Fetch old items to reverse stock
     const oldItemsRes = await client.query(
@@ -855,6 +865,11 @@ router.delete("/purchases/:id", async (req, res): Promise<void> => {
       return;
     }
     const old = oldRes.rows[0];
+    if (old.deleted_at) {
+      await client.query("ROLLBACK");
+      res.status(409).json({ error: "This bill was deleted by Non-GST Data Cleanup. Restore it first." });
+      return;
+    }
     if (old.status === "cancelled") {
       await client.query("ROLLBACK");
       res.status(409).json({ error: "Purchase is already cancelled" });
@@ -934,8 +949,9 @@ router.get("/purchases/attachments/:attachmentId/file", async (req, res): Promis
     const result = await pool.query(
       `SELECT a.* FROM purchase_attachments a
        LEFT JOIN purchases p ON p.id = a.purchase_id AND p.company_id = a.company_id
-       WHERE a.id = $1 AND a.company_id = $2 AND ($3::boolean = false OR p.bill_type = 'gst')`,
-      [id, companyId, isGstAccountant(req)],
+       WHERE a.id = $1 AND a.company_id = $2 AND ($3::boolean = false OR p.bill_type = 'gst')
+         AND (p.deleted_at IS NULL OR $4::boolean)`,
+      [id, companyId, isGstAccountant(req), auth.role === "admin"],
     );
     if (!result.rows[0]) { res.status(404).json({ error: "Attachment not found" }); return; }
     const att = result.rows[0];
@@ -962,8 +978,12 @@ router.delete("/purchases/attachments/:attachmentId", async (req, res): Promise<
   const id = parseInt(req.params.attachmentId, 10);
   if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   try {
+    // Attachments of a bill deleted by Non-GST Data Cleanup are kept as-is.
     const result = await pool.query(
-      `DELETE FROM purchase_attachments WHERE id = $1 AND company_id = $2 RETURNING *`,
+      `DELETE FROM purchase_attachments a
+        WHERE a.id = $1 AND a.company_id = $2
+          AND NOT EXISTS (SELECT 1 FROM purchases p WHERE p.id = a.purchase_id AND p.company_id = a.company_id AND p.deleted_at IS NOT NULL)
+        RETURNING *`,
       [id, companyId],
     );
     if (!result.rows[0]) { res.status(404).json({ error: "Attachment not found" }); return; }
@@ -995,6 +1015,11 @@ router.post(
     const files = req.files as Express.Multer.File[];
     if (!files || files.length === 0) { res.status(400).json({ error: "No files uploaded" }); return; }
     try {
+      const live = await pool.query(
+        `SELECT 1 FROM purchases WHERE id = $1 AND company_id = $2 AND deleted_at IS NULL`,
+        [purchaseId, companyId],
+      );
+      if (live.rowCount === 0) { res.status(404).json({ error: "Purchase not found" }); return; }
       const inserted = [];
       for (const f of files) {
         const r = await pool.query(
@@ -1032,8 +1057,9 @@ router.get("/purchases/:id/attachments", async (req, res): Promise<void> => {
       `SELECT a.* FROM purchase_attachments a
        LEFT JOIN purchases p ON p.id = a.purchase_id AND p.company_id = a.company_id
        WHERE a.purchase_id = $1 AND a.company_id = $2 AND ($3::boolean = false OR p.bill_type = 'gst')
+         AND (p.deleted_at IS NULL OR $4::boolean)
        ORDER BY a.created_at ASC`,
-      [purchaseId, companyId, isGstAccountant(req)],
+      [purchaseId, companyId, isGstAccountant(req), auth.role === "admin"],
     );
     res.json(result.rows.map((r) => ({
       id: r.id,
