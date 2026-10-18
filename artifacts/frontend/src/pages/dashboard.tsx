@@ -35,7 +35,6 @@ import {
 import {
   IndianRupee,
   AlertTriangle,
-  CreditCard,
   TrendingUp,
   Wallet,
   ArrowUpRight,
@@ -140,6 +139,86 @@ function PieValueCard({
               Total: {fmtRupee(totalValue)}
             </div>
           </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+type SalesCompare = {
+  thisMonth: number;
+  thisMonthCount: number;
+  lastMonthSameDays: number;
+  lastMonth: number;
+  lastMonthCount: number;
+  changePct: number | null;
+};
+
+// Sales This Month; for the admin a tap reveals the comparison with last
+// month (same days of last month, and last month in full). Fetched only on
+// the first tap — nobody else sees or loads it.
+function SalesThisMonthCard({ total, invoiceCount, canCompare }: { total: number; invoiceCount: number; canCompare: boolean }) {
+  const [open, setOpen] = React.useState(false);
+  const [data, setData] = React.useState<SalesCompare | null>(null);
+  const [failed, setFailed] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!open || data) return;
+    setFailed(false);
+    fetch("/api/dashboard/sales-compare", { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then(setData)
+      .catch(() => setFailed(true));
+  }, [open, data]);
+
+  const up = data?.changePct != null && data.changePct >= 0;
+  return (
+    <Card
+      className={canCompare ? "cursor-pointer select-none transition-colors hover:bg-muted/40" : undefined}
+      {...(canCompare ? { ...clickableProps(() => setOpen((v) => !v)), "aria-expanded": open } : {})}
+      data-testid="card-sales-this-month"
+    >
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium">Sales This Month</CardTitle>
+        <div className="flex items-center gap-1">
+          <IndianRupee className="h-4 w-4 text-muted-foreground" />
+          {canCompare && <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />}
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="text-2xl font-bold">₹{total.toLocaleString()}</div>
+        <p className="text-xs text-muted-foreground">
+          {invoiceCount} invoices{canCompare ? ` — tap to ${open ? "hide" : "compare with last month"}` : ""}
+        </p>
+        {open && (
+          <div className="mt-3 border-t pt-3 space-y-1.5 text-sm" data-testid="sales-compare">
+            {failed ? (
+              <p className="text-xs text-destructive">Could not load last month's sales.</p>
+            ) : !data ? (
+              <p className="text-xs text-muted-foreground">Loading…</p>
+            ) : (
+              <>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Last month, same days</span>
+                  <span className="font-semibold tabular-nums">₹{data.lastMonthSameDays.toLocaleString()}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Change</span>
+                  {data.changePct == null ? (
+                    <span className="text-xs text-muted-foreground">No sales last month to compare</span>
+                  ) : (
+                    <span className={`font-semibold tabular-nums ${up ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`} data-testid="text-sales-change">
+                      {up ? "▲" : "▼"} {Math.abs(data.changePct)}% ({up ? "+" : "−"}₹{Math.abs(data.thisMonth - data.lastMonthSameDays).toLocaleString()})
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Last month total</span>
+                  <span className="tabular-nums">₹{data.lastMonth.toLocaleString()} <span className="text-xs text-muted-foreground">({data.lastMonthCount} bills)</span></span>
+                </div>
+              </>
+            )}
+          </div>
         )}
       </CardContent>
     </Card>
@@ -645,31 +724,12 @@ export default function Dashboard() {
           ))}
         </div>
       ) : summary ? (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Sales This Month</CardTitle>
-              <IndianRupee className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">₹{summary.totalSalesThisMonth.toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground">
-                {summary.invoicesThisMonth} invoices generated
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Outstanding</CardTitle>
-              <TrendingUp className="h-4 w-4 text-destructive" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">₹{summary.totalOutstanding.toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground">
-                Pending collections from customers
-              </p>
-            </CardContent>
-          </Card>
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+          <SalesThisMonthCard
+            total={summary.totalSalesThisMonth}
+            invoiceCount={summary.invoicesThisMonth}
+            canCompare={isAdmin}
+          />
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Low Stock Alerts</CardTitle>
@@ -679,18 +739,6 @@ export default function Dashboard() {
               <div className="text-2xl font-bold">{summary.lowStockCount}</div>
               <p className="text-xs text-muted-foreground">
                 Products below minimum threshold
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pending Payments</CardTitle>
-              <CreditCard className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{summary.pendingPayments}</div>
-              <p className="text-xs text-muted-foreground">
-                Awaiting admin approval
               </p>
             </CardContent>
           </Card>

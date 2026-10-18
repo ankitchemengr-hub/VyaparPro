@@ -22,22 +22,25 @@ async function queryMany(text: string, params: any[] = []): Promise<any[]> {
   return result.rows;
 }
 
+// Real sales only — quotations, proforma, sale orders and delivery challans
+// aren't revenue. Months are taken in IST, not the server's UTC clock.
+const SALE_TYPES_FILTER = `invoice_type NOT IN ('quotation', 'proforma_invoice', 'sale_order', 'delivery_challan')`;
+const IST_DATE = `(invoice_date AT TIME ZONE 'Asia/Kolkata')::date`;
+const IST_TODAY = `(NOW() AT TIME ZONE 'Asia/Kolkata')::date`;
+
 // GET /dashboard/summary
 router.get("/dashboard/summary", async (req, res): Promise<void> => {
   const companyId = getCompanyId(req);
-  const now = new Date();
-  const month = now.getMonth() + 1;
-  const year = now.getFullYear();
 
   const [salesRow, outstandingRow, lowStockRow, pendingRow, workloadRow, productsRow, customersRow] = await Promise.all([
     queryOne(
       `SELECT COALESCE(SUM(grand_total), 0) as total, COUNT(*) as count
        FROM invoices
        WHERE company_id = $1
-         AND EXTRACT(MONTH FROM invoice_date) = $2
-         AND EXTRACT(YEAR FROM invoice_date) = $3
-         AND status = 'saved'`,
-      [companyId, month, year]
+         AND ${IST_DATE} >= date_trunc('month', ${IST_TODAY})::date
+         AND ${IST_DATE} <= ${IST_TODAY}
+         AND status = 'saved' AND ${SALE_TYPES_FILTER}`,
+      [companyId]
     ),
     queryOne(`SELECT COALESCE(SUM(outstanding_balance), 0) as total FROM entities WHERE company_id = $1 AND type = 'customer'`, [companyId]),
     queryOne(`SELECT COUNT(*) as count FROM products WHERE company_id = $1 AND deleted_at IS NULL AND min_stock_threshold IS NOT NULL AND current_stock < min_stock_threshold`, [companyId]),
@@ -56,6 +59,51 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
     activeWorkloadCards: Number(workloadRow.count ?? 0),
     totalProductsInStock: Number(productsRow.count ?? 0),
     totalCustomers: Number(customersRow.count ?? 0),
+  });
+});
+
+// GET /dashboard/sales-compare (admin) — this month's sales so far against
+// last month: the same days of last month (1st → today's date, for a fair
+// like-for-like), and last month in full. Loaded only when the admin taps
+// the Sales This Month card.
+router.get("/dashboard/sales-compare", async (req, res): Promise<void> => {
+  const role = (req as any).session?.role;
+  if (role !== "admin" && role !== "super_admin") {
+    res.status(403).json({ error: "Admin only" });
+    return;
+  }
+  const companyId = getCompanyId(req);
+  const row = await queryOne(
+    `WITH b AS (
+       SELECT ${IST_TODAY} AS today,
+              date_trunc('month', ${IST_TODAY})::date AS ms,
+              (date_trunc('month', ${IST_TODAY}) - INTERVAL '1 month')::date AS lms
+     ), x AS (
+       SELECT ${IST_DATE} AS dt, grand_total
+       FROM invoices
+       WHERE company_id = $1 AND status = 'saved' AND ${SALE_TYPES_FILTER}
+         AND invoice_date >= NOW() - INTERVAL '75 days'
+     )
+     SELECT
+       COALESCE(SUM(grand_total) FILTER (WHERE dt >= b.ms AND dt <= b.today), 0) AS this_month,
+       COUNT(*) FILTER (WHERE dt >= b.ms AND dt <= b.today) AS this_month_count,
+       COALESCE(SUM(grand_total) FILTER (WHERE dt >= b.lms AND dt < b.ms AND dt <= b.lms + (b.today - b.ms)), 0) AS last_same_days,
+       COALESCE(SUM(grand_total) FILTER (WHERE dt >= b.lms AND dt < b.ms), 0) AS last_month,
+       COUNT(*) FILTER (WHERE dt >= b.lms AND dt < b.ms) AS last_month_count,
+       MAX(b.today) AS today
+     FROM b LEFT JOIN x ON TRUE`,
+    [companyId],
+  );
+  const thisMonth = Number(row.this_month ?? 0);
+  const lastSameDays = Number(row.last_same_days ?? 0);
+  res.json({
+    thisMonth,
+    thisMonthCount: Number(row.this_month_count ?? 0),
+    lastMonthSameDays: lastSameDays,
+    lastMonth: Number(row.last_month ?? 0),
+    lastMonthCount: Number(row.last_month_count ?? 0),
+    // null when last month had no sales in the same days (no base to compare)
+    changePct: lastSameDays > 0 ? Math.round(((thisMonth - lastSameDays) / lastSameDays) * 1000) / 10 : null,
   });
 });
 
