@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, numeric, boolean, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, numeric, boolean, date, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -53,15 +53,20 @@ export const subscriptionAlertsTable = pgTable("subscription_alerts", {
   id: serial("id").primaryKey(),
   companyId: integer("company_id").notNull(),
   subscriptionId: integer("subscription_id").notNull(),
-  alertType: text("alert_type").notNull(), // expiry_30, expiry_15, expiry_7, expiry_3, expiry_today, expired
+  alertType: text("alert_type").notNull(), // expiry_30, expiry_15, expiry_7, expiry_3, expiry_1, expiry_today, expired
   message: text("message").notNull(),
   daysRemaining: integer("days_remaining").notNull().default(0),
   isRead: boolean("is_read").notNull().default(false),
+  // End date of the billing period the alert is about (renewal = new period).
+  periodEnd: date("period_end"),
+  // When the customer was emailed about it (null = admin-only alert / not sent).
+  emailedAt: timestamp("emailed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   index("subscription_alert_sub_idx").on(t.subscriptionId),
-  // Each alert type fires at most once per subscription — keeps scheduler reruns idempotent.
-  uniqueIndex("subscription_alert_type_unique").on(t.subscriptionId, t.alertType),
+  // Each alert type fires at most once per subscription per billing period —
+  // keeps scheduler reruns idempotent, and renewals get fresh reminders.
+  uniqueIndex("subscription_alert_period_unique").on(t.subscriptionId, t.alertType, t.periodEnd),
 ]);
 
 export const insertCompanySchema = createInsertSchema(companiesTable).omit({ id: true, createdAt: true, updatedAt: true });

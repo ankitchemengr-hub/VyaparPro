@@ -20,6 +20,7 @@ import { DomainError, getDomainState, requestDomain, verifyDomain, removeDomain 
 const router: IRouter = Router();
 
 // This router is registered BEFORE the app-wide requireAuth gate (see
+import { sendWelcomeEmail } from "../lib/customer-emails";
 // routes/index.ts) because most of its routes are public — the two "my-*"
 // routes at the bottom check auth themselves via getCompanyId(req), which
 // throws (caught by app.ts's global TenantContextError handler) if there's
@@ -206,6 +207,8 @@ router.post("/portal/register", async (req, res): Promise<void> => {
     res.status(500).json({ error: "Registration failed" });
   } finally {
     client.release();
+    // After the response — a slow mail server never delays signup.
+    void sendWelcomeEmail({ companyId, planSlug: plan.slug, onTrial, trialEnd: end, loginUsername: username });
   }
 });
 

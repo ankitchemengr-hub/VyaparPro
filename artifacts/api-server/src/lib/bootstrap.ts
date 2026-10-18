@@ -445,6 +445,19 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
     // Demo Leads tab: a follow-up note per lead and when it last changed.
     `ALTER TABLE demo_requests ADD COLUMN IF NOT EXISTS notes TEXT`,
     `ALTER TABLE demo_requests ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE`,
+    // Subscription reminders are per billing period (period_end), so a renewed
+    // subscription gets reminders again; emailed_at records the customer email.
+    `ALTER TABLE subscription_alerts ADD COLUMN IF NOT EXISTS period_end DATE`,
+    `ALTER TABLE subscription_alerts ADD COLUMN IF NOT EXISTS emailed_at TIMESTAMP WITH TIME ZONE`,
+    // Older alerts belong to the subscription's current period — stamping them
+    // keeps the first run after this change from re-sending them as emails.
+    `UPDATE subscription_alerts a
+       SET period_end = (s.subscription_end_date AT TIME ZONE 'Asia/Kolkata')::date
+     FROM subscriptions s
+     WHERE s.id = a.subscription_id AND a.period_end IS NULL`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS subscription_alert_period_unique
+       ON subscription_alerts(subscription_id, alert_type, period_end)`,
+    `DROP INDEX IF EXISTS subscription_alert_type_unique`,
     `CREATE TABLE IF NOT EXISTS faqs (
       id          SERIAL PRIMARY KEY,
       question    TEXT NOT NULL,
