@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useRoute, useLocation } from "wouter";
+import { useRoute, useLocation, useSearch } from "wouter";
 import {
   useGetInvoice,
   getGetInvoiceQueryKey,
@@ -32,6 +32,10 @@ import { RecordPaymentDialog } from "@/components/record-payment-dialog";
 export default function InvoiceDetail() {
   const [, params] = useRoute("/invoices/:id");
   const [, setLocation] = useLocation();
+  // Opened from another screen (e.g. a Khatabook customer) → Back returns
+  // there. Only same-app paths are honoured.
+  const fromParam = new URLSearchParams(useSearch()).get("from");
+  const backTo = fromParam && fromParam.startsWith("/") && !fromParam.startsWith("//") ? fromParam : null;
   const { user } = useAuth();
   const { toast } = useToast();
   const id = Number(params?.id);
@@ -183,8 +187,23 @@ export default function InvoiceDetail() {
       {/* Top toolbar */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between print:hidden no-print">
         <div className="flex items-center gap-2 flex-wrap">
-          <Button variant="outline" size="sm" onClick={() => setLocation(isCustomer ? "/my-orders" : "/invoices")} data-testid="button-back">
-            <ArrowLeft className="h-4 w-4 sm:mr-2" /><span className="hidden sm:inline">{isCustomer ? "Back to my bills" : "Back to invoices"}</span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (backTo) {
+                // Step back so the previous screen keeps its scroll position;
+                // fall back to opening it if there's nothing to go back to.
+                if (window.history.length > 1) window.history.back();
+                else setLocation(backTo, { replace: true });
+              } else {
+                setLocation(isCustomer ? "/my-orders" : "/invoices");
+              }
+            }}
+            data-testid="button-back"
+          >
+            <ArrowLeft className="h-4 w-4 mr-1 sm:mr-2" />
+            <span>{backTo ? (backTo.startsWith("/khatabook") ? "Back to Khatabook" : "Back") : isCustomer ? "Back to my bills" : "Back to invoices"}</span>
           </Button>
           <Badge variant={isGst ? "default" : "secondary"}>{isGst ? "GST" : "Non-GST"}</Badge>
           {invPayStatus === "paid" && <Badge className="bg-green-600 text-white hover:bg-green-700">Paid</Badge>}
