@@ -9,8 +9,9 @@ import { logger } from "./logger";
 // COGS, dashboard) keeps the same totals, and its stock_movements,
 // ledger_entries, payments and allocations are never touched — stock, party
 // balances and Cash Book stay exactly as they were. What changes is
-// visibility: deleted bills drop out of every bill list, and only an admin
-// can open one, see it in Deleted Bills, or restore it.
+// visibility: deleted bills drop out of every bill list and only an admin
+// can still open one by its link. There is deliberately no restore — a
+// delete is final.
 //
 // Bills are picked only by verified type + tenant: invoice_type / bill_type
 // = 'non_gst', status 'saved', company_id = the caller's company. A bill is
@@ -351,84 +352,6 @@ export async function runDelete(p: RunDeleteParams) {
   }
 }
 
-// Brings deleted bills back into the normal lists. Either specific bills
-// (`ids`) or everything a given delete job removed (`jobId`).
-export async function restoreBills(p: {
-  companyId: number;
-  category: CleanupCategory;
-  ids?: number[];
-  jobId?: number;
-  idempotencyKey: string;
-  operator: Operator;
-}) {
-  const t = TABLES[p.category];
-  const created = await pool.query(
-    `INSERT INTO non_gst_cleanup_jobs (company_id, category, trigger, action, status, idempotency_key, operator_user_id, operator_name)
-     VALUES ($1, $2, 'manual', 'restore', 'running', $3, $4, $5)
-     ON CONFLICT (company_id, idempotency_key) DO NOTHING
-     RETURNING id`,
-    [p.companyId, p.category, p.idempotencyKey, p.operator.userId, p.operator.name],
-  );
-  if (created.rowCount === 0) {
-    const existing = await pool.query(
-      `SELECT * FROM non_gst_cleanup_jobs WHERE company_id = $1 AND idempotency_key = $2`,
-      [p.companyId, p.idempotencyKey],
-    );
-    return { job: formatJob(existing.rows[0]), duplicate: true };
-  }
-  const jobId: number = created.rows[0].id;
-
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    await client.query(`SELECT pg_advisory_xact_lock(hashtext('non_gst_cleanup'), $1)`, [p.companyId]);
-    const { rows } = await client.query(
-      `UPDATE ${t.table} b
-          SET deleted_at = NULL, deleted_by_user_id = NULL, delete_job_id = NULL
-        WHERE b.company_id = $1 AND b.deleted_at IS NOT NULL
-          AND (($2::int[] IS NOT NULL AND b.id = ANY($2::int[])) OR ($3::int IS NOT NULL AND b.delete_job_id = $3))
-        RETURNING b.id, b.${t.noCol} AS record_no, b.${t.dateCol} AS record_date, b.${t.partyCol} AS party_name, b.grand_total AS amount`,
-      [p.companyId, p.ids && p.ids.length > 0 ? p.ids : null, p.jobId ?? null],
-    );
-    const restored: CleanupCandidate[] = rows.map((r: any) => ({
-      id: r.id, recordNo: r.record_no, recordDate: new Date(r.record_date).toISOString(),
-      partyName: r.party_name, amount: Number(r.amount), reason: null,
-    }));
-    await insertJobItems(client, p.companyId, jobId, restored, () => "restored");
-    const totalValue = round2(restored.reduce((s, c) => s + c.amount, 0));
-    await client.query(
-      `INSERT INTO audit_log (company_id, action, description, user_id, user_name, metadata)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [
-        p.companyId,
-        `non_gst_${p.category}_restored`,
-        `${t.label}: ${restored.length} deleted bill(s) worth ₹${totalValue.toFixed(2)} restored`,
-        p.operator.userId,
-        p.operator.name,
-        JSON.stringify({ jobId, category: p.category, ids: restored.map((r) => r.id), fromJobId: p.jobId ?? null }),
-      ],
-    );
-    const done = await client.query(
-      `UPDATE non_gst_cleanup_jobs
-          SET status = 'succeeded', eligible_count = $2, processed_count = $2, total_value = $3, finished_at = NOW()
-        WHERE id = $1 RETURNING *`,
-      [jobId, restored.length, totalValue],
-    );
-    await client.query("COMMIT");
-    return { job: formatJob(done.rows[0]), duplicate: false };
-  } catch (err: any) {
-    await client.query("ROLLBACK").catch(() => {});
-    logger.error({ err, jobId }, "Non-GST restore failed — rolled back");
-    const failed = await pool.query(
-      `UPDATE non_gst_cleanup_jobs SET status = 'failed', error = $2, finished_at = NOW() WHERE id = $1 RETURNING *`,
-      [jobId, String(err?.message ?? err).slice(0, 500)],
-    );
-    return { job: formatJob(failed.rows[0]), duplicate: false };
-  } finally {
-    client.release();
-  }
-}
-
 export async function setLegalHold(companyId: number, category: CleanupCategory, ids: number[], hold: boolean, operator: Operator) {
   const t = TABLES[category];
   const client = await pool.connect();
@@ -460,37 +383,6 @@ export async function setLegalHold(companyId: number, category: CleanupCategory,
   } finally {
     client.release();
   }
-}
-
-// Admin-only view of bills this company has deleted.
-export async function listDeletedBills(companyId: number, category: CleanupCategory, search: string) {
-  const t = TABLES[category];
-  const params: any[] = [companyId];
-  let searchClause = "";
-  if (search) {
-    params.push(`%${search}%`);
-    searchClause = `AND (b.${t.noCol} ILIKE $2 OR COALESCE(b.${t.partyCol}, '') ILIKE $2)`;
-  }
-  const { rows } = await pool.query(
-    `SELECT b.id, b.${t.noCol} AS record_no, b.${t.dateCol} AS record_date, b.${t.partyCol} AS party_name,
-            b.grand_total, b.deleted_at, b.delete_job_id, u.name AS deleted_by
-       FROM ${t.table} b
-       LEFT JOIN users u ON u.id = b.deleted_by_user_id
-      WHERE b.company_id = $1 AND b.deleted_at IS NOT NULL ${searchClause}
-      ORDER BY b.deleted_at DESC, b.id DESC
-      LIMIT 1000`,
-    params,
-  );
-  return rows.map((r: any) => ({
-    id: r.id,
-    recordNo: r.record_no,
-    recordDate: new Date(r.record_date).toISOString(),
-    partyName: r.party_name,
-    amount: Number(r.grand_total),
-    deletedAt: new Date(r.deleted_at).toISOString(),
-    deletedBy: r.deleted_by ?? null,
-    jobId: r.delete_job_id,
-  }));
 }
 
 export function formatJob(r: any) {

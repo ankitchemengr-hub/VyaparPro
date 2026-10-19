@@ -120,6 +120,9 @@ async function financialSnapshot(company: "A" | "B") {
     otherPurchaseReport: { lines: purchaseNonGst.length, amount: sumBy(purchaseNonGst, "amount") },
     dashboardSummary: await ok(who, "GET", `/dashboard/summary`),
     financeOverview: await ok(who, "GET", `/dashboard/finance-overview`),
+    litersSold: await ok(who, "GET", `/dashboard/liters-sold`),
+    litersBalance: await ok(who, "GET", `/dashboard/liters-balance`),
+    topProducts: await ok(who, "GET", `/dashboard/top-products`),
     stock: await db(`SELECT id, current_stock FROM products WHERE company_id = $1 ORDER BY id`),
     stockMovements: await db(`SELECT product_id, type, quantity, reference_type, reference_id FROM stock_movements WHERE company_id = $1 ORDER BY id`),
     ledger: await db(`SELECT entity_id, debit, credit, balance, type, reference_id FROM ledger_entries WHERE company_id = $1 ORDER BY id`),
@@ -344,23 +347,22 @@ test("Sales and Purchase schedules run independently and apply the same rules", 
 test("tenants are isolated", async () => {
   assert.equal((await call("adminB", "GET", `/non-gst-cleanup/sales/jobs/${salesJobId}`)).status, 404);
   assert.deepEqual(await ok("adminB", "GET", `/non-gst-cleanup/sales/jobs`), []);
-  assert.deepEqual(await ok("adminB", "GET", `/non-gst-cleanup/sales/deleted`), []);
-  const r = await ok("adminB", "POST", `/non-gst-cleanup/sales/restore`, { ids: [ids.NS1], idempotencyKey: key() });
-  assert.equal(r.job.processedCount, 0);
-  assert.equal((await deletedState("invoices", A))[ids.NS1], true);
+  const p = await ok("adminB", "GET", `/non-gst-cleanup/sales/preview?from=${FROM}&to=${TO}`);
+  assert.deepEqual([...p.eligible, ...p.excluded].map((r: any) => r.id), [ids.BS1]);
   const held = await cleanup.setLegalHold(B, "sales", [ids.NS2], true, { userId: ids.adminB, name: "admin B" });
   assert.equal(held, 0);
+  assert.equal((await deletedState("invoices", A))[ids.NS1], true);
 });
 
-test("restore brings bills back and totals still match", async () => {
-  const deleted = await ok("adminA", "GET", `/non-gst-cleanup/sales/deleted`);
-  assert.deepEqual(deleted.map((d: any) => d.id).sort(), [ids.NS1, ids.NS4].sort());
-  await ok("adminA", "POST", `/non-gst-cleanup/sales/restore`, { jobId: salesJobId, idempotencyKey: key() });
-  assert.equal((await deletedState("invoices", A))[ids.NS1], false);
-  assert.ok((await ok("adminA", "GET", `/invoices`)).some((i: any) => i.id === ids.NS1));
-
-  // NS4 was added after the first snapshot; take it back out of the compare
-  // by restoring it too, then compare with a fresh baseline of company B.
-  await ok("adminA", "POST", `/non-gst-cleanup/sales/restore`, { ids: [ids.NS4], idempotencyKey: key() });
+test("a delete is final: there is no restore", async () => {
+  // No such routes any more (an unknown path falls through to a later 403 guard).
+  const r = await call("adminA", "POST", `/non-gst-cleanup/sales/restore`, { ids: [ids.NS1], idempotencyKey: key() });
+  assert.ok(r.status === 403 || r.status === 404, `restore must not exist, got ${r.status}`);
+  const d = await call("adminA", "GET", `/non-gst-cleanup/sales/deleted`);
+  assert.ok(d.status === 403 || d.status === 404, `deleted list must not exist, got ${d.status}`);
+  assert.equal((await deletedState("invoices", A))[ids.NS1], true);
+  assert.equal((await deletedState("purchases", A))[ids.NP1], true);
+  assert.ok(!(await ok("adminA", "GET", `/invoices`)).some((i: any) => i.id === ids.NS1));
+  // Company B's totals never moved at any point.
   assert.deepEqual(await financialSnapshot("B"), snapB0);
 });

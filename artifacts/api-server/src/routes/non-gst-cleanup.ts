@@ -8,9 +8,7 @@ import {
   validateRange,
   previewCleanup,
   runDelete,
-  restoreBills,
   setLegalHold,
-  listDeletedBills,
   listJobs,
   getJob,
   getSettings,
@@ -132,30 +130,6 @@ router.post(`${BASE}/delete`, requireCompanyAdmin, async (req, res): Promise<voi
   }
 });
 
-// POST body: { ids?: number[], jobId?: number, idempotencyKey }
-router.post(`${BASE}/restore`, requireCompanyAdmin, async (req, res): Promise<void> => {
-  const { idempotencyKey } = req.body ?? {};
-  const ids = req.body?.ids == null ? undefined : idList(req.body.ids);
-  const jobId = req.body?.jobId == null ? undefined : Number(req.body.jobId);
-  if (ids === null || (jobId !== undefined && !Number.isInteger(jobId)) || (!ids?.length && jobId === undefined)) {
-    res.status(400).json({ error: "Give the bills (ids) or the delete job (jobId) to restore" });
-    return;
-  }
-  if (typeof idempotencyKey !== "string" || idempotencyKey.length < 8 || idempotencyKey.length > 100) {
-    res.status(400).json({ error: "idempotencyKey is required" });
-    return;
-  }
-  const result = await restoreBills({
-    companyId: getCompanyId(req),
-    category: categoryOf(req),
-    ids,
-    jobId,
-    idempotencyKey: `restore:${idempotencyKey}`,
-    operator: operatorOf(req),
-  });
-  res.status(result.job?.status === "failed" ? 500 : 200).json(result);
-});
-
 // POST body: { ids: number[], hold: boolean }
 router.post(`${BASE}/legal-hold`, requireCompanyAdmin, async (req, res): Promise<void> => {
   const ids = idList(req.body?.ids);
@@ -165,11 +139,6 @@ router.post(`${BASE}/legal-hold`, requireCompanyAdmin, async (req, res): Promise
   }
   const updated = await setLegalHold(getCompanyId(req), categoryOf(req), ids, req.body.hold, operatorOf(req));
   res.json({ updated });
-});
-
-router.get(`${BASE}/deleted`, requireCompanyAdmin, async (req, res): Promise<void> => {
-  const search = String(req.query.search ?? "").trim().slice(0, 100);
-  res.json(await listDeletedBills(getCompanyId(req), categoryOf(req), search));
 });
 
 router.get(`${BASE}/jobs`, requireCompanyAdmin, async (req, res): Promise<void> => {
