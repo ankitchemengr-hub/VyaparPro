@@ -3,7 +3,7 @@ import { useListMyPayments, getListMyPaymentsQueryKey } from "@workspace/api-cli
 import { useAuth } from "@/contexts/use-auth";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, ArrowLeft, Building2 } from "lucide-react";
+import { Loader2, ArrowLeft, Building2, Download, FileText } from "lucide-react";
 
 const STATUS_TONE: Record<string, string> = {
   success: "bg-teal-100 text-teal-700 hover:bg-teal-100",
@@ -46,9 +46,35 @@ export default function PortalPayments() {
                     {p.razorpayPaymentId && <div className="text-[11px] text-slate-400 font-mono mt-0.5">{p.razorpayPaymentId}</div>}
                   </div>
                   <div className="text-right">
-                    <div className="font-bold">₹{p.amount.toLocaleString("en-IN")}</div>
+                    <div className="font-bold">₹{p.amount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                    <div className="text-[11px] text-slate-400">incl. GST</div>
                     <Badge className={STATUS_TONE[p.status] ?? ""}>{p.status}</Badge>
                   </div>
+                  {/* GST tax invoice — issued automatically once a payment succeeds. */}
+                  {(p as any).invoiceId && (
+                    <div className="w-full flex flex-wrap items-center justify-between gap-2 border-t pt-3 mt-1">
+                      <span className="text-sm text-slate-600 flex items-center gap-1.5">
+                        <FileText className="w-4 h-4 text-blue-600" /> Tax Invoice <span className="font-mono font-medium">{(p as any).invoiceNo}</span>
+                      </span>
+                      <div className="flex gap-2">
+                        <a
+                          href={`/api/portal/invoices/${(p as any).invoiceId}/pdf`}
+                          target="_blank" rel="noopener"
+                          className="text-sm px-3 py-1.5 rounded-md border hover:bg-slate-50"
+                          data-testid={`link-view-invoice-${p.id}`}
+                        >
+                          View
+                        </a>
+                        <a
+                          href={`/api/portal/invoices/${(p as any).invoiceId}/pdf?download=1`}
+                          className="text-sm px-3 py-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700 inline-flex items-center gap-1.5"
+                          data-testid={`link-download-invoice-${p.id}`}
+                        >
+                          <Download className="w-4 h-4" /> Download PDF
+                        </a>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             ))}

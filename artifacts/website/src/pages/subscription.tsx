@@ -138,7 +138,7 @@ export default function PortalSubscription() {
             <CardContent className="space-y-4">
               <div className="grid sm:grid-cols-2 gap-4 text-sm">
                 <div><span className="text-slate-500">Billing Cycle</span><div className="font-medium capitalize">{sub.billingCycle?.replace("_", "-") ?? "—"}</div></div>
-                <div><span className="text-slate-500">Amount</span><div className="font-medium">₹{sub.subscriptionAmount.toLocaleString("en-IN")}</div></div>
+                <div><span className="text-slate-500">Amount</span><div className="font-medium">₹{sub.subscriptionAmount.toLocaleString("en-IN")} <span className="text-xs font-normal text-slate-400">(incl. GST)</span></div></div>
                 <div><span className="text-slate-500">Start Date</span><div className="font-medium">{sub.subscriptionStartDate ? new Date(sub.subscriptionStartDate).toLocaleDateString("en-IN") : "—"}</div></div>
                 <div><span className="text-slate-500">Expiry Date</span><div className="font-medium">{new Date(sub.subscriptionEndDate).toLocaleDateString("en-IN")}</div></div>
                 <div><span className="text-slate-500">Payment Status</span><div><Badge variant="outline" className="capitalize">{sub.paymentStatus}</Badge></div></div>

@@ -19,7 +19,9 @@ function getTransport() {
   });
 }
 
-export async function sendMail(to: string, subject: string, html: string): Promise<boolean> {
+export type MailAttachment = { filename: string; content: Buffer; contentType?: string };
+
+export async function sendMail(to: string, subject: string, html: string, attachments?: MailAttachment[]): Promise<boolean> {
   const transport = getTransport();
   if (!transport) {
     logger.warn({ to, subject }, "Email not sent — SMTP is not configured");
@@ -27,7 +29,7 @@ export async function sendMail(to: string, subject: string, html: string): Promi
   }
   const from = process.env["SMTP_FROM"] || process.env["SMTP_USER"]!;
   try {
-    await transport.sendMail({ from, to, subject, html });
+    await transport.sendMail({ from, to, subject, html, ...(attachments?.length ? { attachments } : {}) });
     return true;
   } catch (err) {
     logger.error({ err, to, subject }, "Failed to send email");

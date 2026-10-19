@@ -15,12 +15,16 @@ import { getCompanyId } from "../lib/tenant";
 import { logger } from "../lib/logger";
 import { sendMail, passwordResetEmail } from "../lib/mailer";
 import { PLAN_MONTHS, addMonths, daysBetween } from "./subscriptions";
+import {
+  ensureSubscriptionInvoiceSchema, saveCompanyBillingDetails, issueInvoiceForPayment,
+  emailInvoice, renderInvoicePdf, withGst, GST_RATE,
+} from "../lib/subscription-invoice";
 import { DomainError, getDomainState, requestDomain, verifyDomain, removeDomain } from "../lib/custom-domains";
+import { sendWelcomeEmail } from "../lib/customer-emails";
 
 const router: IRouter = Router();
 
 // This router is registered BEFORE the app-wide requireAuth gate (see
-import { sendWelcomeEmail } from "../lib/customer-emails";
 // routes/index.ts) because most of its routes are public — the two "my-*"
 // routes at the bottom check auth themselves via getCompanyId(req), which
 // throws (caught by app.ts's global TenantContextError handler) if there's
@@ -177,6 +181,8 @@ router.post("/portal/register", async (req, res): Promise<void> => {
       [d.businessName, d.ownerName, d.mobile, d.email ?? null],
     );
     const companyId = companyRes.rows[0].id;
+    // GSTIN / city / state go on the customer's GST invoices.
+    await saveCompanyBillingDetails(client, companyId, d);
 
     const username = (d.email ?? d.mobile).trim().toLowerCase();
     await client.query(
@@ -244,11 +250,14 @@ router.post("/portal/payments/create-order", async (req, res): Promise<void> => 
     return;
   }
   const months = PLAN_MONTHS[billingCycle] ?? 1;
-  const amount = Number(plan.price_monthly) * months;
-  if (!(amount > 0)) {
+  const baseAmount = Number(plan.price_monthly) * months;
+  if (!(baseAmount > 0)) {
     res.status(400).json({ error: "This plan requires custom pricing — please contact sales" });
     return;
   }
+  // Pricing-page prices are before GST — 18% GST is added on top here.
+  const { taxable, gst, total: amount } = withGst(baseAmount);
+  await ensureSubscriptionInvoiceSchema();
 
   try {
     const orderRes = await fetch("https://api.razorpay.com/v1/orders", {
@@ -272,17 +281,64 @@ router.post("/portal/payments/create-order", async (req, res): Promise<void> => 
     const order = (await orderRes.json()) as { id: string };
 
     await pool.query(
-      `INSERT INTO subscription_payments (company_id, subscription_id, plan_tier, billing_cycle, amount, razorpay_order_id, status)
-       VALUES ($1, $2, $3, $4, $5, $6, 'pending')`,
-      [sub.company_id, subscriptionId, planSlug, billingCycle, String(amount), order.id],
+      `INSERT INTO subscription_payments (company_id, subscription_id, plan_tier, billing_cycle, amount, razorpay_order_id, status, taxable_amount, gst_amount)
+       VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8)`,
+      [sub.company_id, subscriptionId, planSlug, billingCycle, String(amount), order.id, String(taxable), String(gst)],
     );
 
-    res.status(201).json({ orderId: order.id, amount, currency: "INR", keyId });
+    res.status(201).json({ orderId: order.id, amount, taxable, gst, gstRate: GST_RATE, currency: "INR", keyId });
   } catch (err) {
     logger.error({ err }, "Razorpay order creation errored");
     res.status(502).json({ error: "Could not create payment order" });
   }
 });
+
+// Activates a captured payment exactly once — whichever of /verify or the
+// webhook lands first — then issues its GST invoice in the same transaction.
+// Keyed on activated_at (not status): the webhook used to flip status to
+// "success" without extending the subscription, and /verify then skipped
+// activation because the status already said success — so the customer paid
+// and nothing renewed. Caller holds the payment row lock (SELECT … FOR UPDATE).
+async function activateAndInvoicePayment(
+  client: { query: (text: string, params?: any[]) => Promise<any> },
+  payment: any,
+  razorpayPaymentId: string,
+  razorpaySignature: string | null,
+): Promise<{ invoiceId: number; created: boolean } | null> {
+  await ensureSubscriptionInvoiceSchema();
+  if (payment.activated_at) {
+    const inv = await client.query(`SELECT id FROM subscription_invoices WHERE payment_id = $1`, [payment.id]);
+    return inv.rows[0] ? { invoiceId: inv.rows[0].id, created: false } : null;
+  }
+  await client.query(
+    `UPDATE subscription_payments
+     SET status = 'success', razorpay_payment_id = $1,
+         razorpay_signature = COALESCE($2, razorpay_signature),
+         verified_at = COALESCE(verified_at, NOW()), activated_at = NOW()
+     WHERE id = $3`,
+    [razorpayPaymentId, razorpaySignature, payment.id],
+  );
+
+  const subRes = await client.query(`SELECT * FROM subscriptions WHERE id = $1 FOR UPDATE`, [payment.subscription_id]);
+  const sub = subRes.rows[0];
+  const months = PLAN_MONTHS[payment.billing_cycle] ?? 1;
+  const now = new Date();
+  const curEnd = new Date(sub.subscription_end_date);
+  const base = curEnd > now ? curEnd : now;
+  const newEnd = addMonths(base, months);
+
+  await client.query(
+    `UPDATE subscriptions SET
+       plan_name = $1, plan_tier = $2, subscription_amount = $3,
+       subscription_end_date = $4, subscription_status = 'active', payment_status = 'paid',
+       last_payment_date = NOW(), next_due_date = $4, updated_at = NOW()
+     WHERE id = $5`,
+    [payment.billing_cycle, payment.plan_tier, payment.amount, newEnd, payment.subscription_id],
+  );
+
+  const inv = await issueInvoiceForPayment(client, payment.id, { start: base, end: newEnd });
+  return { invoiceId: inv.id, created: inv.created };
+}
 
 // POST /portal/payments/verify — the ONLY place a subscription is ever
 // activated from a payment. Recomputes the HMAC signature server-side
@@ -336,33 +392,11 @@ router.post("/portal/payments/verify", async (req, res): Promise<void> => {
       return;
     }
 
-    if (payment.status !== "success") {
-      await client.query(
-        `UPDATE subscription_payments
-         SET status = 'success', razorpay_payment_id = $1, razorpay_signature = $2, verified_at = NOW()
-         WHERE id = $3`,
-        [razorpayPaymentId, razorpaySignature, payment.id],
-      );
-
-      const subRes = await client.query(`SELECT * FROM subscriptions WHERE id = $1 FOR UPDATE`, [payment.subscription_id]);
-      const sub = subRes.rows[0];
-      const months = PLAN_MONTHS[payment.billing_cycle] ?? 1;
-      const now = new Date();
-      const curEnd = new Date(sub.subscription_end_date);
-      const base = curEnd > now ? curEnd : now;
-      const newEnd = addMonths(base, months);
-
-      await client.query(
-        `UPDATE subscriptions SET
-           plan_name = $1, plan_tier = $2, subscription_amount = $3,
-           subscription_end_date = $4, subscription_status = 'active', payment_status = 'paid',
-           last_payment_date = NOW(), next_due_date = $4, updated_at = NOW()
-         WHERE id = $5`,
-        [payment.billing_cycle, payment.plan_tier, payment.amount, newEnd, payment.subscription_id],
-      );
-    }
+    const invoice = await activateAndInvoicePayment(client, payment, razorpayPaymentId, razorpaySignature);
 
     await client.query("COMMIT");
+    // Email the PDF after commit — never delays or fails the payment itself.
+    if (invoice?.created) void emailInvoice(invoice.invoiceId);
 
     const { rows } = await pool.query(`SELECT * FROM subscriptions WHERE id = $1`, [payment.subscription_id]);
     res.json(formatMySubscription(rows[0]));
@@ -408,18 +442,28 @@ router.post("/portal/payments/webhook", async (req, res): Promise<void> => {
 
   const paymentEntity = event?.payload?.payment?.entity;
   if (event?.event === "payment.captured" && paymentEntity?.order_id) {
-    const { rows } = await pool.query(
-      `SELECT status FROM subscription_payments WHERE razorpay_order_id = $1`,
-      [paymentEntity.order_id],
-    );
-    if (rows.length > 0 && rows[0].status !== "success") {
-      // Same activation the /verify handler performs — a webhook can arrive
-      // even when the customer's browser never called /verify at all.
-      await pool.query(
-        `UPDATE subscription_payments SET status = 'success', razorpay_payment_id = $1, verified_at = NOW() WHERE razorpay_order_id = $2`,
-        [paymentEntity.id, paymentEntity.order_id],
+    // Same activation as /verify — the customer's browser may have closed
+    // before /verify ran. Signature already checked above.
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
+      const { rows } = await client.query(
+        `SELECT * FROM subscription_payments WHERE razorpay_order_id = $1 FOR UPDATE`,
+        [paymentEntity.order_id],
       );
-      logger.info({ orderId: paymentEntity.order_id }, "Razorpay webhook: payment captured (subscription activation left to /verify or a manual check)");
+      let invoice: { invoiceId: number; created: boolean } | null = null;
+      if (rows[0]) invoice = await activateAndInvoicePayment(client, rows[0], paymentEntity.id, null);
+      await client.query("COMMIT");
+      if (invoice?.created) void emailInvoice(invoice.invoiceId);
+      if (rows[0]) logger.info({ orderId: paymentEntity.order_id }, "Razorpay webhook: payment captured and activated");
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
+      logger.error({ err, orderId: paymentEntity.order_id }, "Razorpay webhook activation failed");
+      // 500 so Razorpay retries the delivery.
+      res.status(500).end();
+      return;
+    } finally {
+      client.release();
     }
   }
 
@@ -440,8 +484,12 @@ router.get("/portal/my-subscription", async (req, res): Promise<void> => {
 // GET /portal/my-payments — authenticated.
 router.get("/portal/my-payments", async (req, res): Promise<void> => {
   const companyId = getCompanyId(req);
+  await ensureSubscriptionInvoiceSchema();
   const { rows } = await pool.query(
-    `SELECT * FROM subscription_payments WHERE company_id = $1 ORDER BY created_at DESC`,
+    `SELECT sp.*, si.id AS invoice_id, si.invoice_no
+     FROM subscription_payments sp
+     LEFT JOIN subscription_invoices si ON si.payment_id = sp.id
+     WHERE sp.company_id = $1 ORDER BY sp.created_at DESC`,
     [companyId],
   );
   res.json(rows.map((r) => ({
@@ -453,7 +501,33 @@ router.get("/portal/my-payments", async (req, res): Promise<void> => {
     status: r.status,
     razorpayPaymentId: r.razorpay_payment_id ?? null,
     createdAt: r.created_at.toISOString(),
+    invoiceId: r.invoice_id ?? null,
+    invoiceNo: r.invoice_no ?? null,
   })));
+});
+
+// GET /portal/invoices/:id/pdf — the GST tax invoice for one subscription
+// payment. The paying company's own users, or the platform super_admin.
+router.get("/portal/invoices/:id/pdf", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ error: "Invalid invoice id" });
+    return;
+  }
+  await ensureSubscriptionInvoiceSchema();
+  const { rows: [inv] } = await pool.query(`SELECT * FROM subscription_invoices WHERE id = $1`, [id]);
+  const session = (req as any).session;
+  const allowed = inv && (session?.role === "super_admin" || (session?.userId && session.companyId === inv.company_id));
+  if (!allowed) {
+    res.status(404).json({ error: "Invoice not found" });
+    return;
+  }
+  const pdf = await renderInvoicePdf(inv);
+  const fileName = `${String(inv.invoice_no).replace(/\//g, "-")}.pdf`;
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `${req.query.download === "1" ? "attachment" : "inline"}; filename="${fileName}"`);
+  res.setHeader("Cache-Control", "private, no-store");
+  res.send(Buffer.from(pdf));
 });
 
 // ── Custom domain (portal "My Domain" page) ────────────────────────────────

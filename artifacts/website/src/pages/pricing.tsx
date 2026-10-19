@@ -15,6 +15,7 @@ export default function SitePricing() {
       <section className="max-w-6xl mx-auto px-4 py-16">
         <h1 className="text-3xl sm:text-4xl font-bold text-center">Plans for every stage of your business</h1>
         <p className="text-center text-slate-500 mt-3">All plans include GST billing, inventory, and free updates. Cancel any time.</p>
+        <p className="text-center text-xs text-slate-400 mt-1">Prices are exclusive of 18% GST. A GST tax invoice is emailed after every payment.</p>
 
         {isLoading ? (
           <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-blue-600" /></div>
@@ -36,7 +37,7 @@ export default function SitePricing() {
                       {isCustom ? (
                         <div className="text-2xl font-bold">Custom Pricing</div>
                       ) : (
-                        <div className="text-3xl font-bold">₹{p.priceMonthly.toLocaleString("en-IN")}<span className="text-sm font-normal text-slate-500">/mo</span></div>
+                        <div className="text-3xl font-bold">₹{p.priceMonthly.toLocaleString("en-IN")}<span className="text-sm font-normal text-slate-500">/mo + GST</span></div>
                       )}
                       {p.trialDays > 0 && <p className="text-xs text-teal-600 mt-1">{p.trialDays}-day free trial</p>}
                     </div>

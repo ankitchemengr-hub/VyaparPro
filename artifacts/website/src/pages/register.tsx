@@ -252,7 +252,7 @@ export default function PortalRegister() {
                     <SelectContent>
                       {plans.map((p) => (
                         <SelectItem key={p.slug} value={p.slug}>
-                          {p.name} — {p.priceMonthly > 0 ? `₹${p.priceMonthly.toLocaleString("en-IN")}/mo` : "Custom pricing"}
+                          {p.name} — {p.priceMonthly > 0 ? `₹${p.priceMonthly.toLocaleString("en-IN")}/mo + GST` : "Custom pricing"}
                           {p.trialDays > 0 ? ` (${p.trialDays}-day free trial)` : ""}
                         </SelectItem>
                       ))}
