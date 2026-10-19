@@ -886,6 +886,16 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
     const productById = new Map(productRows.map((p) => [p.id, p]));
     // Live BOM cost for manufactured items — snapshotted as cost_price below.
     const manufacturingCosts = await loadManufacturingCosts(companyId);
+    // Cost as it was when this invoice was first saved, per product. Editing
+    // an old bill must not re-price its cost at today's purchase/BOM rate —
+    // that made old sales show as losses once the purchase price went up.
+    // Only a product newly added in this edit takes today's cost.
+    const savedCostByProduct = new Map<number, string>();
+    for (const oi of oldItemsRes.rows) {
+      if (oi.cost_price != null && !savedCostByProduct.has(oi.product_id)) {
+        savedCostByProduct.set(oi.product_id, String(oi.cost_price));
+      }
+    }
 
     const processedItems = data.items.map((item) => {
       const qty = Number(item.qty);
@@ -908,8 +918,13 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
       const litersPerBoxVal = productById.get(item.productId)?.litersPerBox;
       // total_liters = qty × liters-per-unit. Feeds the commission calculation.
       const totalLiters = litersPerBoxVal != null ? qty * Number(litersPerBoxVal) : null;
-      // Same cost snapshot as the create route (BOM cost for manufactured items).
-      const costPriceVal = effectiveUnitCost(item.productId, productById.get(item.productId)?.purchasePrice, manufacturingCosts);
+      // Keep the sale-time cost for products already on the bill; a newly
+      // added product gets today's cost (same snapshot as the create route).
+      const savedCost = savedCostByProduct.get(item.productId);
+      const liveCost = savedCost == null
+        ? effectiveUnitCost(item.productId, productById.get(item.productId)?.purchasePrice, manufacturingCosts)
+        : null;
+      const costPriceVal = savedCost ?? liveCost;
       return {
         ...item,
         qty: String(qty), rate: String(rate), mrp: String(item.mrp),

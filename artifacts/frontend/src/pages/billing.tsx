@@ -126,6 +126,10 @@ type BillingItem = {
   // list refreshes. Unset = straight from the price list, so it follows rate
   // updates made elsewhere (Purchases, Price List, Inventory).
   rateEdited?: boolean;
+  // Cost recorded on the saved invoice line (purchase rate / BOM cost at the
+  // time of that sale). When editing an old bill, the at/below-cost check
+  // compares against this — not today's cost, which may have gone up since.
+  savedCost?: { cost: number; source: CostSource } | null;
 };
 
 function resolvePack(p: any): number {
@@ -236,9 +240,9 @@ const RATE_HIST_CSS = `
 // Red line under a Rate field whose net rate is at/below the product's
 // purchase price — the always-visible half of the cost warning (the beep +
 // toast fire once on blur, and the popup on save).
-type CostSource = "mfg" | "purchase";
+type CostSource = "mfg" | "purchase" | "saved";
 type CostWarning = { kind: "below" | "equal"; cost: number; net: number; source: CostSource };
-const COST_LABEL: Record<CostSource, string> = { mfg: "Mfg cost", purchase: "Purchase rate" };
+const COST_LABEL: Record<CostSource, string> = { mfg: "Mfg cost", purchase: "Purchase rate", saved: "Cost at sale time" };
 
 // Amber line under a Rate field a non-admin set below the price-list rate.
 function ListRateHint({ w, testId }: { w: { list: number; net: number } | null; testId: string }) {
@@ -482,6 +486,9 @@ export default function Billing() {
         // Editing a saved invoice — keep its recorded rates; the history
         // auto-fill must not silently reprice existing lines.
         rateEdited: true,
+        savedCost: it.costPrice != null && Number(it.costPrice) > 0
+          ? { cost: Number(it.costPrice), source: "saved" as CostSource }
+          : null,
         discountPct: Number(it.discountPct), discountAmt: Number(it.discountAmt),
         amount: Number(it.amount), litersPerBox: Number(prod?.litersPerBox ?? 0) || 0,
         packagingUnit: prod?.packagingUnit?.trim() || "Box",
@@ -726,7 +733,9 @@ export default function Billing() {
     return (base - disc) / units;
   };
   const costWarning = (i: BillingItem): CostWarning | null => {
-    const c = costByProduct.get(i.productId);
+    // A line from a saved invoice is judged by the cost at the time of that
+    // sale; only new lines use today's purchase / BOM cost.
+    const c = i.savedCost !== undefined ? i.savedCost : costByProduct.get(i.productId);
     if (!c || !(c.cost > 0)) return null; // no cost recorded — nothing to compare
     const { cost, source } = c;
     const net = Math.round(netUnitRate(i) * 100) / 100;
