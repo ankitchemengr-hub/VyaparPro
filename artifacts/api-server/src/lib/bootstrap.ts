@@ -152,6 +152,8 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
     // ── Store users allowed to change the rate while billing, and the audit
     //    trail for invoices billed below the price-list rate ────────────────
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS can_edit_rate BOOLEAN NOT NULL DEFAULT false`,
+    // Store users only: may add Production Received (goods in from manufacturing).
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS can_receive_production BOOLEAN NOT NULL DEFAULT false`,
     `ALTER TABLE invoices ADD COLUMN IF NOT EXISTS below_list_rate BOOLEAN NOT NULL DEFAULT false`,
     `ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS list_rate NUMERIC(12, 2)`,
 

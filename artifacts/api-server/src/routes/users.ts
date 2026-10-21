@@ -41,6 +41,7 @@ function toPublic(u: typeof usersTable.$inferSelect) {
     pricingTier: u.pricingTier,
     isActive: u.isActive,
     canEditRate: u.canEditRate,
+    canReceiveProduction: u.canReceiveProduction,
     createdAt: u.createdAt.toISOString(),
   };
 }
@@ -323,6 +324,40 @@ router.put("/users/:id/rate-permission", requireAdmin, async (req, res): Promise
     companyId,
     action: "rate_permission_changed",
     description: `Rate change while billing ${canEditRate ? "allowed" : "blocked"} for "${updated.username}"`,
+    actorId: session?.userId ?? 0,
+    actorName: session?.name ?? session?.username ?? "Unknown",
+    targetUsername: updated.username,
+    targetUserId: updated.id,
+    ipAddress: getClientIp(req),
+  });
+  res.json(toPublic(updated));
+});
+
+// PUT /users/:id/production-permission { canReceiveProduction } — admin
+// lets one store user add Production Received entries (goods in from
+// manufacturing; add only). Audit-logged like the rate switch.
+router.put("/users/:id/production-permission", requireAdmin, async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  const canReceiveProduction = (req.body ?? {}).canReceiveProduction;
+  if (!Number.isInteger(id) || typeof canReceiveProduction !== "boolean") {
+    res.status(400).json({ error: "Send { canReceiveProduction: true | false }" });
+    return;
+  }
+  const companyId = getCompanyId(req);
+  const [updated] = await db
+    .update(usersTable)
+    .set({ canReceiveProduction })
+    .where(and(eq(usersTable.id, id), eq(usersTable.companyId, companyId)))
+    .returning();
+  if (!updated) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  const session = (req as any).session;
+  await writeAuditLog({
+    companyId,
+    action: "production_permission_changed",
+    description: `Production Received ${canReceiveProduction ? "allowed" : "blocked"} for "${updated.username}"`,
     actorId: session?.userId ?? 0,
     actorName: session?.name ?? session?.username ?? "Unknown",
     targetUsername: updated.username,

@@ -79,7 +79,7 @@ export const moduleNavItems: NavItem[] = [
   { name: "Cash Book", href: "/cashbook", icon: HandCoins, roles: ["admin", "accountant"], description: "Daily cash movements" },
   { name: "Accounts", href: "/accounts", icon: Wallet, roles: ["admin", "accountant"], description: "Bank and cash accounts" },
   { name: "Rewards", href: "/rewards", icon: Award, roles: ["admin", "customer"], description: "Volume reward schemes" },
-  { name: "Material Received", href: "/material-received", icon: PackagePlus, roles: ["store"], feature: "material_receive", description: "Enter finished goods received from manufacturing" },
+  { name: "Production Received", href: "/material-received", icon: PackagePlus, roles: ["store"], feature: "material_receive", description: "Goods received from manufacturing (not a purchase)" },
   { name: "Manufacturing", href: "/manufacturing", icon: Factory, roles: ["admin", "manufacturing"], description: "Production workload" },
   { name: "Bill of Materials", href: "/bom", icon: FileText, roles: ["admin"], description: "BOM master" },
   { name: "Auto Manufacturing", href: "/auto-manufacture", icon: Factory, roles: ["admin"], description: "Made products never go negative on sale; fix existing negative stock" },

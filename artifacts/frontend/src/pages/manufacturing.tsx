@@ -2303,8 +2303,9 @@ export function MaterialTransferTab({ canEdit = true }: { canEdit?: boolean } = 
             <div className="grid grid-cols-12 gap-2 px-4 py-2 text-xs uppercase text-muted-foreground font-medium bg-muted/50">
               <div className="col-span-2">Transfer #</div>
               <div className="col-span-2">Date</div>
-              <div className="col-span-3">Sent By</div>
-              <div className="col-span-2 text-right">Items</div>
+              <div className="col-span-2">Sent By</div>
+              <div className="col-span-2">Entered By</div>
+              <div className="col-span-1 text-right">Items</div>
               <div className="col-span-3 text-right">Actions</div>
             </div>
             <div className="divide-y">
@@ -2318,8 +2319,9 @@ export function MaterialTransferTab({ canEdit = true }: { canEdit?: boolean } = 
                   <div className="col-span-2 text-muted-foreground">
                     {new Date(t.transferDate).toLocaleDateString("en-IN")}
                   </div>
-                  <div className="col-span-3 text-muted-foreground line-clamp-1">{t.sentBy || "—"}</div>
-                  <div className="col-span-2 text-right tabular-nums">{t.itemCount}</div>
+                  <div className="col-span-2 text-muted-foreground line-clamp-1">{t.sentBy || "—"}</div>
+                  <div className="col-span-2 text-muted-foreground line-clamp-1" data-testid={`transfer-entered-by-${t.id}`}>{(t as any).enteredBy || "—"}</div>
+                  <div className="col-span-1 text-right tabular-nums">{t.itemCount}</div>
                   <div className="col-span-3 flex items-center justify-end gap-1">
                     <Button
                       variant="outline"
@@ -2384,6 +2386,7 @@ export function MaterialTransferTab({ canEdit = true }: { canEdit?: boolean } = 
                 </div>
                 <div className="text-sm text-muted-foreground">
                   {t.sentBy ? `Sent by ${t.sentBy}` : "—"} · {t.itemCount} item{t.itemCount === 1 ? "" : "s"}
+                  {(t as any).enteredBy && <div className="text-xs">Entered by {(t as any).enteredBy}</div>}
                 </div>
                 <div className="flex items-center gap-2 pt-1">
                   <Button

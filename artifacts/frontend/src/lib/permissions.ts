@@ -17,6 +17,9 @@ export function useRoleFeature(): (feature: string) => boolean {
   return (feature: string) => {
     if (!user) return false;
     if (isAdmin) return true;
+    // Per-user switches from User Accounts (returned on /auth/me).
+    if (feature === FEATURE_MATERIAL_RECEIVE && (user as any).canReceiveProduction === true) return true;
+    if (feature === FEATURE_BILLING_RATE_EDIT && (user as any).canEditRate === true) return true;
     return (data ?? []).some((p) => p.role === user.role && p.feature === feature && p.allowed);
   };
 }

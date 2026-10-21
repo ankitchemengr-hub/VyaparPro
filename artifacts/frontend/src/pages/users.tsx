@@ -218,6 +218,9 @@ function UserRow({
       <TableCell>{user.name}{isSelf && <span className="text-xs text-muted-foreground ml-2">(you)</span>}</TableCell>
       <TableCell className="hidden sm:table-cell">
         <Badge variant="outline" className="capitalize">{user.role}</Badge>
+        {user.role === "store" && (user as any).canReceiveProduction && (
+          <Badge variant="secondary" className="ml-1.5 text-[10px]" data-testid={`badge-production-${user.id}`}>Production</Badge>
+        )}
         {user.role === "store" && (user as any).canEditRate && (
           <Badge variant="secondary" className="ml-1.5 text-[10px]" data-testid={`badge-rate-edit-${user.id}`}>Rate edit</Badge>
         )}
@@ -285,6 +288,8 @@ function EditUserDialog({
   const [pricingTier, setPricingTier] = useState<"retail" | "wholesale">("retail");
   // Store users only: may change the line rate while billing.
   const [canEditRate, setCanEditRate] = useState(false);
+  // Store users only: may add Production Received entries.
+  const [canReceiveProduction, setCanReceiveProduction] = useState(false);
   const [savingRatePerm, setSavingRatePerm] = useState(false);
 
   const linkableType = ROLE_TO_ENTITY_TYPE[role];
@@ -306,10 +311,30 @@ function EditUserDialog({
       setEntityId(target.entityId ? String(target.entityId) : "");
       setPricingTier((target as any).pricingTier === "wholesale" ? "wholesale" : "retail");
       setCanEditRate(Boolean((target as any).canEditRate));
+      setCanReceiveProduction(Boolean((target as any).canReceiveProduction));
     }
   }, [target]);
 
   // The rate permission has its own endpoint; only call it when it changed.
+  // Same pattern for the Production Received switch.
+  const saveProductionPermission = async (): Promise<boolean> => {
+    if (!target) return true;
+    const wanted = role === "store" ? canReceiveProduction : false;
+    if (wanted === Boolean((target as any).canReceiveProduction)) return true;
+    const res = await fetch(`/api/users/${target.id}/production-permission`, {
+      method: "PUT",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ canReceiveProduction: wanted }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      toast({ title: "Could not save Production Received permission", description: body?.error ?? `Error ${res.status}`, variant: "destructive" });
+      return false;
+    }
+    return true;
+  };
+
   const saveRatePermission = async (): Promise<boolean> => {
     if (!target) return true;
     const wanted = role === "store" ? canEditRate : false;
@@ -347,7 +372,7 @@ function EditUserDialog({
       },
       {
         onSuccess: async () => {
-          if (await saveRatePermission()) onDone();
+          if ((await saveRatePermission()) && (await saveProductionPermission())) onDone();
         },
         onError: (e: any) =>
           toast({
@@ -390,6 +415,19 @@ function EditUserDialog({
               placeholder="Falls back to entity name if linked"
             />
           </div>
+
+          {role === "store" && (
+            <label className="flex items-start gap-3 rounded-md border p-3 cursor-pointer" data-testid="toggle-can-receive-production">
+              <Switch checked={canReceiveProduction} onCheckedChange={setCanReceiveProduction} className="mt-0.5" />
+              <span className="space-y-0.5">
+                <span className="block text-sm font-medium">Can add Production Received</span>
+                <span className="block text-xs text-muted-foreground">
+                  Enter goods that came in from manufacturing — date, item and quantity only (no price).
+                  Add only; editing and deleting stay with admin.
+                </span>
+              </span>
+            </label>
+          )}
 
           {role === "store" && (
             <label className="flex items-start gap-3 rounded-md border p-3 cursor-pointer" data-testid="toggle-can-edit-rate">

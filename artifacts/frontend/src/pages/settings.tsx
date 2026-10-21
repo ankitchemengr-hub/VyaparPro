@@ -263,7 +263,7 @@ export default function Settings() {
   // Received page + API); the rest are saved here but not yet enforced.
   const FEATURE_INFO: Record<string, { label: string; hint?: string }> = {
     billing_rate_edit: { label: "Billing — change rate", hint: "Can edit the Rate field while billing (store)" },
-    material_receive: { label: "Material Received — add", hint: "Can add finished goods received from manufacturing (add only, no edit/delete)" },
+    material_receive: { label: "Production Received — add (whole role)", hint: "Every user of this role can add goods received from manufacturing. To allow only some store users, leave this off and turn it on per user in User Accounts." },
   };
 
   const handleToggle = (role: string, feature: string, checked: boolean) => {

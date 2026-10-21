@@ -24,6 +24,8 @@ export const usersTable = pgTable("users", {
   // Store users only: may change the line rate while billing. A rate below
   // the price-list rate still warns and flags the invoice (below_list_rate).
   canEditRate: boolean("can_edit_rate").notNull().default(false),
+  // Store users only: may add Production Received entries (add only).
+  canReceiveProduction: boolean("can_receive_production").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (t) => [

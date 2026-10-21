@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { pool } from "@workspace/db";
 import { getCompanyId } from "../lib/tenant";
-import { roleAllows, ROLE_FEATURES } from "../lib/role-permission";
+import { userAllows, ROLE_FEATURES } from "../lib/role-permission";
 
 // Production roles manage transfers fully; a store user may only ADD one,
 // and only when Settings > Permissions gives the store role "Material Receive".
@@ -122,11 +122,13 @@ router.get("/material-transfers", async (req, res): Promise<void> => {
   const rows = await queryMany(
     `SELECT
        mt.id, mt.transfer_no, mt.transfer_date, mt.sent_by, mt.notes, mt.created_at,
+       u.name AS entered_by,
        COUNT(mti.id) AS item_count
      FROM material_transfers mt
      LEFT JOIN material_transfer_items mti ON mti.transfer_id = mt.id
+     LEFT JOIN users u ON u.id = mt.created_by_user_id
      WHERE mt.company_id = $1
-     GROUP BY mt.id
+     GROUP BY mt.id, u.name
      ORDER BY mt.transfer_date DESC, mt.id DESC
      LIMIT 200`,
     [companyId],
@@ -137,6 +139,8 @@ router.get("/material-transfers", async (req, res): Promise<void> => {
     transferNo: r.transfer_no,
     transferDate: new Date(r.transfer_date).toISOString(),
     sentBy: r.sent_by ?? null,
+    // The login that entered it (e.g. the store user who received the goods).
+    enteredBy: r.entered_by ?? null,
     notes: r.notes ?? null,
     itemCount: Number(r.item_count),
     createdAt: new Date(r.created_at).toISOString(),
@@ -198,7 +202,7 @@ router.get("/material-transfers/:id", async (req, res): Promise<void> => {
 router.post("/material-transfers", async (req, res): Promise<void> => {
   const companyId = getCompanyId(req);
   const auth = (req as any).session;
-  if (!TRANSFER_MANAGERS.has(auth?.role) && !(await roleAllows(companyId, auth?.role, ROLE_FEATURES.materialReceive))) {
+  if (!TRANSFER_MANAGERS.has(auth?.role) && !(await userAllows(companyId, auth, ROLE_FEATURES.materialReceive))) {
     res.status(403).json({ error: "You don't have permission to add material received entries" });
     return;
   }
