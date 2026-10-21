@@ -175,12 +175,14 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
 
       <Card>
         <CardContent className="p-4">
-          <div className="flex items-center gap-2">
+          {/* On phones the search box takes its own full-width line and the
+              filter buttons / count wrap below it; from sm up it's one row. */}
+          <div className="flex flex-wrap items-center gap-2">
             <Input
               placeholder="Search invoice number, customer, or item..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="flex-1 min-w-0"
+              className="basis-full h-11 text-base sm:basis-0 sm:flex-1 sm:h-9 sm:text-sm min-w-0"
               data-testid="input-invoice-search"
             />
 
@@ -336,7 +338,7 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
               </Button>
             )}
 
-            <span className="shrink-0 text-sm text-muted-foreground" data-testid="text-result-count">
+            <span className="shrink-0 ml-auto sm:ml-0 text-sm text-muted-foreground" data-testid="text-result-count">
               {isLoading ? "Loading…" : `${displayedInvoices.length} invoice${displayedInvoices.length === 1 ? "" : "s"}`}
             </span>
           </div>
