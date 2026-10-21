@@ -510,6 +510,39 @@ router.get("/dashboard/finance-overview", async (req, res): Promise<void> => {
   res.json({ items, totalValue });
 });
 
+// GET /dashboard/receivable-payable (admin/accountant, same as Khatabook) —
+// what the market owes the business and what the business owes the market,
+// summed over every party exactly the way Khatabook's two tabs show it. A
+// positive customer balance is money to receive and a positive vendor balance
+// is money to pay (purchases.ts: "we owe them"); a negative balance on either
+// side is an advance and counts on the opposite side.
+router.get("/dashboard/receivable-payable", async (req, res): Promise<void> => {
+  const role = (req as any).session?.role;
+  if (role !== "admin" && role !== "accountant") {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  const companyId = getCompanyId(req);
+  const row = await queryOne(
+    `SELECT
+       COALESCE(SUM(CASE WHEN type = 'customer' AND outstanding_balance > 0 THEN outstanding_balance
+                         WHEN type = 'vendor' AND outstanding_balance < 0 THEN -outstanding_balance END), 0) AS receivable,
+       COALESCE(SUM(CASE WHEN type = 'vendor' AND outstanding_balance > 0 THEN outstanding_balance
+                         WHEN type = 'customer' AND outstanding_balance < 0 THEN -outstanding_balance END), 0) AS payable,
+       COUNT(*) FILTER (WHERE (type = 'customer' AND outstanding_balance > 0) OR (type = 'vendor' AND outstanding_balance < 0))::int AS receivable_parties,
+       COUNT(*) FILTER (WHERE (type = 'vendor' AND outstanding_balance > 0) OR (type = 'customer' AND outstanding_balance < 0))::int AS payable_parties
+     FROM entities
+     WHERE company_id = $1 AND type IN ('customer', 'vendor')`,
+    [companyId],
+  );
+  res.json({
+    receivable: Number(row.receivable ?? 0),
+    payable: Number(row.payable ?? 0),
+    receivableParties: Number(row.receivable_parties ?? 0),
+    payableParties: Number(row.payable_parties ?? 0),
+  });
+});
+
 // GET /reports/ledger
 router.get("/reports/ledger", async (req, res): Promise<void> => {
   const role = (req as any).session?.role;

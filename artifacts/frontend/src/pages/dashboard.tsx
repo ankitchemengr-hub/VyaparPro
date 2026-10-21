@@ -1,5 +1,5 @@
 import React from "react";
-import { Redirect } from "wouter";
+import { Redirect, useLocation } from "wouter";
 import { PieChart, Pie, Cell } from "recharts";
 import { useAuth } from "@/contexts/use-auth";
 import { homePathForRole } from "@/lib/nav-items";
@@ -157,6 +157,53 @@ type SalesCompare = {
 // Sales This Month; for the admin a tap reveals the comparison with last
 // month (same days of last month, and last month in full). Fetched only on
 // the first tap — nobody else sees or loads it.
+interface ReceivablePayable { receivable: number; payable: number; receivableParties: number; payableParties: number }
+
+// Market totals, the same figures Khatabook's two tabs add up to: what the
+// business will get (customer dues + vendor advances) and will give (vendor
+// dues + customer advances). Tapping a card opens the matching Khatabook tab.
+function ReceivablePayableCards() {
+  const [, setLocation] = useLocation();
+  const [data, setData] = React.useState<ReceivablePayable | null>(null);
+  const [hidden, setHidden] = React.useState(false);
+
+  React.useEffect(() => {
+    fetch("/api/dashboard/receivable-payable", { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then(setData)
+      .catch(() => setHidden(true));
+  }, []);
+
+  if (hidden) return null;
+  const card = (
+    title: string, amount: number | undefined, parties: number | undefined,
+    tone: string, Icon: typeof ArrowDownRight, href: string, testId: string,
+  ) => (
+    <Card className="cursor-pointer select-none transition-colors hover:bg-muted/40" {...clickableProps(() => setLocation(href))} data-testid={testId}>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+        <Icon className={`h-4 w-4 ${tone}`} />
+      </CardHeader>
+      <CardContent>
+        {amount === undefined ? (
+          <div className="h-8 w-28 bg-muted rounded animate-pulse" />
+        ) : (
+          <div className={`text-2xl font-bold ${tone}`}>₹{amount.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</div>
+        )}
+        <p className="text-xs text-muted-foreground">
+          {parties === undefined ? " " : `${parties} part${parties === 1 ? "y" : "ies"} — tap for Khatabook`}
+        </p>
+      </CardContent>
+    </Card>
+  );
+  return (
+    <>
+      {card("You Will Get", data?.receivable, data?.receivableParties, "text-emerald-600", ArrowDownRight, "/khatabook", "card-you-will-get")}
+      {card("You Will Give", data?.payable, data?.payableParties, "text-red-600", ArrowUpRight, "/khatabook?tab=vendor", "card-you-will-give")}
+    </>
+  );
+}
+
 function SalesThisMonthCard({ total, invoiceCount, canCompare }: { total: number; invoiceCount: number; canCompare: boolean }) {
   const [open, setOpen] = React.useState(false);
   const [data, setData] = React.useState<SalesCompare | null>(null);
@@ -724,12 +771,13 @@ export default function Dashboard() {
           ))}
         </div>
       ) : summary ? (
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
           <SalesThisMonthCard
             total={summary.totalSalesThisMonth}
             invoiceCount={summary.invoicesThisMonth}
             canCompare={isAdmin}
           />
+          {hasRole(["admin", "accountant"]) && <ReceivablePayableCards />}
         </div>
       ) : null}
 
