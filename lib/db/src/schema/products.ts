@@ -12,6 +12,9 @@ export const productsTable = pgTable("products", {
   itemCode: text("item_code").notNull(),
   unit: text("unit").notNull().default("QTY"),
   purchasePrice: numeric("purchase_price", { precision: 12, scale: 2 }).notNull().default("0"),
+  // GST % paid on the purchases behind purchasePrice (value-weighted; 0 for
+  // non-GST bills). A non-GST sale can't claim it back, so profit adds it to cost.
+  purchaseGstPct: numeric("purchase_gst_pct", { precision: 6, scale: 3 }),
   retailPrice: numeric("retail_price", { precision: 12, scale: 2 }).notNull().default("0"),
   wholesalePrice: numeric("wholesale_price", { precision: 12, scale: 2 }).notNull().default("0"),
   mrp: numeric("mrp", { precision: 12, scale: 2 }).notNull().default("0"),

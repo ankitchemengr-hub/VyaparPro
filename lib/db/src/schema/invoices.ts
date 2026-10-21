@@ -89,6 +89,9 @@ export const invoiceItemsTable = pgTable("invoice_items", {
   // purchase price. Null on rows created before this column existed; reports
   // fall back to the current product price for those.
   costPrice: numeric("cost_price", { precision: 12, scale: 2 }),
+  // GST % paid on that cost at purchase, snapshotted at sale. Profit on a
+  // non-GST invoice uses cost_price × (1 + cost_gst_pct/100).
+  costGstPct: numeric("cost_gst_pct", { precision: 6, scale: 3 }),
   // Price-list rate for this customer/invoice type at save time — what the
   // line's rate is compared against for the below-rate flag.
   listRate: numeric("list_rate", { precision: 12, scale: 2 }),

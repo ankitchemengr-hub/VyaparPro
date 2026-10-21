@@ -165,6 +165,19 @@ function buildPriceChange(productId: number, prod: any, newRate: number): PriceC
 // zero-stock case (new product, or fully sold out) falls out of the same
 // formula naturally, since a zero weight on oldAvgCost leaves newRate as
 // the whole answer.
+// GST % paid on the stock, weighted by value — same blending as the average
+// cost below. A GST bill contributes its line GST %, a non-GST bill 0. Unknown
+// (null) history counts as the incoming bill's own %.
+function weightedGstPct(
+  oldStock: number, oldAvgCost: number, oldPct: number | null,
+  newQty: number, newRate: number, newPct: number,
+): number {
+  const oldValue = Math.max(0, oldStock) * oldAvgCost;
+  const newValue = newQty * newRate;
+  if (oldPct == null || oldValue + newValue <= 0) return newPct;
+  return Math.round(((oldValue * oldPct + newValue * newPct) / (oldValue + newValue)) * 1000) / 1000;
+}
+
 function weightedAverageCost(oldStock: number, oldAvgCost: number, newQty: number, newRate: number): number {
   const clampedOldStock = Math.max(0, oldStock);
   const combinedQty = clampedOldStock + newQty;
@@ -456,7 +469,7 @@ router.post("/purchases", async (req, res): Promise<void> => {
     const priceChanges: PriceChange[] = [];
     for (const item of processed) {
       const prodRes = await client.query(
-        `SELECT name, item_code, purchase_price, wholesale_price, retail_price, non_gst_price,
+        `SELECT name, item_code, purchase_price, purchase_gst_pct, wholesale_price, retail_price, non_gst_price,
                 tax_rate, non_gst_margin_pct, retail_margin_pct, wholesale_margin_pct, current_stock
            FROM products WHERE company_id = $1 AND id = $2`,
         [companyId, item.productId],
@@ -503,9 +516,14 @@ router.post("/purchases", async (req, res): Promise<void> => {
       );
       const priceChange = buildPriceChange(item.productId, prod, newAvgCost);
       if (priceChange) priceChanges.push(priceChange);
+      const newGstPct = weightedGstPct(
+        Number(prod?.current_stock ?? 0), Number(prod?.purchase_price ?? 0),
+        prod?.purchase_gst_pct != null ? Number(prod.purchase_gst_pct) : null,
+        Number(item.qty), Number(item.rate), isGst ? Number(item.taxPct) || 0 : 0,
+      );
       await client.query(
-        `UPDATE products SET purchase_price = $1 WHERE company_id = $2 AND id = $3`,
-        [newAvgCost, companyId, item.productId],
+        `UPDATE products SET purchase_price = $1, purchase_gst_pct = $4 WHERE company_id = $2 AND id = $3`,
+        [newAvgCost, companyId, item.productId, newGstPct],
       );
     }
 
@@ -711,7 +729,7 @@ router.put("/purchases/:id", async (req, res): Promise<void> => {
     const priceChanges: PriceChange[] = [];
     for (const item of processed) {
       const prodRes = await client.query(
-        `SELECT name, item_code, purchase_price, wholesale_price, retail_price, non_gst_price,
+        `SELECT name, item_code, purchase_price, purchase_gst_pct, wholesale_price, retail_price, non_gst_price,
                 tax_rate, non_gst_margin_pct, retail_margin_pct, wholesale_margin_pct, current_stock
            FROM products WHERE company_id = $1 AND id = $2`,
         [companyId, item.productId],
@@ -743,9 +761,14 @@ router.put("/purchases/:id", async (req, res): Promise<void> => {
       );
       const priceChange = buildPriceChange(item.productId, prod, newAvgCost);
       if (priceChange) priceChanges.push(priceChange);
+      const newGstPct = weightedGstPct(
+        Number(prod?.current_stock ?? 0), Number(prod?.purchase_price ?? 0),
+        prod?.purchase_gst_pct != null ? Number(prod.purchase_gst_pct) : null,
+        Number(item.qty), Number(item.rate), isGst ? Number(item.taxPct) || 0 : 0,
+      );
       await client.query(
-        `UPDATE products SET purchase_price = $1 WHERE company_id = $2 AND id = $3`,
-        [String(newAvgCost), companyId, item.productId],
+        `UPDATE products SET purchase_price = $1, purchase_gst_pct = $4 WHERE company_id = $2 AND id = $3`,
+        [String(newAvgCost), companyId, item.productId, newGstPct],
       );
     }
 

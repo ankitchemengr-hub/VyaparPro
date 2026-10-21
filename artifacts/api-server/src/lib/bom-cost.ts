@@ -116,6 +116,47 @@ export async function loadManufacturingCosts(companyId: number): Promise<Map<num
  * manufactured product (when it rolls up to something > 0), otherwise the
  * product's purchasePrice.
  */
+// GST % paid on each product's cost, keyed by product id: a bought item's own
+// purchase_gst_pct; for a made item, worked out from its BOM materials
+// (GST-inclusive recipe cost vs plain recipe cost). Used to snapshot
+// invoice_items.cost_gst_pct and by the products list for billing alerts.
+export async function loadCostGstPct(companyId: number): Promise<Map<number, number>> {
+  const [prodRows, bomRows] = await Promise.all([
+    pool.query(`SELECT id, purchase_price, purchase_gst_pct FROM products WHERE company_id = $1`, [companyId]),
+    pool.query(
+      `SELECT b.finished_product_id, b.output_quantity, bi.material_product_id, bi.quantity
+       FROM boms b
+       JOIN bom_items bi ON bi.bom_id = b.id AND bi.company_id = b.company_id
+       WHERE b.company_id = $1`,
+      [companyId],
+    ),
+  ]);
+  const pctById = new Map<number, number>(prodRows.rows.map((r: any) => [r.id, Number(r.purchase_gst_pct) || 0]));
+  const result = new Map<number, number>(pctById);
+  if (bomRows.rows.length === 0) return result;
+
+  const bomItems: BomItemRow[] = bomRows.rows.map((r: any) => ({
+    finishedProductId: r.finished_product_id,
+    materialProductId: r.material_product_id,
+    quantity: r.quantity,
+    outputQuantity: r.output_quantity,
+  }));
+  const basic = computeProductCosts(
+    prodRows.rows.map((r: any) => ({ id: r.id, purchasePrice: r.purchase_price })),
+    bomItems,
+  );
+  const gross = computeProductCosts(
+    prodRows.rows.map((r: any) => ({ id: r.id, purchasePrice: (Number(r.purchase_price) || 0) * (1 + (pctById.get(r.id) ?? 0) / 100) })),
+    bomItems,
+  );
+  for (const finishedId of new Set(bomItems.map((b) => b.finishedProductId))) {
+    const b = basic.get(finishedId) ?? 0;
+    const g = gross.get(finishedId) ?? 0;
+    if (b > 0) result.set(finishedId, Math.round(((g / b) - 1) * 100 * 1000) / 1000);
+  }
+  return result;
+}
+
 export function effectiveUnitCost(
   productId: number,
   purchasePrice: string | number | null | undefined,

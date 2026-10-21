@@ -26,7 +26,7 @@ import { logger } from "../lib/logger";
 import { generateSeriesNumber, type SeriesType } from "../lib/number-series";
 import { getCompanyId } from "../lib/tenant";
 import { isGstAccountant } from "../lib/gst-access";
-import { loadManufacturingCosts, effectiveUnitCost } from "../lib/bom-cost";
+import { loadManufacturingCosts, effectiveUnitCost, loadCostGstPct } from "../lib/bom-cost";
 import { settleExcessInvoiceDues, NO_PAY_INVOICE_TYPES } from "../lib/entity-payment";
 import { autoManufactureForSale } from "../lib/auto-manufacture";
 import { applyListRateFlags } from "../lib/list-rate";
@@ -255,7 +255,10 @@ router.get("/invoices", async (req, res): Promise<void> => {
          AND i.invoice_type NOT IN ('quotation', 'proforma_invoice', 'sale_order', 'delivery_challan')
          AND ii.cost_price > 0
          AND ii.qty > 0
-         AND ROUND((ii.qty * ii.rate - ii.discount_amt) / ii.qty, 2) < ii.cost_price
+         -- Non-GST sale: the purchase GST can't be recovered, so it's cost too.
+         AND ROUND((ii.qty * ii.rate - ii.discount_amt) / ii.qty, 2) < ROUND(ii.cost_price *
+               (CASE WHEN i.invoice_type IN ('gst', 'proforma_invoice') THEN 1
+                     ELSE 1 + COALESCE(ii.cost_gst_pct, 0) / 100 END), 2)
        GROUP BY ii.invoice_id`,
       [companyId, invoices.map((i) => i.id)],
     );
@@ -332,6 +335,8 @@ router.post("/invoices", async (req, res): Promise<void> => {
     const productById = new Map(productRows.map((p) => [p.id, p]));
     // Live BOM cost for manufactured items — snapshotted as cost_price below.
     const manufacturingCosts = await loadManufacturingCosts(companyId);
+    // GST % paid on each product's cost — snapshotted as cost_gst_pct.
+    const costGstPcts = await loadCostGstPct(companyId);
 
     const processedItems = data.items.map((item) => {
       const qty = Number(item.qty);
@@ -379,6 +384,7 @@ router.post("/invoices", async (req, res): Promise<void> => {
           ? String(qty * Number(litersPerBox))
           : null,
         costPrice: costPrice != null ? String(costPrice) : null,
+        costGstPct: String(costGstPcts.get(item.productId) ?? 0),
         rate: String(rate),
         mrp: String(item.mrp),
         discountPct: String(discPct),
@@ -477,8 +483,8 @@ router.post("/invoices", async (req, res): Promise<void> => {
     // Insert items + deduct stock
     for (const item of processedItems) {
       await client.query(
-        `INSERT INTO invoice_items (company_id, invoice_id, product_id, product_name, hsn_code, description, qty, qty_boxes, total_liters, unit, rate, mrp, discount_pct, discount_amt, tax_pct, cess_pct, net_price, amount, cost_price)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
+        `INSERT INTO invoice_items (company_id, invoice_id, product_id, product_name, hsn_code, description, qty, qty_boxes, total_liters, unit, rate, mrp, discount_pct, discount_amt, tax_pct, cess_pct, net_price, amount, cost_price, cost_gst_pct)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
         [
           companyId,
           invRow.id,
@@ -499,6 +505,7 @@ router.post("/invoices", async (req, res): Promise<void> => {
           item.netPrice,
           item.amount,
           item.costPrice,
+          item.costGstPct,
         ]
       );
 
@@ -668,10 +675,10 @@ router.get("/invoices/:id", async (req, res): Promise<void> => {
   const customerMobile = await getCustomerMobile(companyId, inv.customerId ?? null);
   const body = formatInvoice(inv, items, createdByName, customerBalance, customerMobile);
   // Purchase cost / margin is internal, not GST data.
-  if (isGstAccountant(req)) body.items = body.items.map((it) => ({ ...it, costPrice: null }));
+  if (isGstAccountant(req)) body.items = body.items.map((it) => ({ ...it, costPrice: null, costGstPct: null }));
   // A customer viewing their own bill sees neither our cost nor our audit marks.
   if (session?.role === "customer") {
-    body.items = body.items.map((it) => ({ ...it, costPrice: null, listRate: null }));
+    body.items = body.items.map((it) => ({ ...it, costPrice: null, costGstPct: null, listRate: null }));
     body.belowListRate = false;
   }
   res.json(body);
@@ -891,11 +898,16 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
     // that made old sales show as losses once the purchase price went up.
     // Only a product newly added in this edit takes today's cost.
     const savedCostByProduct = new Map<number, string>();
+    const savedGstByProduct = new Map<number, string>();
     for (const oi of oldItemsRes.rows) {
       if (oi.cost_price != null && !savedCostByProduct.has(oi.product_id)) {
         savedCostByProduct.set(oi.product_id, String(oi.cost_price));
       }
+      if (oi.cost_gst_pct != null && !savedGstByProduct.has(oi.product_id)) {
+        savedGstByProduct.set(oi.product_id, String(oi.cost_gst_pct));
+      }
     }
+    const liveGstPcts = await loadCostGstPct(companyId);
 
     const processedItems = data.items.map((item) => {
       const qty = Number(item.qty);
@@ -925,6 +937,7 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
         ? effectiveUnitCost(item.productId, productById.get(item.productId)?.purchasePrice, manufacturingCosts)
         : null;
       const costPriceVal = savedCost ?? liveCost;
+      const costGstPctVal = savedGstByProduct.get(item.productId) ?? String(liveGstPcts.get(item.productId) ?? 0);
       return {
         ...item,
         qty: String(qty), rate: String(rate), mrp: String(item.mrp),
@@ -935,6 +948,7 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
         qtyBoxesVal: qtyBoxes != null ? String(qtyBoxes) : null,
         totalLitersVal: totalLiters != null ? String(totalLiters) : null,
         costPriceVal: costPriceVal != null ? String(costPriceVal) : null,
+        costGstPctVal,
       };
     });
     const freight = Number(data.freight ?? existing.freight ?? 0);
@@ -1014,9 +1028,9 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
     for (const item of processedItems) {
       const prodName = productById.get(item.productId)?.name ?? "Unknown";
       await client.query(
-        `INSERT INTO invoice_items (company_id, invoice_id, product_id, product_name, hsn_code, description, qty, qty_boxes, total_liters, unit, rate, mrp, discount_pct, discount_amt, tax_pct, cess_pct, net_price, amount, cost_price)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
-        [companyId, invoiceId, item.productId, prodName, null, item.description ?? null, item.qty, item.qtyBoxesVal, item.totalLitersVal, item.unit, item.rate, item.mrp, item.discountPct, item.discountAmt, item.taxPct, item.cessPct, item.netPrice, item.amount, item.costPriceVal]
+        `INSERT INTO invoice_items (company_id, invoice_id, product_id, product_name, hsn_code, description, qty, qty_boxes, total_liters, unit, rate, mrp, discount_pct, discount_amt, tax_pct, cess_pct, net_price, amount, cost_price, cost_gst_pct)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
+        [companyId, invoiceId, item.productId, prodName, null, item.description ?? null, item.qty, item.qtyBoxesVal, item.totalLitersVal, item.unit, item.rate, item.mrp, item.discountPct, item.discountAmt, item.taxPct, item.cessPct, item.netPrice, item.amount, item.costPriceVal, item.costGstPctVal]
       );
       if (!isQuotationEdit) {
         await autoManufactureForSale(client, {
@@ -1464,6 +1478,7 @@ function formatItem(i: any) {
     netPrice: Number(i.netPrice),
     amount: Number(i.amount),
     costPrice: i.costPrice != null ? Number(i.costPrice) : null,
+    costGstPct: i.costGstPct != null ? Number(i.costGstPct) : null,
     listRate: i.listRate != null ? Number(i.listRate) : null,
   };
 }

@@ -152,6 +152,26 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
     // ── Store users allowed to change the rate while billing, and the audit
     //    trail for invoices billed below the price-list rate ────────────────
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS can_edit_rate BOOLEAN NOT NULL DEFAULT false`,
+    // ── GST paid on purchase, for profit on non-GST sales ──────────────────
+    // products.purchase_gst_pct: value-weighted GST % of the stock's purchases
+    // (0 for non-GST bills). invoice_items.cost_gst_pct: that %, snapshotted
+    // at sale time. NULL = not known yet → filled from the latest purchase.
+    `ALTER TABLE products ADD COLUMN IF NOT EXISTS purchase_gst_pct NUMERIC(6, 3)`,
+    `ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS cost_gst_pct NUMERIC(6, 3)`,
+    `UPDATE products p SET purchase_gst_pct = x.pct
+     FROM (
+       SELECT DISTINCT ON (pi.product_id) pi.product_id,
+              CASE WHEN pu.bill_type = 'gst' THEN COALESCE(pi.tax_pct, 0) ELSE 0 END AS pct
+       FROM purchase_items pi
+       JOIN purchases pu ON pu.id = pi.purchase_id AND pu.company_id = pi.company_id
+       WHERE pu.status <> 'cancelled'
+       ORDER BY pi.product_id, pu.bill_date DESC, pu.id DESC
+     ) x
+     WHERE p.id = x.product_id AND p.purchase_gst_pct IS NULL`,
+    `UPDATE invoice_items ii SET cost_gst_pct = p.purchase_gst_pct
+     FROM products p
+     WHERE p.id = ii.product_id AND p.company_id = ii.company_id
+       AND ii.cost_gst_pct IS NULL AND p.purchase_gst_pct IS NOT NULL`,
     // Store users only: may add Production Received (goods in from manufacturing).
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS can_receive_production BOOLEAN NOT NULL DEFAULT false`,
     `ALTER TABLE invoices ADD COLUMN IF NOT EXISTS below_list_rate BOOLEAN NOT NULL DEFAULT false`,

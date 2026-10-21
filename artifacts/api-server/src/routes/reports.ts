@@ -385,7 +385,7 @@ router.get("/reports/profit-loss", async (req, res): Promise<void> => {
       // historical COGS doesn't shift when a product's purchase price later
       // changes. Falls back to the product's current price only for rows
       // saved before cost_price existed.
-      `SELECT COALESCE(SUM(ii.qty * COALESCE(ii.cost_price, prod.purchase_price, 0)), 0) AS cogs
+      `SELECT COALESCE(SUM(ii.qty * COALESCE(ii.cost_price, prod.purchase_price, 0) * (CASE WHEN i.invoice_type IN ('gst', 'proforma_invoice') THEN 1 ELSE 1 + COALESCE(ii.cost_gst_pct, prod.purchase_gst_pct, 0) / 100 END)), 0) AS cogs
        FROM invoice_items ii
        JOIN invoices i ON i.id = ii.invoice_id
        JOIN products prod ON prod.id = ii.product_id
@@ -444,7 +444,7 @@ router.get("/reports/bill-wise-profit", async (req, res): Promise<void> => {
     // rows saved before cost_price existed.
     `SELECT i.id, i.invoice_no, i.invoice_date, i.invoice_type, i.customer_id, i.customer_name,
             i.subtotal, i.grand_total, i.deleted_at,
-            COALESCE(SUM(ii.qty * COALESCE(ii.cost_price, prod.purchase_price, 0)), 0) AS cogs
+            COALESCE(SUM(ii.qty * COALESCE(ii.cost_price, prod.purchase_price, 0) * (CASE WHEN i.invoice_type IN ('gst', 'proforma_invoice') THEN 1 ELSE 1 + COALESCE(ii.cost_gst_pct, prod.purchase_gst_pct, 0) / 100 END)), 0) AS cogs
      FROM invoices i
      JOIN invoice_items ii ON ii.invoice_id = i.id
      JOIN products prod ON prod.id = ii.product_id

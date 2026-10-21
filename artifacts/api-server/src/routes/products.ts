@@ -18,7 +18,7 @@ import {
   BulkStockReconciliationBody,
 } from "@workspace/api-zod";
 import { getCompanyId, handleTenantError } from "../lib/tenant";
-import { loadManufacturingCosts } from "../lib/bom-cost";
+import { loadManufacturingCosts, loadCostGstPct } from "../lib/bom-cost";
 import { computeRecalculation, applyRecalculation } from "../lib/recalculate-prices";
 import { buildProductImageUrl, decodeProductImageDataUrl } from "../lib/product-image";
 
@@ -72,10 +72,13 @@ router.get("/products", async (req, res): Promise<void> => {
   // is run and can otherwise drift as raw material rates change. Billing
   // also uses it as the cost to warn against when selling below cost.
   const manufacturingCosts = await loadManufacturingCosts(companyId);
+  const costGstPcts = await loadCostGstPct(companyId);
 
   res.json(products.map((p) => ({
     ...formatProduct(p),
     manufacturingCost: manufacturingCosts.get(p.id) ?? null,
+    // GST % paid on its cost — billing adds it on a non-GST invoice.
+    purchaseGstPct: costGstPcts.get(p.id) ?? 0,
   })));
 });
 
@@ -385,7 +388,8 @@ router.get("/products/:id/recent-prices", async (req, res): Promise<void> => {
 
   res.json({
     lastSalePrices: salesRes.rows.map(toPoint),
-    lastPurchasePrices: purchasesRes.rows.map(toPoint),
+    // Store users never see purchase history (see purchases.ts).
+    lastPurchasePrices: (req as any).session?.role === "store" ? [] : purchasesRes.rows.map(toPoint),
   });
 });
 

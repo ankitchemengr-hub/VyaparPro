@@ -129,7 +129,7 @@ type BillingItem = {
   // Cost recorded on the saved invoice line (purchase rate / BOM cost at the
   // time of that sale). When editing an old bill, the at/below-cost check
   // compares against this — not today's cost, which may have gone up since.
-  savedCost?: { cost: number; source: CostSource } | null;
+  savedCost?: { cost: number; source: CostSource; gstPct: number } | null;
 };
 
 function resolvePack(p: any): number {
@@ -241,7 +241,9 @@ const RATE_HIST_CSS = `
 // purchase price — the always-visible half of the cost warning (the beep +
 // toast fire once on blur, and the popup on save).
 type CostSource = "mfg" | "purchase" | "saved";
-type CostWarning = { kind: "below" | "equal"; cost: number; net: number; source: CostSource };
+// `cost` already includes the purchase GST when the invoice is non-GST
+// (`withGst`), since that GST can't be claimed back on a non-GST sale.
+type CostWarning = { kind: "below" | "equal"; cost: number; net: number; source: CostSource; withGst?: boolean };
 const COST_LABEL: Record<CostSource, string> = { mfg: "Mfg cost", purchase: "Purchase rate", saved: "Cost at sale time" };
 
 // Amber line under a Rate field a non-admin set below the price-list rate.
@@ -256,7 +258,7 @@ function ListRateHint({ w, testId }: { w: { list: number; net: number } | null; 
 
 function CostWarningHint({ w, testId }: { w: CostWarning | null; testId: string }) {
   if (!w) return null;
-  const label = w.source === "mfg" ? "Mfg cost" : "Purchase";
+  const label = `${w.source === "mfg" ? "Mfg cost" : w.source === "saved" ? "Cost" : "Purchase"}${w.withGst ? " + GST" : ""}`;
   return (
     <div className="mt-0.5 flex items-center justify-end gap-0.5 text-[10px] font-semibold leading-tight text-red-600" data-testid={testId}>
       <AlertTriangle className="w-3 h-3 shrink-0" />
@@ -487,7 +489,7 @@ export default function Billing() {
         // auto-fill must not silently reprice existing lines.
         rateEdited: true,
         savedCost: it.costPrice != null && Number(it.costPrice) > 0
-          ? { cost: Number(it.costPrice), source: "saved" as CostSource }
+          ? { cost: Number(it.costPrice), source: "saved" as CostSource, gstPct: Number(it.costGstPct ?? 0) || 0 }
           : null,
         discountPct: Number(it.discountPct), discountAmt: Number(it.discountAmt),
         amount: Number(it.amount), litersPerBox: Number(prod?.litersPerBox ?? 0) || 0,
@@ -721,9 +723,10 @@ export default function Billing() {
   // purchasePrice — the same figure the server snapshots as the line's
   // cost_price for profit reports (lib/bom-cost.ts effectiveUnitCost). Uses
   // the net rate per unit after the line discount, before GST (costs are pre-tax).
-  const costByProduct = new Map<number, { cost: number; source: CostSource }>((products ?? []).map((p: any) => {
+  const costByProduct = new Map<number, { cost: number; source: CostSource; gstPct: number }>((products ?? []).map((p: any) => {
     const mfg = Number(p.manufacturingCost) || 0;
-    return [p.id, mfg > 0 ? { cost: mfg, source: "mfg" } : { cost: Number(p.purchasePrice) || 0, source: "purchase" }];
+    const gstPct = Number(p.purchaseGstPct) || 0;
+    return [p.id, mfg > 0 ? { cost: mfg, source: "mfg", gstPct } : { cost: Number(p.purchasePrice) || 0, source: "purchase", gstPct }];
   }));
   const netUnitRate = (i: BillingItem) => {
     const units = billedUnits(i);
@@ -737,10 +740,14 @@ export default function Billing() {
     // sale; only new lines use today's purchase / BOM cost.
     const c = i.savedCost !== undefined ? i.savedCost : costByProduct.get(i.productId);
     if (!c || !(c.cost > 0)) return null; // no cost recorded — nothing to compare
-    const { cost, source } = c;
+    // Non-GST bill: the GST paid when buying this material can't be recovered,
+    // so it is part of the cost (basic rate + its GST %). GST bill: basic rate.
+    const withGst = !isGstInvoiceType(invoiceType) && c.gstPct > 0;
+    const cost = Math.round(c.cost * (withGst ? 1 + c.gstPct / 100 : 1) * 100) / 100;
+    const source = c.source;
     const net = Math.round(netUnitRate(i) * 100) / 100;
-    if (net < cost - 0.005) return { kind: "below", cost, net, source };
-    if (Math.abs(net - cost) <= 0.005) return { kind: "equal", cost, net, source };
+    if (net < cost - 0.005) return { kind: "below", cost, net, source, withGst };
+    if (Math.abs(net - cost) <= 0.005) return { kind: "equal", cost, net, source, withGst };
     return null;
   };
   const costWarnings = items
@@ -792,7 +799,7 @@ export default function Billing() {
     warnedRatesRef.current.set(item.productId, key);
     if (!w) return;
     playWarningBeep();
-    const label = COST_LABEL[w.source];
+    const label = `${COST_LABEL[w.source]}${w.withGst ? " + GST" : ""}`;
     toast({
       title: w.kind === "below" ? `⚠ Rate is BELOW ${label.toLowerCase()}` : `⚠ Rate is SAME as ${label.toLowerCase()}`,
       description: `${item.name}: selling at ₹${w.net.toLocaleString()} — ${label.toLowerCase()} ₹${w.cost.toLocaleString()}. Please check the rate.`,
@@ -1516,13 +1523,13 @@ export default function Billing() {
                   <td className="px-3 py-2">
                     <div className="font-medium leading-tight">{item.name}</div>
                     <div className="text-[11px] text-red-600">
-                      {w.kind === "below" ? "Below" : "Same as"} {COST_LABEL[w.source].toLowerCase()}
+                      {w.kind === "below" ? "Below" : "Same as"} {COST_LABEL[w.source].toLowerCase()}{w.withGst ? " + GST" : ""}
                     </div>
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums font-semibold text-red-600">₹{w.net.toLocaleString()}</td>
                   <td className="px-3 py-2 text-right tabular-nums">
                     ₹{w.cost.toLocaleString()}
-                    <div className="text-[10px] text-muted-foreground">{COST_LABEL[w.source]}</div>
+                    <div className="text-[10px] text-muted-foreground">{COST_LABEL[w.source]}{w.withGst ? " + GST" : ""}</div>
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">
                     {w.kind === "below" ? `₹${(Math.round((w.cost - w.net) * 100) / 100).toLocaleString()}` : "₹0"}
