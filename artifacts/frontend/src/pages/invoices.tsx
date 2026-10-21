@@ -175,12 +175,14 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
 
       <Card>
         <CardContent className="p-4">
-          <div className="flex items-center gap-2">
+          {/* On phones the search box takes its own full-width line and the
+              filter buttons / count wrap below it; from sm up it's one row. */}
+          <div className="flex flex-wrap items-center gap-2">
             <Input
               placeholder="Search invoice number, customer, or item..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="flex-1 min-w-0"
+              className="basis-full h-11 text-base sm:basis-0 sm:flex-1 sm:h-9 sm:text-sm min-w-0"
               data-testid="input-invoice-search"
             />
 
@@ -295,6 +297,35 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
                   </div>
                 </div>
 
+                {isAdmin && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Check bills</Label>
+                    <div className="grid gap-2">
+                      <Button
+                        variant={lossOnly ? "destructive" : "outline"}
+                        size="sm"
+                        className="justify-start"
+                        onClick={() => setLossOnly((v) => !v)}
+                        title="Show only invoices with items sold below cost"
+                        data-testid="button-loss-filter"
+                      >
+                        <AlertTriangle className="h-4 w-4 mr-1.5" />
+                        Below cost{lossInvoiceCount > 0 ? ` (${lossInvoiceCount})` : ""}
+                      </Button>
+                      <Button
+                        variant={belowRateOnly ? "destructive" : "outline"}
+                        size="sm"
+                        className="justify-start"
+                        onClick={() => setBelowRateOnly((v) => !v)}
+                        title="Invoices billed below the price-list rate by staff"
+                        data-testid="button-filter-below-rate"
+                      >
+                        <AlertTriangle className="h-4 w-4 mr-1.5" /> Below rate
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 {hasFilters && (
                   <Button
                     variant="ghost"
@@ -309,34 +340,7 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
               </PopoverContent>
             </Popover>
 
-            {isAdmin && (lossInvoiceCount > 0 || lossOnly) && (
-              <Button
-                variant={lossOnly ? "destructive" : "outline"}
-                size="sm"
-                className={cn("shrink-0 gap-1", !lossOnly && "border-red-500 text-red-600 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/40")}
-                onClick={() => setLossOnly((v) => !v)}
-                title={lossOnly ? "Show all invoices" : "Show only invoices with items sold below cost"}
-                data-testid="button-loss-filter"
-              >
-                <AlertTriangle className="h-4 w-4" />
-                {lossInvoiceCount}<span className="hidden sm:inline"> below cost</span>
-              </Button>
-            )}
-
-            {isAdmin && (
-              <Button
-                variant={belowRateOnly ? "destructive" : "outline"}
-                size="sm"
-                className="shrink-0 h-9"
-                onClick={() => setBelowRateOnly((v) => !v)}
-                data-testid="button-filter-below-rate"
-                title="Invoices billed below the price-list rate by staff"
-              >
-                <AlertTriangle className="h-4 w-4 mr-1.5" /> Below rate
-              </Button>
-            )}
-
-            <span className="shrink-0 text-sm text-muted-foreground" data-testid="text-result-count">
+            <span className="shrink-0 ml-auto sm:ml-0 text-sm text-muted-foreground" data-testid="text-result-count">
               {isLoading ? "Loading…" : `${displayedInvoices.length} invoice${displayedInvoices.length === 1 ? "" : "s"}`}
             </span>
           </div>
