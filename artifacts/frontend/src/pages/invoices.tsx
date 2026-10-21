@@ -297,6 +297,35 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
                   </div>
                 </div>
 
+                {isAdmin && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Check bills</Label>
+                    <div className="grid gap-2">
+                      <Button
+                        variant={lossOnly ? "destructive" : "outline"}
+                        size="sm"
+                        className="justify-start"
+                        onClick={() => setLossOnly((v) => !v)}
+                        title="Show only invoices with items sold below cost"
+                        data-testid="button-loss-filter"
+                      >
+                        <AlertTriangle className="h-4 w-4 mr-1.5" />
+                        Below cost{lossInvoiceCount > 0 ? ` (${lossInvoiceCount})` : ""}
+                      </Button>
+                      <Button
+                        variant={belowRateOnly ? "destructive" : "outline"}
+                        size="sm"
+                        className="justify-start"
+                        onClick={() => setBelowRateOnly((v) => !v)}
+                        title="Invoices billed below the price-list rate by staff"
+                        data-testid="button-filter-below-rate"
+                      >
+                        <AlertTriangle className="h-4 w-4 mr-1.5" /> Below rate
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 {hasFilters && (
                   <Button
                     variant="ghost"
@@ -310,33 +339,6 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
                 )}
               </PopoverContent>
             </Popover>
-
-            {isAdmin && (lossInvoiceCount > 0 || lossOnly) && (
-              <Button
-                variant={lossOnly ? "destructive" : "outline"}
-                size="sm"
-                className={cn("shrink-0 gap-1", !lossOnly && "border-red-500 text-red-600 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/40")}
-                onClick={() => setLossOnly((v) => !v)}
-                title={lossOnly ? "Show all invoices" : "Show only invoices with items sold below cost"}
-                data-testid="button-loss-filter"
-              >
-                <AlertTriangle className="h-4 w-4" />
-                {lossInvoiceCount}<span className="hidden sm:inline"> below cost</span>
-              </Button>
-            )}
-
-            {isAdmin && (
-              <Button
-                variant={belowRateOnly ? "destructive" : "outline"}
-                size="sm"
-                className="shrink-0 h-9"
-                onClick={() => setBelowRateOnly((v) => !v)}
-                data-testid="button-filter-below-rate"
-                title="Invoices billed below the price-list rate by staff"
-              >
-                <AlertTriangle className="h-4 w-4 mr-1.5" /> Below rate
-              </Button>
-            )}
 
             <span className="shrink-0 ml-auto sm:ml-0 text-sm text-muted-foreground" data-testid="text-result-count">
               {isLoading ? "Loading…" : `${displayedInvoices.length} invoice${displayedInvoices.length === 1 ? "" : "s"}`}
