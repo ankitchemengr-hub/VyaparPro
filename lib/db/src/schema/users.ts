@@ -26,6 +26,10 @@ export const usersTable = pgTable("users", {
   canEditRate: boolean("can_edit_rate").notNull().default(false),
   // Store users only: may add Production Received entries (add only).
   canReceiveProduction: boolean("can_receive_production").notNull().default(false),
+  // Website-signup accounts only (api-server lib/auth-codes.ts): the email
+  // must be verified with a code, and a new device needs an emailed code.
+  emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
+  loginOtpRequired: boolean("login_otp_required").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (t) => [

@@ -480,6 +480,40 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
     `CREATE UNIQUE INDEX IF NOT EXISTS subscription_alert_period_unique
        ON subscription_alerts(subscription_id, alert_type, period_end)`,
     `DROP INDEX IF EXISTS subscription_alert_type_unique`,
+    // Email codes (lib/auth-codes.ts). Only accounts created by website signup
+    // get login_otp_required = true; every existing account stays false and
+    // logs in exactly as before.
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMP WITH TIME ZONE`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS login_otp_required BOOLEAN NOT NULL DEFAULT false`,
+    `CREATE TABLE IF NOT EXISTS auth_challenges (
+      id            SERIAL PRIMARY KEY,
+      user_id       INTEGER NOT NULL,
+      purpose       TEXT NOT NULL,
+      token_hash    TEXT NOT NULL UNIQUE,
+      code_hash     TEXT NOT NULL,
+      email         TEXT NOT NULL,
+      payload       JSONB,
+      attempts      INTEGER NOT NULL DEFAULT 0,
+      send_count    INTEGER NOT NULL DEFAULT 1,
+      last_sent_at  TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+      expires_at    TIMESTAMP WITH TIME ZONE NOT NULL,
+      consumed_at   TIMESTAMP WITH TIME ZONE,
+      created_at    TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    )`,
+    `CREATE INDEX IF NOT EXISTS auth_challenges_user_idx ON auth_challenges(user_id, purpose)`,
+    `CREATE TABLE IF NOT EXISTS trusted_devices (
+      id            SERIAL PRIMARY KEY,
+      user_id       INTEGER NOT NULL,
+      token_hash    TEXT NOT NULL UNIQUE,
+      user_agent    TEXT,
+      created_at    TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+      last_used_at  TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+      expires_at    TIMESTAMP WITH TIME ZONE NOT NULL
+    )`,
+    `CREATE INDEX IF NOT EXISTS trusted_devices_user_idx ON trusted_devices(user_id)`,
+    // Old challenges/devices are useless after they expire — keep tables small.
+    `DELETE FROM auth_challenges WHERE created_at < NOW() - INTERVAL '7 days'`,
+    `DELETE FROM trusted_devices WHERE expires_at < NOW()`,
     `CREATE TABLE IF NOT EXISTS faqs (
       id          SERIAL PRIMARY KEY,
       question    TEXT NOT NULL,

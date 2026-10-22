@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, CheckCircle2, Building2 } from "lucide-react";
 import { SiteHeader } from "@/components/site/site-header";
 import { SiteFooter } from "@/components/site/site-footer";
+import { CodeEntry } from "@/components/code-entry";
 
 declare global {
   interface Window {
@@ -49,7 +50,20 @@ export default function PortalRegister() {
   const createOrder = useCreatePortalPaymentOrder();
   const verifyPayment = useVerifyPortalPayment();
 
-  const [step, setStep] = useState<"form" | "paying" | "done">("form");
+  const [step, setStep] = useState<"form" | "verify" | "paying" | "done">("form");
+  // Set after signup: the emailed-code step, then payment (or straight to done).
+  const [pending, setPending] = useState<{
+    challengeId: string; email: string; subscriptionId: number; requiresPayment: boolean;
+  } | null>(null);
+
+  const afterVerified = (p: { subscriptionId: number; requiresPayment: boolean }) => {
+    if (p.requiresPayment) {
+      setStep("paying");
+      runPayment(p.subscriptionId, form.planSlug);
+    } else {
+      setStep("done");
+    }
+  };
   const [form, setForm] = useState({
     businessName: "", ownerName: "", mobile: "", email: "", password: "", confirmPassword: "",
     businessType: "", city: "", state: "", gstin: "", referralCode: "", planSlug: preselectedPlan, agree: false,
@@ -110,8 +124,12 @@ export default function PortalRegister() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (form.password.length < 6) {
-      toast({ title: "Password must be at least 6 characters", variant: "destructive" });
+    if (!/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(form.email.trim())) {
+      toast({ title: "Enter a valid email", description: "We send your verification code and invoices there.", variant: "destructive" });
+      return;
+    }
+    if (form.password.length < 8) {
+      toast({ title: "Password must be at least 8 characters", variant: "destructive" });
       return;
     }
     if (form.password !== form.confirmPassword) {
@@ -154,11 +172,15 @@ export default function PortalRegister() {
       },
       {
         onSuccess: (result) => {
-          if (result.requiresPayment) {
-            setStep("paying");
-            runPayment(result.subscriptionId, form.planSlug);
+          const v = (result as any).verification as { challengeId: string; email: string; sent: boolean } | null | undefined;
+          if (v?.challengeId) {
+            // Prove the email first; payment / trial continues after the code.
+            setPending({ challengeId: v.challengeId, email: v.email, subscriptionId: result.subscriptionId, requiresPayment: result.requiresPayment });
+            setStep("verify");
+            if (!v.sent) toast({ title: "We couldn't send the code yet", description: "Tap “Resend code” in a minute.", variant: "destructive" });
           } else {
-            setStep("done");
+            // No code could be created — the email gets verified at first login.
+            afterVerified({ subscriptionId: result.subscriptionId, requiresPayment: result.requiresPayment });
           }
         },
         onError: async (err: any) => {
@@ -169,6 +191,33 @@ export default function PortalRegister() {
       },
     );
   };
+
+  if (step === "verify" && pending) {
+    return (
+      <div className="min-h-screen bg-white text-slate-900">
+        <SiteHeader />
+        <div className="max-w-sm mx-auto px-4 py-16">
+          <Card>
+            <CardContent className="p-6">
+              <CodeEntry
+                title="Verify your email"
+                description="We sent a 6-digit code to"
+                email={pending.email}
+                challengeId={pending.challengeId}
+                verifyUrl="/api/portal/verify-email"
+                resendUrl="/api/portal/verify-email/resend"
+                onVerified={() => {
+                  toast({ title: "Email verified" });
+                  afterVerified(pending);
+                }}
+              />
+            </CardContent>
+          </Card>
+        </div>
+        <SiteFooter />
+      </div>
+    );
+  }
 
   if (step === "done") {
     return (
@@ -214,12 +263,12 @@ export default function PortalRegister() {
                   <Input value={form.mobile} onChange={(e) => setForm({ ...form, mobile: e.target.value.replace(/\D/g, "").slice(0, 10) })} required />
                 </div>
                 <div className="space-y-1.5 col-span-2 sm:col-span-1">
-                  <Label>Email</Label>
-                  <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+                  <Label>Email * <span className="font-normal text-slate-400">(your login ID)</span></Label>
+                  <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
                 </div>
                 <div className="space-y-1.5 col-span-2 sm:col-span-1">
                   <Label>Password *</Label>
-                  <Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required minLength={6} />
+                  <Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required minLength={8} placeholder="At least 8 characters" />
                 </div>
                 <div className="space-y-1.5 col-span-2 sm:col-span-1">
                   <Label>Confirm Password *</Label>

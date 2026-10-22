@@ -83,15 +83,23 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps = {}) {
       </div>
 
       <div className="p-4 border-t border-sidebar-border shrink-0">
-        <div className="flex items-center gap-3 mb-4 px-2">
+        <Link
+          href="/my-account"
+          onClick={() => onClose && window.innerWidth < 1024 && onClose()}
+          className="flex items-center gap-3 mb-4 px-2 py-1 rounded-md hover:bg-sidebar-accent/60 transition-colors"
+          title="My Account — change password / login email"
+          data-testid="link-my-account"
+        >
           <div className="w-8 h-8 rounded-full bg-sidebar-accent flex items-center justify-center text-xs font-medium">
             {user?.name?.charAt(0) || "U"}
           </div>
           <div className="flex flex-col">
             <span className="text-sm font-medium leading-none">{user?.name}</span>
-            <span className="text-xs text-sidebar-foreground/50 capitalize">{user?.role}</span>
+            <span className="text-xs text-sidebar-foreground/50">
+              <span className="capitalize">{user?.role}</span> · My Account
+            </span>
           </div>
-        </div>
+        </Link>
         <button 
           onClick={handleLogout}
           className="flex w-full items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors"
