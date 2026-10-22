@@ -502,6 +502,9 @@ function LineItemsEditor({
 const SMART_ORDER_PREFILL_KEY = "smart_order_prefill";
 
 export default function Purchases() {
+  // Store users only enter new bills — no Purchase History tab at all.
+  const { hasRole } = useAuth();
+  const showHistory = !hasRole(["store"]);
   const [tab, setTab] = useState("new");
   const [smartOrderPrefill, setSmartOrderPrefill] = useState<{ productId: number; qty: number } | null>(() => {
     try {
@@ -528,10 +531,12 @@ export default function Purchases() {
       </div>
 
       <Tabs value={tab} onValueChange={setTab} className="w-full">
-        <TabsList className="grid w-full max-w-sm grid-cols-2">
-          <TabsTrigger value="new" data-testid="tab-new-purchase">New Purchase</TabsTrigger>
-          <TabsTrigger value="history" data-testid="tab-purchase-history">Purchase History</TabsTrigger>
-        </TabsList>
+        {showHistory && (
+          <TabsList className="grid w-full max-w-sm grid-cols-2">
+            <TabsTrigger value="new" data-testid="tab-new-purchase">New Purchase</TabsTrigger>
+            <TabsTrigger value="history" data-testid="tab-purchase-history">Purchase History</TabsTrigger>
+          </TabsList>
+        )}
 
         <TabsContent value="new" className="mt-6">
           <NewPurchaseTab
@@ -540,9 +545,11 @@ export default function Purchases() {
           />
         </TabsContent>
 
-        <TabsContent value="history" className="mt-6">
-          <HistoryTab />
-        </TabsContent>
+        {showHistory && (
+          <TabsContent value="history" className="mt-6">
+            <HistoryTab />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

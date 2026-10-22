@@ -25,8 +25,18 @@ import multer from "multer";
 const router: IRouter = Router();
 
 // gst_accountant is read-only and further limited to bill_type = 'gst' below.
-const PURCHASE_READ_ROLES = new Set(["admin", "accountant", "store", GST_ACCOUNTANT_ROLE]);
-const PURCHASE_WRITE_ROLES = new Set(["admin", "accountant", "store"]);
+// A store user may only enter new purchase bills (and attach files to bills
+// they entered themselves) — they never see Purchase History, its report, or
+// any other bill, and can't edit or cancel one.
+const PURCHASE_HISTORY_ROLES = new Set(["admin", "accountant", GST_ACCOUNTANT_ROLE]);
+const PURCHASE_CREATE_ROLES = new Set(["admin", "accountant", "store"]);
+const PURCHASE_EDIT_ROLES = new Set(["admin", "accountant"]);
+const PURCHASE_ATTACHMENT_ROLES = new Set(["admin", "accountant", "store", GST_ACCOUNTANT_ROLE]);
+
+// For a store user, the id they must have created the bill with; null = any bill.
+function ownBillsOnly(auth: { userId: number; role: string }): number | null {
+  return auth.role === "store" ? auth.userId : null;
+}
 
 function requireSession(req: any, res: any, roles: Set<string>): { userId: number; role: string } | null {
   const session = req.session;
@@ -225,7 +235,7 @@ pool.query(`
 
 // GET /purchases
 router.get("/purchases", async (req, res): Promise<void> => {
-  if (!requireSession(req, res, PURCHASE_READ_ROLES)) return;
+  if (!requireSession(req, res, PURCHASE_HISTORY_ROLES)) return;
   const parsed = ListPurchasesQueryParams.safeParse(req.query);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -243,7 +253,7 @@ router.get("/purchases", async (req, res): Promise<void> => {
 
 // GET /purchases/report — date + product filtered line-item report
 router.get("/purchases/report", async (req, res): Promise<void> => {
-  const auth = requireSession(req, res, PURCHASE_READ_ROLES);
+  const auth = requireSession(req, res, PURCHASE_HISTORY_ROLES);
   if (!auth) return;
   const companyId = getCompanyId(req);
   const { fromDate, toDate, productId, billType, vendorId } = req.query as Record<string, string | undefined>;
@@ -311,7 +321,7 @@ router.get("/purchases/report", async (req, res): Promise<void> => {
 
 // GET /purchases/:id
 router.get("/purchases/:id", async (req, res): Promise<void> => {
-  if (!requireSession(req, res, PURCHASE_READ_ROLES)) return;
+  if (!requireSession(req, res, PURCHASE_HISTORY_ROLES)) return;
   const parsed = GetPurchaseParams.safeParse(req.params);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -332,7 +342,7 @@ router.get("/purchases/:id", async (req, res): Promise<void> => {
 // Atomic SERIALIZABLE: insert bill + items, INWARD stock movement, debit
 // product stock UP, and credit the vendor ledger (we now owe them).
 router.post("/purchases", async (req, res): Promise<void> => {
-  const auth = requireSession(req, res, PURCHASE_WRITE_ROLES);
+  const auth = requireSession(req, res, PURCHASE_CREATE_ROLES);
   if (!auth) return;
 
   const parsed = CreatePurchaseBody.safeParse(req.body);
@@ -562,7 +572,7 @@ router.post("/purchases", async (req, res): Promise<void> => {
 
 // PUT /purchases/:id  — replace bill: reverse old stock/ledger, re-apply new
 router.put("/purchases/:id", async (req, res): Promise<void> => {
-  const auth = requireSession(req, res, PURCHASE_WRITE_ROLES);
+  const auth = requireSession(req, res, PURCHASE_EDIT_ROLES);
   if (!auth) return;
 
   const paramsParsed = UpdatePurchaseParams.safeParse(req.params);
@@ -863,7 +873,7 @@ router.put("/purchases/:id", async (req, res): Promise<void> => {
 // sent real goods anywhere, so leaving stock/payable inflated would just be
 // wrong going forward, not a record of something that already happened.
 router.delete("/purchases/:id", async (req, res): Promise<void> => {
-  const auth = requireSession(req, res, PURCHASE_WRITE_ROLES);
+  const auth = requireSession(req, res, PURCHASE_EDIT_ROLES);
   if (!auth) return;
 
   const paramsParsed = DeletePurchaseParams.safeParse(req.params);
@@ -963,7 +973,7 @@ router.delete("/purchases/:id", async (req, res): Promise<void> => {
 
 // GET /purchases/attachments/:attachmentId/file — serve/download file
 router.get("/purchases/attachments/:attachmentId/file", async (req, res): Promise<void> => {
-  const auth = requireSession(req, res, PURCHASE_READ_ROLES);
+  const auth = requireSession(req, res, PURCHASE_ATTACHMENT_ROLES);
   if (!auth) return;
   const companyId = getCompanyId(req);
   const id = parseInt(req.params.attachmentId, 10);
@@ -973,8 +983,9 @@ router.get("/purchases/attachments/:attachmentId/file", async (req, res): Promis
       `SELECT a.* FROM purchase_attachments a
        LEFT JOIN purchases p ON p.id = a.purchase_id AND p.company_id = a.company_id
        WHERE a.id = $1 AND a.company_id = $2 AND ($3::boolean = false OR p.bill_type = 'gst')
-         AND (p.deleted_at IS NULL OR $4::boolean)`,
-      [id, companyId, isGstAccountant(req), auth.role === "admin"],
+         AND (p.deleted_at IS NULL OR $4::boolean)
+         AND ($5::int IS NULL OR p.created_by_user_id = $5)`,
+      [id, companyId, isGstAccountant(req), auth.role === "admin", ownBillsOnly(auth)],
     );
     if (!result.rows[0]) { res.status(404).json({ error: "Attachment not found" }); return; }
     const att = result.rows[0];
@@ -995,7 +1006,7 @@ router.get("/purchases/attachments/:attachmentId/file", async (req, res): Promis
 
 // DELETE /purchases/attachments/:attachmentId
 router.delete("/purchases/attachments/:attachmentId", async (req, res): Promise<void> => {
-  const auth = requireSession(req, res, PURCHASE_WRITE_ROLES);
+  const auth = requireSession(req, res, PURCHASE_CREATE_ROLES);
   if (!auth) return;
   const companyId = getCompanyId(req);
   const id = parseInt(req.params.attachmentId, 10);
@@ -1006,8 +1017,9 @@ router.delete("/purchases/attachments/:attachmentId", async (req, res): Promise<
       `DELETE FROM purchase_attachments a
         WHERE a.id = $1 AND a.company_id = $2
           AND NOT EXISTS (SELECT 1 FROM purchases p WHERE p.id = a.purchase_id AND p.company_id = a.company_id AND p.deleted_at IS NOT NULL)
+          AND ($3::int IS NULL OR EXISTS (SELECT 1 FROM purchases p WHERE p.id = a.purchase_id AND p.company_id = a.company_id AND p.created_by_user_id = $3))
         RETURNING *`,
-      [id, companyId],
+      [id, companyId, ownBillsOnly(auth)],
     );
     if (!result.rows[0]) { res.status(404).json({ error: "Attachment not found" }); return; }
     res.json({ success: true });
@@ -1030,7 +1042,7 @@ router.post(
     });
   },
   async (req, res): Promise<void> => {
-    const auth = requireSession(req, res, PURCHASE_WRITE_ROLES);
+    const auth = requireSession(req, res, PURCHASE_CREATE_ROLES);
     if (!auth) return;
     const companyId = getCompanyId(req);
     const purchaseId = parseInt(req.params.id, 10);
@@ -1039,8 +1051,9 @@ router.post(
     if (!files || files.length === 0) { res.status(400).json({ error: "No files uploaded" }); return; }
     try {
       const live = await pool.query(
-        `SELECT 1 FROM purchases WHERE id = $1 AND company_id = $2 AND deleted_at IS NULL`,
-        [purchaseId, companyId],
+        `SELECT 1 FROM purchases WHERE id = $1 AND company_id = $2 AND deleted_at IS NULL
+           AND ($3::int IS NULL OR created_by_user_id = $3)`,
+        [purchaseId, companyId, ownBillsOnly(auth)],
       );
       if (live.rowCount === 0) { res.status(404).json({ error: "Purchase not found" }); return; }
       const inserted = [];
@@ -1070,7 +1083,7 @@ router.post(
 
 // GET /purchases/:id/attachments — list attachments for a purchase
 router.get("/purchases/:id/attachments", async (req, res): Promise<void> => {
-  const auth = requireSession(req, res, PURCHASE_READ_ROLES);
+  const auth = requireSession(req, res, PURCHASE_ATTACHMENT_ROLES);
   if (!auth) return;
   const companyId = getCompanyId(req);
   const purchaseId = parseInt(req.params.id, 10);
@@ -1081,8 +1094,9 @@ router.get("/purchases/:id/attachments", async (req, res): Promise<void> => {
        LEFT JOIN purchases p ON p.id = a.purchase_id AND p.company_id = a.company_id
        WHERE a.purchase_id = $1 AND a.company_id = $2 AND ($3::boolean = false OR p.bill_type = 'gst')
          AND (p.deleted_at IS NULL OR $4::boolean)
+         AND ($5::int IS NULL OR p.created_by_user_id = $5)
        ORDER BY a.created_at ASC`,
-      [purchaseId, companyId, isGstAccountant(req), auth.role === "admin"],
+      [purchaseId, companyId, isGstAccountant(req), auth.role === "admin", ownBillsOnly(auth)],
     );
     res.json(result.rows.map((r) => ({
       id: r.id,
