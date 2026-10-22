@@ -39,7 +39,8 @@ import {
 } from "@/components/ui/dialog";
 import {
   Trash2, Printer, Save, CheckCircle, Loader2, User, Phone, MapPin,
-  ArrowLeft, Search, Plus, Pencil, UserPlus, Share2, History, AlertTriangle,
+  ArrowLeft, ArrowRight, Search, Plus, Minus, Pencil, UserPlus, Share2, History, AlertTriangle,
+  ChevronDown,
 } from "lucide-react";
 import { playWarningBeep } from "@/lib/notification-sound";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -359,6 +360,15 @@ export default function Billing() {
   const warnedRatesRef = useRef<Map<number, string>>(new Map());
   // Same idea for the below-price-list warning (keyed by product → net rate).
   const warnedListRef = useRef<Map<number, number>>(new Map());
+  // Phone flow: below the md breakpoint the page is split into Customer →
+  // Items → Review steps instead of one long scroll. Desktop ignores this and
+  // shows everything at once. Arriving with a cart (from Catalog) or editing a
+  // saved bill already has the customer, so it opens straight on Items.
+  const [mobileStep, setMobileStep] = useState<1 | 2 | 3>(() => (params.cart || isEditMode ? 2 : 1));
+  // Which phone item card is expanded to show Rate / Disc / Tax / description.
+  const [openItemIdx, setOpenItemIdx] = useState<number | null>(null);
+  const [showMoreDetails, setShowMoreDetails] = useState(false);
+  const [showGstBreakup, setShowGstBreakup] = useState(false);
 
   // ── All data hooks ──
   // Always refetch on open (not served from a stale cache) so a rate updated
@@ -620,7 +630,10 @@ export default function Billing() {
     });
   };
 
-  const removeItem = (idx: number) => setItems((prev) => prev.filter((_, i) => i !== idx));
+  const removeItem = (idx: number) => {
+    setItems((prev) => prev.filter((_, i) => i !== idx));
+    setOpenItemIdx(null);
+  };
 
   // Returns the row index the product landed on (existing row if it was
   // already in the cart, otherwise the newly appended row) — callers use
@@ -973,7 +986,7 @@ export default function Billing() {
           </Card>
         )}
 
-        <div className="flex gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:flex">
           <Button variant="outline" onClick={() => setLocation("/invoices")}>View All Invoices</Button>
           <Button onClick={() => setLocation("/catalog")}>New Order</Button>
         </div>
@@ -991,24 +1004,47 @@ export default function Billing() {
     );
   }
 
+  const isSaving = createInvoice.isPending || updateInvoice.isPending;
+  const docLabel = docType === "invoice"
+    ? (invoiceSubtype === "gst" ? "GST Invoice" : "Non-GST Invoice")
+    : (DOC_TYPE_OPTIONS.find((o) => o.value === docType)?.label ?? "Invoice");
+  // Phone steps: tailwind classes that hide a section unless its step is the
+  // current one — md and up always shows it, so desktop is unchanged.
+  const stepCls = (s: 1 | 2 | 3) => (mobileStep === s ? "" : "hidden md:block");
+  const goToStep = (s: 1 | 2 | 3) => {
+    setMobileStep(s);
+    setSearchOpen(false);
+    window.scrollTo({ top: 0 });
+  };
+  const exitBilling = () => setLocation(isEditMode ? "/invoices" : "/catalog");
+  const totalQtyAll = items.reduce((s, i) => s + billedUnits(i), 0);
+  const totalLtrAll = items.reduce((s, i) => s + lineLiters(i), 0);
+
   return (
     <>
-    <div className="space-y-5 pb-10 print:hidden">
+    <div className="space-y-5 pb-28 md:pb-10 print:hidden">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-3 flex-wrap">
-          <Button variant="ghost" size="icon" className="shrink-0" onClick={() => setLocation(isEditMode ? "/invoices" : "/catalog")} data-testid="button-back-catalog">
+          <Button variant="ghost" size="icon" className="shrink-0"
+            onClick={() => {
+              // Phone: back steps through the flow first; desktop always leaves.
+              if (mobileStep > 1 && !window.matchMedia("(min-width: 768px)").matches) goToStep((mobileStep - 1) as 1 | 2);
+              else exitBilling();
+            }}
+            data-testid="button-back-catalog">
             <ArrowLeft className="w-5 h-5" />
           </Button>
-          <h1 className="text-2xl font-bold tracking-tight">
+          <h1 className="text-xl md:text-2xl font-bold tracking-tight">
             {isEditMode ? `Edit Invoice ${existingInvoice?.invoiceNo ?? ""}` : "Create Invoice"}
           </h1>
+          <Badge variant="secondary" className="md:hidden ml-auto">{docLabel}</Badge>
           {isEditMode && (
             <Badge variant="outline" className="border-amber-500/40 text-amber-700 dark:text-amber-400 whitespace-normal text-left max-w-full">
               Editing — stock &amp; customer balance will be re-adjusted on save
             </Badge>
           )}
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="hidden md:flex flex-wrap gap-2">
           <Select value={docType} onValueChange={setDocType}>
             <SelectTrigger className="w-[150px] sm:w-[170px]" data-testid="select-doc-type"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -1037,9 +1073,55 @@ export default function Billing() {
         </div>
       </div>
 
+      {/* Phone step bar — tap a step to jump to it. */}
+      <div className="md:hidden grid grid-cols-3 gap-2" data-testid="billing-mobile-steps">
+        {(["Customer", "Items", "Review"] as const).map((label, i) => {
+          const s = (i + 1) as 1 | 2 | 3;
+          return (
+            <button key={label} type="button" onClick={() => goToStep(s)}
+              className="flex flex-col gap-1.5 text-left" aria-current={mobileStep === s ? "step" : undefined}
+              data-testid={`button-mobile-step-${s}`}>
+              <span className={`h-1 rounded-full ${s <= mobileStep ? "bg-primary" : "bg-muted"}`} />
+              <span className={`text-[11px] font-semibold uppercase tracking-wide ${mobileStep === s ? "text-primary" : "text-muted-foreground"}`}>
+                {s}. {label}{s === 2 && items.length > 0 ? ` (${items.length})` : ""}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       <div className="grid gap-5 lg:grid-cols-3">
-        <div className="lg:col-span-2 space-y-5">
-          <Card>
+        <div className={`lg:col-span-2 space-y-5 ${mobileStep === 3 ? "hidden md:block" : ""}`}>
+          {/* Phone step 1: document type as tap chips (desktop has the dropdowns in the header). */}
+          {mobileStep === 1 && (
+            <Card className="md:hidden">
+              <CardContent className="pt-4 pb-4 space-y-3">
+                <Label className="text-xs text-muted-foreground uppercase tracking-wide">Document</Label>
+                <div className="flex flex-wrap gap-2">
+                  {DOC_TYPE_OPTIONS.map((opt) => (
+                    <button key={opt.value} type="button" onClick={() => setDocType(opt.value)}
+                      className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${docType === opt.value ? "bg-primary text-primary-foreground border-primary" : "hover:bg-accent"}`}
+                      data-testid={`chip-doc-type-${opt.value}`}>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                {docType === "invoice" && (
+                  <div className="grid grid-cols-2 rounded-md border overflow-hidden text-sm font-semibold">
+                    {(["gst", "non_gst"] as const).map((v) => (
+                      <button key={v} type="button" onClick={() => setInvoiceSubtype(v)}
+                        className={`py-2 transition-colors ${invoiceSubtype === v ? "bg-primary/10 text-primary" : "text-muted-foreground"}`}
+                        data-testid={`seg-invoice-subtype-${v}`}>
+                        {v === "gst" ? "GST" : "Non-GST"}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          <Card className={stepCls(1)}>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2"><User className="w-4 h-4 text-primary" /> Customer Details</CardTitle>
             </CardHeader>
@@ -1076,7 +1158,7 @@ export default function Billing() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className={stepCls(1)}>
             <CardContent className="pt-4 pb-4">
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 <div className="space-y-1">
@@ -1087,12 +1169,21 @@ export default function Billing() {
                   <Label className="text-xs">Place of Supply</Label>
                   <Input value={placeOfSupply} onChange={(e) => setPlaceOfSupply(e.target.value)} placeholder="e.g. Maharashtra" data-testid="input-place-supply" />
                 </div>
-                <div className="space-y-1">
+                {/* Phone: Freight / Salesman are rarely needed, so they sit behind "More". */}
+                {!(showMoreDetails || freight > 0) && (
+                  <button type="button" onClick={() => setShowMoreDetails(true)}
+                    className="md:hidden col-span-2 flex items-center justify-between rounded-md border border-dashed px-3 py-2 text-xs font-medium text-muted-foreground"
+                    data-testid="button-more-details">
+                    <span>{user?.role === "admin" ? "Freight, Salesman" : "Freight"}</span>
+                    <span className="flex items-center gap-1"><Plus className="w-3.5 h-3.5" /> More</span>
+                  </button>
+                )}
+                <div className={`space-y-1 ${showMoreDetails || freight > 0 ? "" : "hidden md:block"}`}>
                   <Label className="text-xs">Freight (₹)</Label>
                   <NumberInput min={0} value={freight} onChange={(v) => setFreight(v)} data-testid="input-freight" />
                 </div>
                 {user?.role === "admin" && (
-                  <div className="space-y-1">
+                  <div className={`space-y-1 ${showMoreDetails || freight > 0 ? "" : "hidden md:block"}`}>
                     <Label className="text-xs">Salesman (Commission)</Label>
                     <Select value={salesmanId ? String(salesmanId) : "__none__"} onValueChange={(v) => setSalesmanId(v === "__none__" ? null : Number(v))}>
                       <SelectTrigger className="h-9" data-testid="select-salesman"><SelectValue placeholder="No salesman" /></SelectTrigger>
@@ -1107,7 +1198,7 @@ export default function Billing() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className={stepCls(2)}>
             <CardHeader className="pb-2 flex-row items-center justify-between">
               <CardTitle className="text-base">Line Items</CardTitle>
               <span className="text-xs text-muted-foreground">{items.length} item{items.length !== 1 ? "s" : ""}</span>
@@ -1278,109 +1369,153 @@ export default function Billing() {
               {/* Mobile: stacked cards — the table's 8 fixed-width columns
                   (~780px) never fit a phone screen, so each line item gets
                   its own labeled block instead of a cramped row. */}
-              <div className="md:hidden max-h-[500px] overflow-y-auto divide-y">
+              <div className="md:hidden divide-y">
                 {items.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground text-sm">No items — search above to add products</div>
-                ) : items.map((item, idx) => (
-                  <div key={idx} className="p-4 space-y-3" data-testid={`billing-row-mobile-${idx}`}>
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
+                ) : items.map((item, idx) => {
+                  const open = openItemIdx === idx;
+                  const ltr = lineLiters(item);
+                  return (
+                  <div key={idx} className={`p-3 space-y-2 ${open ? "bg-muted/30" : ""}`} data-testid={`billing-row-mobile-${idx}`}>
+                    {/* Compact row: tap the name to open Rate / Disc / Tax / description. */}
+                    <div className="flex items-start gap-2">
+                      <button type="button" className="min-w-0 flex-1 text-left" aria-expanded={open}
+                        onClick={() => setOpenItemIdx(open ? null : idx)} data-testid={`button-toggle-item-mobile-${idx}`}>
                         <div className="font-medium text-sm leading-tight">{item.name}</div>
-                        <div className="text-xs text-muted-foreground">{item.unit}</div>
-                      </div>
-                      <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0 text-destructive hover:text-destructive"
+                        <div className="text-xs text-muted-foreground tabular-nums">
+                          ₹{item.rate.toLocaleString()} / {item.unit}
+                          {isGstInvoiceType(invoiceType) && item.taxPct ? ` · GST ${item.taxPct}%` : ""}
+                          {item.discountPct > 0 ? ` · ${item.discountPct}% off` : ""}
+                          {ltr > 0 ? ` · ${ltr.toLocaleString(undefined, { maximumFractionDigits: 3 })} L` : ""}
+                        </div>
+                      </button>
+                      <span className="font-bold text-sm tabular-nums shrink-0">₹{item.amount.toLocaleString()}</span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <Button type="button" size="icon" variant="outline" className="h-8 w-8 shrink-0"
+                        disabled={item.qty <= 1} onClick={() => updateItem(idx, "qty", Math.max(1, item.qty - 1))}
+                        aria-label="Decrease quantity" data-testid={`button-qty-minus-mobile-${idx}`}>
+                        <Minus className="w-3.5 h-3.5" />
+                      </Button>
+                      <NumberInput min={1} step="any" value={item.qty}
+                        onChange={(v) => updateItem(idx, "qty", v)}
+                        className="h-8 w-14 text-center text-sm px-1" data-testid={`input-qty-mobile-${idx}`} />
+                      <Button type="button" size="icon" variant="outline" className="h-8 w-8 shrink-0"
+                        onClick={() => updateItem(idx, "qty", item.qty + 1)}
+                        aria-label="Increase quantity" data-testid={`button-qty-plus-mobile-${idx}`}>
+                        <Plus className="w-3.5 h-3.5" />
+                      </Button>
+                      <Select value={item.qtyMode} onValueChange={(v) => updateItem(idx, "qtyMode", v as QtyMode)}>
+                        <SelectTrigger className="h-8 w-[62px] px-2 text-xs shrink-0" data-testid={`select-qty-mode-mobile-${idx}`}><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="unit">QTY</SelectItem>
+                          <SelectItem value="box" disabled={item.unitsPerBox <= 0}>{item.packagingUnit.toUpperCase()}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button type="button" size="icon" variant="ghost" className="h-8 w-8 ml-auto shrink-0"
+                        onClick={() => setOpenItemIdx(open ? null : idx)} aria-label={open ? "Hide item details" : "Show item details"}>
+                        <ChevronDown className={`w-4 h-4 transition-transform ${open ? "rotate-180" : ""}`} />
+                      </Button>
+                      <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0 text-destructive hover:text-destructive"
                         onClick={() => removeItem(idx)} data-testid={`button-remove-item-mobile-${idx}`}>
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>
                     </div>
-
-                    <Input
-                      value={item.description}
-                      onChange={(e) => updateItem(idx, "description", e.target.value)}
-                      placeholder="Add description (optional)"
-                      className="h-8 text-xs"
-                      data-testid={`input-description-mobile-${idx}`}
-                    />
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1">
-                        <Label className="text-[11px] text-muted-foreground">Qty</Label>
-                        <div className="flex items-center gap-1">
-                          <NumberInput min={1} step="any" value={item.qty}
-                            onChange={(v) => updateItem(idx, "qty", v)}
-                            className="h-8 text-sm" data-testid={`input-qty-mobile-${idx}`} />
-                          <Select value={item.qtyMode} onValueChange={(v) => updateItem(idx, "qtyMode", v as QtyMode)}>
-                            <SelectTrigger className="h-8 w-[62px] px-2 text-xs shrink-0" data-testid={`select-qty-mode-mobile-${idx}`}><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="unit">QTY</SelectItem>
-                              <SelectItem value="box" disabled={item.unitsPerBox <= 0}>{item.packagingUnit.toUpperCase()}</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        {item.qtyMode === "box" && item.unitsPerBox > 0 && (
-                          <span className="text-[10px] text-muted-foreground block" data-testid={`hint-billed-units-mobile-${idx}`}>= {billedUnits(item).toLocaleString()} {item.unit}</span>
-                        )}
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[11px] text-muted-foreground">Rate (₹)</Label>
-                        <NumberInput min={0} value={item.rate}
-                          onChange={(v) => updateItem(idx, "rate", v, { rateEdited: true })}
-                          onFocus={() => setRateFocusIdx(idx)}
-                          onBlur={() => { setRateFocusIdx((cur) => (cur === idx ? null : cur)); checkCostOnBlur(idx); }}
-                          className={`h-8 text-sm disabled:opacity-100 disabled:cursor-not-allowed ${costWarning(item) ? "border-red-500 bg-red-50 text-red-700 focus-visible:ring-red-500" : listRateWarning(item) ? "border-amber-500 bg-amber-50 text-amber-800 focus-visible:ring-amber-500" : ""}`}
-                          data-testid={`input-rate-mobile-${idx}`} disabled={!canEditRate}
-                          title={!canEditRate ? "Rate change not allowed for your login" : undefined} />
+                    {item.qtyMode === "box" && item.unitsPerBox > 0 && (
+                      <span className="text-[10px] text-muted-foreground block" data-testid={`hint-billed-units-mobile-${idx}`}>= {billedUnits(item).toLocaleString()} {item.unit}</span>
+                    )}
+                    {/* Warnings stay visible even when the card is closed. */}
+                    {!open && (costWarning(item) || listRateWarning(item)) && (
+                      <div className="flex flex-col items-start">
                         <CostWarningHint w={costWarning(item)} testId={`hint-cost-warning-mobile-${idx}`} />
                         <ListRateHint w={listRateWarning(item)} testId={`hint-list-rate-mobile-${idx}`} />
                       </div>
-                    </div>
-
-                    {rateFocusIdx === idx && (
-                      <RateHistoryPanel
-                        productId={item.productId}
-                        customerId={customer?.id ?? null}
-                        customerName={customer?.name ?? null}
-                        excludeInvoiceId={isEditMode ? editId : null}
-                        unit={item.unit}
-                      />
                     )}
 
-                    <div className={`grid gap-2 ${isGstInvoiceType(invoiceType) ? "grid-cols-3" : "grid-cols-2"}`}>
-                      {isGstInvoiceType(invoiceType) && (
-                        <div className="space-y-1">
-                          <Label className="text-[11px] text-muted-foreground">Tax%</Label>
-                          <NumberInput min={0} max={28} value={item.taxPct}
-                            onChange={(v) => updateItem(idx, "taxPct", v)}
-                            className="h-8 text-sm" data-testid={`input-tax-mobile-${idx}`} />
+                    {open && (
+                      <div className="space-y-2 pt-1">
+                        <div className={`grid gap-2 ${isGstInvoiceType(invoiceType) ? "grid-cols-3" : "grid-cols-2"}`}>
+                          <div className="space-y-1">
+                            <Label className="text-[11px] text-muted-foreground">Rate (₹)</Label>
+                            <NumberInput min={0} value={item.rate}
+                              onChange={(v) => updateItem(idx, "rate", v, { rateEdited: true })}
+                              onFocus={() => setRateFocusIdx(idx)}
+                              onBlur={() => { setRateFocusIdx((cur) => (cur === idx ? null : cur)); checkCostOnBlur(idx); }}
+                              className={`h-8 text-sm disabled:opacity-100 disabled:cursor-not-allowed ${costWarning(item) ? "border-red-500 bg-red-50 text-red-700 focus-visible:ring-red-500" : listRateWarning(item) ? "border-amber-500 bg-amber-50 text-amber-800 focus-visible:ring-amber-500" : ""}`}
+                              data-testid={`input-rate-mobile-${idx}`} disabled={!canEditRate}
+                              title={!canEditRate ? "Rate change not allowed for your login" : undefined} />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[11px] text-muted-foreground">Disc%</Label>
+                            <NumberInput min={0} max={100} value={item.discountPct}
+                              onChange={(v) => updateItem(idx, "discountPct", v)}
+                              onBlur={() => checkCostOnBlur(idx)}
+                              className="h-8 text-sm" data-testid={`input-discount-mobile-${idx}`} />
+                          </div>
+                          {isGstInvoiceType(invoiceType) && (
+                            <div className="space-y-1">
+                              <Label className="text-[11px] text-muted-foreground">Tax%</Label>
+                              <NumberInput min={0} max={28} value={item.taxPct}
+                                onChange={(v) => updateItem(idx, "taxPct", v)}
+                                className="h-8 text-sm" data-testid={`input-tax-mobile-${idx}`} />
+                            </div>
+                          )}
                         </div>
-                      )}
-                      <div className="space-y-1">
-                        <Label className="text-[11px] text-muted-foreground">Disc%</Label>
-                        <NumberInput min={0} max={100} value={item.discountPct}
-                          onChange={(v) => updateItem(idx, "discountPct", v)}
-                          onBlur={() => checkCostOnBlur(idx)}
-                          className="h-8 text-sm" data-testid={`input-discount-mobile-${idx}`} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[11px] text-muted-foreground">LTR</Label>
-                        <div className="h-8 flex items-center text-sm tabular-nums" data-testid={`cell-ltr-mobile-${idx}`}>
-                          {(() => { const ltr = lineLiters(item); return ltr > 0 ? ltr.toLocaleString(undefined, { maximumFractionDigits: 3 }) : "—"; })()}
+                        <div className="flex flex-col items-start">
+                          <CostWarningHint w={costWarning(item)} testId={`hint-cost-warning-mobile-${idx}`} />
+                          <ListRateHint w={listRateWarning(item)} testId={`hint-list-rate-mobile-${idx}`} />
                         </div>
+                        {rateFocusIdx === idx && (
+                          <RateHistoryPanel
+                            productId={item.productId}
+                            customerId={customer?.id ?? null}
+                            customerName={customer?.name ?? null}
+                            excludeInvoiceId={isEditMode ? editId : null}
+                            unit={item.unit}
+                          />
+                        )}
+                        <Input
+                          value={item.description}
+                          onChange={(e) => updateItem(idx, "description", e.target.value)}
+                          placeholder="Add description (optional)"
+                          className="h-8 text-xs"
+                          data-testid={`input-description-mobile-${idx}`}
+                        />
                       </div>
-                    </div>
-
-                    <div className="flex items-center justify-between pt-1 border-t text-sm">
-                      <span className="text-muted-foreground">Amount</span>
-                      <span className="font-bold">₹{item.amount.toLocaleString()}</span>
-                    </div>
+                    )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
         </div>
 
-        <div className="space-y-5">
+        <div className={`space-y-5 ${stepCls(3)}`}>
+          {/* Phone step 3: what's being billed, with a jump back to step 1. */}
+          <Card className="md:hidden">
+            <CardContent className="pt-4 pb-4 flex items-start gap-3">
+              <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                <User className="w-4 h-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="font-semibold text-sm truncate">{customer?.name ?? "Walk-in / Cash customer"}</div>
+                <div className="text-xs text-muted-foreground">
+                  {docLabel} · {invoiceDate.split("-").reverse().join("/")} · {items.length} item{items.length !== 1 ? "s" : ""}
+                </div>
+              </div>
+              <div className="flex flex-col gap-1 shrink-0">
+                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => goToStep(1)} data-testid="button-review-edit-customer">Edit</Button>
+                {isEditMode && existingInvoice && (
+                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => window.print()} data-testid="button-print-invoice-mobile">
+                    <Printer className="w-3 h-3 mr-1" /> Print
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base">Invoice Summary</CardTitle></CardHeader>
             <CardContent className="space-y-3 text-sm">
@@ -1429,8 +1564,16 @@ export default function Billing() {
               {Math.abs(roundOff) > 0.001 && <div className="flex justify-between text-muted-foreground text-xs"><span>Round Off</span><span>{roundOff > 0 ? "+" : ""}₹{roundOff.toFixed(2)}</span></div>}
               <Separator />
               <div className="flex justify-between font-bold text-lg"><span>Grand Total</span><span className="text-primary">₹{finalTotal.toLocaleString()}</span></div>
+              {isGstInvoiceType(invoiceType) && totalTax > 0 && !showGstBreakup && (
+                <button type="button" onClick={() => setShowGstBreakup(true)}
+                  className="md:hidden w-full flex items-center justify-between rounded bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground"
+                  data-testid="button-show-gst-breakup">
+                  <span className="uppercase tracking-wide">GST Breakup</span>
+                  <ChevronDown className="w-4 h-4" />
+                </button>
+              )}
               {isGstInvoiceType(invoiceType) && totalTax > 0 && (
-                <div className="bg-muted/50 rounded p-3 space-y-1 text-xs">
+                <div className={`bg-muted/50 rounded p-3 space-y-1 text-xs ${showGstBreakup ? "" : "hidden md:block"}`}>
                   <div className="font-medium mb-1 text-muted-foreground uppercase tracking-wide">GST Breakup</div>
                   {items.map((item, i) => {
                     if (!item.taxPct) return null;
@@ -1448,16 +1591,55 @@ export default function Billing() {
               )}
             </CardContent>
           </Card>
-          <Button className="w-full" size="lg" onClick={handleSave}
-            disabled={createInvoice.isPending || updateInvoice.isPending || items.length === 0}
-            data-testid="button-save-invoice-bottom">
-            {(createInvoice.isPending || updateInvoice.isPending) ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-            {isEditMode ? "Update Invoice" : "Save & Generate Invoice"}
-          </Button>
-          <Button variant="outline" className="w-full" onClick={() => setLocation(isEditMode ? "/invoices" : "/catalog")} data-testid="button-back-to-catalog">
-            <ArrowLeft className="w-4 h-4 mr-2" /> {isEditMode ? "Back to Invoices" : "Back to Catalog"}
-          </Button>
+          {/* Phone uses the sticky bar below instead. */}
+          <div className="hidden md:flex flex-col gap-5">
+            <Button className="w-full" size="lg" onClick={handleSave}
+              disabled={isSaving || items.length === 0}
+              data-testid="button-save-invoice-bottom">
+              {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+              {isEditMode ? "Update Invoice" : "Save & Generate Invoice"}
+            </Button>
+            <Button variant="outline" className="w-full" onClick={exitBilling} data-testid="button-back-to-catalog">
+              <ArrowLeft className="w-4 h-4 mr-2" /> {isEditMode ? "Back to Invoices" : "Back to Catalog"}
+            </Button>
+          </div>
         </div>
+      </div>
+
+      {/* Phone sticky bar: running total + the one action for this step. */}
+      <div className="md:hidden fixed bottom-0 inset-x-0 z-30 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] flex items-center gap-3"
+        data-testid="billing-mobile-bar">
+        {mobileStep < 3 ? (
+          <>
+            <div className="min-w-0 leading-tight">
+              <div className="text-[11px] text-muted-foreground tabular-nums">
+                {items.length} item{items.length !== 1 ? "s" : ""}
+                {items.length > 0 ? ` · ${totalQtyAll.toLocaleString()} qty` : ""}
+                {totalLtrAll > 0 ? ` · ${totalLtrAll.toLocaleString(undefined, { maximumFractionDigits: 3 })} L` : ""}
+              </div>
+              <div className="text-lg font-bold tabular-nums">₹{finalTotal.toLocaleString()}</div>
+            </div>
+            {mobileStep === 1 ? (
+              <Button className="ml-auto" onClick={() => goToStep(2)} data-testid="button-mobile-next-items">
+                {items.length > 0 ? "Items" : "Add Items"} <ArrowRight className="w-4 h-4 ml-1.5" />
+              </Button>
+            ) : (
+              <Button className="ml-auto" onClick={() => goToStep(3)} disabled={items.length === 0} data-testid="button-mobile-next-review">
+                Review <ArrowRight className="w-4 h-4 ml-1.5" />
+              </Button>
+            )}
+          </>
+        ) : (
+          <>
+            <Button variant="outline" onClick={() => goToStep(2)} data-testid="button-mobile-back-items">
+              <ArrowLeft className="w-4 h-4 mr-1.5" /> Items
+            </Button>
+            <Button className="flex-1" onClick={handleSave} disabled={isSaving || items.length === 0} data-testid="button-save-invoice-mobile">
+              {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+              {isEditMode ? "Update" : "Save"} · ₹{finalTotal.toLocaleString()}
+            </Button>
+          </>
+        )}
       </div>
     </div>
 
