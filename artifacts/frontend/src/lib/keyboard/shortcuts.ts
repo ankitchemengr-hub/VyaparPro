@@ -55,6 +55,7 @@ export const SHORTCUTS: ShortcutDoc[] = [
   { keys: ["↑", "↓"], label: "Move through the product / customer list", group: "Billing" },
   { keys: ["Enter"], label: "Add the highlighted product · move to next field", group: "Billing" },
   { keys: ["Alt", "C"], label: "Change customer", group: "Billing" },
+  { keys: ["Alt", "T"], label: "Jump to bill discount (or Enter on an empty product search)", group: "Billing" },
   { keys: ["Alt", "Del"], label: "Remove the focused line", group: "Billing" },
   { keys: ["Ctrl", "S"], label: "Save & generate the invoice", group: "Billing" },
 ];

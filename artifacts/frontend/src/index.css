@@ -354,3 +354,28 @@
   .recharts-surface:focus,
   .recharts-surface:focus-visible { outline: none !important; }
 }
+
+/* Highlighted option in any pick-list (dropdowns, search suggestions, menus):
+   solid brand orange with white text — the pale --accent tint was invisible on
+   a white popover, so you couldn't tell which row Enter / click would pick.
+   Covers Radix items (data-highlighted), cmdk items (data-selected) and
+   hand-rolled suggestion rows (.option-row, data-active). Unlayered on purpose
+   so it wins over the components' own bg utilities. */
+[data-highlighted],
+[cmdk-item][data-selected="true"],
+.option-row:hover,
+.option-row:focus-visible,
+.option-row[data-active="true"] {
+  background-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  outline: none;
+}
+/* Grey helper text / icons inside the highlighted row turn white so they
+   stay readable on the orange. */
+[data-highlighted] .text-muted-foreground,
+[cmdk-item][data-selected="true"] .text-muted-foreground,
+.option-row:hover .text-muted-foreground,
+.option-row:focus-visible .text-muted-foreground,
+.option-row[data-active="true"] .text-muted-foreground {
+  color: hsl(var(--primary-foreground) / 0.85);
+}

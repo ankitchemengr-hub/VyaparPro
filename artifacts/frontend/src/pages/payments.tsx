@@ -75,7 +75,7 @@ function PickCustomerDialog({
                 key={e.id}
                 type="button"
                 onClick={() => onSelect({ id: e.id, name: e.name })}
-                className="w-full text-left px-3 py-2 rounded-md hover:bg-accent text-sm"
+                className="option-row w-full text-left px-3 py-2 rounded-md text-sm"
                 data-testid={`option-pick-customer-${e.id}`}
               >
                 <div className="font-medium">{e.name}</div>

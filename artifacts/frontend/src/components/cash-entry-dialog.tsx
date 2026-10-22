@@ -420,7 +420,7 @@ export function CashEntryDialog({
                         key={e.id}
                         onClick={() => pickEntity(e)}
                         className={cn(
-                          "w-full text-left px-3 py-2 hover:bg-accent flex items-center justify-between gap-2 text-sm",
+                          "option-row w-full text-left px-3 py-2 flex items-center justify-between gap-2 text-sm",
                         )}
                         data-testid={`option-name-${e.id}`}
                       >
@@ -474,7 +474,7 @@ export function CashEntryDialog({
                         type="button"
                         key={e.id}
                         onClick={() => pickEntity(e)}
-                        className="w-full text-left px-3 py-2 hover:bg-accent text-sm flex items-center justify-between gap-2"
+                        className="option-row w-full text-left px-3 py-2 text-sm flex items-center justify-between gap-2"
                         data-testid={`option-mobile-${e.id}`}
                       >
                         <div className="min-w-0">

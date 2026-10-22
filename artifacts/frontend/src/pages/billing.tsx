@@ -339,6 +339,10 @@ export default function Billing() {
   // adds it. Reset to the top whenever the query or open state changes.
   const [searchActiveIdx, setSearchActiveIdx] = useState(0);
   const searchRef = useRef<HTMLDivElement>(null);
+  // Set once the biller moves through the dropdown with the arrow keys. Enter
+  // on an empty search without arrowing means "done adding" (jump to the bill
+  // discount), not "add whichever product happens to be listed first".
+  const searchArrowedRef = useRef(false);
   const [savedInvoice, setSavedInvoice] = useState<any>(null);
   const [sharing, setSharing] = useState(false);
   const savedSheetRef = useRef<HTMLDivElement>(null);
@@ -553,6 +557,11 @@ export default function Billing() {
     setSearchOpen(true);
     searchRef.current?.querySelector("input")?.focus();
   };
+  const focusBillDiscount = () => {
+    setSearchOpen(false);
+    const el = document.getElementById("input-bill-discount") as HTMLInputElement | null;
+    if (el) { el.focus(); el.select(); }
+  };
 
   // Desktop-only keyboard shortcuts (Ctrl/Cmd+S save; "/" or Alt+N focus the
   // product search; Alt+C change customer; Esc close the search) — gated on
@@ -584,6 +593,11 @@ export default function Billing() {
         setShowCustomerSearch(true);
         return;
       }
+      if (e.altKey && !e.ctrlKey && !e.metaKey && e.code === "KeyT") {
+        e.preventDefault();
+        focusBillDiscount();
+        return;
+      }
       if (e.key === "/" && !isEditable) {
         e.preventDefault();
         focusProductSearch();
@@ -594,7 +608,15 @@ export default function Billing() {
   }, []);
 
   // Keep the dropdown highlight on the first match as the query changes.
-  useEffect(() => { setSearchActiveIdx(0); }, [productSearch, searchOpen]);
+  useEffect(() => { setSearchActiveIdx(0); searchArrowedRef.current = false; }, [productSearch, searchOpen]);
+
+  // Desktop: a new bill opens with the cursor already in the product search,
+  // so typing can start without reaching for the mouse.
+  useEffect(() => {
+    if (isEditMode || !window.matchMedia("(min-width: 768px)").matches) return;
+    searchRef.current?.querySelector("input")?.focus();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Keep the keyboard-highlighted product row scrolled into view.
   useEffect(() => {
@@ -1214,12 +1236,18 @@ export default function Billing() {
                   aria-activedescendant={searchOpen && filteredProducts[searchActiveIdx] ? `product-opt-${searchActiveIdx}` : undefined}
                   onKeyDown={(e) => {
                     if (e.key === "ArrowDown") {
-                      e.preventDefault(); setSearchOpen(true);
+                      e.preventDefault(); setSearchOpen(true); searchArrowedRef.current = true;
                       setSearchActiveIdx((i) => Math.min(i + 1, filteredProducts.length - 1));
                     } else if (e.key === "ArrowUp") {
-                      e.preventDefault();
+                      e.preventDefault(); searchArrowedRef.current = true;
                       setSearchActiveIdx((i) => Math.max(i - 1, 0));
                     } else if (e.key === "Enter") {
+                      // Empty search + Enter = done adding items → bill discount.
+                      if (!productSearch.trim() && !searchArrowedRef.current && items.length > 0) {
+                        e.preventDefault();
+                        focusBillDiscount();
+                        return;
+                      }
                       const pick = filteredProducts[searchActiveIdx];
                       if (pick) { e.preventDefault(); addProductAndFocusQty(pick); }
                     }
@@ -1556,6 +1584,12 @@ export default function Billing() {
                   min={0}
                   value={billDiscount}
                   onChange={(v) => setBillDiscount(v)}
+                  onKeyDown={(e) => {
+                    // Enter → the Save button (one more Enter saves); never saves by itself.
+                    if (e.key !== "Enter") return;
+                    e.preventDefault();
+                    document.querySelector<HTMLButtonElement>('[data-testid="button-save-invoice-bottom"]')?.focus();
+                  }}
                   className="w-28 text-right"
                   data-testid="input-bill-discount"
                 />
@@ -1661,6 +1695,9 @@ export default function Billing() {
         setCustomer(c);
         if (c?.state) setPlaceOfSupply(c.state);
         setShowCustomerSearch(false);
+        // Keyboard flow: customer picked → straight on to adding products.
+        // After the dialog has handed focus back, so it isn't stolen again.
+        if (window.matchMedia("(min-width: 768px)").matches) setTimeout(focusProductSearch, 50);
       }}
     />
     <CustomerEditDialog
@@ -1899,6 +1936,7 @@ function CustomerSearchDialog({
                   placeholder="10-digit mobile number"
                   value={mobileInput}
                   maxLength={10}
+                  autoFocus
                   onChange={(e) => { setMobileInput(e.target.value.replace(/\D/g, "")); setSearchMobile(""); }}
                   onKeyDown={(e) => { if (e.key === "Enter") handleLookup(); }}
                   className="font-mono tracking-wider"
@@ -1914,6 +1952,7 @@ function CustomerSearchDialog({
                   placeholder="Type customer name or code..."
                   value={nameInput}
                   onChange={(e) => setNameInput(e.target.value)}
+                  autoFocus
                   autoComplete="off"
                   data-testid="input-customer-search-name"
                   role="combobox"
@@ -1954,7 +1993,7 @@ function CustomerSearchDialog({
                           data-active={active}
                           onClick={() => { onSelect(c); reset(); }}
                           onMouseEnter={() => setCustActiveIdx(idx)}
-                          className={`w-full text-left px-3 py-2 rounded-md border text-sm ${active ? "bg-accent border-accent-foreground/20" : "hover:bg-accent"}`}
+                          className="option-row w-full text-left px-3 py-2 rounded-md border text-sm"
                           data-testid={`option-customer-${c.id}`}
                         >
                           <div className="font-medium">{c.name}</div>
@@ -1984,7 +2023,7 @@ function CustomerSearchDialog({
             </div>
             <div className="flex gap-2">
               <Button variant="outline" className="flex-1" onClick={() => { setStep("mobile"); setSearchMobile(""); }}>Change</Button>
-              <Button className="flex-1" onClick={() => { onSelect(foundCustomer); reset(); }} data-testid="button-confirm-customer">Select</Button>
+              <Button autoFocus className="flex-1" onClick={() => { onSelect(foundCustomer); reset(); }} data-testid="button-confirm-customer">Select</Button>
             </div>
           </div>
         )}
@@ -1992,10 +2031,17 @@ function CustomerSearchDialog({
         {step === "not_found" && (
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">No customer registered for {mobileInput}. Register one now:</p>
-            <div className="grid grid-cols-2 gap-3">
+            {/* Enter in any text field registers the customer (once a name is typed). */}
+            <div className="grid grid-cols-2 gap-3"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.target as HTMLElement).tagName === "INPUT" && newCustomer.name.trim() && !createEntity.isPending) {
+                  e.preventDefault();
+                  handleCreate();
+                }
+              }}>
               <div className="col-span-2 space-y-1">
                 <Label className="text-xs">Name</Label>
-                <Input value={newCustomer.name} onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })} placeholder="Business / customer name" data-testid="input-new-customer-name" />
+                <Input autoFocus value={newCustomer.name} onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })} placeholder="Business / customer name" data-testid="input-new-customer-name" />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">GSTIN</Label>

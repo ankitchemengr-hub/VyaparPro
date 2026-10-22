@@ -1044,7 +1044,7 @@ const proceedToOrderWithCustomer = (customer: any) => {
                               key={entity.id}
                               type="button"
                               data-testid={`option-customer-${entity.id}`}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted transition-colors"
+                              className="option-row w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors"
                               onClick={() => { setFoundCustomer(entity); setStep("found"); }}
                             >
                               <User className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
