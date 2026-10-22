@@ -271,19 +271,23 @@ function CostWarningHint({ w, testId }: { w: CostWarning | null; testId: string 
 }
 
 // Stock on hand beside each product in the billing search dropdown, so the
-// biller sees how many are left before adding the line. Red at zero or
-// negative, amber at/below the product's low-stock threshold.
+// biller sees how many are left before adding the line. Just the number (the
+// label ate width the product name needs on a phone): red when out of stock
+// or at/below the product's low-stock threshold, green otherwise.
 function StockPill({ product, active }: { product: { currentStock: number; unit: string; minStockThreshold?: number | null }; active: boolean }) {
   const stock = Number(product.currentStock) || 0;
   const min = product.minStockThreshold != null ? Number(product.minStockThreshold) : null;
-  const tone = stock <= 0
+  const low = stock <= 0 || (min != null && stock <= min);
+  const tone = low
     ? "bg-red-600 text-white"
-    : min != null && stock <= min
-      ? "bg-amber-500 text-white"
-      : active ? "bg-primary-foreground/20 text-primary-foreground" : "bg-green-100 text-green-800 dark:bg-green-950/50 dark:text-green-300";
+    : active ? "bg-primary-foreground/20 text-primary-foreground" : "bg-green-100 text-green-800 dark:bg-green-950/50 dark:text-green-300";
   return (
-    <span className={`text-xs px-1.5 py-0.5 rounded font-semibold tabular-nums whitespace-nowrap ${tone}`} data-testid={`stock-pill-${(product as any).id}`}>
-      Stock: {stock.toLocaleString()} {product.unit}
+    <span
+      className={`min-w-[2.25rem] text-center text-xs px-1.5 py-0.5 rounded font-semibold tabular-nums whitespace-nowrap ${tone}`}
+      title={`Stock: ${stock.toLocaleString()} ${product.unit}`}
+      data-testid={`stock-pill-${(product as any).id}`}
+    >
+      {stock.toLocaleString()}
     </span>
   );
 }
@@ -1234,19 +1238,19 @@ export default function Billing() {
                         data-active={active}
                         onClick={() => addProductAndFocusQty(p)}
                         onMouseEnter={() => setSearchActiveIdx(idx)}
-                        className={`w-full text-left px-3 py-2 flex items-center justify-between gap-3 text-sm border-b last:border-0 ${active ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+                        className={`w-full text-left px-3 py-2 flex items-start justify-between gap-2 text-sm border-b last:border-0 ${active ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
                         data-testid={`product-option-${p.id}`}>
                         <div className="min-w-0 flex-1">
-                          <div className="font-medium truncate">{p.name}</div>
+                          <div className="font-medium break-words leading-snug">{p.name}</div>
                           <div className={`text-xs ${active ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
                             ₹{getBaseRate(p, customer, invoiceType).toLocaleString()}
                             {isGstInvoiceType(invoiceType) && p.taxRate ? ` · GST ${p.taxRate}%` : ""}
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
                           <StockPill product={p} active={active} />
                           {alreadyAdded && <span className={`text-[10px] uppercase px-1.5 py-0.5 rounded font-medium ${active ? "bg-primary-foreground/20 text-primary-foreground" : "bg-primary/10 text-primary"}`}>Added</span>}
-                          <Plus className={`w-4 h-4 ${active ? "text-primary-foreground" : "text-muted-foreground"}`} />
+                          <Plus className={`hidden sm:block w-4 h-4 ${active ? "text-primary-foreground" : "text-muted-foreground"}`} />
                         </div>
                       </button>
                     );
