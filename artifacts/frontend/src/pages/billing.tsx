@@ -795,7 +795,9 @@ export default function Billing() {
 
   // Who may type in the Rate field: admin always; a store user only when the
   // admin turned on "Can change rate while billing" in User Accounts.
-  const isAdminUser = user?.role === "admin";
+  // hasRole, not role === "admin": a super_admin switched into a company acts
+  // as its admin (opens Billing) and must not find the Rate field locked.
+  const isAdminUser = hasRole(["admin"]);
   // Store user: allowed per user (User Accounts switch) or for the whole
   // store role (Settings > Permissions "Billing Rate Edit").
   const canEditRate = isAdminUser || (user?.role === "store" && ((user as any)?.canEditRate === true || allowsFeature(FEATURE_BILLING_RATE_EDIT)));
@@ -1198,7 +1200,7 @@ export default function Billing() {
                   <button type="button" onClick={() => setShowMoreDetails(true)}
                     className="md:hidden col-span-2 flex items-center justify-between rounded-md border border-dashed px-3 py-2 text-xs font-medium text-muted-foreground"
                     data-testid="button-more-details">
-                    <span>{user?.role === "admin" ? "Freight, Salesman" : "Freight"}</span>
+                    <span>{isAdminUser ? "Freight, Salesman" : "Freight"}</span>
                     <span className="flex items-center gap-1"><Plus className="w-3.5 h-3.5" /> More</span>
                   </button>
                 )}
@@ -1206,7 +1208,7 @@ export default function Billing() {
                   <Label className="text-xs">Freight (₹)</Label>
                   <NumberInput min={0} value={freight} onChange={(v) => setFreight(v)} data-testid="input-freight" />
                 </div>
-                {user?.role === "admin" && (
+                {isAdminUser && (
                   <div className={`space-y-1 ${showMoreDetails || freight > 0 ? "" : "hidden md:block"}`}>
                     <Label className="text-xs">Salesman (Commission)</Label>
                     <Select value={salesmanId ? String(salesmanId) : "__none__"} onValueChange={(v) => setSalesmanId(v === "__none__" ? null : Number(v))}>
@@ -1444,7 +1446,7 @@ export default function Billing() {
                         </SelectContent>
                       </Select>
                       <Button type="button" size="icon" variant="ghost" className="h-8 w-8 ml-auto shrink-0"
-                        onClick={() => setOpenItemIdx(open ? null : idx)} aria-label={open ? "Hide item details" : "Show item details"}>
+                        onClick={() => setOpenItemIdx(open ? null : idx)} aria-label={open ? "Hide description" : "Add description"}>
                         <ChevronDown className={`w-4 h-4 transition-transform ${open ? "rotate-180" : ""}`} />
                       </Button>
                       <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0 text-destructive hover:text-destructive"
@@ -1455,19 +1457,13 @@ export default function Billing() {
                     {item.qtyMode === "box" && item.unitsPerBox > 0 && (
                       <span className="text-[10px] text-muted-foreground block" data-testid={`hint-billed-units-mobile-${idx}`}>= {billedUnits(item).toLocaleString()} {item.unit}</span>
                     )}
-                    {/* Warnings stay visible even when the card is closed. */}
-                    {!open && (costWarning(item) || listRateWarning(item)) && (
-                      <div className="flex flex-col items-start">
-                        <CostWarningHint w={costWarning(item)} testId={`hint-cost-warning-mobile-${idx}`} />
-                        <ListRateHint w={listRateWarning(item)} testId={`hint-list-rate-mobile-${idx}`} />
-                      </div>
-                    )}
-
-                    {open && (
-                      <div className="space-y-2 pt-1">
+                    {/* Rate / Disc / Tax always on the card — the rate is the
+                        field changed most, so it must not hide behind a tap. */}
                         <div className={`grid gap-2 ${isGstInvoiceType(invoiceType) ? "grid-cols-3" : "grid-cols-2"}`}>
                           <div className="space-y-1">
-                            <Label className="text-[11px] text-muted-foreground">Rate (₹)</Label>
+                            <Label className="text-[11px] text-muted-foreground">
+                              Rate (₹){!canEditRate && <span className="ml-1 text-amber-700 dark:text-amber-400" data-testid={`hint-rate-locked-mobile-${idx}`}>🔒 Locked</span>}
+                            </Label>
                             <NumberInput min={0} value={item.rate}
                               onChange={(v) => updateItem(idx, "rate", v, { rateEdited: true })}
                               onFocus={() => setRateFocusIdx(idx)}
@@ -1505,6 +1501,8 @@ export default function Billing() {
                             unit={item.unit}
                           />
                         )}
+                    {/* ⌄ opens the rarely-used extra: the line description. */}
+                    {(open || item.description) && (
                         <Input
                           value={item.description}
                           onChange={(e) => updateItem(idx, "description", e.target.value)}
@@ -1512,7 +1510,6 @@ export default function Billing() {
                           className="h-8 text-xs"
                           data-testid={`input-description-mobile-${idx}`}
                         />
-                      </div>
                     )}
                   </div>
                   );
