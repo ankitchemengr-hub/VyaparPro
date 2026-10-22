@@ -1097,15 +1097,13 @@ export default function Billing() {
             <Card className="md:hidden">
               <CardContent className="pt-4 pb-4 space-y-3">
                 <Label className="text-xs text-muted-foreground uppercase tracking-wide">Document</Label>
-                <div className="flex flex-wrap gap-2">
-                  {DOC_TYPE_OPTIONS.map((opt) => (
-                    <button key={opt.value} type="button" onClick={() => setDocType(opt.value)}
-                      className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${docType === opt.value ? "bg-primary text-primary-foreground border-primary" : "hover:bg-accent"}`}
-                      data-testid={`chip-doc-type-${opt.value}`}>
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
+                {/* Invoice is the default; the other document types stay tucked in the list. */}
+                <Select value={docType} onValueChange={setDocType}>
+                  <SelectTrigger className="h-10" data-testid="select-doc-type-mobile"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {DOC_TYPE_OPTIONS.map((opt) => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
                 {docType === "invoice" && (
                   <div className="grid grid-cols-2 rounded-md border overflow-hidden text-sm font-semibold">
                     {(["gst", "non_gst"] as const).map((v) => (
