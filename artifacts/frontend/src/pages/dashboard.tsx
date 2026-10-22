@@ -43,6 +43,8 @@ import {
   Droplets,
   ChevronDown,
   PieChartIcon,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
@@ -458,6 +460,9 @@ export default function Dashboard() {
   const { data: lastMonthProfit } = useGetProfitLossReport(lastMonthProfitParams, {
     query: { queryKey: getGetProfitLossReportQueryKey(lastMonthProfitParams), enabled: isAdmin },
   });
+  // Profit figures start hidden on every dashboard visit (not remembered) so
+  // they aren't on screen when someone else is looking; the eye reveals them.
+  const [showProfit, setShowProfit] = React.useState(false);
 
   const { data: workloadCards } = useListWorkloadCards();
 
@@ -676,7 +681,16 @@ export default function Dashboard() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Profit</CardTitle>
-              <IndianRupee className="h-4 w-4 text-emerald-600" />
+              <button
+                type="button"
+                onClick={() => setShowProfit((v) => !v)}
+                className="text-muted-foreground hover:text-foreground"
+                aria-label={showProfit ? "Hide profit" : "Show profit"}
+                title={showProfit ? "Hide profit" : "Show profit"}
+                data-testid="button-toggle-profit"
+              >
+                {showProfit ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+              </button>
             </CardHeader>
             <CardContent>
               <Tabs defaultValue="week">
@@ -685,7 +699,9 @@ export default function Dashboard() {
                   <TabsTrigger value="month" className="text-xs px-2 py-0.5">Month</TabsTrigger>
                 </TabsList>
                 <TabsContent value="week">
-                  {isLoadingWeekProfit || !weekProfit ? (
+                  {!showProfit ? (
+                    <div className="text-2xl font-bold text-muted-foreground" data-testid="text-profit-hidden">₹ ••••••</div>
+                  ) : isLoadingWeekProfit || !weekProfit ? (
                     <div className="h-8 w-24 bg-muted rounded animate-pulse" />
                   ) : (
                     <div
@@ -697,7 +713,9 @@ export default function Dashboard() {
                   )}
                 </TabsContent>
                 <TabsContent value="month">
-                  {isLoadingMonthProfit || !monthProfit ? (
+                  {!showProfit ? (
+                    <div className="text-2xl font-bold text-muted-foreground">₹ ••••••</div>
+                  ) : isLoadingMonthProfit || !monthProfit ? (
                     <div className="h-8 w-24 bg-muted rounded animate-pulse" />
                   ) : (
                     <>
