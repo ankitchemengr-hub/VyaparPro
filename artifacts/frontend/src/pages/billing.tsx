@@ -197,7 +197,7 @@ function RateHistoryPanel({ productId, customerId, customerName, excludeInvoiceI
 
   return (
     <div
-      className="rate-hist-panel rounded-lg border-2 border-primary/50 bg-primary/5 px-3 py-2 text-left max-w-md ml-auto"
+      className="rate-hist-panel w-full min-w-0 rounded-lg border-2 border-primary/50 bg-primary/5 px-3 py-2 text-left md:w-auto md:max-w-md md:ml-auto"
       // Never steal focus from the Rate field if it's clicked.
       onMouseDown={(e) => e.preventDefault()}
       data-testid={`rate-history-${productId}`}
@@ -215,7 +215,7 @@ function RateHistoryPanel({ productId, customerId, customerName, excludeInvoiceI
       ) : !data || data.rows.length === 0 ? (
         <div className="text-xs text-muted-foreground py-1">First time for this customer — no previous rate.</div>
       ) : (
-        <table className="w-full text-sm tabular-nums">
+        <table className="w-full text-xs md:text-sm tabular-nums">
           <tbody>
             {data.rows.map((r, i) => (
               <tr key={i} className={i === 0 ? "font-semibold" : "text-muted-foreground"}>
@@ -1408,109 +1408,127 @@ export default function Billing() {
                   const open = openItemIdx === idx;
                   const ltr = lineLiters(item);
                   return (
-                  <div key={idx} className={`p-3 space-y-2 ${open ? "bg-muted/30" : ""}`} data-testid={`billing-row-mobile-${idx}`}>
-                    {/* Compact row: tap the name to open Rate / Disc / Tax / description. */}
+                  <div key={idx} className="p-3 space-y-2.5 min-w-0" data-testid={`billing-row-mobile-${idx}`}>
+                    {/* Laid out for a 320px-wide phone: every row is a grid of
+                        min-w-0 cells, so no field can push past the card edge. */}
                     <div className="flex items-start gap-2">
-                      <button type="button" className="min-w-0 flex-1 text-left" aria-expanded={open}
-                        onClick={() => setOpenItemIdx(open ? null : idx)} data-testid={`button-toggle-item-mobile-${idx}`}>
-                        <div className="font-medium text-sm leading-tight">{item.name}</div>
-                        <div className="text-xs text-muted-foreground tabular-nums">
-                          ₹{item.rate.toLocaleString()} / {item.unit}
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium text-sm leading-tight break-words">{item.name}</div>
+                        <div className="text-[11px] text-muted-foreground tabular-nums">
+                          {item.unit}
                           {isGstInvoiceType(invoiceType) && item.taxPct ? ` · GST ${item.taxPct}%` : ""}
-                          {item.discountPct > 0 ? ` · ${item.discountPct}% off` : ""}
                           {ltr > 0 ? ` · ${ltr.toLocaleString(undefined, { maximumFractionDigits: 3 })} L` : ""}
                         </div>
-                      </button>
-                      <span className="font-bold text-sm tabular-nums shrink-0">₹{item.amount.toLocaleString()}</span>
+                      </div>
+                      <Button size="icon" variant="ghost" className="h-8 w-8 -mr-1 -mt-1 shrink-0 text-destructive hover:text-destructive"
+                        onClick={() => removeItem(idx)} aria-label="Remove item" data-testid={`button-remove-item-mobile-${idx}`}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
                     </div>
 
-                    <div className="flex items-center gap-1.5">
-                      <Button type="button" size="icon" variant="outline" className="h-8 w-8 shrink-0"
-                        disabled={item.qty <= 1} onClick={() => updateItem(idx, "qty", Math.max(1, item.qty - 1))}
-                        aria-label="Decrease quantity" data-testid={`button-qty-minus-mobile-${idx}`}>
-                        <Minus className="w-3.5 h-3.5" />
-                      </Button>
-                      <NumberInput min={1} step="any" value={item.qty}
-                        onChange={(v) => updateItem(idx, "qty", v)}
-                        className="h-8 w-14 text-center text-sm px-1" data-testid={`input-qty-mobile-${idx}`} />
-                      <Button type="button" size="icon" variant="outline" className="h-8 w-8 shrink-0"
-                        onClick={() => updateItem(idx, "qty", item.qty + 1)}
-                        aria-label="Increase quantity" data-testid={`button-qty-plus-mobile-${idx}`}>
-                        <Plus className="w-3.5 h-3.5" />
-                      </Button>
-                      <Select value={item.qtyMode} onValueChange={(v) => updateItem(idx, "qtyMode", v as QtyMode)}>
-                        <SelectTrigger className="h-8 w-[62px] px-2 text-xs shrink-0" data-testid={`select-qty-mode-mobile-${idx}`}><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="unit">QTY</SelectItem>
-                          <SelectItem value="box" disabled={item.unitsPerBox <= 0}>{item.packagingUnit.toUpperCase()}</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Button type="button" size="icon" variant="ghost" className="h-8 w-8 ml-auto shrink-0"
-                        onClick={() => setOpenItemIdx(open ? null : idx)} aria-label={open ? "Hide description" : "Add description"}>
-                        <ChevronDown className={`w-4 h-4 transition-transform ${open ? "rotate-180" : ""}`} />
-                      </Button>
-                      <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0 text-destructive hover:text-destructive"
-                        onClick={() => removeItem(idx)} data-testid={`button-remove-item-mobile-${idx}`}>
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
+                    {/* Qty and Rate side by side — the two fields set on every line. */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="min-w-0 space-y-1">
+                        <Label className="text-[11px] text-muted-foreground">Qty</Label>
+                        <div className="flex items-center gap-1">
+                          <Button type="button" size="icon" variant="outline" className="h-9 w-8 shrink-0"
+                            disabled={item.qty <= 1} onClick={() => updateItem(idx, "qty", Math.max(1, item.qty - 1))}
+                            aria-label="Decrease quantity" data-testid={`button-qty-minus-mobile-${idx}`}>
+                            <Minus className="w-3.5 h-3.5" />
+                          </Button>
+                          <NumberInput min={1} step="any" value={item.qty}
+                            onChange={(v) => updateItem(idx, "qty", v)}
+                            className="h-9 min-w-0 flex-1 px-1 text-center text-sm" data-testid={`input-qty-mobile-${idx}`} />
+                          <Button type="button" size="icon" variant="outline" className="h-9 w-8 shrink-0"
+                            onClick={() => updateItem(idx, "qty", item.qty + 1)}
+                            aria-label="Increase quantity" data-testid={`button-qty-plus-mobile-${idx}`}>
+                            <Plus className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="min-w-0 space-y-1">
+                        <Label className="text-[11px] text-muted-foreground flex items-center gap-1 truncate">
+                          Rate (₹){!canEditRate && <span className="text-amber-700 dark:text-amber-400" data-testid={`hint-rate-locked-mobile-${idx}`}>🔒 Locked</span>}
+                        </Label>
+                        <NumberInput min={0} value={item.rate}
+                          onChange={(v) => updateItem(idx, "rate", v, { rateEdited: true })}
+                          onFocus={() => setRateFocusIdx(idx)}
+                          onBlur={() => { setRateFocusIdx((cur) => (cur === idx ? null : cur)); checkCostOnBlur(idx); }}
+                          className={`h-9 min-w-0 px-2 text-right text-sm disabled:opacity-100 disabled:cursor-not-allowed ${costWarning(item) ? "border-red-500 bg-red-50 text-red-700 focus-visible:ring-red-500" : listRateWarning(item) ? "border-amber-500 bg-amber-50 text-amber-800 focus-visible:ring-amber-500" : ""}`}
+                          data-testid={`input-rate-mobile-${idx}`} disabled={!canEditRate}
+                          title={!canEditRate ? "Rate change not allowed for your login" : undefined} />
+                      </div>
+                    </div>
+
+                    {/* Unit (only when the product has a box size), Disc%, Tax%. */}
+                    <div className="grid grid-cols-3 gap-2">
+                      {item.unitsPerBox > 0 && (
+                        <div className="min-w-0 space-y-1">
+                          <Label className="text-[11px] text-muted-foreground">Unit</Label>
+                          <Select value={item.qtyMode} onValueChange={(v) => updateItem(idx, "qtyMode", v as QtyMode)}>
+                            <SelectTrigger className="h-9 w-full min-w-0 px-2 text-xs" data-testid={`select-qty-mode-mobile-${idx}`}><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="unit">QTY</SelectItem>
+                              <SelectItem value="box">{item.packagingUnit.toUpperCase()}</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                      <div className="min-w-0 space-y-1">
+                        <Label className="text-[11px] text-muted-foreground">Disc %</Label>
+                        <NumberInput min={0} max={100} value={item.discountPct}
+                          onChange={(v) => updateItem(idx, "discountPct", v)}
+                          onBlur={() => checkCostOnBlur(idx)}
+                          className="h-9 min-w-0 px-2 text-right text-sm" data-testid={`input-discount-mobile-${idx}`} />
+                      </div>
+                      {isGstInvoiceType(invoiceType) && (
+                        <div className="min-w-0 space-y-1">
+                          <Label className="text-[11px] text-muted-foreground">Tax %</Label>
+                          <NumberInput min={0} max={28} value={item.taxPct}
+                            onChange={(v) => updateItem(idx, "taxPct", v)}
+                            className="h-9 min-w-0 px-2 text-right text-sm" data-testid={`input-tax-mobile-${idx}`} />
+                        </div>
+                      )}
                     </div>
                     {item.qtyMode === "box" && item.unitsPerBox > 0 && (
                       <span className="text-[10px] text-muted-foreground block" data-testid={`hint-billed-units-mobile-${idx}`}>= {billedUnits(item).toLocaleString()} {item.unit}</span>
                     )}
-                    {/* Rate / Disc / Tax always on the card — the rate is the
-                        field changed most, so it must not hide behind a tap. */}
-                        <div className={`grid gap-2 ${isGstInvoiceType(invoiceType) ? "grid-cols-3" : "grid-cols-2"}`}>
-                          <div className="space-y-1">
-                            <Label className="text-[11px] text-muted-foreground">
-                              Rate (₹){!canEditRate && <span className="ml-1 text-amber-700 dark:text-amber-400" data-testid={`hint-rate-locked-mobile-${idx}`}>🔒 Locked</span>}
-                            </Label>
-                            <NumberInput min={0} value={item.rate}
-                              onChange={(v) => updateItem(idx, "rate", v, { rateEdited: true })}
-                              onFocus={() => setRateFocusIdx(idx)}
-                              onBlur={() => { setRateFocusIdx((cur) => (cur === idx ? null : cur)); checkCostOnBlur(idx); }}
-                              className={`h-8 text-sm disabled:opacity-100 disabled:cursor-not-allowed ${costWarning(item) ? "border-red-500 bg-red-50 text-red-700 focus-visible:ring-red-500" : listRateWarning(item) ? "border-amber-500 bg-amber-50 text-amber-800 focus-visible:ring-amber-500" : ""}`}
-                              data-testid={`input-rate-mobile-${idx}`} disabled={!canEditRate}
-                              title={!canEditRate ? "Rate change not allowed for your login" : undefined} />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-[11px] text-muted-foreground">Disc%</Label>
-                            <NumberInput min={0} max={100} value={item.discountPct}
-                              onChange={(v) => updateItem(idx, "discountPct", v)}
-                              onBlur={() => checkCostOnBlur(idx)}
-                              className="h-8 text-sm" data-testid={`input-discount-mobile-${idx}`} />
-                          </div>
-                          {isGstInvoiceType(invoiceType) && (
-                            <div className="space-y-1">
-                              <Label className="text-[11px] text-muted-foreground">Tax%</Label>
-                              <NumberInput min={0} max={28} value={item.taxPct}
-                                onChange={(v) => updateItem(idx, "taxPct", v)}
-                                className="h-8 text-sm" data-testid={`input-tax-mobile-${idx}`} />
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex flex-col items-start">
-                          <CostWarningHint w={costWarning(item)} testId={`hint-cost-warning-mobile-${idx}`} />
-                          <ListRateHint w={listRateWarning(item)} testId={`hint-list-rate-mobile-${idx}`} />
-                        </div>
-                        {rateFocusIdx === idx && (
-                          <RateHistoryPanel
-                            productId={item.productId}
-                            customerId={customer?.id ?? null}
-                            customerName={customer?.name ?? null}
-                            excludeInvoiceId={isEditMode ? editId : null}
-                            unit={item.unit}
-                          />
-                        )}
-                    {/* ⌄ opens the rarely-used extra: the line description. */}
-                    {(open || item.description) && (
-                        <Input
-                          value={item.description}
-                          onChange={(e) => updateItem(idx, "description", e.target.value)}
-                          placeholder="Add description (optional)"
-                          className="h-8 text-xs"
-                          data-testid={`input-description-mobile-${idx}`}
-                        />
+
+                    <div className="flex flex-col items-start">
+                      <CostWarningHint w={costWarning(item)} testId={`hint-cost-warning-mobile-${idx}`} />
+                      <ListRateHint w={listRateWarning(item)} testId={`hint-list-rate-mobile-${idx}`} />
+                    </div>
+                    {rateFocusIdx === idx && (
+                      <RateHistoryPanel
+                        productId={item.productId}
+                        customerId={customer?.id ?? null}
+                        customerName={customer?.name ?? null}
+                        excludeInvoiceId={isEditMode ? editId : null}
+                        unit={item.unit}
+                      />
                     )}
+                    {(open || item.description) && (
+                      <Input
+                        value={item.description}
+                        onChange={(e) => updateItem(idx, "description", e.target.value)}
+                        placeholder="Add description (optional)"
+                        className="h-8 text-xs"
+                        data-testid={`input-description-mobile-${idx}`}
+                      />
+                    )}
+
+                    <div className="flex items-center justify-between gap-2 border-t pt-2">
+                      {!(open || item.description) ? (
+                        <button type="button" onClick={() => setOpenItemIdx(idx)}
+                          className="text-xs font-medium text-primary flex items-center gap-1" data-testid={`button-toggle-item-mobile-${idx}`}>
+                          <Plus className="w-3 h-3" /> Note
+                        </button>
+                      ) : <span />}
+                      <div className="text-sm tabular-nums">
+                        <span className="text-muted-foreground text-xs mr-1.5">Amount</span>
+                        <span className="font-bold">₹{item.amount.toLocaleString()}</span>
+                      </div>
+                    </div>
                   </div>
                   );
                 })}
