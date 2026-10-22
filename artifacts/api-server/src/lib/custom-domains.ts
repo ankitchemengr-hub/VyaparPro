@@ -337,22 +337,24 @@ export async function verifyDomain(companyId: number) {
   if (now - (lastVerify.get(companyId) ?? 0) < 5_000) throw new DomainError("Please wait a few seconds before checking again", 429);
   lastVerify.set(companyId, now);
 
-  let { active, pending } = await rowsFor(companyId);
+  const { active, pending } = await rowsFor(companyId);
   const row = pending ?? active;
   if (!row) throw new DomainError("Add a domain first", 404);
 
   await attachToRailway(row);
-  ({ active, pending } = await rowsFor(companyId));
-  const target = (pending ?? active)!;
-
   return checkDomainNow(companyId);
 }
-  let records = target.dns_records?.length ? target.dns_records : fallbackRecords(target.domain);
+
 // Re-check DNS for the pending domain (or refresh the active one's status).
 // When automatic (Railway configured) and every record matches, the pending
 // domain goes live immediately; otherwise staff finish it by hand. Also run
 // by lib/domain-scheduler.ts every 15 minutes for pending domains.
 export async function checkDomainNow(companyId: number) {
+  const { active, pending } = await rowsFor(companyId);
+  const target = pending ?? active;
+  if (!target) return getDomainState(companyId);
+
+  let records = target.dns_records?.length ? target.dns_records : fallbackRecords(target.domain);
   let certificateStatus = target.certificate_status;
   if (railwayConfigured() && target.railway_domain_id) {
     try {
