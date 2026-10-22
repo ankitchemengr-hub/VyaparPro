@@ -25,6 +25,7 @@ import { UpdateSalePriceDialog } from "@/components/update-sale-price-dialog";
 import { useAuth } from "@/contexts/use-auth";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { ProductDialog } from "@/pages/inventory";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -73,6 +74,7 @@ function ProductCombobox({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const queryClient = useQueryClient();
   const selected = products.find((p) => p.id === value);
   const trimmedQuery = query.trim();
   const filtered = trimmedQuery
@@ -132,11 +134,14 @@ function ProductCombobox({
         </Command>
       </PopoverContent>
     </Popover>
-    <QuickAddProductDialog
+    <ProductDialog
       open={quickAddOpen}
       onOpenChange={setQuickAddOpen}
-      initialName={trimmedQuery}
+      initialValues={{ name: trimmedQuery }}
       onCreated={(created) => {
+        // The purchase line pickers read useListProducts({}) — put the new
+        // product in that exact cache now so it's selectable immediately.
+        queryClient.setQueryData(getListProductsQueryKey({}), (old: any[] | undefined) => [...(old ?? []), created]);
         onChange(String(created.id));
         setQuery("");
       }}
@@ -295,186 +300,6 @@ function BrandCombobox({ value, onChange }: { value: string; onChange: (v: strin
         </Command>
       </PopoverContent>
     </Popover>
-  );
-}
-
-function suggestItemCode(name: string): string {
-  const cleaned = name.toUpperCase().replace(/[^A-Z0-9\s-]/g, "");
-  const words = cleaned.split(/\s+/).filter(Boolean);
-  return words.slice(0, 3).map((w) => (/\d/.test(w) ? w : w.slice(0, 3))).join("-");
-}
-
-// Quick-add a brand-new product without leaving the Purchase form. Only the
-// fields the product schema actually requires (name/group/brand/itemCode/
-// unit/purchasePrice/retailPrice/wholesalePrice/mrp) — sale prices default to
-// sane margins over purchase price and stay editable, since a purchase alone
-// doesn't tell us what this should sell for.
-function QuickAddProductDialog({
-  open, onOpenChange, initialName, onCreated,
-}: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  initialName: string;
-  onCreated: (product: any) => void;
-}) {
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
-  const create = useCreateProduct();
-  const [name, setName] = useState(initialName);
-  const [itemCode, setItemCode] = useState("");
-  const [itemCodeAuto, setItemCodeAuto] = useState(true);
-  const [brand, setBrand] = useState("");
-  const [group, setGroup] = useState("");
-  const [unit, setUnit] = useState("pcs");
-  const [taxRate, setTaxRate] = useState("18");
-  const [purchasePrice, setPurchasePrice] = useState("0");
-  const [retailPrice, setRetailPrice] = useState("0");
-  const [wholesalePrice, setWholesalePrice] = useState("0");
-  const [mrp, setMrp] = useState("0");
-  const [priceEdited, setPriceEdited] = useState(false);
-
-  useEffect(() => {
-    if (open) {
-      setName(initialName);
-      setItemCode(suggestItemCode(initialName));
-      setItemCodeAuto(true);
-      setBrand(""); setGroup(""); setUnit("pcs"); setTaxRate("18");
-      setPurchasePrice("0"); setRetailPrice("0"); setWholesalePrice("0"); setMrp("0");
-      setPriceEdited(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-
-  useEffect(() => {
-    if (itemCodeAuto) setItemCode(suggestItemCode(name));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, itemCodeAuto]);
-
-  // Suggest sale prices from purchase price with typical margins, until the
-  // user edits one of them directly.
-  useEffect(() => {
-    if (priceEdited) return;
-    const p = Number(purchasePrice) || 0;
-    setRetailPrice(p > 0 ? (p * 1.15).toFixed(2) : "0");
-    setWholesalePrice(p > 0 ? (p * 1.10).toFixed(2) : "0");
-    setMrp(p > 0 ? (p * 1.25).toFixed(2) : "0");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [purchasePrice, priceEdited]);
-
-  const canSave = name.trim() && itemCode.trim() && brand.trim() && group.trim() && unit.trim() && !create.isPending;
-
-  const handleSave = () => {
-    create.mutate(
-      {
-        data: {
-          name: name.trim(),
-          itemCode: itemCode.trim(),
-          brand: brand.trim(),
-          group: group.trim(),
-          unit: unit.trim(),
-          taxRate: Number(taxRate) || 0,
-          purchasePrice: Number(purchasePrice) || 0,
-          retailPrice: Number(retailPrice) || 0,
-          wholesalePrice: Number(wholesalePrice) || 0,
-          mrp: Number(mrp) || 0,
-        },
-      },
-      {
-        onSuccess: (created) => {
-          // NewPurchaseTab/HistoryTab's edit dialog all call useListProducts({}) —
-          // match that exact key so the new product is visible in this line's
-          // picker immediately, not just after the invalidate below settles.
-          queryClient.setQueryData(getListProductsQueryKey({}), (old: any[] | undefined) => [...(old ?? []), created]);
-          queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() });
-          toast({ title: "Product added" });
-          onCreated(created);
-          onOpenChange(false);
-        },
-        onError: async (err: any) => {
-          let desc = err?.message ?? "Server error";
-          try {
-            const body = err?.response ? await err.response.json() : null;
-            if (body?.error) desc = String(body.error).slice(0, 300);
-          } catch {}
-          toast({ title: "Could not add product", description: desc, variant: "destructive" });
-        },
-      },
-    );
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Quick Add Product</DialogTitle>
-          <DialogDescription>
-            Adds this straight to your catalog so you can pick it in this purchase. You can fill in the rest (image, stock threshold, etc.) later in Inventory.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-3 py-1">
-          <div>
-            <Label>Name *</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} data-testid="input-quick-add-name" />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>Brand *</Label>
-              <BrandCombobox value={brand} onChange={setBrand} />
-            </div>
-            <div>
-              <Label>Group / Category *</Label>
-              <Input value={group} onChange={(e) => setGroup(e.target.value)} placeholder="e.g. Engine Oil" data-testid="input-quick-add-group" />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>Unit *</Label>
-              <Input value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="e.g. Ltr, Box, Pcs" data-testid="input-quick-add-unit" />
-            </div>
-            <div>
-              <Label>Item Code *</Label>
-              <Input
-                value={itemCode}
-                onChange={(e) => { setItemCode(e.target.value); setItemCodeAuto(false); }}
-                data-testid="input-quick-add-item-code"
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>Purchase Price (₹) *</Label>
-              <Input type="number" min="0" step="0.01" value={purchasePrice} onChange={(e) => setPurchasePrice(e.target.value)} data-testid="input-quick-add-purchase-price" />
-            </div>
-            <div>
-              <Label>Tax Rate (%)</Label>
-              <Input type="number" min="0" max="100" step="0.5" value={taxRate} onChange={(e) => setTaxRate(e.target.value)} />
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <Label className="text-xs">Retail Price *</Label>
-              <Input type="number" min="0" step="0.01" value={retailPrice} onChange={(e) => { setRetailPrice(e.target.value); setPriceEdited(true); }} />
-            </div>
-            <div>
-              <Label className="text-xs">Wholesale Price *</Label>
-              <Input type="number" min="0" step="0.01" value={wholesalePrice} onChange={(e) => { setWholesalePrice(e.target.value); setPriceEdited(true); }} />
-            </div>
-            <div>
-              <Label className="text-xs">MRP *</Label>
-              <Input type="number" min="0" step="0.01" value={mrp} onChange={(e) => { setMrp(e.target.value); setPriceEdited(true); }} />
-            </div>
-          </div>
-          <p className="text-[11px] text-muted-foreground">Sale prices are suggested from purchase price — adjust if needed.</p>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={create.isPending}>Cancel</Button>
-          <Button onClick={handleSave} disabled={!canSave} data-testid="button-save-quick-add-product">
-            {create.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-            Add Product
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 

@@ -522,7 +522,7 @@ function ProductBillsDialog({
   );
 }
 
-type ProductForm = {
+export type ProductForm = {
   gstPrice: string;
   nonGstPrice: string;
   name: string;
@@ -583,7 +583,18 @@ function suggestItemCode(name: string, litersPerBox: string, volumeUnit: string)
   return `${prefix}${volSuffix}`;
 }
 
-function ProductDialog({ open, onOpenChange, product, isAdmin }: { open: boolean; onOpenChange: (v: boolean) => void; product?: any; isAdmin?: boolean }) {
+// The one Add/Edit Product form — also opened from Purchases and from the
+// BOM editor's "+ new material", so a product gets the same details however
+// it's created. `initialValues` pre-fills a new product (e.g. the typed name,
+// or raw-material defaults); `onCreated` hands the new product back.
+export function ProductDialog({ open, onOpenChange, product, isAdmin, initialValues, onCreated }: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  product?: any;
+  isAdmin?: boolean;
+  initialValues?: Partial<ProductForm>;
+  onCreated?: (created: any) => void;
+}) {
   const isEdit = !!product;
   const [tab, setTab] = useState("details");
   const [form, setForm] = useState<ProductForm>(emptyForm);
@@ -663,7 +674,7 @@ function ProductDialog({ open, onOpenChange, product, isAdmin }: { open: boolean
       setStockCount("");
       setStockDisplay(null);
     } else if (open && !product) {
-      setForm(emptyForm);
+      setForm({ ...emptyForm, ...(initialValues ?? {}) });
       setImagePreview("");
       setImageChanged(false);
       setProductType("Purchased");
@@ -731,6 +742,14 @@ function ProductDialog({ open, onOpenChange, product, isAdmin }: { open: boolean
         setTab("pricing");
         return;
       }
+    } else if (form.notForSale) {
+      // Not for Sale (raw materials, packaging…): never billed, so no sale
+      // prices or MRP needed — only what it costs to buy.
+      if (!isManufactured && !form.purchasePrice) {
+        toast({ title: "Pricing required", description: "Fill in Purchase Price.", variant: "destructive" });
+        setTab("pricing");
+        return;
+      }
     } else if (!form.retailPrice || !form.wholesalePrice || !form.mrp || (!isManufactured && !form.purchasePrice)) {
       toast({ title: "Pricing required", description: "Fill in all price fields.", variant: "destructive" });
       setTab("pricing");
@@ -750,7 +769,7 @@ function ProductDialog({ open, onOpenChange, product, isAdmin }: { open: boolean
       itemCode: form.itemCode.trim(),
       unit: form.unit.trim(),
       purchasePrice: isManufactured ? 0 : Number(form.purchasePrice),
-      mrp: Number(form.mrp),
+      mrp: Number(form.mrp) || 0,
       // mrp_based products don't use these flat fields for billing (see
       // getBaseRate in billing.tsx) — sent as 0/omitted rather than left
       // populated with stale values from before a mode switch.
@@ -807,6 +826,7 @@ function ProductDialog({ open, onOpenChange, product, isAdmin }: { open: boolean
           onSuccess: (created) => {
             queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() });
             toast({ title: `Product "${created.name}" added successfully` });
+            onCreated?.(created);
             handleClose();
           },
           onError: (err) => handleError(err, "Failed to create product"),
@@ -1013,7 +1033,7 @@ function ProductDialog({ open, onOpenChange, product, isAdmin }: { open: boolean
                 </div>
               )}
               <div className="space-y-1.5">
-                <Label>MRP (₹) *</Label>
+                <Label>MRP (₹){form.notForSale ? "" : " *"}</Label>
                 <Input
                   type="number" min={0}
                   value={form.mrp}
@@ -1091,7 +1111,7 @@ function ProductDialog({ open, onOpenChange, product, isAdmin }: { open: boolean
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <Label>Wholesale Price (₹) *</Label>
+                      <Label>Wholesale Price (₹){form.notForSale ? "" : " *"}</Label>
                       <Input
                         type="number" min={0}
                         value={form.wholesalePrice}
@@ -1104,7 +1124,7 @@ function ProductDialog({ open, onOpenChange, product, isAdmin }: { open: boolean
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label>Retail Price (₹) *</Label>
+                      <Label>Retail Price (₹){form.notForSale ? "" : " *"}</Label>
                       <Input
                         type="number" min={0}
                         value={form.retailPrice}

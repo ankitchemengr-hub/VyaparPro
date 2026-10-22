@@ -11,6 +11,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { ProductDialog } from "@/pages/inventory";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -168,6 +169,17 @@ export interface BomDialogState {
   finishedProductName: string;
   existingBom: any | null;
 }
+
+// New material added from the BOM editor: same full product form as
+// Inventory, pre-set as a raw material (not for sale, used in manufacturing).
+const RAW_MATERIAL_DEFAULTS = {
+  brand: "Raw Material",
+  group: "Raw Materials",
+  unit: "QTY",
+  notForSale: true,
+  addForManufacturing: true,
+  minStockThreshold: "5",
+};
 
 export function BomDialog({
   state,
@@ -458,9 +470,10 @@ export function BomDialog({
         </DialogFooter>
       </DialogContent>
 
-      <QuickAddMaterialDialog
+      <ProductDialog
         open={quickAddIdx !== null}
         onOpenChange={(o) => { if (!o) setQuickAddIdx(null); }}
+        initialValues={RAW_MATERIAL_DEFAULTS}
         onCreated={(p) => {
           if (quickAddIdx !== null) {
             updateRow(quickAddIdx, {
@@ -471,168 +484,6 @@ export function BomDialog({
           setQuickAddIdx(null);
         }}
       />
-    </Dialog>
-  );
-}
-
-function QuickAddMaterialDialog({
-  open,
-  onOpenChange,
-  onCreated,
-}: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  onCreated: (p: any) => void;
-}) {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const createProduct = useCreateProduct();
-  const [name, setName] = useState("");
-  const [itemCode, setItemCode] = useState("");
-  const [unit, setUnit] = useState("QTY");
-  const [brand, setBrand] = useState("Raw Material");
-  const [group, setGroup] = useState("Raw Materials");
-  const [openingStock, setOpeningStock] = useState("0");
-  const [purchasePrice, setPurchasePrice] = useState("0");
-
-  useEffect(() => {
-    if (open) {
-      setName(""); setItemCode(""); setUnit("QTY");
-      setBrand("Raw Material"); setGroup("Raw Materials");
-      setOpeningStock("0"); setPurchasePrice("0");
-    }
-  }, [open]);
-
-  const submitting = createProduct.isPending;
-  const canSave = !submitting && name.trim().length > 0;
-
-  async function handleCreate() {
-    const code = itemCode.trim() || `RAW-${Date.now().toString(36).toUpperCase()}`;
-    try {
-      const created = await createProduct.mutateAsync({
-        data: {
-          name: name.trim(),
-          itemCode: code,
-          group: group.trim() || "Raw Materials",
-          brand: brand.trim() || "Raw Material",
-          unit: unit.trim() || "QTY",
-          purchasePrice: Number(purchasePrice) || 0,
-          mrp: 0,
-          wholesalePrice: 0,
-          retailPrice: 0,
-          notForSale: true,
-          addForManufacturing: true,
-          openingStock: Number(openingStock) || 0,
-          // Without this, a raw material added here would never appear in Low
-          // Stock Alerts (that query requires a non-null threshold) no matter
-          // how low it ran — 5 is just a starting point; adjust per-material
-          // in Inventory once its real reorder point is known.
-          minStockThreshold: 5,
-        } as any,
-      });
-      await queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() });
-      toast({ title: "Raw material added", description: `${created.name} saved to Inventory (Not for Sale).` });
-      onCreated(created);
-    } catch (err: any) {
-      toast({
-        title: "Could not add material",
-        description: err?.response?.data?.error ?? err?.message ?? "Unknown error",
-        variant: "destructive",
-      });
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Add New Raw Material</DialogTitle>
-          <DialogDescription>
-            Saved to Inventory as <strong>Not for Sale</strong> &amp; available for Manufacturing.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-3">
-          <div>
-            <Label>Material Name <span className="text-destructive">*</span></Label>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Base Oil SN150"
-              className="mt-1.5"
-              autoFocus
-              data-testid="input-quick-material-name"
-            />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <Label>Item Code</Label>
-              <Input
-                value={itemCode}
-                onChange={(e) => setItemCode(e.target.value)}
-                placeholder="Auto"
-                className="mt-1.5"
-                data-testid="input-quick-material-code"
-              />
-            </div>
-            <div>
-              <Label>Unit</Label>
-              <Input
-                value={unit}
-                onChange={(e) => setUnit(e.target.value)}
-                placeholder="QTY / LTR / KG"
-                className="mt-1.5"
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <Label>Group</Label>
-              <Input
-                value={group}
-                onChange={(e) => setGroup(e.target.value)}
-                className="mt-1.5"
-              />
-            </div>
-            <div>
-              <Label>Brand</Label>
-              <BrandCombobox value={brand} onChange={setBrand} />
-            </div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <Label>Opening Stock</Label>
-              <Input
-                type="number"
-                min="0"
-                step="0.001"
-                value={openingStock}
-                onChange={(e) => setOpeningStock(e.target.value)}
-                className="mt-1.5"
-              />
-            </div>
-            <div>
-              <Label>Purchase Price</Label>
-              <Input
-                type="number"
-                min="0"
-                step="0.01"
-                value={purchasePrice}
-                onChange={(e) => setPurchasePrice(e.target.value)}
-                className="mt-1.5"
-              />
-            </div>
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
-            Cancel
-          </Button>
-          <Button onClick={handleCreate} disabled={!canSave} data-testid="button-create-quick-material">
-            {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            Add Material
-          </Button>
-        </DialogFooter>
-      </DialogContent>
     </Dialog>
   );
 }
