@@ -322,9 +322,7 @@ async function activate(companyId: number, pending: DomainRow, previous: DomainR
 
 const lastVerify = new Map<number, number>();
 
-// Re-check DNS for the pending domain (or refresh the active one's status).
-// When automatic (Railway configured) and every record matches, the pending
-// domain goes live immediately; otherwise staff finish it by hand.
+// "Check DNS now" from the portal — throttled per company.
 export async function verifyDomain(companyId: number) {
   const now = Date.now();
   if (now - (lastVerify.get(companyId) ?? 0) < 5_000) throw new DomainError("Please wait a few seconds before checking again", 429);
@@ -338,7 +336,14 @@ export async function verifyDomain(companyId: number) {
   ({ active, pending } = await rowsFor(companyId));
   const target = (pending ?? active)!;
 
+  return checkDomainNow(companyId);
+}
   let records = target.dns_records?.length ? target.dns_records : fallbackRecords(target.domain);
+// Re-check DNS for the pending domain (or refresh the active one's status).
+// When automatic (Railway configured) and every record matches, the pending
+// domain goes live immediately; otherwise staff finish it by hand. Also run
+// by lib/domain-scheduler.ts every 15 minutes for pending domains.
+export async function checkDomainNow(companyId: number) {
   let certificateStatus = target.certificate_status;
   if (railwayConfigured() && target.railway_domain_id) {
     try {

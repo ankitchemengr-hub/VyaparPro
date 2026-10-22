@@ -273,7 +273,10 @@ export default function PortalDomain() {
                     </li>
                     <li className="space-y-2">
                       <div className="font-medium text-slate-900">3. Check</div>
-                      <div className="text-slate-500">DNS usually updates within 15–30 minutes, occasionally up to 24 hours.</div>
+                      <div className="text-slate-500">
+                        DNS usually updates within 15–30 minutes, occasionally up to 24 hours. We check automatically every
+                        15 minutes and email you the moment your domain is live — or check now yourself:
+                      </div>
                       <Button onClick={() => verify.mutate()} disabled={verify.isPending} className="bg-blue-600 hover:bg-blue-700">
                         {verify.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />} Check DNS now
                       </Button>
