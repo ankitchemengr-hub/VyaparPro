@@ -32,6 +32,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { useToast } from "@/hooks/use-toast";
+import { CodeEntry } from "@/components/code-entry";
 import { Factory, Check, Eye, EyeOff } from "lucide-react";
 
 // Persisted login-screen company override, set via the hidden switcher. After a
@@ -70,6 +71,8 @@ export default function Login() {
   const [switcherOpen, setSwitcherOpen] = React.useState(false);
   const [showPassword, setShowPassword] = React.useState(false);
   const [loginError, setLoginError] = React.useState<string | null>(null);
+  // Emailed-code step for website-signup accounts (new device / unverified email).
+  const [challenge, setChallenge] = React.useState<{ challengeId: string; email: string; reason: string } | null>(null);
   const [override, setOverride] = React.useState<LoginCompany | null>(() => readLoginCompany());
   const logoClicksRef = React.useRef(0);
   const logoTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -173,6 +176,31 @@ export default function Login() {
       },
       {
         onSuccess: (data) => {
+          // Website-signup accounts on a new device (or with an unverified
+          // email) get 202 + an emailed code instead of a session.
+          const r = data as any;
+          if (r?.challenge === "email_code") {
+            setChallenge({ challengeId: r.challengeId, email: r.email, reason: r.reason });
+            return;
+          }
+          goAfterLogin(data);
+        },
+        onError: (err: any) => {
+          // Rate-limit / dedicated-company / mail-down messages are specific and
+          // useful — show them as-is; anything else is a wrong username/password.
+          const serverMsg = typeof err?.data?.error === "string" ? err.data.error : null;
+          const msg = err?.status === 429 || err?.status === 403 || err?.status === 409 || err?.status === 503
+            ? (serverMsg ?? "Too many attempts. Please wait a few minutes.")
+            : "Wrong username or password. Check the spelling and try again.";
+          setLoginError(msg);
+          toast({ title: "Login failed", description: msg, variant: "destructive" });
+        },
+      },
+    );
+  };
+
+  // Where each role lands after signing in (also used after the email code).
+  const goAfterLogin = (data: { role: string }) => {
           // If a company was picked via the hidden switcher and this account can
           // switch (super_admin), jump straight into that company's ERP.
           if (data.role === "super_admin" && override) {
@@ -209,19 +237,6 @@ export default function Login() {
           } else {
             window.location.href = "/catalog";
           }
-        },
-        onError: (err: any) => {
-          // Rate-limit / dedicated-company messages are specific and useful —
-          // show them as-is; anything else is a wrong username/password.
-          const serverMsg = typeof err?.data?.error === "string" ? err.data.error : null;
-          const msg = err?.status === 429 || err?.status === 403 || err?.status === 409
-            ? (serverMsg ?? "Too many attempts. Please wait a few minutes.")
-            : "Wrong username or password. Check the spelling and try again.";
-          setLoginError(msg);
-          toast({ title: "Login failed", description: msg, variant: "destructive" });
-        },
-      }
-    );
   };
 
   return (
@@ -256,6 +271,19 @@ export default function Login() {
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {challenge ? (
+              <CodeEntry
+                title={challenge.reason === "verify_email" ? "Verify your email" : "New device — confirm it's you"}
+                description="We sent a 6-digit code to"
+                email={challenge.email}
+                challengeId={challenge.challengeId}
+                verifyUrl="/api/auth/login/verify"
+                resendUrl="/api/auth/login/resend"
+                rememberOption
+                onVerified={(result) => goAfterLogin(result as { role: string })}
+                onCancel={() => { setChallenge(null); form.setValue("password", ""); }}
+              />
+            ) : (
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                 <FormField
@@ -327,6 +355,7 @@ export default function Login() {
                 </p>
               </form>
             </Form>
+            )}
           </CardContent>
         </Card>
         

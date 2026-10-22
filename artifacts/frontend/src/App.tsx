@@ -31,6 +31,7 @@ import SmartOrder from "@/pages/smart-order";
 import Reports from "@/pages/reports";
 import Settings from "@/pages/settings";
 import Users from "@/pages/users";
+import MyAccount from "@/pages/my-account";
 import Accounts from "@/pages/accounts";
 import CashBook from "@/pages/cashbook";
 import Workers from "@/pages/workers";
@@ -119,6 +120,7 @@ function ProtectedRoutes() {
         <Route path="/material-received" component={MaterialReceived} />
         <Route path="/price-list" component={PriceList} />
         <Route path="/users" component={Users} />
+        <Route path="/my-account" component={MyAccount} />
         <Route path="/my-orders" component={MyOrders} />
         <Route path="/my-statement" component={MyStatement} />
         <Route path="/customer-orders" component={CustomerOrdersAdmin} />

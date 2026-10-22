@@ -15,6 +15,12 @@ import { isAccountAllowedHere, getDefaultCompanyId } from "../lib/system-config"
 import { getCurrentCompany } from "../lib/company";
 import { verifyPassword } from "../lib/password";
 import { loginRateLimitKey, checkLoginRateLimit, recordLoginFailure, clearLoginAttempts } from "../lib/login-rate-limit";
+import { hashPassword } from "../lib/password";
+import { isUsernameTaken } from "../lib/username";
+import {
+  CodeError, otpDisabled, createChallenge, verifyChallenge, resendChallenge,
+  isDeviceTrusted, trustDevice, forgetTrustedDevices,
+} from "../lib/auth-codes";
 
 const router: IRouter = Router();
 
@@ -260,7 +266,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
       ? null
       : effectiveSwitch ?? getDefaultCompanyId() ?? user.companyId ?? null;
 
-  (req as any).session = {
+  const session = {
     userId: user.id,
     username: user.username,
     role: user.role,
@@ -273,7 +279,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
 
   const loginCompany = await getCurrentCompany(sessionCompanyId);
 
-  res.json({
+  const body = {
     id: user.id,
     username: user.username,
     role: user.role,
@@ -284,7 +290,29 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     canReceiveProduction: user.canReceiveProduction ?? false,
     companyId: sessionCompanyId,
     company: loginCompany ? { name: loginCompany.name, logo: loginCompany.logo ?? null } : null,
-  });
+  };
+
+  // Website-signup accounts: an unverified email, or a device this account
+  // hasn't trusted yet, needs the emailed code first. The checked session is
+  // parked on the challenge and issued by POST /auth/login/verify.
+  if (user.loginOtpRequired && !otpDisabled()) {
+    const reason = !user.emailVerifiedAt ? "verify_email" : (await isDeviceTrusted(req, user.id)) ? null : "new_device";
+    if (reason) {
+      const ch = await createChallenge({
+        userId: user.id, purpose: "login", email: user.username,
+        payload: { session, body, username, ip },
+      });
+      if (!ch.sent) {
+        res.status(503).json({ error: "We couldn't send your login code right now. Please try again in a few minutes, or contact support." });
+        return;
+      }
+      res.status(202).json({ challenge: "email_code", reason, challengeId: ch.challengeId, email: ch.email });
+      return;
+    }
+  }
+
+  (req as any).session = session;
+  res.json(body);
 
   // Audit success after sending the response.
   await writeLoginAudit({
@@ -295,6 +323,185 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     userId: user.id,
     userName: user.name,
   });
+});
+
+// ---------------------------------------------------------------------------
+// Email codes: new-device / unverified-email login, change password & email
+// ---------------------------------------------------------------------------
+
+const MIN_PASSWORD = 8;
+
+function codeErrorResponse(err: unknown, res: import("express").Response): boolean {
+  if (err instanceof CodeError) {
+    res.status(err.status).json({ error: err.message });
+    return true;
+  }
+  return false;
+}
+
+// POST /auth/login/verify { challengeId, code, rememberDevice? } — finishes a
+// login that answered 202 { challenge: "email_code" }.
+router.post("/auth/login/verify", async (req, res): Promise<void> => {
+  try {
+    const ch = await verifyChallenge(req.body?.challengeId, "login", req.body?.code);
+    const { session, body, username, ip } = ch.payload ?? {};
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, ch.user_id));
+    if (!session || !user || !user.isActive) {
+      res.status(403).json({ error: "This account can't sign in right now. Contact support." });
+      return;
+    }
+    if (!user.emailVerifiedAt) {
+      await pool.query(`UPDATE users SET email_verified_at = NOW() WHERE id = $1`, [user.id]);
+    }
+    if (req.body?.rememberDevice !== false) await trustDevice(req, res, user.id);
+    (req as any).session = session;
+    res.json(body);
+    await writeLoginAudit({
+      username: username ?? user.username, companyId: session.companyId ?? 0,
+      ipAddress: ip ?? getClientIp(req as any), success: true, userId: user.id, userName: user.name,
+    });
+  } catch (err) {
+    if (!codeErrorResponse(err, res)) throw err;
+  }
+});
+
+// POST /auth/login/resend { challengeId }
+router.post("/auth/login/resend", async (req, res): Promise<void> => {
+  try {
+    res.json(await resendChallenge(req.body?.challengeId, "login"));
+  } catch (err) {
+    if (!codeErrorResponse(err, res)) throw err;
+  }
+});
+
+function sessionUserId(req: import("express").Request): number | null {
+  const id = (req as any).session?.userId;
+  return typeof id === "number" ? id : null;
+}
+
+// POST /auth/change-password { currentPassword, newPassword } — any signed-in
+// user changes their own password. Other trusted devices are forgotten, so a
+// new device has to prove the email again (website-signup accounts).
+router.post("/auth/change-password", async (req, res): Promise<void> => {
+  const userId = sessionUserId(req);
+  if (!userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  const { currentPassword, newPassword } = req.body ?? {};
+  if (typeof currentPassword !== "string" || typeof newPassword !== "string") {
+    res.status(400).json({ error: "Enter your current and new password" });
+    return;
+  }
+  if (newPassword.length < MIN_PASSWORD) {
+    res.status(400).json({ error: `New password must be at least ${MIN_PASSWORD} characters` });
+    return;
+  }
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+  if (!user || !verifyPassword(currentPassword, user.passwordHash)) {
+    res.status(400).json({ error: "Current password is wrong" });
+    return;
+  }
+  if (verifyPassword(newPassword, user.passwordHash)) {
+    res.status(400).json({ error: "New password must be different from the current one" });
+    return;
+  }
+  await pool.query(`UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`, [hashPassword(newPassword), userId]);
+  await forgetTrustedDevices(userId, req);
+  res.json({ message: "Password changed" });
+});
+
+// POST /auth/change-email { newEmail, password } — a company admin whose login
+// is an email moves it to a new address; a code goes to the NEW address and
+// POST /auth/change-email/verify applies it.
+router.post("/auth/change-email", async (req, res): Promise<void> => {
+  const userId = sessionUserId(req);
+  if (!userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  const newEmail = String(req.body?.newEmail ?? "").trim().toLowerCase();
+  const password = req.body?.password;
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+  if (!user || user.role !== "admin" || !user.username.includes("@")) {
+    res.status(403).json({ error: "Only a company admin with an email login can change it here" });
+    return;
+  }
+  if (typeof password !== "string" || !verifyPassword(password, user.passwordHash)) {
+    res.status(400).json({ error: "Password is wrong" });
+    return;
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(newEmail) || newEmail.length > 200) {
+    res.status(400).json({ error: "Enter a valid email address" });
+    return;
+  }
+  if (newEmail === user.username.toLowerCase()) {
+    res.status(400).json({ error: "This is already your login email" });
+    return;
+  }
+  if (await isUsernameTaken(pool, newEmail)) {
+    res.status(409).json({ error: "This email is already used by another account" });
+    return;
+  }
+  const ch = await createChallenge({ userId, purpose: "change_email", email: newEmail, payload: { newEmail } });
+  if (!ch.sent) {
+    res.status(503).json({ error: "We couldn't send the code right now. Please try again in a few minutes." });
+    return;
+  }
+  res.json({ challengeId: ch.challengeId, email: ch.email });
+});
+
+// POST /auth/change-email/resend { challengeId }
+router.post("/auth/change-email/resend", async (req, res): Promise<void> => {
+  if (!sessionUserId(req)) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  try {
+    res.json(await resendChallenge(req.body?.challengeId, "change_email"));
+  } catch (err) {
+    if (!codeErrorResponse(err, res)) throw err;
+  }
+});
+
+// POST /auth/change-email/verify { challengeId, code }
+router.post("/auth/change-email/verify", async (req, res): Promise<void> => {
+  const userId = sessionUserId(req);
+  if (!userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  try {
+    const ch = await verifyChallenge(req.body?.challengeId, "change_email", req.body?.code);
+    const newEmail = String(ch.payload?.newEmail ?? "");
+    if (ch.user_id !== userId || !newEmail) {
+      res.status(403).json({ error: "This code belongs to another session" });
+      return;
+    }
+    if (await isUsernameTaken(pool, newEmail)) {
+      res.status(409).json({ error: "This email is already used by another account" });
+      return;
+    }
+    const { rows } = await pool.query(
+      `UPDATE users SET username = $1, email_verified_at = NOW(), updated_at = NOW()
+       WHERE id = $2 RETURNING company_id`,
+      [newEmail, userId],
+    );
+    // Keep the company's contact email (reminders, invoices) on the new address
+    // when it was the old login email.
+    const companyId = rows[0]?.company_id;
+    if (companyId) {
+      await pool.query(
+        `UPDATE companies SET email = $1, updated_at = NOW()
+         WHERE id = $2 AND (email IS NULL OR lower(email) = lower($3))`,
+        [newEmail, companyId, (req as any).session?.username ?? ""],
+      );
+    }
+    (req as any).session = { ...(req as any).session, username: newEmail };
+    res.json({ message: "Login email changed", username: newEmail });
+  } catch (err) {
+    if (!codeErrorResponse(err, res)) throw err;
+  }
 });
 
 // POST /auth/logout

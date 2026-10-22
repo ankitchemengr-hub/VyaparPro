@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Building2 } from "lucide-react";
 import { SiteFooter } from "@/components/site/site-footer";
+import { CodeEntry, apiErrorText } from "@/components/code-entry";
 
 // The customer portal reuses the ERP's own session/login (POST /auth/login)
 // — a tenant's admin-role user IS the portal login, no separate identity.
@@ -18,6 +19,8 @@ export default function PortalLogin() {
   const { isAuthenticated, isLoading } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  // Set when the server asks for the emailed code (new device / email not yet verified).
+  const [challenge, setChallenge] = useState<{ challengeId: string; email: string; reason: string } | null>(null);
 
   if (isLoading) return null;
   if (isAuthenticated) {
@@ -30,8 +33,15 @@ export default function PortalLogin() {
     loginMutation.mutate(
       { data: { username, password, companyId: null } },
       {
-        onSuccess: () => { window.location.href = "/dashboard"; },
-        onError: () => toast({ title: "Login failed", description: "Invalid username or password.", variant: "destructive" }),
+        onSuccess: (data) => {
+          const r = data as any;
+          if (r?.challenge === "email_code") {
+            setChallenge({ challengeId: r.challengeId, email: r.email, reason: r.reason });
+            return;
+          }
+          window.location.href = "/dashboard";
+        },
+        onError: (err) => toast({ title: "Login failed", description: apiErrorText(err, "Invalid username or password."), variant: "destructive" }),
       },
     );
   };
@@ -48,6 +58,19 @@ export default function PortalLogin() {
           </div>
           <Card>
             <CardContent className="p-6">
+              {challenge ? (
+                <CodeEntry
+                  title={challenge.reason === "verify_email" ? "Verify your email" : "New device — confirm it's you"}
+                  description="We sent a 6-digit code to"
+                  email={challenge.email}
+                  challengeId={challenge.challengeId}
+                  verifyUrl="/api/auth/login/verify"
+                  resendUrl="/api/auth/login/resend"
+                  rememberOption
+                  onVerified={() => { window.location.href = "/dashboard"; }}
+                  onCancel={() => { setChallenge(null); setPassword(""); }}
+                />
+              ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-1.5">
                   <Label>Email or Mobile</Label>
@@ -68,6 +91,7 @@ export default function PortalLogin() {
                   New here? <Link href="/register" className="text-blue-600 hover:underline">Create an account</Link>
                 </p>
               </form>
+              )}
             </CardContent>
           </Card>
         </div>

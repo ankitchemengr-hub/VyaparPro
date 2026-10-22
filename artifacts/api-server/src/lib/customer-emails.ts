@@ -44,6 +44,25 @@ function layout(title: string, body: string): string {
   </div>`;
 }
 
+// ── One-time code (signup verification / new-device login / email change) ──
+
+export function codeEmail(
+  purpose: "signup_verify" | "login" | "change_email",
+  code: string,
+): { subject: string; html: string } {
+  const what = {
+    signup_verify: { subject: `Your ${BRAND} verification code: ${code}`, title: "Verify your email", lead: "Use this code to verify your email and finish creating your account:" },
+    login: { subject: `Your ${BRAND} login code: ${code}`, title: "Your login code", lead: "Someone (hopefully you) is signing in to your account from a new device. Enter this code to continue:" },
+    change_email: { subject: `Confirm your new ${BRAND} login email: ${code}`, title: "Confirm your new email", lead: "Enter this code to make this address your new login email:" },
+  }[purpose];
+  const body = `
+    <p>${what.lead}</p>
+    <p style="margin:24px 0;font-size:32px;font-weight:bold;letter-spacing:8px;color:${BLUE};font-family:'Courier New',monospace;">${code}</p>
+    <p style="color:#64748b;font-size:14px;">This code expires in 10 minutes. Never share it with anyone — ${BRAND} staff will never ask for it.</p>
+    <p style="color:#64748b;font-size:14px;">Didn't ask for this? You can ignore this email${purpose === "login" ? " — but if it keeps happening, change your password" : ""}.</p>`;
+  return { subject: what.subject, html: layout(what.title, body) };
+}
+
 export interface CompanyContact {
   email: string;
   ownerName: string;

@@ -21,6 +21,7 @@ import {
 } from "../lib/subscription-invoice";
 import { DomainError, getDomainState, requestDomain, verifyDomain, removeDomain } from "../lib/custom-domains";
 import { sendWelcomeEmail } from "../lib/customer-emails";
+import { CodeError, createChallenge, verifyChallenge, resendChallenge, trustDevice, forgetTrustedDevices } from "../lib/auth-codes";
 
 const router: IRouter = Router();
 
@@ -133,6 +134,16 @@ router.post("/portal/register", async (req, res): Promise<void> => {
     return;
   }
   const d = parsed.data;
+  // Email is required: the verification code, login codes, invoices and
+  // renewal reminders all go there, and it is the account's login ID.
+  if (!d.email || !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(d.email.trim())) {
+    res.status(400).json({ error: "Please enter a valid email address — your verification code and invoices are sent there." });
+    return;
+  }
+  if (d.password.length < 8) {
+    res.status(400).json({ error: "Password must be at least 8 characters" });
+    return;
+  }
 
   const client = await pool.connect();
   try {
@@ -185,11 +196,15 @@ router.post("/portal/register", async (req, res): Promise<void> => {
     await saveCompanyBillingDetails(client, companyId, d);
 
     const username = (d.email ?? d.mobile).trim().toLowerCase();
-    await client.query(
-      `INSERT INTO users (username, password_hash, role, name, is_active, company_id)
-       VALUES ($1, $2, 'admin', $3, true, $4)`,
+    const userRes = await client.query(
+      // login_otp_required: this account verifies its email and gets a code on
+      // new devices (lib/auth-codes.ts). Accounts made before this never do.
+      `INSERT INTO users (username, password_hash, role, name, is_active, company_id, login_otp_required)
+       VALUES ($1, $2, 'admin', $3, true, $4, true)
+       RETURNING id`,
       [username, hashPassword(d.password), d.ownerName, companyId],
     );
+    const userId: number = userRes.rows[0].id;
 
     const subRes = await client.query(
       `INSERT INTO subscriptions
@@ -206,16 +221,65 @@ router.post("/portal/register", async (req, res): Promise<void> => {
     );
 
     await client.query("COMMIT");
-    res.status(201).json({ companyId, subscriptionId: subRes.rows[0].id, requiresPayment: !onTrial });
-    // After the response — a slow mail server never delays signup. Only on a
-    // successful signup (these values don't exist on the early-return paths).
-    void sendWelcomeEmail({ companyId, planSlug: plan.slug, onTrial, trialEnd: end, loginUsername: username });
+    // Email the verification code. The welcome email goes out once the code
+    // is entered (POST /portal/verify-email), so it reaches a proven address.
+    // A failure here must not fail a signup that already committed — the
+    // customer simply gets the code on their first login instead.
+    const ch = await createChallenge({
+      userId, purpose: "signup_verify", email: username,
+      payload: { companyId, planSlug: plan.slug, onTrial, trialEnd: end.toISOString(), loginUsername: username },
+    }).catch((err) => {
+      logger.error({ err, userId }, "Signup verification code failed");
+      return null;
+    });
+    res.status(201).json({
+      companyId, subscriptionId: subRes.rows[0].id, requiresPayment: !onTrial,
+      verification: ch ? { challengeId: ch.challengeId, email: ch.email, sent: ch.sent } : null,
+    });
   } catch (err) {
     await client.query("ROLLBACK");
     logger.error({ err }, "Portal registration failed");
     res.status(500).json({ error: "Registration failed" });
   } finally {
     client.release();
+  }
+});
+
+// POST /portal/verify-email { challengeId, code } — the code emailed right
+// after signup. Marks the email verified, trusts this browser (so the first
+// login here doesn't ask again) and sends the welcome email.
+router.post("/portal/verify-email", async (req, res): Promise<void> => {
+  try {
+    const ch = await verifyChallenge(req.body?.challengeId, "signup_verify", req.body?.code);
+    await pool.query(`UPDATE users SET email_verified_at = COALESCE(email_verified_at, NOW()) WHERE id = $1`, [ch.user_id]);
+    await trustDevice(req, res, ch.user_id);
+    const p = ch.payload ?? {};
+    if (p.companyId) {
+      void sendWelcomeEmail({
+        companyId: p.companyId, planSlug: p.planSlug, onTrial: !!p.onTrial,
+        trialEnd: new Date(p.trialEnd), loginUsername: p.loginUsername,
+      });
+    }
+    res.json({ verified: true });
+  } catch (err) {
+    if (err instanceof CodeError) {
+      res.status(err.status).json({ error: err.message });
+      return;
+    }
+    throw err;
+  }
+});
+
+// POST /portal/verify-email/resend { challengeId }
+router.post("/portal/verify-email/resend", async (req, res): Promise<void> => {
+  try {
+    res.json(await resendChallenge(req.body?.challengeId, "signup_verify"));
+  } catch (err) {
+    if (err instanceof CodeError) {
+      res.status(err.status).json({ error: err.message });
+      return;
+    }
+    throw err;
   }
 });
 
@@ -629,8 +693,22 @@ router.post("/portal/reset-password", async (req, res): Promise<void> => {
     return;
   }
 
-  await pool.query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [hashPassword(newPassword), record.user_id]);
+  // Website-signup accounts follow the 8-character rule; older accounts keep
+  // the schema's minimum.
+  const { rows: [owner] } = await pool.query(`SELECT login_otp_required FROM users WHERE id = $1`, [record.user_id]);
+  if (owner?.login_otp_required && newPassword.length < 8) {
+    res.status(400).json({ error: "Password must be at least 8 characters" });
+    return;
+  }
+
+  // The reset link arrived by email, so the email is proven. Every trusted
+  // device is forgotten — after a reset, any device needs a fresh code.
+  await pool.query(
+    `UPDATE users SET password_hash = $1, email_verified_at = COALESCE(email_verified_at, NOW()) WHERE id = $2`,
+    [hashPassword(newPassword), record.user_id],
+  );
   await pool.query(`UPDATE password_reset_tokens SET used_at = NOW() WHERE id = $1`, [record.id]);
+  await forgetTrustedDevices(record.user_id);
   res.json({ message: "Password reset successfully — you can now log in with your new password." });
 });
 
