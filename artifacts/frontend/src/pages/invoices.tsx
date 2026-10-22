@@ -340,6 +340,19 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
               </PopoverContent>
             </Popover>
 
+            {hasFilters && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="shrink-0 h-9 px-2 text-muted-foreground"
+                onClick={clearFilters}
+                title="Clear all filters"
+                data-testid="button-clear-filters-inline"
+              >
+                <X className="h-4 w-4 mr-1" />Clear
+              </Button>
+            )}
+
             <span className="shrink-0 ml-auto sm:ml-0 text-sm text-muted-foreground" data-testid="text-result-count">
               {isLoading ? "Loading…" : `${displayedInvoices.length} invoice${displayedInvoices.length === 1 ? "" : "s"}`}
             </span>
