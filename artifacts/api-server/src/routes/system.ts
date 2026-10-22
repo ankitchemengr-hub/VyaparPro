@@ -3,7 +3,7 @@ import { asc } from "drizzle-orm";
 import { db, companiesTable } from "@workspace/db";
 import { isMultiCompanyMode, getDefaultCompanyId } from "../lib/system-config";
 import { getCurrentCompany } from "../lib/company";
-import { companyIdForHost } from "../lib/custom-domains";
+import { companyIdForHost, requestHost } from "../lib/custom-domains";
 import { requireAuth, requireSuperAdmin, getSession } from "../lib/tenant";
 import { SetActiveCompanyBody } from "@workspace/api-zod";
 
@@ -24,7 +24,7 @@ router.get("/system/config", async (req, res): Promise<void> => {
 
   const multiCompanyMode = isMultiCompanyMode();
   const brandCompanyId = multiCompanyMode
-    ? await companyIdForHost(req.headers["x-forwarded-host"]?.toString().split(",")[0] ?? req.headers.host)
+    ? await companyIdForHost(requestHost(req))
     : getDefaultCompanyId();
 
   let company: { id: number; name: string; logo: string | null } | null = null;
@@ -42,6 +42,13 @@ router.get("/system/config", async (req, res): Promise<void> => {
 // middleware; this only powers the pre-auth picker.
 router.get("/system/companies-public", async (_req, res): Promise<void> => {
   res.set("Cache-Control", "no-store");
+  // Shared SaaS mode: never list other customers' companies to anyone who
+  // opens the login page. Staff sign in on their own company's link, and the
+  // login handler already finds their company from the username.
+  if (isMultiCompanyMode()) {
+    res.json([]);
+    return;
+  }
   const rows = await db
     .select({ id: companiesTable.id, name: companiesTable.name, logo: companiesTable.logo })
     .from(companiesTable)

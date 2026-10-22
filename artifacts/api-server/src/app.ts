@@ -84,6 +84,9 @@ app.use((_req, res, next) => {
           signed: true,
           httpOnly: true,
           sameSite: "lax",
+          // HTTPS-only whenever the request came in over HTTPS (Railway sets
+          // X-Forwarded-Proto); plain-HTTP local/LAN use keeps working.
+          secure: _req.secure || String(_req.headers["x-forwarded-proto"] ?? "").split(",")[0].trim() === "https",
           path: "/",
           maxAge: 8 * 60 * 60 * 1000, // 8h
         });

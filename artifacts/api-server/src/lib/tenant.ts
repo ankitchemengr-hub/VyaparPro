@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { isAccountAllowedHere } from "./system-config";
+import { companyIdForHost, requestHost } from "./custom-domains";
 
 // The authenticated session shape stored in the signed cookie.
 export interface AppSession {
@@ -75,7 +76,7 @@ export function getCurrentCompanyId(req: Request): number {
 // Express middleware: require a logged-in user before any data route runs and
 // expose convenience flags. This is the single choke point that guarantees no
 // data route can be reached anonymously.
-export function requireAuth(req: Request, res: Response, next: NextFunction): void {
+export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
   const session = getSession(req);
   if (!session || !session.userId) {
     res.status(401).json({ error: "Not authenticated" });
@@ -92,6 +93,24 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     res.clearCookie("session", { path: "/" });
     res.status(403).json({ error: "This system is dedicated to another company." });
     return;
+  }
+  // Domain lock: a customer's own domain (e.g. abc.com) serves only that
+  // company. A session from any other company is refused and signed out, so
+  // no one can use abc.com to reach a different company's data. The platform
+  // super_admin is exempt (it operates across companies by design).
+  if (session.role !== "super_admin") {
+    let hostCompanyId: number | null;
+    try {
+      hostCompanyId = await companyIdForHost(requestHost(req));
+    } catch {
+      res.status(503).json({ error: "Please try again in a moment." });
+      return;
+    }
+    if (hostCompanyId != null && hostCompanyId !== (session.companyId ?? null)) {
+      (req as any).session = null; // the JSON helper in app.ts then clears the cookie
+      res.status(403).json({ error: "This link belongs to another company. Please sign in on your own company's link." });
+      return;
+    }
   }
   // For a normal user this is their home company; for the platform super_admin
   // it is whichever company they have switched into (null until they pick one).

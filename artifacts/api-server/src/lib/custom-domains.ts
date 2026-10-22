@@ -120,6 +120,15 @@ function fallbackRecords(domain: string): DnsRecord[] {
 
 const clean = (s: string) => s.toLowerCase().replace(/\.$/, "");
 
+// The host a request arrived on. Behind Railway's proxy the original host is
+// in X-Forwarded-Host (first value when chained).
+export function requestHost(req: { headers: Record<string, string | string[] | undefined> }): string | undefined {
+  const fwd = req.headers["x-forwarded-host"];
+  const first = (Array.isArray(fwd) ? fwd[0] : fwd)?.split(",")[0]?.trim();
+  const host = req.headers["host"];
+  return first || (Array.isArray(host) ? host[0] : host);
+}
+
 async function checkRecord(r: DnsRecord): Promise<DnsRecord> {
   const want = clean(r.value);
   try {
