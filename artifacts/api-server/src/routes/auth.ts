@@ -12,6 +12,7 @@ import {
 } from "@workspace/api-zod";
 import { getCompanyId, handleTenantError } from "../lib/tenant";
 import { isAccountAllowedHere, getDefaultCompanyId } from "../lib/system-config";
+import { companyIdForHost, requestHost } from "../lib/custom-domains";
 import { getCurrentCompany } from "../lib/company";
 import { verifyPassword } from "../lib/password";
 import { loginRateLimitKey, checkLoginRateLimit, recordLoginFailure, clearLoginAttempts } from "../lib/login-rate-limit";
@@ -114,6 +115,18 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     return;
   }
 
+  // Domain lock: on a customer's own active domain (e.g. abc.com) only that
+  // company's accounts may sign in — same rule requireAuth applies to every
+  // request afterwards, checked here so the user gets a clear message instead
+  // of a "successful" login that then fails on every page.
+  let hostCompanyId: number | null;
+  try {
+    hostCompanyId = await companyIdForHost(requestHost(req as any));
+  } catch {
+    res.status(503).json({ error: "Please try again in a moment." });
+    return;
+  }
+
   // Since usernames are unique per company (not globally), the lookup MUST be
   // scoped to a specific company. Two strategies:
   //
@@ -156,6 +169,14 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     // super-admin switcher), not the user's choice — look the account up the
     // normal way instead of failing every login from this device.
     if (!user && rows.length === 0) effectiveSwitch = null;
+  }
+  if (!user && effectiveSwitch == null && hostCompanyId != null) {
+    // On a customer's own domain, that company's account wins over a
+    // same-named account elsewhere.
+    user = pickByPassword(await db
+      .select()
+      .from(usersTable)
+      .where(and(usernameMatch, eq(usersTable.companyId, hostCompanyId))));
   }
   if (!user && effectiveSwitch == null) {
     // No company selected — try super_admin (company_id IS NULL) first.
@@ -214,6 +235,14 @@ router.post("/auth/login", async (req, res): Promise<void> => {
       error: "Your account is not assigned to any company. Contact the Super Admin to fix this.",
     });
     await writeLoginAudit({ username, companyId: 0, ipAddress: ip, success: false, reason: "no_company_binding", userId: user.id, userName: user.name });
+    return;
+  }
+
+  if (user.role !== "super_admin" && hostCompanyId != null && user.companyId !== hostCompanyId) {
+    res.status(403).json({
+      error: "This link belongs to another company. Please sign in on your own company's link.",
+    });
+    await writeLoginAudit({ username, companyId: hostCompanyId, ipAddress: ip, success: false, reason: "domain_lock", userId: user.id, userName: user.name });
     return;
   }
 

@@ -66,7 +66,29 @@ before(async () => {
     cookies[tag] = sessionCookie({ userId: u.rows[0].id, username: `admin-${tag}-${RUN}`, role: "admin", name: `admin ${tag}`, entityId: null, companyId: cid });
   }
   await pool.query(`INSERT INTO company_domains (company_id, domain, status) VALUES ($1, $2, 'active')`, [A, DOMAIN_A]);
+
+  // Real passwords for the login tests, plus one username that exists in
+  // both companies with the same password.
+  const { hashPassword } = await import("../src/lib/password");
+  await pool.query(`UPDATE users SET password_hash = $1 WHERE company_id IN ($2, $3)`, [hashPassword(PASSWORD), A, B]);
+  for (const cid of [A, B]) {
+    await pool.query(
+      `INSERT INTO users (username, password_hash, name, role, company_id, is_active) VALUES ($1, $2, 'shared staff', 'store', $3, true)`,
+      [`staff-${RUN}`, hashPassword(PASSWORD), cid],
+    );
+  }
 });
+
+const PASSWORD = "Domain-Lock-Test-1";
+
+async function login(username: string, host?: string) {
+  const res = await fetch(base + "/api/auth/login", {
+    method: "POST",
+    headers: { "content-type": "application/json", ...(host ? { "x-forwarded-host": host } : {}) },
+    body: JSON.stringify({ username, password: PASSWORD }),
+  });
+  return { status: res.status, body: await res.json().catch(() => null) };
+}
 
 after(async () => {
   server?.close();
@@ -107,4 +129,29 @@ test("session cookie is Secure over HTTPS and stays usable over plain HTTP", asy
   assert.match(https.setCookie, /;\s*Secure/i);
   const http = await get("A", "/dashboard/summary");
   assert.ok(http.setCookie.includes("session=") && !/;\s*Secure/i.test(http.setCookie));
+});
+
+test("login on a company's own domain: its own user gets in", async () => {
+  const r = await login(`admin-A-${RUN}`, DOMAIN_A);
+  assert.equal(r.status, 200);
+  assert.equal(r.body.companyId, A);
+});
+
+test("login on a company's own domain: another company's user is refused at login", async () => {
+  const r = await login(`admin-B-${RUN}`, DOMAIN_A);
+  assert.equal(r.status, 403);
+  assert.match(r.body.error, /another company/);
+});
+
+test("login on a company's own domain picks that company's account for a shared username", async () => {
+  const r = await login(`staff-${RUN}`, DOMAIN_A);
+  assert.equal(r.status, 200, "own domain decides which same-named account signs in");
+  assert.equal(r.body.companyId, A);
+  // On the shared link the same username + password stays ambiguous.
+  assert.equal((await login(`staff-${RUN}`, "app.shared-erp.test")).status, 409);
+});
+
+test("login on the shared ERP link works for every company as before", async () => {
+  assert.equal((await login(`admin-A-${RUN}`, "app.shared-erp.test")).status, 200);
+  assert.equal((await login(`admin-B-${RUN}`)).status, 200);
 });

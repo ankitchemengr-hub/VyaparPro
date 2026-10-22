@@ -73,7 +73,12 @@ export default function Login() {
   const [loginError, setLoginError] = React.useState<string | null>(null);
   // Emailed-code step for website-signup accounts (new device / unverified email).
   const [challenge, setChallenge] = React.useState<{ challengeId: string; email: string; reason: string } | null>(null);
-  const [override, setOverride] = React.useState<LoginCompany | null>(() => readLoginCompany());
+  const [storedOverride, setOverride] = React.useState<LoginCompany | null>(() => readLoginCompany());
+  // The hidden switcher only exists on dedicated installs. In shared SaaS
+  // mode the company comes from the link (customer domain) or the username,
+  // so a company remembered by this browser is ignored entirely.
+  const switcherEnabled = systemConfig != null && !systemConfig.multiCompanyMode;
+  const override = switcherEnabled ? storedOverride : null;
   const logoClicksRef = React.useRef(0);
   const logoTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const setActiveCompany = useSetActiveCompany();
@@ -96,6 +101,7 @@ export default function Login() {
 
   // Hidden trigger: five quick clicks on the logo open the switcher.
   const handleLogoClick = () => {
+    if (!switcherEnabled) return;
     logoClicksRef.current += 1;
     if (logoTimerRef.current) clearTimeout(logoTimerRef.current);
     if (logoClicksRef.current >= 5) {
@@ -364,7 +370,7 @@ export default function Login() {
         </div>
       </div>
 
-      <Dialog open={switcherOpen} onOpenChange={setSwitcherOpen}>
+      <Dialog open={switcherEnabled && switcherOpen} onOpenChange={setSwitcherOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Switch Company</DialogTitle>
