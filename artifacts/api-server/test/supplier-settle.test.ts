@@ -176,6 +176,7 @@ test("a made product's sale is traced through its BOM to the raw-material suppli
   const bom = (await pool.query(`INSERT INTO boms (company_id, finished_product_id, output_quantity) VALUES ($1, $2, 1) RETURNING id`, [A, made])).rows[0].id;
   await pool.query(`INSERT INTO bom_items (company_id, bom_id, material_product_id, quantity, unit) VALUES ($1, $2, $3, 2, 'QTY')`, [A, bom, raw]);
   const v3 = (await pool.query(`INSERT INTO entities (company_id, type, name, mobile) VALUES ($1, 'vendor', 'Supplier Three', '83') RETURNING id`, [A])).rows[0].id;
+  ids.v3 = v3;
 
   await ok("adminA", "POST", "/purchases", {
     billType: "non_gst", billDate: "2026-04-01", vendorId: v3, placeOfSupply: "Maharashtra",
@@ -215,6 +216,45 @@ test("a made product's sale is traced through its BOM to the raw-material suppli
   const after = find(await ok("adminA", "GET", "/supplier-settle"), v3);
   assert.equal(after.payNow, 0);
   assert.equal(after.investment, 400);
+});
+
+test("Investment = cash on hand minus everything owed to suppliers", async () => {
+  const cashNow = async () => Number((await pool.query(
+    `SELECT COALESCE(SUM(current_balance), 0)::float8 AS c FROM accounts WHERE company_id = $1 AND is_active = true`, [A],
+  )).rows[0].c);
+  const dueNow = async () => Number((await pool.query(
+    `SELECT COALESCE(SUM(GREATEST(outstanding_balance, 0)), 0)::float8 AS d FROM entities WHERE company_id = $1 AND type = 'vendor'`, [A],
+  )).rows[0].d);
+
+  let rep = await ok("adminA", "GET", "/supplier-settle");
+  assert.equal(rep.cash.cashInHand, await cashNow());
+  assert.equal(rep.cash.supplierDue, await dueNow());
+  assert.equal(rep.cash.investment, Math.round((rep.cash.cashInHand - rep.cash.supplierDue) * 100) / 100);
+  const start = rep.cash.investment;
+
+  // Paying a supplier what they're owed: cash and dues both drop — no change.
+  const owed = find(rep, ids.v2).supplierDue;
+  assert.ok(owed > 0);
+  await ok("adminA", "POST", "/account-transactions", {
+    accountId: ids.account, direction: "out", amount: 100, mode: "cash", partyEntityId: ids.v2,
+  });
+  rep = await ok("adminA", "GET", "/supplier-settle");
+  assert.equal(rep.cash.investment, start);
+
+  // A customer pays: cash goes up, so Investment goes up.
+  await ok("adminA", "POST", "/account-transactions", {
+    accountId: ids.account, direction: "in", amount: 250, mode: "cash", partyEntityId: ids.customer,
+  });
+  rep = await ok("adminA", "GET", "/supplier-settle");
+  assert.equal(rep.cash.investment, start + 250);
+
+  // New material on credit: dues go up, so Investment goes down.
+  await ok("adminA", "POST", "/purchases", {
+    billType: "non_gst", billDate: "2026-04-20", vendorId: ids.v3, placeOfSupply: "Maharashtra",
+    items: [{ productId: ids.product, qty: 5, unit: "QTY", rate: 100 }],
+  });
+  rep = await ok("adminA", "GET", "/supplier-settle");
+  assert.equal(rep.cash.investment, start + 250 - 500);
 });
 
 test("only the company admin can open it (not accountant, store or super admin), and another company sees none of it", async () => {

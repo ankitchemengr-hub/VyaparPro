@@ -77,13 +77,37 @@ export interface SupplierSettleRow {
   products: SupplierProductRow[];
 }
 
+export interface CashPosition {
+  // Money on hand: every active Cash Book account (cash, bank, UPI), as Cash Book shows it.
+  cashInHand: number;
+  // Everything owed to suppliers (Khatabook), not just Pay now.
+  supplierDue: number;
+  // What is left once every supplier is paid: cashInHand - supplierDue.
+  investment: number;
+}
+
 export interface SupplierSettleReport {
   suppliers: SupplierSettleRow[];
   totals: Omit<SupplierSettleRow, "vendorId" | "vendorName" | "mobile" | "products">;
   unattributed: { soldQty: number; soldValue: number; collected: number };
+  cash: CashPosition;
 }
 
-export async function buildSupplierSettle(companyId: number): Promise<SupplierSettleReport> {
+// The Investment card: cash on hand minus everything owed to suppliers —
+// e.g. 10 lakh in hand and 9 lakh due to suppliers leaves 1 lakh to invest.
+// It follows real money: a customer payment raises it, paying a supplier
+// lowers cash and dues alike (no change), new material on credit lowers it.
+export async function cashPosition(companyId: number, supplierDue: number): Promise<CashPosition> {
+  const { rows } = await pool.query(
+    `SELECT COALESCE(SUM(current_balance), 0)::float8 AS cash FROM accounts WHERE company_id = $1 AND is_active = true`,
+    [companyId],
+  );
+  const cashInHand = r2(Number(rows[0]?.cash ?? 0));
+  const due = r2(supplierDue);
+  return { cashInHand, supplierDue: due, investment: r2(cashInHand - due) };
+}
+
+export async function buildSupplierSettle(companyId: number): Promise<Omit<SupplierSettleReport, "cash">> {
   const noPay = NO_PAY_INVOICE_TYPES as string[];
   const [vendorsRes, lotsRes, salesRes, paidRes, productsRes, bomRes] = await Promise.all([
     pool.query(
