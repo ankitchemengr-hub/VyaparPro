@@ -27,6 +27,7 @@ interface Totals {
   collected: number; costOfCollected: number; profitCollected: number;
   pendingFromCustomers: number; stockValue: number;
   paidToSupplier: number; supplierDue: number; payNow: number;
+  investment: number;
 }
 interface SupplierRow extends Totals {
   vendorId: number; vendorName: string; mobile: string | null; products: ProductRow[];
@@ -95,9 +96,10 @@ export default function SupplierSettle() {
         <div className="py-10 text-center text-destructive text-sm">{(error as Error).message}</div>
       ) : t ? (
         <>
-          <div className="grid grid-cols-2 gap-2 sm:gap-4 max-w-2xl">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-4 max-w-3xl">
             <Stat label="Pay suppliers now" value={rs(t.payNow)} tone="text-red-600" hint="Their share of money already collected" />
             <Stat label="Still to collect" value={rs(t.pendingFromCustomers)} tone="text-amber-600" hint="Sold, customer not paid yet" />
+            <Stat label="Investment" value={rs(t.investment)} tone="text-blue-600" hint="Sold material already paid for — keep to buy material again" />
           </div>
 
           <div className="flex flex-wrap items-center gap-2">

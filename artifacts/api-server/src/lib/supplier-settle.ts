@@ -69,6 +69,10 @@ export interface SupplierSettleRow {
   // What to pay the supplier now: their share of collected money not yet paid,
   // never more than what is actually due to them.
   payNow: number;
+  // The rest of their share of collected money: material that was already
+  // paid for, so this money is the business's to keep for buying material
+  // again (costOfCollected - payNow).
+  investment: number;
   products: SupplierProductRow[];
 }
 
@@ -274,6 +278,7 @@ export async function buildSupplierSettle(companyId: number): Promise<SupplierSe
     const soldValue = sum((p) => p.soldValue);
     const paidToSupplier = r2(paidBy.get(v.id) ?? 0);
     const supplierDue = r2(Math.max(0, due));
+    const payNow = r2(Math.min(supplierDue, Math.max(0, costOfCollected - paidToSupplier)));
     suppliers.push({
       vendorId: v.id,
       vendorName: v.name,
@@ -288,7 +293,8 @@ export async function buildSupplierSettle(companyId: number): Promise<SupplierSe
       stockValue: sum((p) => p.stockValue),
       paidToSupplier,
       supplierDue,
-      payNow: r2(Math.min(supplierDue, Math.max(0, costOfCollected - paidToSupplier))),
+      payNow,
+      investment: r2(Math.max(0, costOfCollected - payNow)),
       products,
     });
   }
@@ -309,6 +315,7 @@ export async function buildSupplierSettle(companyId: number): Promise<SupplierSe
       paidToSupplier: tot((s) => s.paidToSupplier),
       supplierDue: tot((s) => s.supplierDue),
       payNow: tot((s) => s.payNow),
+      investment: tot((s) => s.investment),
     },
     unattributed: { soldQty: r3(unattributed.soldQty), soldValue: r2(unattributed.soldValue), collected: r2(unattributed.collected) },
   };

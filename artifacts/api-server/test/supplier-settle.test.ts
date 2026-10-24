@@ -120,6 +120,7 @@ test("sales are matched oldest-purchase-first and split by what customers have p
   assert.equal(v1.profitCollected, 500);
   assert.equal(v1.supplierDue, 1000);
   assert.equal(v1.payNow, 1000);
+  assert.equal(v1.investment, 0, "nothing paid to Supplier One yet, so nothing to keep");
 
   // Supplier Two: 2 on the paid bill + 4 on the unpaid one, 4 still in stock.
   assert.equal(v2.products[0].soldQty, 6);
@@ -143,6 +144,8 @@ test("paying a supplier reduces what is left to pay them", async () => {
   assert.equal(v1.paidToSupplier, 400);
   assert.equal(v1.supplierDue, 600);
   assert.equal(v1.payNow, 600);
+  // The 400 already paid covers sold material whose money is in: keep it.
+  assert.equal(v1.investment, 400);
 });
 
 test("when the second bill is paid, Supplier Two's share of it becomes payable", async () => {
@@ -201,7 +204,17 @@ test("a made product's sale is traced through its BOM to the raw-material suppli
   assert.equal(s3.costOfCollected, 400);
   assert.equal(s3.profitCollected, 600);
   assert.equal(s3.payNow, 400);
+  assert.equal(s3.investment, 0);
   assert.equal(rep.unattributed.soldValue, 0);
+
+  // Supplier Three paid in full: nothing left to pay, and the sold
+  // material's cost (already paid) is money to keep as Investment.
+  await ok("adminA", "POST", "/account-transactions", {
+    accountId: ids.account, direction: "out", amount: 1000, mode: "cash", partyEntityId: v3,
+  });
+  const after = find(await ok("adminA", "GET", "/supplier-settle"), v3);
+  assert.equal(after.payNow, 0);
+  assert.equal(after.investment, 400);
 });
 
 test("only the company admin can open it (not accountant, store or super admin), and another company sees none of it", async () => {
