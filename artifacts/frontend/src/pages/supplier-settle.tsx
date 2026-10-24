@@ -38,8 +38,11 @@ interface Report {
   unattributed: { soldQty: number; soldValue: number; collected: number };
 }
 
-const rs = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
-const qty = (n: number) => n.toLocaleString("en-IN", { maximumFractionDigits: 3 });
+// Amounts arrive as JSON numbers; a NaN on the server arrives as null, so
+// coerce before formatting rather than crash the page.
+const num = (n: unknown) => { const v = Number(n); return Number.isFinite(v) ? v : 0; };
+const rs = (n: unknown) => `₹${num(n).toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+const qty = (n: unknown) => num(n).toLocaleString("en-IN", { maximumFractionDigits: 3 });
 
 function Stat({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: string }) {
   return (
@@ -74,7 +77,7 @@ export default function SupplierSettle() {
 
   const q = search.trim().toLowerCase();
   const rows = (data?.suppliers ?? []).filter((s) =>
-    (!q || s.vendorName.toLowerCase().includes(q) || (s.mobile ?? "").includes(q)) && (!onlyPayNow || s.payNow > 0.005),
+    (!q || String(s.vendorName ?? "").toLowerCase().includes(q) || String(s.mobile ?? "").includes(q)) && (!onlyPayNow || num(s.payNow) > 0.005),
   );
   const t = data?.totals;
 
@@ -205,8 +208,8 @@ export default function SupplierSettle() {
               Sales are matched to suppliers oldest-purchase-first for each product. A product you make is broken down through its BOM,
               so selling it counts as selling its raw materials. A sale counts as collected as far as its bill is paid.
               Amounts include GST.
-              {data!.unattributed.soldValue > 0.005 && (
-                <> Sales of {rs(data!.unattributed.soldValue)} could not be matched to any purchase (opening stock, or a made product with no BOM) and are not counted for any supplier.</>
+              {num(data?.unattributed?.soldValue) > 0.005 && (
+                <> Sales of {rs(data?.unattributed?.soldValue)} could not be matched to any purchase (opening stock, or a made product with no BOM) and are not counted for any supplier.</>
               )}
             </div>
           </div>

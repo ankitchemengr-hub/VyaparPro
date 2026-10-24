@@ -26,8 +26,9 @@ import { NO_PAY_INVOICE_TYPES } from "./entity-payment";
 // purchases); cancelled ones don't. Sales returns put quantity back.
 
 const EPS = 1e-9;
-const r2 = (n: number) => Math.round(n * 100) / 100;
-const r3 = (n: number) => Math.round(n * 1000) / 1000;
+// Rounded, and never NaN/Infinity — JSON would turn those into null.
+const r2 = (n: number) => (Number.isFinite(n) ? Math.round(n * 100) / 100 : 0);
+const r3 = (n: number) => (Number.isFinite(n) ? Math.round(n * 1000) / 1000 : 0);
 
 interface Lot { vendorId: number; qty: number; unitCost: number; left: number }
 interface SaleLine { productId: number; qty: number; unitValue: number; paidRatio: number }

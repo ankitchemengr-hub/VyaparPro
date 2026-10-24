@@ -1,5 +1,6 @@
 import React from "react";
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
+import { PageErrorBoundary } from "@/components/page-error-boundary";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ApiError } from "@workspace/api-client-react";
 import { Toaster } from "@/components/ui/toaster";
@@ -77,8 +78,10 @@ const queryClient = new QueryClient({
 });
 
 function ProtectedRoutes() {
+  const [location] = useLocation();
   return (
     <AppLayout>
+      <PageErrorBoundary key={location}>
       <Switch>
         <Route path="/" component={Dashboard} />
         <Route path="/menu" component={Menu} />
@@ -132,6 +135,7 @@ function ProtectedRoutes() {
         <Route path="/dispatches" component={Dispatches} />
         <Route component={NotFound} />
       </Switch>
+      </PageErrorBoundary>
     </AppLayout>
   );
 }
