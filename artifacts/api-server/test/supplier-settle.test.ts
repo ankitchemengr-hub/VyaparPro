@@ -160,6 +160,50 @@ test("when the second bill is paid, Supplier Two's share of it becomes payable",
   assert.equal(v2.payNow, 720);
 });
 
+test("a made product's sale is traced through its BOM to the raw-material supplier", async () => {
+  // Raw material bought from Supplier Three; finished product made from it (2 per unit).
+  const raw = (await pool.query(
+    `INSERT INTO products (company_id, name, "group", brand, item_code, unit, purchase_price, not_for_sale) VALUES ($1, 'Plastic Marshal', 'Raw', 'T', $2, 'QTY', 10, true) RETURNING id`,
+    [A, `RAW-${RUN}`],
+  )).rows[0].id;
+  const made = (await pool.query(
+    `INSERT INTO products (company_id, name, "group", brand, item_code, unit, purchase_price) VALUES ($1, 'Marshal Tooti 40ml', 'Tooti', 'T', $2, 'QTY', 20) RETURNING id`,
+    [A, `TOOTI-${RUN}`],
+  )).rows[0].id;
+  const bom = (await pool.query(`INSERT INTO boms (company_id, finished_product_id, output_quantity) VALUES ($1, $2, 1) RETURNING id`, [A, made])).rows[0].id;
+  await pool.query(`INSERT INTO bom_items (company_id, bom_id, material_product_id, quantity, unit) VALUES ($1, $2, $3, 2, 'QTY')`, [A, bom, raw]);
+  const v3 = (await pool.query(`INSERT INTO entities (company_id, type, name, mobile) VALUES ($1, 'vendor', 'Supplier Three', '83') RETURNING id`, [A])).rows[0].id;
+
+  await ok("adminA", "POST", "/purchases", {
+    billType: "non_gst", billDate: "2026-04-01", vendorId: v3, placeOfSupply: "Maharashtra",
+    items: [{ productId: raw, qty: 100, unit: "QTY", rate: 10 }],
+  });
+  const inv = await ok("adminA", "POST", "/invoices", {
+    invoiceType: "non_gst", invoiceDate: "2026-04-05", customerId: ids.customer, placeOfSupply: "Maharashtra",
+    items: [{ productId: made, qty: 20, unit: "QTY", rate: 50, mrp: 50 }],
+  });
+  await ok("adminA", "POST", "/account-transactions", {
+    accountId: ids.account, direction: "in", amount: Number(inv.grandTotal), mode: "cash",
+    partyEntityId: ids.customer, invoiceId: inv.id,
+  });
+
+  // Backend: selling 20 made units consumed 40 of the raw material.
+  const stock = (await pool.query(`SELECT current_stock::float8 AS s FROM products WHERE id = $1`, [raw])).rows[0].s;
+  assert.equal(stock, 60);
+
+  const rep = await ok("adminA", "GET", "/supplier-settle");
+  const s3 = find(rep, v3);
+  const line = s3.products.find((p: any) => p.productId === raw);
+  assert.equal(line.soldQty, 40);
+  assert.equal(line.usedInMadeQty, 40);
+  assert.equal(line.stockQty, 60);
+  assert.equal(s3.collected, 1000);
+  assert.equal(s3.costOfCollected, 400);
+  assert.equal(s3.profitCollected, 600);
+  assert.equal(s3.payNow, 400);
+  assert.equal(rep.unattributed.soldValue, 0);
+});
+
 test("only the company admin can open it (not accountant, store or super admin), and another company sees none of it", async () => {
   assert.equal((await call("accountantA", "GET", "/supplier-settle")).status, 403);
   // Platform super admin switched into company A still can't open it.

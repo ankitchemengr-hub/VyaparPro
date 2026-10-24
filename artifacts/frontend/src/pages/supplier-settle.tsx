@@ -16,6 +16,7 @@ import { Scale, ChevronDown, Search, Loader2, Info } from "lucide-react";
 
 interface ProductRow {
   productId: number; productName: string; unit: string;
+  usedInMadeQty: number;
   purchasedQty: number; purchasedValue: number;
   soldQty: number; soldValue: number; costOfSold: number;
   collected: number; costOfCollected: number;
@@ -167,7 +168,13 @@ export default function SupplierSettle() {
                                     <TableRow key={p.productId}>
                                       <TableCell className="font-medium min-w-[140px]">{p.productName}</TableCell>
                                       <TableCell className="text-right whitespace-nowrap">{qty(p.purchasedQty)} {p.unit}<div className="text-xs text-muted-foreground">{rs(p.purchasedValue)}</div></TableCell>
-                                      <TableCell className="text-right whitespace-nowrap">{qty(p.soldQty)} {p.unit}<div className="text-xs text-muted-foreground">{rs(p.soldValue)}</div></TableCell>
+                                      <TableCell className="text-right whitespace-nowrap">
+                                        {qty(p.soldQty)} {p.unit}
+                                        <div className="text-xs text-muted-foreground">{rs(p.soldValue)}</div>
+                                        {p.usedInMadeQty > 0 && (
+                                          <div className="text-[11px] text-blue-600 dark:text-blue-400">{qty(p.usedInMadeQty)} {p.unit} inside made products</div>
+                                        )}
+                                      </TableCell>
                                       <TableCell className="text-right whitespace-nowrap font-mono text-emerald-600">{rs(p.collected)}</TableCell>
                                       <TableCell className="text-right whitespace-nowrap font-mono">{rs(p.costOfCollected)}</TableCell>
                                       <TableCell className="text-right whitespace-nowrap">{qty(p.stockQty)} {p.unit}<div className="text-xs text-muted-foreground">{rs(p.stockValue)}</div></TableCell>
@@ -199,10 +206,11 @@ export default function SupplierSettle() {
           <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground flex gap-2">
             <Info className="w-4 h-4 shrink-0 mt-0.5" />
             <div>
-              Sales are matched to suppliers oldest-purchase-first for each product. A sale counts as collected as far as its bill is paid.
+              Sales are matched to suppliers oldest-purchase-first for each product. A product you make is broken down through its BOM,
+              so selling it counts as selling its raw materials. A sale counts as collected as far as its bill is paid.
               Amounts include GST.
               {data!.unattributed.soldValue > 0.005 && (
-                <> Sales of {rs(data!.unattributed.soldValue)} could not be matched to any purchase (opening stock or made in-house) and are not counted for any supplier.</>
+                <> Sales of {rs(data!.unattributed.soldValue)} could not be matched to any purchase (opening stock, or a made product with no BOM) and are not counted for any supplier.</>
               )}
             </div>
           </div>

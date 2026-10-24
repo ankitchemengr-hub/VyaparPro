@@ -8,8 +8,13 @@ import { NO_PAY_INVOICE_TYPES } from "./entity-payment";
 //
 // Which supplier a sale belongs to is decided FIFO per product: sales use up
 // the oldest purchase lots first (across all suppliers), the way stock moves
-// on the shelf. Sales beyond everything ever purchased (opening stock, made
-// in-house) are left unattributed and reported separately.
+// on the shelf. A product made in-house (has a BOM) that wasn't bought is
+// broken down through its BOM — selling 1 unit "sells" the raw materials it
+// is made of (BOM qty x units / output qty, the same maths manufacturing uses
+// to consume them), so the raw-material supplier's money counts as in once
+// the customer pays. The sale value is split across the materials by their
+// cost. Sales that still can't be traced to any purchase (opening stock, no
+// BOM) are left unattributed and reported separately.
 //
 // Amounts include GST/freight: a purchase line's cost is its share of the
 // bill's grand total (what is owed to the supplier); a sale line's value is
@@ -31,6 +36,8 @@ export interface SupplierProductRow {
   productId: number;
   productName: string;
   unit: string;
+  // Of soldQty, how much went out inside made products (via their BOM).
+  usedInMadeQty: number;
   purchasedQty: number;
   purchasedValue: number;
   soldQty: number;
@@ -73,7 +80,7 @@ export interface SupplierSettleReport {
 
 export async function buildSupplierSettle(companyId: number): Promise<SupplierSettleReport> {
   const noPay = NO_PAY_INVOICE_TYPES as string[];
-  const [vendorsRes, lotsRes, salesRes, paidRes, productsRes] = await Promise.all([
+  const [vendorsRes, lotsRes, salesRes, paidRes, productsRes, bomRes] = await Promise.all([
     pool.query(
       `SELECT id, name, mobile, outstanding_balance FROM entities WHERE company_id = $1 AND type = 'vendor'`,
       [companyId],
@@ -123,12 +130,27 @@ export async function buildSupplierSettle(companyId: number): Promise<SupplierSe
         GROUP BY l.entity_id`,
       [companyId],
     ),
-    pool.query(`SELECT id, name, unit FROM products WHERE company_id = $1`, [companyId]),
+    pool.query(`SELECT id, name, unit, purchase_price FROM products WHERE company_id = $1`, [companyId]),
+    pool.query(
+      `SELECT b.finished_product_id, b.output_quantity::float8 AS output_qty, bi.material_product_id, bi.quantity::float8 AS qty
+         FROM boms b JOIN bom_items bi ON bi.bom_id = b.id AND bi.company_id = b.company_id
+        WHERE b.company_id = $1 AND bi.quantity > 0`,
+      [companyId],
+    ),
   ]);
 
-  const productInfo = new Map<number, { name: string; unit: string }>(
-    productsRes.rows.map((p: any) => [p.id, { name: p.name, unit: p.unit }]),
+  const productInfo = new Map<number, { name: string; unit: string; price: number }>(
+    productsRes.rows.map((p: any) => [p.id, { name: p.name, unit: p.unit, price: Number(p.purchase_price ?? 0) }]),
   );
+
+  // BOM per finished product: raw material qty needed per 1 unit made.
+  const bomOf = new Map<number, { materialId: number; perUnit: number }[]>();
+  for (const b of bomRes.rows as any[]) {
+    const out = Number(b.output_qty) > 0 ? Number(b.output_qty) : 1;
+    const list = bomOf.get(b.finished_product_id) ?? [];
+    list.push({ materialId: b.material_product_id, perUnit: Number(b.qty) / out });
+    bomOf.set(b.finished_product_id, list);
+  }
 
   // FIFO lots per product.
   const lotsByProduct = new Map<number, Lot[]>();
@@ -146,7 +168,7 @@ export async function buildSupplierSettle(companyId: number): Promise<SupplierSe
     const k = `${vendorId}:${productId}`;
     let a = acc.get(k);
     if (!a) {
-      a = { purchasedQty: 0, purchasedValue: 0, soldQty: 0, soldValue: 0, costOfSold: 0, collected: 0, costOfCollected: 0 };
+      a = { usedInMadeQty: 0, purchasedQty: 0, purchasedValue: 0, soldQty: 0, soldValue: 0, costOfSold: 0, collected: 0, costOfCollected: 0 };
       acc.set(k, a);
     }
     return a;
@@ -161,8 +183,10 @@ export async function buildSupplierSettle(companyId: number): Promise<SupplierSe
 
   const unattributed = { soldQty: 0, soldValue: 0, collected: 0 };
   const cursor = new Map<number, number>(); // product → index of oldest lot with stock left
-  for (const s of salesRes.rows as any[]) {
-    const line: SaleLine = { productId: s.product_id, qty: Number(s.qty), unitValue: Number(s.unit_value), paidRatio: Number(s.paid_ratio) };
+
+  // Use up `line.qty` of a product: its own purchase lots first (FIFO), then —
+  // for a made product — the raw materials of whatever is left, via its BOM.
+  const consume = (line: SaleLine, viaBom: boolean, depth: number): void => {
     const lots = lotsByProduct.get(line.productId) ?? [];
     let need = line.qty;
     let i = cursor.get(line.productId) ?? 0;
@@ -174,6 +198,7 @@ export async function buildSupplierSettle(companyId: number): Promise<SupplierSe
         const value = take * line.unitValue;
         const cost = take * lot.unitCost;
         a.soldQty += take;
+        if (viaBom) a.usedInMadeQty += take;
         a.soldValue += value;
         a.costOfSold += cost;
         a.collected += value * line.paidRatio;
@@ -184,11 +209,30 @@ export async function buildSupplierSettle(companyId: number): Promise<SupplierSe
       if (lot.left <= EPS) i++;
     }
     cursor.set(line.productId, i);
-    if (need > EPS) {
-      unattributed.soldQty += need;
-      unattributed.soldValue += need * line.unitValue;
-      unattributed.collected += need * line.unitValue * line.paidRatio;
+    if (need <= EPS) return;
+
+    const bom = depth < 5 ? bomOf.get(line.productId) : undefined;
+    if (bom && bom.length > 0) {
+      // Split the remaining sale value across the materials by their cost.
+      const parts = bom.map((m) => ({ ...m, qty: need * m.perUnit, w: need * m.perUnit * (productInfo.get(m.materialId)?.price ?? 0) }));
+      const totalW = parts.reduce((sum, m) => sum + m.w, 0);
+      const value = need * line.unitValue;
+      for (const m of parts) {
+        if (m.qty <= EPS) continue;
+        const share = totalW > EPS ? m.w / totalW : 1 / parts.length;
+        consume({ productId: m.materialId, qty: m.qty, unitValue: (value * share) / m.qty, paidRatio: line.paidRatio }, true, depth + 1);
+      }
+      return;
     }
+    // Can't be traced to any purchase. A raw material used beyond what was
+    // ever bought adds its value but not its quantity (a different item).
+    if (!viaBom) unattributed.soldQty += need;
+    unattributed.soldValue += need * line.unitValue;
+    unattributed.collected += need * line.unitValue * line.paidRatio;
+  };
+
+  for (const row of salesRes.rows as any[]) {
+    consume({ productId: row.product_id, qty: Number(row.qty), unitValue: Number(row.unit_value), paidRatio: Number(row.paid_ratio) }, false, 0);
   }
 
   // Stock still on hand, per supplier lot.
@@ -212,9 +256,9 @@ export async function buildSupplierSettle(companyId: number): Promise<SupplierSe
       const [vid, pid] = k.split(":").map(Number);
       if (vid !== v.id) continue;
       const st = stock.get(k) ?? { qty: 0, value: 0 };
-      const info = productInfo.get(pid!) ?? { name: `Product #${pid}`, unit: "" };
+      const info = productInfo.get(pid!) ?? { name: `Product #${pid}`, unit: "", price: 0 };
       products.push({
-        productId: pid!, productName: info.name, unit: info.unit,
+        productId: pid!, productName: info.name, unit: info.unit, usedInMadeQty: r3(a.usedInMadeQty),
         purchasedQty: r3(a.purchasedQty), purchasedValue: r2(a.purchasedValue),
         soldQty: r3(a.soldQty), soldValue: r2(a.soldValue), costOfSold: r2(a.costOfSold),
         collected: r2(a.collected), costOfCollected: r2(a.costOfCollected),
