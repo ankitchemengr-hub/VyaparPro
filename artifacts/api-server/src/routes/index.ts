@@ -29,6 +29,7 @@ import gstinRouter from "./gstin";
 import transportRouter from "./transport";
 import whatsappRouter from "./whatsapp";
 import khatabookRouter from "./khatabook";
+import supplierSettleRouter from "./supplier-settle";
 import systemAdminRouter from "./system-admin";
 import portalRouter from "./portal";
 import nonGstCleanupRouter from "./non-gst-cleanup";
@@ -85,6 +86,7 @@ router.use(gstinRouter);
 router.use(transportRouter);
 router.use(whatsappRouter);
 router.use(khatabookRouter);
+router.use(supplierSettleRouter);
 // Company-admin-only; mounted before the subscriptions super_admin guard.
 router.use(nonGstCleanupRouter);
 // Mounted before subscriptions: the subscriptions router installs a path-less

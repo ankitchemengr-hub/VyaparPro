@@ -23,6 +23,7 @@ import Customers from "@/pages/customers";
 import CustomerProfile from "@/pages/customer-profile";
 import InactiveCustomers from "@/pages/inactive-customers";
 import Khatabook from "@/pages/khatabook";
+import SupplierSettle from "@/pages/supplier-settle";
 import Payments from "@/pages/payments";
 import Rewards from "@/pages/rewards";
 import Manufacturing from "@/pages/manufacturing";
@@ -102,6 +103,7 @@ function ProtectedRoutes() {
         <Route path="/customers/inactive" component={InactiveCustomers} />
         <Route path="/customers/:id" component={CustomerProfile} />
         <Route path="/khatabook" component={Khatabook} />
+        <Route path="/supplier-settle" component={SupplierSettle} />
         <Route path="/payments" component={Payments} />
         <Route path="/rewards" component={Rewards} />
         <Route path="/manufacturing" component={Manufacturing} />
