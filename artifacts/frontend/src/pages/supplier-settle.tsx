@@ -95,15 +95,9 @@ export default function SupplierSettle() {
         <div className="py-10 text-center text-destructive text-sm">{(error as Error).message}</div>
       ) : t ? (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
+          <div className="grid grid-cols-2 gap-2 sm:gap-4 max-w-2xl">
             <Stat label="Pay suppliers now" value={rs(t.payNow)} tone="text-red-600" hint="Their share of money already collected" />
-            <Stat label="Collected from customers" value={rs(t.collected)} tone="text-emerald-600" hint={`of ${rs(t.soldValue)} sold`} />
-            <Stat label="Your profit (collected)" value={rs(t.profitCollected)} tone="text-emerald-700" />
             <Stat label="Still to collect" value={rs(t.pendingFromCustomers)} tone="text-amber-600" hint="Sold, customer not paid yet" />
-            <Stat label="Supplier share collected" value={rs(t.costOfCollected)} />
-            <Stat label="Paid to suppliers" value={rs(t.paidToSupplier)} />
-            <Stat label="Total due to suppliers" value={rs(t.supplierDue)} hint="Same as Khatabook" />
-            <Stat label="Unsold stock (cost)" value={rs(t.stockValue)} />
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
