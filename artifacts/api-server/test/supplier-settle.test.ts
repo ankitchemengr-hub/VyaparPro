@@ -160,8 +160,15 @@ test("when the second bill is paid, Supplier Two's share of it becomes payable",
   assert.equal(v2.payNow, 720);
 });
 
-test("only admin can open it, and another company sees none of it", async () => {
+test("only the company admin can open it (not accountant, store or super admin), and another company sees none of it", async () => {
   assert.equal((await call("accountantA", "GET", "/supplier-settle")).status, 403);
+  // Platform super admin switched into company A still can't open it.
+  const su = await pool.query(
+    `INSERT INTO users (username, password_hash, name, role, company_id, is_active) VALUES ($1, 'x', 'super', 'super_admin', NULL, true) RETURNING id`,
+    [`super-${RUN}`],
+  );
+  cookies.super = sessionCookie({ userId: su.rows[0].id, username: `super-${RUN}`, role: "super_admin", name: "super", entityId: null, companyId: null, activeCompanyId: A });
+  assert.equal((await call("super", "GET", "/supplier-settle")).status, 403);
   assert.equal((await call("storeA", "GET", "/supplier-settle")).status, 403);
   const other = await ok("adminB", "GET", "/supplier-settle");
   assert.deepEqual(other.suppliers, []);

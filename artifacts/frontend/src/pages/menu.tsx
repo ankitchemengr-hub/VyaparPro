@@ -31,12 +31,13 @@ const TILE_COLORS = [
 ];
 
 export default function Menu() {
-  const { hasRole } = useAuth();
+  const { hasRole, user } = useAuth();
   const allows = useRoleFeature();
   const [query, setQuery] = React.useState("");
   const trimmed = query.trim();
 
-  const modules = moduleNavItems.filter((item) => hasRole(item.roles as any) && (!item.feature || allows(item.feature)));
+  const modules = moduleNavItems.filter((item) =>
+    hasRole(item.roles as any) && (!item.feature || allows(item.feature)) && !(item.noSuperAdmin && user?.role === "super_admin"));
   const filteredModules = trimmed
     ? modules.filter((item) => item.name.toLowerCase().includes(trimmed.toLowerCase()))
     : modules;

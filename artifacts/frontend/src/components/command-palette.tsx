@@ -52,7 +52,7 @@ export function CommandPalette({
   onOpenChange: (open: boolean) => void;
 }) {
   const [, setLocation] = useLocation();
-  const { hasRole } = useAuth();
+  const { hasRole, user } = useAuth();
   const allows = useRoleFeature();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResults | null>(null);
@@ -92,10 +92,11 @@ export function CommandPalette({
     const seen = new Set<string>();
     return [...topNavItems, ...moduleNavItems].filter((item) => {
       if (seen.has(item.href) || !hasRole(item.roles as any) || (item.feature && !allows(item.feature))) return false;
+      if (item.noSuperAdmin && user?.role === "super_admin") return false;
       seen.add(item.href);
       return true;
     });
-  }, [hasRole, allows]);
+  }, [hasRole, allows, user?.role]);
 
   const actions = QUICK_ACTIONS.filter((a) => hasRole(a.roles as any));
   const customers = (results?.entities ?? []).filter((e) => e.type === "customer");

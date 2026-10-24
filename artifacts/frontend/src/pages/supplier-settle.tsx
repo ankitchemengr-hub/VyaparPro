@@ -52,7 +52,8 @@ function Stat({ label, value, hint, tone }: { label: string; value: string; hint
 }
 
 export default function SupplierSettle() {
-  const { hasRole } = useAuth();
+  // Company admins only — not the platform super_admin, even when switched in.
+  const { user } = useAuth();
   const [, setLocation] = useLocation();
   const [search, setSearch] = React.useState("");
   const [open, setOpen] = React.useState<number | null>(null);
@@ -67,7 +68,7 @@ export default function SupplierSettle() {
     },
   });
 
-  if (!hasRole(["admin"])) return <Redirect to="/" />;
+  if (user?.role !== "admin") return <Redirect to="/" />;
 
   const q = search.trim().toLowerCase();
   const rows = (data?.suppliers ?? []).filter((s) =>

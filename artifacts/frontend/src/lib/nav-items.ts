@@ -45,6 +45,9 @@ export interface NavItem {
   description?: string;
   /** For non-admin roles: also needs this Settings > Permissions feature on. */
   feature?: string;
+  /** Hidden from a platform super_admin even while switched into a company
+   *  (hasRole otherwise lets it see every admin item). */
+  noSuperAdmin?: boolean;
 }
 
 // Top-level items always shown in the sidebar.
@@ -75,7 +78,7 @@ export const moduleNavItems: NavItem[] = [
   { name: "Customers", href: "/customers", icon: Users, roles: ["admin", "salesman", "accountant"], description: "Customer directory and ledgers" },
   { name: "Inactive Customers", href: "/customers/inactive", icon: PhoneCall, roles: ["admin", "salesman", "accountant"], description: "Customers with no order in a while — contact them and log a remark" },
   { name: "Khatabook", href: "/khatabook", icon: BookOpen, roles: ["admin", "accountant"], description: "Customer and supplier balances at a glance" },
-  { name: "Supplier Settle", href: "/supplier-settle", icon: Scale, roles: ["admin"], description: "Each supplier's material sold, money collected for it, and what to pay them now" },
+  { name: "Supplier Settle", href: "/supplier-settle", icon: Scale, roles: ["admin"], noSuperAdmin: true, description: "Each supplier's material sold, money collected for it, and what to pay them now" },
   { name: "Payments", href: "/payments", icon: CreditCard, roles: ["admin", "salesman", "accountant", "gst_accountant"], description: "Collections and approvals" },
   { name: "Commission", href: "/commission", icon: BadgeIndianRupee, roles: ["admin", "accountant", "salesman"], description: "Salesman commission report" },
   { name: "Cash Book", href: "/cashbook", icon: HandCoins, roles: ["admin", "accountant"], description: "Daily cash movements" },
