@@ -3,13 +3,13 @@ import { getCompanyId } from "../lib/tenant";
 import { logger } from "../lib/logger";
 import { buildSupplierSettle } from "../lib/supplier-settle";
 
-// Supplier Settle (see lib/supplier-settle.ts) — admin and accountant, the
-// same people who see Khatabook.
+// Supplier Settle (see lib/supplier-settle.ts) — admin only: it shows the
+// business's profit and what it owes each supplier.
 const router: IRouter = Router();
 
 router.get("/supplier-settle", async (req, res): Promise<void> => {
   const role = (req as any).session?.role;
-  if (role !== "admin" && role !== "accountant") {
+  if (role !== "admin") {
     res.status(403).json({ error: "Forbidden" });
     return;
   }

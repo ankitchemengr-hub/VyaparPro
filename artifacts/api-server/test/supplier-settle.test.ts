@@ -160,8 +160,8 @@ test("when the second bill is paid, Supplier Two's share of it becomes payable",
   assert.equal(v2.payNow, 720);
 });
 
-test("accountant can open it, store can't, and another company sees none of it", async () => {
-  assert.equal((await call("accountantA", "GET", "/supplier-settle")).status, 200);
+test("only admin can open it, and another company sees none of it", async () => {
+  assert.equal((await call("accountantA", "GET", "/supplier-settle")).status, 403);
   assert.equal((await call("storeA", "GET", "/supplier-settle")).status, 403);
   const other = await ok("adminB", "GET", "/supplier-settle");
   assert.deepEqual(other.suppliers, []);

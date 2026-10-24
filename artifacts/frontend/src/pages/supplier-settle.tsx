@@ -67,7 +67,7 @@ export default function SupplierSettle() {
     },
   });
 
-  if (!hasRole(["admin", "accountant"])) return <Redirect to="/" />;
+  if (!hasRole(["admin"])) return <Redirect to="/" />;
 
   const q = search.trim().toLowerCase();
   const rows = (data?.suppliers ?? []).filter((s) =>

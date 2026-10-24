@@ -75,7 +75,7 @@ export const moduleNavItems: NavItem[] = [
   { name: "Customers", href: "/customers", icon: Users, roles: ["admin", "salesman", "accountant"], description: "Customer directory and ledgers" },
   { name: "Inactive Customers", href: "/customers/inactive", icon: PhoneCall, roles: ["admin", "salesman", "accountant"], description: "Customers with no order in a while — contact them and log a remark" },
   { name: "Khatabook", href: "/khatabook", icon: BookOpen, roles: ["admin", "accountant"], description: "Customer and supplier balances at a glance" },
-  { name: "Supplier Settle", href: "/supplier-settle", icon: Scale, roles: ["admin", "accountant"], description: "Each supplier's material sold, money collected for it, and what to pay them now" },
+  { name: "Supplier Settle", href: "/supplier-settle", icon: Scale, roles: ["admin"], description: "Each supplier's material sold, money collected for it, and what to pay them now" },
   { name: "Payments", href: "/payments", icon: CreditCard, roles: ["admin", "salesman", "accountant", "gst_accountant"], description: "Collections and approvals" },
   { name: "Commission", href: "/commission", icon: BadgeIndianRupee, roles: ["admin", "accountant", "salesman"], description: "Salesman commission report" },
   { name: "Cash Book", href: "/cashbook", icon: HandCoins, roles: ["admin", "accountant"], description: "Daily cash movements" },
