@@ -37,6 +37,20 @@ export async function sendMail(to: string, subject: string, html: string, attach
   }
 }
 
+// Where staff notifications go (new demo lead, domain request, DNS
+// verified). ADMIN_EMAIL wins; otherwise the address in SMTP_FROM (e.g.
+// support@shradhaerp.com, forwarded to the owner's inbox). Not SMTP_USER: with
+// a relay like Brevo that is an SMTP login, not a mailbox anyone reads.
+export function adminNotifyEmail(): string | null {
+  const explicit = process.env["ADMIN_EMAIL"]?.trim();
+  if (explicit) return explicit;
+  const from = process.env["SMTP_FROM"] ?? "";
+  const addr = (from.match(/<([^>]+)>/)?.[1] ?? from).trim();
+  if (addr.includes("@")) return addr;
+  const user = process.env["SMTP_USER"]?.trim();
+  return user && user.includes("@") ? user : null;
+}
+
 export function passwordResetEmail(resetUrl: string): { subject: string; html: string } {
   return {
     subject: "Reset your SHRADHA ERP password",

@@ -13,7 +13,7 @@ import { hashPassword } from "../lib/password";
 import { isUsernameTaken } from "../lib/username";
 import { getCompanyId } from "../lib/tenant";
 import { logger } from "../lib/logger";
-import { sendMail, passwordResetEmail } from "../lib/mailer";
+import { sendMail, passwordResetEmail, adminNotifyEmail } from "../lib/mailer";
 import { PLAN_MONTHS, addMonths, daysBetween } from "./subscriptions";
 import {
   ensureSubscriptionInvoiceSchema, saveCompanyBillingDetails, issueInvoiceForPayment,
@@ -100,7 +100,7 @@ router.post("/portal/demo-requests", async (req, res): Promise<void> => {
     [d.name, d.businessName ?? null, d.mobile, d.email ?? null, d.businessType ?? null, d.numUsers ?? null, d.message ?? null],
   );
 
-  const adminEmail = process.env["SMTP_USER"];
+  const adminEmail = adminNotifyEmail();
   if (adminEmail) {
     const row = (label: string, value: string | number | null | undefined) =>
       value == null || value === "" ? "" : `<tr><td style="padding:2px 12px 2px 0;color:#666">${label}</td><td><b>${escapeHtml(String(value))}</b></td></tr>`;

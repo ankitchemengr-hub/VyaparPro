@@ -12,7 +12,7 @@
 import dns from "node:dns/promises";
 import { pool } from "@workspace/db";
 import { logger } from "./logger";
-import { sendMail } from "./mailer";
+import { sendMail, adminNotifyEmail } from "./mailer";
 import {
   railwayConfigured, railwayAddDomain, railwayGetDomain, railwayRemoveDomain, type DnsRecord,
 } from "./railway";
@@ -282,7 +282,7 @@ export async function requestDomain(companyId: number, rawDomain: unknown) {
   await attachToRailway(inserted);
   await syncCompanyColumns(companyId);
 
-  const adminEmail = process.env["SMTP_USER"];
+  const adminEmail = adminNotifyEmail();
   if (adminEmail) {
     const { rows: c } = await pool.query(`SELECT name FROM companies WHERE id = $1`, [companyId]);
     void sendMail(
@@ -388,7 +388,7 @@ export async function checkDomainNow(companyId: number) {
     if (railwayConfigured() && target.railway_domain_id) {
       await activate(companyId, target, active);
     } else if (!target.dns_verified_at) {
-      const adminEmail = process.env["SMTP_USER"];
+      const adminEmail = adminNotifyEmail();
       if (adminEmail) {
         void sendMail(
           adminEmail,
