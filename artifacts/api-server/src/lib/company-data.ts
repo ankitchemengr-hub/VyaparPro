@@ -28,6 +28,7 @@ export const COMPANY_TABLES = [
   "number_series",
   "app_settings",
   "print_settings",
+  "book_ledgers",
   // Sequences (per-company counters)
   "invoice_sequence",
   "purchase_sequence",
@@ -50,6 +51,8 @@ export const COMPANY_TABLES = [
   "account_transactions",
   "capital_snapshots",
   "expenses",
+  "journal_vouchers",
+  "journal_voucher_lines",
   // History
   "audit_log",
 ] as const;

@@ -621,6 +621,43 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
       reason      TEXT
     )`,
     `CREATE INDEX IF NOT EXISTS non_gst_cleanup_job_items_job_idx ON non_gst_cleanup_job_items(job_id)`,
+    // Books & Audit (lib/books.ts): ledgers the business adds itself (capital,
+    // loans, fixed assets, depreciation…) and the Journal vouchers posted to them.
+    `CREATE TABLE IF NOT EXISTS book_ledgers (
+      id              SERIAL PRIMARY KEY,
+      company_id      INTEGER NOT NULL,
+      name            TEXT NOT NULL,
+      group_code      TEXT NOT NULL,
+      opening_balance NUMERIC(14, 2) NOT NULL DEFAULT 0,
+      is_active       BOOLEAN NOT NULL DEFAULT true,
+      created_at      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+      CONSTRAINT book_ledgers_company_name_unique UNIQUE (company_id, name)
+    )`,
+    `CREATE TABLE IF NOT EXISTS journal_vouchers (
+      id              SERIAL PRIMARY KEY,
+      company_id      INTEGER NOT NULL,
+      voucher_no      TEXT NOT NULL,
+      voucher_date    DATE NOT NULL,
+      narration       TEXT,
+      total           NUMERIC(14, 2) NOT NULL DEFAULT 0,
+      status          TEXT NOT NULL DEFAULT 'saved',
+      created_by_id   INTEGER,
+      created_by_name TEXT,
+      cancelled_at    TIMESTAMP WITH TIME ZONE,
+      created_at      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+      CONSTRAINT journal_vouchers_company_no_unique UNIQUE (company_id, voucher_no)
+    )`,
+    `CREATE INDEX IF NOT EXISTS journal_vouchers_company_date_idx ON journal_vouchers(company_id, voucher_date)`,
+    `CREATE TABLE IF NOT EXISTS journal_voucher_lines (
+      id          SERIAL PRIMARY KEY,
+      company_id  INTEGER NOT NULL,
+      voucher_id  INTEGER NOT NULL REFERENCES journal_vouchers(id) ON DELETE CASCADE,
+      ledger_id   INTEGER NOT NULL REFERENCES book_ledgers(id),
+      debit       NUMERIC(14, 2) NOT NULL DEFAULT 0,
+      credit      NUMERIC(14, 2) NOT NULL DEFAULT 0
+    )`,
+    `CREATE INDEX IF NOT EXISTS journal_voucher_lines_voucher_idx ON journal_voucher_lines(voucher_id)`,
+    `CREATE INDEX IF NOT EXISTS journal_voucher_lines_ledger_idx ON journal_voucher_lines(company_id, ledger_id)`,
   ];
 
   for (const sql of patches) {
