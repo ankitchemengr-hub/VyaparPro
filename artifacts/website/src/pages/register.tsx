@@ -15,7 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, CheckCircle2, Building2 } from "lucide-react";
 import { SiteHeader } from "@/components/site/site-header";
 import { SiteFooter } from "@/components/site/site-footer";
-import { CodeEntry } from "@/components/code-entry";
+import { CodeEntry, apiErrorText } from "@/components/code-entry";
 
 declare global {
   interface Window {
@@ -183,10 +183,9 @@ export default function PortalRegister() {
             afterVerified({ subscriptionId: result.subscriptionId, requiresPayment: result.requiresPayment });
           }
         },
-        onError: async (err: any) => {
-          let desc = "Please check your details and try again.";
-          try { const j = await err?.response?.json?.(); if (j?.error) desc = j.error; } catch { /* ignore */ }
-          toast({ title: "Registration failed", description: desc, variant: "destructive" });
+        onError: (err) => {
+          // The server says exactly what's wrong (e.g. mobile already registered).
+          toast({ title: "Registration failed", description: apiErrorText(err, "Please check your details and try again."), variant: "destructive" });
         },
       },
     );

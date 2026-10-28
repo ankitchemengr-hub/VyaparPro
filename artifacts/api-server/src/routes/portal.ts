@@ -130,7 +130,17 @@ router.post("/portal/demo-requests", async (req, res): Promise<void> => {
 router.post("/portal/register", async (req, res): Promise<void> => {
   const parsed = RegisterPortalCustomerBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    // One plain sentence for the form, not the raw validation dump.
+    const issue = parsed.error.issues[0];
+    const LABELS: Record<string, string> = {
+      businessName: "Business name", ownerName: "Owner name", mobile: "Mobile number",
+      email: "Email", password: "Password", planSlug: "Plan", gstin: "GSTIN",
+    };
+    const field = LABELS[String(issue?.path?.[0])] ?? "One of the fields";
+    const msg = issue?.code === "too_small" && issue.path?.[0] === "password"
+      ? "Password must be at least 8 characters"
+      : `${field}: ${issue?.message ?? "please check this value"}`;
+    res.status(400).json({ error: msg });
     return;
   }
   const d = parsed.data;
@@ -150,13 +160,16 @@ router.post("/portal/register", async (req, res): Promise<void> => {
     await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
 
     const dupe = await client.query(
-      `SELECT c.id FROM companies c
-       WHERE ($1::text IS NOT NULL AND lower(c.email) = lower($1)) OR c.mobile = $2`,
+      `SELECT lower(c.email) = lower($1) AS same_email FROM companies c
+       WHERE ($1::text IS NOT NULL AND lower(c.email) = lower($1)) OR c.mobile = $2
+       LIMIT 1`,
       [d.email ?? null, d.mobile],
     );
     if (dupe.rows.length > 0) {
       await client.query("ROLLBACK");
-      res.status(409).json({ error: "A company with this email or mobile is already registered" });
+      // Say which one, so the customer knows what to change (or to log in).
+      const which = dupe.rows[0].same_email ? "email" : "mobile number";
+      res.status(409).json({ error: `An account with this ${which} is already registered. Please log in, or use a different ${which}.` });
       return;
     }
     // The admin login's username is this email/mobile — it must not already be
