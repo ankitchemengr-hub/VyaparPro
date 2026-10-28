@@ -66,15 +66,18 @@ export default function Menu() {
         </p>
       </div>
 
-      <div className="relative max-w-xl">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search modules..."
-          className="pl-9"
-          data-testid="input-global-search"
-        />
+      {/* Sticks just below the 48px top bar so it stays reachable while scrolling the tiles */}
+      <div className="sticky top-12 z-10 -mx-6 px-6 py-2 bg-background">
+        <div className="relative w-full">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search modules..."
+            className="pl-10 h-11 text-base"
+            data-testid="input-global-search"
+          />
+        </div>
       </div>
 
       <div>
