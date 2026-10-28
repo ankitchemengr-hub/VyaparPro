@@ -739,8 +739,11 @@ function NewPurchaseTab({
       // price, offer to update that item's own sale price right away.
       // Otherwise fall through to the BOM cost-cascade check (a raw
       // material can feed a recipe without ever being resold directly).
-      if (newPurchase.priceChanges && newPurchase.priceChanges.length > 0) {
-        setSalePriceChanges(newPurchase.priceChanges);
+      // Not-for-sale items (raw materials, packing) have no sale price to set
+      // — their new cost goes straight to the BOM recalculation below.
+      const saleable = (newPurchase.priceChanges ?? []).filter((c: PurchasePriceChange) => !productMap.get(c.productId)?.notForSale);
+      if (saleable.length > 0) {
+        setSalePriceChanges(saleable);
         setShowSalePricePrompt(true);
       } else {
         await checkRecalcPrompt();
