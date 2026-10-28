@@ -1,9 +1,59 @@
-// Transactional email — Gmail SMTP via an App Password until a dedicated
-// sender (Resend/Brevo/SendGrid) is set up. Sends are best-effort: a failure
-// is logged, never thrown, so a broken mail server can't 500 an API call
-// that already did its real work (e.g. saving a reset token).
+// Transactional email. Two ways to send, best-effort either way (a failure is
+// logged and returns false, never thrown, so a broken mail setup can't 500 an
+// API call that already did its real work):
+//
+//  • BREVO_API_KEY set → Brevo's HTTPS API (https://api.brevo.com/v3/smtp/email).
+//    Use this on Railway Hobby: outbound SMTP ports are blocked there, so SMTP
+//    just hangs until it times out.
+//  • otherwise SMTP (SMTP_HOST/PORT/USER/PASS) with short timeouts, so a
+//    blocked port fails in seconds instead of stalling the request for minutes.
+//
+// The sender is SMTP_FROM ("Name <address>") in both cases.
 import nodemailer from "nodemailer";
 import { logger } from "./logger";
+
+export type MailAttachment = { filename: string; content: Buffer; contentType?: string };
+
+function parseFrom(): { name?: string; email: string } | null {
+  const raw = (process.env["SMTP_FROM"] || process.env["SMTP_USER"] || "").trim();
+  const m = raw.match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/);
+  const email = (m ? m[2] : raw).trim();
+  if (!email.includes("@")) return null;
+  const name = m?.[1]?.trim();
+  return name ? { name, email } : { email };
+}
+
+async function sendViaBrevoApi(apiKey: string, to: string, subject: string, html: string, attachments?: MailAttachment[]): Promise<boolean> {
+  const sender = parseFrom();
+  if (!sender) {
+    logger.warn({ to, subject }, "Email not sent — SMTP_FROM has no sender address");
+    return false;
+  }
+  try {
+    const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: { "api-key": apiKey, "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify({
+        sender,
+        to: [{ email: to }],
+        subject,
+        htmlContent: html,
+        ...(attachments?.length
+          ? { attachment: attachments.map((a) => ({ name: a.filename, content: a.content.toString("base64") })) }
+          : {}),
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) {
+      logger.error({ to, subject, status: res.status, body: (await res.text()).slice(0, 300) }, "Brevo API rejected email");
+      return false;
+    }
+    return true;
+  } catch (err) {
+    logger.error({ err, to, subject }, "Failed to send email via Brevo API");
+    return false;
+  }
+}
 
 function getTransport() {
   const host = process.env["SMTP_HOST"];
@@ -16,15 +66,20 @@ function getTransport() {
     port: port ? Number(port) : 587,
     secure: false, // STARTTLS on port 587
     auth: { user, pass },
+    // Fail fast when the port is blocked instead of nodemailer's 2-minute default.
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 20_000,
   });
 }
 
-export type MailAttachment = { filename: string; content: Buffer; contentType?: string };
-
 export async function sendMail(to: string, subject: string, html: string, attachments?: MailAttachment[]): Promise<boolean> {
+  const apiKey = process.env["BREVO_API_KEY"]?.trim();
+  if (apiKey) return sendViaBrevoApi(apiKey, to, subject, html, attachments);
+
   const transport = getTransport();
   if (!transport) {
-    logger.warn({ to, subject }, "Email not sent — SMTP is not configured");
+    logger.warn({ to, subject }, "Email not sent — set BREVO_API_KEY or SMTP_HOST/USER/PASS");
     return false;
   }
   const from = process.env["SMTP_FROM"] || process.env["SMTP_USER"]!;
