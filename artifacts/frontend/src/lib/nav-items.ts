@@ -55,6 +55,8 @@ export const topNavItems: NavItem[] = [
   { name: "Platform Console", href: "/subscriptions", icon: BadgeIndianRupee, roles: ["super_admin"] },
   { name: "Dashboard", href: "/", icon: LayoutDashboard, roles: ["admin"] },
   { name: "Invoices", href: "/invoices", icon: FileText, roles: ["admin", "salesman", "accountant", "gst_accountant", "store"] },
+  // Straight to a new bill, without going through Menu.
+  { name: "Billing", href: "/billing", icon: Receipt, roles: ["admin", "store"] },
   { name: "Menu", href: "/menu", icon: LayoutGrid, roles: ["admin", "salesman", "store", "manufacturing", "accountant", "gst_accountant", "customer", "counter"] },
   { name: "Catalog", href: "/catalog", icon: ShoppingCart, roles: ["admin", "salesman", "store", "manufacturing", "customer", "counter"] },
   { name: "My Statement", href: "/my-statement", icon: FileText, roles: ["customer"] },
