@@ -135,8 +135,9 @@ export default function SupplierSettle() {
                           <div className="min-w-0">
                             <div className="font-semibold truncate">{s.vendorName}</div>
                             <div className="text-xs text-muted-foreground">
-                              Sold {rs(s.soldValue)} · collected {rs(s.collected)}
-                              {s.pendingFromCustomers > 0.005 && <> · <span className="text-amber-600">{rs(s.pendingFromCustomers)} to collect</span></>}
+                              {s.pendingFromCustomers > 0.005
+                                ? <span className="text-amber-600">{rs(s.pendingFromCustomers)} to collect from market</span>
+                                : "Nothing pending in market"}
                             </div>
                           </div>
                           <div className="text-right shrink-0">
@@ -149,11 +150,13 @@ export default function SupplierSettle() {
 
                       {isOpen && (
                         <div className="mt-3 border-t pt-3 space-y-3">
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
-                            <div><div className="text-xs text-muted-foreground">Supplier share collected</div><div className="font-mono">{rs(s.costOfCollected)}</div></div>
-                            <div><div className="text-xs text-muted-foreground">Already paid</div><div className="font-mono">{rs(s.paidToSupplier)}</div></div>
-                            <div><div className="text-xs text-muted-foreground">Total due (Khatabook)</div><div className="font-mono">{rs(s.supplierDue)}</div></div>
-                            <div><div className="text-xs text-muted-foreground">Your profit (collected)</div><div className="font-mono text-emerald-700">{rs(s.profitCollected)}</div></div>
+                          {/* Kept to the three figures the owner works from: what we
+                              owe them, what their material has brought in from the
+                              market, and what the market still owes for it. */}
+                          <div className="grid grid-cols-3 gap-2 text-sm">
+                            <div className="min-w-0"><div className="text-xs text-muted-foreground">Total to pay</div><div className="font-mono font-semibold text-red-600 break-all">{rs(s.supplierDue)}</div></div>
+                            <div className="min-w-0"><div className="text-xs text-muted-foreground">Collected from market</div><div className="font-mono text-emerald-600 break-all">{rs(s.collected)}</div></div>
+                            <div className="min-w-0"><div className="text-xs text-muted-foreground">Pending in market</div><div className="font-mono text-amber-600 break-all">{rs(s.pendingFromCustomers)}</div></div>
                           </div>
                           {s.products.length > 0 && (
                             <div className="overflow-x-auto rounded-md border">
@@ -162,9 +165,7 @@ export default function SupplierSettle() {
                                   <TableRow>
                                     <TableHead>Material</TableHead>
                                     <TableHead className="text-right">Bought</TableHead>
-                                    <TableHead className="text-right">Sold</TableHead>
                                     <TableHead className="text-right">Collected</TableHead>
-                                    <TableHead className="text-right">Supplier share</TableHead>
                                     <TableHead className="text-right">In stock</TableHead>
                                   </TableRow>
                                 </TableHeader>
@@ -173,15 +174,7 @@ export default function SupplierSettle() {
                                     <TableRow key={p.productId}>
                                       <TableCell className="font-medium min-w-[140px]">{p.productName}</TableCell>
                                       <TableCell className="text-right whitespace-nowrap">{qty(p.purchasedQty)} {p.unit}<div className="text-xs text-muted-foreground">{rs(p.purchasedValue)}</div></TableCell>
-                                      <TableCell className="text-right whitespace-nowrap">
-                                        {qty(p.soldQty)} {p.unit}
-                                        <div className="text-xs text-muted-foreground">{rs(p.soldValue)}</div>
-                                        {p.usedInMadeQty > 0 && (
-                                          <div className="text-[11px] text-blue-600 dark:text-blue-400">{qty(p.usedInMadeQty)} {p.unit} inside made products</div>
-                                        )}
-                                      </TableCell>
                                       <TableCell className="text-right whitespace-nowrap font-mono text-emerald-600">{rs(p.collected)}</TableCell>
-                                      <TableCell className="text-right whitespace-nowrap font-mono">{rs(p.costOfCollected)}</TableCell>
                                       <TableCell className="text-right whitespace-nowrap">{qty(p.stockQty)} {p.unit}<div className="text-xs text-muted-foreground">{rs(p.stockValue)}</div></TableCell>
                                     </TableRow>
                                   ))}
