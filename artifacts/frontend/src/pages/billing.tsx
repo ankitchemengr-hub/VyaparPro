@@ -1119,7 +1119,7 @@ export default function Billing() {
       </div>
 
       <div className="grid gap-5 lg:grid-cols-3">
-        <div className={`lg:col-span-2 space-y-5 ${mobileStep === 3 ? "hidden md:block" : ""}`}>
+        <div className={`lg:col-span-2 space-y-5 min-w-0 ${mobileStep === 3 ? "hidden md:block" : ""}`}>
           {/* Phone step 1: document type as tap chips (desktop has the dropdowns in the header). */}
           {mobileStep === 1 && (
             <Card className="md:hidden">
@@ -1537,20 +1537,20 @@ export default function Billing() {
           </Card>
         </div>
 
-        <div className={`space-y-5 ${stepCls(3)}`}>
+        <div className={`space-y-5 min-w-0 ${stepCls(3)}`}>
           {/* Phone step 3: what's being billed, with a jump back to step 1. */}
           <Card className="md:hidden">
-            <CardContent className="pt-4 pb-4 flex items-start gap-3">
+            <CardContent className="pt-4 pb-4 flex flex-wrap items-start gap-3">
               <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
                 <User className="w-4 h-4" />
               </div>
-              <div className="min-w-0 flex-1">
+              <div className="min-w-[10rem] flex-1">
                 <div className="font-semibold text-sm truncate">{customer?.name ?? "Walk-in / Cash customer"}</div>
                 <div className="text-xs text-muted-foreground">
                   {docLabel} · {invoiceDate.split("-").reverse().join("/")} · {items.length} item{items.length !== 1 ? "s" : ""}
                 </div>
               </div>
-              <div className="flex flex-col gap-1 shrink-0">
+              <div className="flex gap-1 shrink-0 ml-auto">
                 <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => goToStep(1)} data-testid="button-review-edit-customer">Edit</Button>
                 {isEditMode && existingInvoice && (
                   <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => window.print()} data-testid="button-print-invoice-mobile">
@@ -1682,25 +1682,30 @@ export default function Billing() {
           </>
         ) : (
           <>
-            <Button variant="outline" onClick={() => goToStep(2)} data-testid="button-mobile-back-items">
-              <ArrowLeft className="w-4 h-4 mr-1.5" /> Items
+            <Button variant="outline" className="shrink-0" onClick={() => goToStep(2)} data-testid="button-mobile-back-items">
+              <ArrowLeft className="w-4 h-4 min-[360px]:mr-1.5" /><span className="hidden min-[360px]:inline">Items</span>
             </Button>
-            <Button className="flex-1" onClick={handleSave} disabled={isSaving || items.length === 0} data-testid="button-save-invoice-mobile">
-              {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-              {isEditMode ? "Update" : "Save"} · ₹{finalTotal.toLocaleString()}
+            <Button className="flex-1 min-w-0" onClick={handleSave} disabled={isSaving || items.length === 0} data-testid="button-save-invoice-mobile">
+              {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin shrink-0" /> : <Save className="w-4 h-4 mr-2 shrink-0" />}
+              <span className="truncate">{isEditMode ? "Update" : "Save"} · ₹{finalTotal.toLocaleString()}</span>
             </Button>
           </>
         )}
       </div>
     </div>
 
+    {/* For the Print button while editing. Only its print copy (portaled to
+        <body>, see InvoiceTemplateRenderer) is needed — the on-screen preview
+        is hidden so it doesn't sit under the edit form. */}
     {isEditMode && existingInvoice && (
-      <InvoiceTemplateRenderer
-        invoice={existingInvoice}
-        settings={printSettings}
-        maps={printMaps}
-        templateId={printSettings.defaultTemplate}
-      />
+      <div className="hidden">
+        <InvoiceTemplateRenderer
+          invoice={existingInvoice}
+          settings={printSettings}
+          maps={printMaps}
+          templateId={printSettings.defaultTemplate}
+        />
+      </div>
     )}
 
     <CustomerSearchDialog
