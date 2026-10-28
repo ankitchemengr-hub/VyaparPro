@@ -32,8 +32,16 @@ const FIELDS: { key: Field; label: string }[] = [
 const fmt = (n: number) => `₹${Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
 export function UpdateSalePriceDialog({
-  open, onOpenChange, changes,
-}: { open: boolean; onOpenChange: (v: boolean) => void; changes: PurchasePriceChange[] }) {
+  open, onOpenChange, changes, costLabel = "Purchase rate", intro,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  changes: PurchasePriceChange[];
+  /** Label for the old → new cost line ("Making cost" for made products). */
+  costLabel?: string;
+  /** Replaces the first sentence of the description. */
+  intro?: string;
+}) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const updateProduct = useUpdateProduct();
@@ -142,7 +150,7 @@ export function UpdateSalePriceDialog({
             <Tag className="w-5 h-5 text-primary" /> Update Sale Price?
           </DialogTitle>
           <DialogDescription>
-            The purchase rate changed for {changes.length} item{changes.length === 1 ? "" : "s"}. The boxes show a
+            {intro ?? `The purchase rate changed for ${changes.length} item${changes.length === 1 ? "" : "s"}.`} The boxes show a
             suggested new price — <b>type your own rate in any box</b>, go back to the old rates, or leave a product out.
           </DialogDescription>
         </DialogHeader>
@@ -172,7 +180,7 @@ export function UpdateSalePriceDialog({
                       <div className="font-medium break-words">{c.name}</div>
                       <div className="text-xs text-muted-foreground">
                         {c.itemCode && <span className="font-mono mr-2">{c.itemCode}</span>}
-                        Purchase rate{" "}
+                        {costLabel}{" "}
                         <span className="line-through">{fmt(c.oldPurchasePrice)}</span>
                         <ArrowRight className="w-3 h-3 inline mx-1" />
                         <span className="font-semibold text-foreground">{fmt(c.newPurchasePrice)}</span>

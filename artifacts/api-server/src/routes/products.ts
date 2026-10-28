@@ -20,6 +20,7 @@ import {
 import { getCompanyId, handleTenantError } from "../lib/tenant";
 import { loadManufacturingCosts, loadCostGstPct } from "../lib/bom-cost";
 import { computeRecalculation, applyRecalculation } from "../lib/recalculate-prices";
+import { computeMarginedPrices } from "../lib/margin-pricing";
 import { buildProductImageUrl, decodeProductImageDataUrl } from "../lib/product-image";
 
 const router: IRouter = Router();
@@ -286,6 +287,66 @@ router.post("/products/recalculate-apply", async (req, res): Promise<void> => {
   const companyId = getCompanyId(req);
   const changes = await applyRecalculation(companyId);
   res.json({ updated: changes.length, items: changes });
+});
+
+// POST /products/sale-price-suggestions — admin only. Body:
+// { items: [{ productId, oldCost, newCost }] }. For products whose cost just
+// moved (e.g. made products after Recalculate Prices), returns the same shape
+// as a purchase's priceChanges: today's sale prices plus suggestions from
+// each product's own margin % (same formula as a purchase uses). Not-for-sale
+// items are left out — there's no sale price to set.
+router.post("/products/sale-price-suggestions", async (req, res): Promise<void> => {
+  const session = (req as any).session;
+  if (session?.role !== "admin" && session?.role !== "super_admin") {
+    res.status(403).json({ error: "Only admin can change sale prices" });
+    return;
+  }
+  const raw = Array.isArray(req.body?.items) ? req.body.items : [];
+  const items = raw
+    .map((i: any) => ({ productId: Number(i?.productId), oldCost: Number(i?.oldCost), newCost: Number(i?.newCost) }))
+    .filter((i: any) => Number.isInteger(i.productId) && Number.isFinite(i.oldCost) && Number.isFinite(i.newCost) && i.newCost >= 0);
+  if (items.length === 0) {
+    res.json([]);
+    return;
+  }
+  const companyId = getCompanyId(req);
+  const { rows } = await pool.query(
+    `SELECT id, name, item_code, tax_rate, non_gst_price, retail_price, wholesale_price,
+            non_gst_margin_pct, retail_margin_pct, wholesale_margin_pct, not_for_sale
+     FROM products WHERE company_id = $1 AND deleted_at IS NULL AND id = ANY($2::int[])`,
+    [companyId, items.map((i: any) => i.productId)],
+  );
+  const byId = new Map<number, any>(rows.map((r: any) => [r.id, r]));
+  const out = [];
+  for (const i of items) {
+    const prod = byId.get(i.productId);
+    if (!prod || prod.not_for_sale) continue;
+    const taxRate = prod.tax_rate != null ? Number(prod.tax_rate) : null;
+    const suggested = computeMarginedPrices(
+      i.newCost,
+      {
+        nonGstMarginPct: prod.non_gst_margin_pct != null ? Number(prod.non_gst_margin_pct) : null,
+        retailMarginPct: prod.retail_margin_pct != null ? Number(prod.retail_margin_pct) : null,
+        wholesaleMarginPct: prod.wholesale_margin_pct != null ? Number(prod.wholesale_margin_pct) : null,
+      },
+      taxRate,
+    );
+    out.push({
+      productId: prod.id,
+      name: prod.name ?? "Unknown",
+      itemCode: prod.item_code ?? null,
+      oldPurchasePrice: i.oldCost,
+      newPurchasePrice: i.newCost,
+      taxRate,
+      currentNonGstPrice: Number(prod.non_gst_price ?? 0),
+      currentRetailPrice: Number(prod.retail_price ?? 0),
+      currentWholesalePrice: Number(prod.wholesale_price ?? 0),
+      suggestedNonGstPrice: suggested.nonGstPrice,
+      suggestedRetailPrice: suggested.retailPrice,
+      suggestedWholesalePrice: suggested.wholesalePrice,
+    });
+  }
+  res.json(out);
 });
 
 // GET /products/:id

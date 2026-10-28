@@ -18,6 +18,8 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Calculator, Loader2, CheckCircle2, ArrowRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { UpdateSalePriceDialog } from "@/components/update-sale-price-dialog";
+import type { PurchasePriceChange } from "@workspace/api-client-react";
 
 function PriceCell({ oldVal, newVal }: { oldVal: number; newVal: number }) {
   const changed = Math.abs(newVal - oldVal) > 0.004;
@@ -36,6 +38,10 @@ export function RecalculatePricesDialog({ open, onOpenChange }: { open: boolean;
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [applied, setApplied] = useState<number | null>(null);
+  // After Apply: made products whose cost moved, with suggested sale prices —
+  // offered in the editable sale-price dialog once this one is closed.
+  const [saleSuggestions, setSaleSuggestions] = useState<PurchasePriceChange[]>([]);
+  const [salePromptOpen, setSalePromptOpen] = useState(false);
 
   const { data: changes, isLoading } = useGetRecalculatePricePreview({
     query: { enabled: open, queryKey: getGetRecalculatePricePreviewQueryKey() },
@@ -43,8 +49,27 @@ export function RecalculatePricesDialog({ open, onOpenChange }: { open: boolean;
   const apply = useApplyPriceRecalculation();
 
   const handleClose = (v: boolean) => {
-    if (!v) setApplied(null);
+    if (!v) {
+      setApplied(null);
+      if (saleSuggestions.length > 0) setSalePromptOpen(true);
+    }
     onOpenChange(v);
+  };
+
+  const loadSaleSuggestions = async (items: { id: number; oldCost: number; newCost: number }[]) => {
+    const moved = items.filter((i) => Math.abs(i.newCost - i.oldCost) > 0.004);
+    if (moved.length === 0) return;
+    try {
+      const res = await fetch("/api/products/sale-price-suggestions", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: moved.map((i) => ({ productId: i.id, oldCost: i.oldCost, newCost: i.newCost })) }),
+      });
+      if (res.ok) setSaleSuggestions(await res.json());
+    } catch {
+      // Non-critical — sale prices can still be edited in Inventory.
+    }
   };
 
   const handleApply = () => {
@@ -53,6 +78,7 @@ export function RecalculatePricesDialog({ open, onOpenChange }: { open: boolean;
         queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetRecalculatePricePreviewQueryKey() });
         setApplied(res.updated);
+        void loadSaleSuggestions(res.items ?? []);
         toast({ title: `${res.updated} product price${res.updated === 1 ? "" : "s"} updated` });
       },
       onError: (err: any) => {
@@ -62,6 +88,7 @@ export function RecalculatePricesDialog({ open, onOpenChange }: { open: boolean;
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
         <DialogHeader>
@@ -136,5 +163,16 @@ export function RecalculatePricesDialog({ open, onOpenChange }: { open: boolean;
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    <UpdateSalePriceDialog
+      open={salePromptOpen}
+      onOpenChange={(v) => {
+        setSalePromptOpen(v);
+        if (!v) setSaleSuggestions([]);
+      }}
+      changes={saleSuggestions}
+      costLabel="Making cost"
+      intro={`The making cost changed for ${saleSuggestions.length} product${saleSuggestions.length === 1 ? "" : "s"} made from these materials.`}
+    />
+    </>
   );
 }
