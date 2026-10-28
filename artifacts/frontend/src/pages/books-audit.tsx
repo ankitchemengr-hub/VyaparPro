@@ -4,7 +4,7 @@
 // whatever the rest of the ERP records with no other side.
 
 import React from "react";
-import { Redirect } from "wouter";
+import { Link, Redirect } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/use-auth";
 import { useToast } from "@/hooks/use-toast";
@@ -17,7 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { BookOpenCheck, Loader2, Plus, Printer, Trash2, Info } from "lucide-react";
+import { BookOpenCheck, Loader2, Plus, Printer, Trash2, Info, Search, AlertTriangle } from "lucide-react";
 
 interface Line { name: string; amount: number; note?: string }
 interface Group { group: string; lines: Line[] }
@@ -505,6 +505,403 @@ function LedgersTab({ ledgers, groups }: { ledgers: Ledger[]; groups: LedgerGrou
   );
 }
 
+// ── Day Book ─────────────────────────────────────────────────────────
+
+interface DayBookRow { date: string; kind: string; id: number; no: string | null; party: string | null; amount: number; detail: string | null }
+
+const KIND_LABEL: Record<string, string> = {
+  sale: "Sales", purchase: "Purchase", credit_note: "Credit Note", debit_note: "Debit Note",
+  receipt: "Receipt", payment: "Payment", contra: "Contra", journal: "Journal",
+};
+const KIND_TONE: Record<string, string> = {
+  sale: "text-emerald-700 dark:text-emerald-400", receipt: "text-emerald-700 dark:text-emerald-400",
+  purchase: "text-blue-700 dark:text-blue-400", payment: "text-red-700 dark:text-red-400",
+  credit_note: "text-amber-700 dark:text-amber-400", debit_note: "text-amber-700 dark:text-amber-400",
+};
+
+function useDayBook(from: string, to: string) {
+  return useQuery<DayBookRow[]>({
+    queryKey: ["/api/books/day-book", from, to],
+    queryFn: () => getJson(`/api/books/day-book?from=${from}&to=${to}`),
+  });
+}
+
+function DayBookTab({ from, to }: { from: string; to: string }) {
+  const { data, isLoading, error } = useDayBook(from, to);
+  const [kind, setKind] = React.useState("all");
+  if (isLoading || error || !data) return <Loading error={error} />;
+  const rows = kind === "all" ? data : data.filter((r) => r.kind === kind);
+  const totals = Object.keys(KIND_LABEL)
+    .map((k) => ({ k, total: data.filter((r) => r.kind === k).reduce((s, r) => s + r.amount, 0) }))
+    .filter((t) => t.total !== 0);
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-1.5 print:hidden">
+        <Button size="sm" variant={kind === "all" ? "default" : "outline"} onClick={() => setKind("all")}>All ({data.length})</Button>
+        {totals.map((t) => (
+          <Button key={t.k} size="sm" variant={kind === t.k ? "default" : "outline"} onClick={() => setKind(t.k)}>
+            {KIND_LABEL[t.k]} · {rs(t.total)}
+          </Button>
+        ))}
+      </div>
+      {rows.length === 0 ? (
+        <div className="py-8 text-center text-sm text-muted-foreground">No entries in this period.</div>
+      ) : (
+        <div className="overflow-x-auto rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>Voucher</TableHead>
+                <TableHead>Particulars</TableHead>
+                <TableHead className="text-right">Amount</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((r) => (
+                <TableRow key={`${r.kind}-${r.id}`}>
+                  <TableCell className="whitespace-nowrap text-sm">{fmtDate(r.date)}</TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    <div className={`text-xs font-semibold ${KIND_TONE[r.kind] ?? ""}`}>{KIND_LABEL[r.kind] ?? r.kind}</div>
+                    <div className="text-sm">
+                      {r.kind === "sale" ? <Link href={`/invoices/${r.id}`} className="underline underline-offset-2">{r.no}</Link> : r.no}
+                    </div>
+                  </TableCell>
+                  <TableCell className="min-w-[160px]">
+                    <div className="text-sm">{r.party || "—"}</div>
+                    {r.detail && <div className="text-[11px] text-muted-foreground">{r.detail}</div>}
+                  </TableCell>
+                  <TableCell className="text-right font-mono whitespace-nowrap">{rs(r.amount)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Contra ───────────────────────────────────────────────────────────
+
+interface CashAccount { id: number; name: string; type: string; currentBalance: number; isActive: boolean }
+
+// Uses the Accounts module's own transfer (POST /accounts/transfer, admin only).
+function ContraTab({ from, to, isAdmin }: { from: string; to: string; isAdmin: boolean }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const { data: rows, isLoading, error } = useDayBook(from, to);
+  const { data: accounts } = useQuery<CashAccount[]>({ queryKey: ["/api/accounts"], queryFn: () => getJson("/api/accounts"), enabled: isAdmin });
+  const [fromId, setFromId] = React.useState("");
+  const [toId, setToId] = React.useState("");
+  const [amount, setAmount] = React.useState("");
+  const [notes, setNotes] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+  const active = (accounts ?? []).filter((a) => a.isActive);
+  const source = active.find((a) => String(a.id) === fromId);
+  const short = !!source && num(amount) > source.currentBalance + 0.001;
+
+  async function save() {
+    setSaving(true);
+    try {
+      await sendJson("/api/accounts/transfer", "POST", { fromAccountId: Number(fromId), toAccountId: Number(toId), amount: num(amount), notes });
+      toast({ title: "Contra entry saved" });
+      setAmount("");
+      setNotes("");
+      qc.invalidateQueries({ predicate: (q) => String(q.queryKey[0]).startsWith("/api/books/") || q.queryKey[0] === "/api/accounts" });
+    } catch (e) {
+      toast({ title: (e as Error).message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const contra = (rows ?? []).filter((r) => r.kind === "contra");
+  return (
+    <div className="space-y-4">
+      {isAdmin && (
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <div className="font-semibold">New Contra (cash ↔ bank transfer)</div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div>
+                <Label>From account</Label>
+                <Select value={fromId} onValueChange={setFromId}>
+                  <SelectTrigger><SelectValue placeholder="Choose" /></SelectTrigger>
+                  <SelectContent>
+                    {active.map((a) => <SelectItem key={a.id} value={String(a.id)}>{a.name} ({rs(a.currentBalance)})</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>To account</Label>
+                <Select value={toId} onValueChange={setToId}>
+                  <SelectTrigger><SelectValue placeholder="Choose" /></SelectTrigger>
+                  <SelectContent>
+                    {active.filter((a) => String(a.id) !== fromId).map((a) => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Amount</Label>
+                <Input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="0" />
+              </div>
+            </div>
+            <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Note (optional), e.g. Cash deposited in bank" />
+            {short && <div className="text-xs text-destructive">{source!.name} has only {rs(source!.currentBalance)}.</div>}
+            <Button onClick={save} disabled={saving || !fromId || !toId || fromId === toId || num(amount) <= 0 || short}>
+              {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Save Contra
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+      {isLoading || error ? <Loading error={error} /> : contra.length === 0 ? (
+        <div className="py-8 text-center text-sm text-muted-foreground">No transfers between accounts in this period.</div>
+      ) : (
+        <div className="overflow-x-auto rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow><TableHead>Date</TableHead><TableHead>Transfer</TableHead><TableHead className="text-right">Amount</TableHead></TableRow>
+            </TableHeader>
+            <TableBody>
+              {contra.map((r) => (
+                <TableRow key={r.id}>
+                  <TableCell className="whitespace-nowrap text-sm">{fmtDate(r.date)}</TableCell>
+                  <TableCell className="min-w-[160px]">
+                    <div className="text-sm">{r.party}</div>
+                    {r.detail && <div className="text-[11px] text-muted-foreground">{r.detail}</div>}
+                  </TableCell>
+                  <TableCell className="text-right font-mono whitespace-nowrap">{rs(r.amount)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Debit Note (purchase return) ─────────────────────────────────────
+
+interface PurchaseBill { id: number; billNo: string; vendorBillNo: string | null; billDate: string; vendorName: string | null; grandTotal: number }
+interface ReturnableItem { purchaseItemId: number; productName: string; unit: string; taxPct: number; qty: number; amount: number; returnableQty: number; currentStock: number }
+interface DebitNote {
+  id: number; returnNo: string; date: string; billNo: string; vendorName: string | null; reason: string | null;
+  grandTotal: number; totalTax: number; status: string; createdByName: string | null;
+  items: { productName: string; qty: number; unit: string; amount: number }[];
+}
+
+function DebitNoteTab({ from, to, isAdmin }: { from: string; to: string; isAdmin: boolean }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [search, setSearch] = React.useState("");
+  const [bill, setBill] = React.useState<PurchaseBill | null>(null);
+  const [qtys, setQtys] = React.useState<Record<number, string>>({});
+  const [reason, setReason] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+
+  const { data: bills } = useQuery<PurchaseBill[]>({
+    queryKey: ["/api/purchase-returns/bills", search],
+    queryFn: () => getJson(`/api/purchase-returns/bills?search=${encodeURIComponent(search.trim())}`),
+    enabled: !bill,
+  });
+  const { data: items } = useQuery<ReturnableItem[]>({
+    queryKey: ["/api/purchase-returns/bills", bill?.id, "items"],
+    queryFn: () => getJson(`/api/purchase-returns/bills/${bill!.id}/items`),
+    enabled: !!bill,
+  });
+  const { data: notes, isLoading, error } = useQuery<DebitNote[]>({
+    queryKey: ["/api/purchase-returns", from, to],
+    queryFn: () => getJson(`/api/purchase-returns?from=${from}&to=${to}`),
+  });
+
+  const qtyOf = (it: ReturnableItem) => num(qtys[it.purchaseItemId]);
+  const total = (items ?? []).reduce((s, it) => s + (it.qty > 0 ? (it.amount / it.qty) * qtyOf(it) : 0), 0);
+  const over = (items ?? []).some((it) => qtyOf(it) > it.returnableQty + 0.0001);
+  const lowStock = (items ?? []).filter((it) => qtyOf(it) > it.currentStock + 0.0001);
+  const refresh = () => qc.invalidateQueries({
+    predicate: (q) => String(q.queryKey[0]).startsWith("/api/books/") || String(q.queryKey[0]).startsWith("/api/purchase-returns"),
+  });
+
+  async function save() {
+    // Warn, never block: stock may simply not have been entered.
+    if (lowStock.length && !window.confirm(`Stock is lower than the quantity being returned for ${lowStock.map((i) => i.productName).join(", ")} — it will go below zero. Save anyway?`)) return;
+    setSaving(true);
+    try {
+      const r = await sendJson("/api/purchase-returns", "POST", {
+        purchaseId: bill!.id, reason,
+        items: (items ?? []).filter((it) => qtyOf(it) > 0).map((it) => ({ purchaseItemId: it.purchaseItemId, qty: qtyOf(it) })),
+      });
+      toast({ title: `Debit note ${r.returnNo} saved for ${rs(r.grandTotal)}` });
+      setBill(null);
+      setQtys({});
+      setReason("");
+      refresh();
+    } catch (e) {
+      toast({ title: (e as Error).message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function cancel(n: DebitNote) {
+    if (!window.confirm(`Cancel ${n.returnNo}? The stock comes back and the supplier's dues go back up.`)) return;
+    try {
+      await sendJson(`/api/purchase-returns/${n.id}/cancel`, "POST");
+      toast({ title: `${n.returnNo} cancelled` });
+      refresh();
+    } catch (e) {
+      toast({ title: (e as Error).message, variant: "destructive" });
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <div className="font-semibold">New Debit Note — goods returned to a supplier</div>
+          {!bill ? (
+            <>
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Input className="pl-8" placeholder="Search purchase bill no. or supplier" value={search} onChange={(e) => setSearch(e.target.value)} />
+              </div>
+              <div className="max-h-64 overflow-y-auto divide-y rounded-md border">
+                {(bills ?? []).length === 0 ? (
+                  <div className="p-3 text-sm text-muted-foreground">No purchase bills found.</div>
+                ) : bills!.map((b) => (
+                  <button key={b.id} type="button" className="w-full text-left p-2.5 hover:bg-muted flex justify-between gap-2" onClick={() => setBill(b)}>
+                    <span className="min-w-0">
+                      <span className="font-medium">{b.billNo}</span>
+                      {b.vendorBillNo && <span className="text-xs text-muted-foreground"> · Supplier bill {b.vendorBillNo}</span>}
+                      <span className="block text-xs text-muted-foreground truncate">{b.vendorName ?? "—"} · {new Date(b.billDate).toLocaleDateString("en-IN")}</span>
+                    </span>
+                    <span className="font-mono text-sm whitespace-nowrap">{rs(b.grandTotal)}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                <div><b>{bill.billNo}</b> · {bill.vendorName ?? "—"}</div>
+                <Button variant="ghost" size="sm" onClick={() => { setBill(null); setQtys({}); }}>Change bill</Button>
+              </div>
+              <div className="space-y-2">
+                {(items ?? []).map((it) => (
+                  <div key={it.purchaseItemId} className="grid grid-cols-[1fr_110px] gap-2 items-center">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium truncate">{it.productName}</div>
+                      <div className="text-[11px] text-muted-foreground">
+                        Can return {it.returnableQty} {it.unit} · In stock {it.currentStock} · GST {it.taxPct}%
+                      </div>
+                    </div>
+                    <Input
+                      inputMode="decimal" placeholder="Qty" value={qtys[it.purchaseItemId] ?? ""} disabled={it.returnableQty <= 0}
+                      onChange={(e) => setQtys({ ...qtys, [it.purchaseItemId]: e.target.value.replace(/[^0-9.]/g, "") })}
+                    />
+                  </div>
+                ))}
+              </div>
+              <Textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason, e.g. damaged / wrong item" rows={2} />
+              {over && <div className="text-xs text-destructive">A quantity is more than can still be returned.</div>}
+              {lowStock.length > 0 && !over && (
+                <div className="flex gap-1.5 text-xs text-amber-700 dark:text-amber-400">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" /> Stock is lower than the quantity for {lowStock.map((i) => i.productName).join(", ")}.
+                </div>
+              )}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-sm">Debit note value <b className="font-mono">{rs(total)}</b></div>
+                <Button onClick={save} disabled={saving || total <= 0 || over}>
+                  {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Save Debit Note
+                </Button>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {isLoading || error ? <Loading error={error} /> : (notes ?? []).length === 0 ? (
+        <div className="py-8 text-center text-sm text-muted-foreground">No debit notes in this period.</div>
+      ) : (
+        <div className="space-y-2">
+          {notes!.map((n) => (
+            <Card key={n.id} className={n.status === "cancelled" ? "opacity-60" : ""}>
+              <CardContent className="p-3 sm:p-4 space-y-1.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold">{n.returnNo}</span>
+                    <span className="text-xs text-muted-foreground">{fmtDate(n.date)} · Bill {n.billNo}</span>
+                    {n.status === "cancelled" && <Badge variant="secondary">Cancelled</Badge>}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-semibold">{rs(n.grandTotal)}</span>
+                    {isAdmin && n.status === "saved" && (
+                      <Button size="sm" variant="ghost" className="text-destructive print:hidden" onClick={() => cancel(n)}>Cancel</Button>
+                    )}
+                  </div>
+                </div>
+                <div className="text-sm">{n.vendorName ?? "—"}</div>
+                <div className="text-xs text-muted-foreground">
+                  {n.items.map((i) => `${i.productName} × ${i.qty} ${i.unit}`).join(", ")}
+                  {n.reason ? ` · ${n.reason}` : ""}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Credit Note (sales return) ───────────────────────────────────────
+
+interface SalesReturnRow { id: number; returnNo: string; returnDate: string; invoiceNo: string; customerName: string | null; grandTotal: number; status: string; reason: string | null }
+
+// Credit notes are the existing Sales Returns; this tab lists them for the period.
+function CreditNoteTab({ from, to }: { from: string; to: string }) {
+  const { data, isLoading, error } = useQuery<SalesReturnRow[]>({ queryKey: ["/api/sales-returns"], queryFn: () => getJson("/api/sales-returns") });
+  const dayOf = (iso: string) => new Date(new Date(iso).getTime() + 5.5 * 3600_000).toISOString().slice(0, 10);
+  const rows = (data ?? []).filter((r) => { const d = dayOf(r.returnDate); return d >= from && d <= to; });
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-muted-foreground">A credit note is made when a customer returns goods, from the Sales Return page.</p>
+        <Link href="/sales-return"><Button size="sm"><Plus className="w-4 h-4 mr-1" /> New Credit Note</Button></Link>
+      </div>
+      {isLoading || error ? <Loading error={error} /> : rows.length === 0 ? (
+        <div className="py-8 text-center text-sm text-muted-foreground">No credit notes in this period.</div>
+      ) : (
+        <div className="overflow-x-auto rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow><TableHead>Date</TableHead><TableHead>Credit Note</TableHead><TableHead>Customer</TableHead><TableHead className="text-right">Amount</TableHead></TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((r) => (
+                <TableRow key={r.id} className={r.status === "cancelled" ? "opacity-60" : ""}>
+                  <TableCell className="whitespace-nowrap text-sm">{fmtDate(dayOf(r.returnDate))}</TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    <div className="text-sm font-medium">{r.returnNo} {r.status === "cancelled" && <Badge variant="secondary">Cancelled</Badge>}</div>
+                    <div className="text-[11px] text-muted-foreground">Inv {r.invoiceNo}</div>
+                  </TableCell>
+                  <TableCell className="min-w-[140px] text-sm">
+                    {r.customerName ?? "—"}
+                    {r.reason && <div className="text-[11px] text-muted-foreground">{r.reason}</div>}
+                  </TableCell>
+                  <TableCell className="text-right font-mono whitespace-nowrap">{rs(r.grandTotal)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Page ─────────────────────────────────────────────────────────────
 
 export default function BooksAudit() {
@@ -524,7 +921,11 @@ export default function BooksAudit() {
   if (!allowed) return <Redirect to="/" />;
   const validRange = !!from && !!to && from <= to;
   const showPeriod = tab !== "ledgers";
-  const title = { "trial-balance": "Trial Balance", "profit-loss": "Profit & Loss", "balance-sheet": "Balance Sheet", journal: "Journal", ledgers: "Ledgers" }[tab];
+  const title = {
+    "trial-balance": "Trial Balance", "profit-loss": "Profit & Loss", "balance-sheet": "Balance Sheet", "day-book": "Day Book",
+    journal: "Journal", contra: "Contra", "debit-note": "Debit Note", "credit-note": "Credit Note", ledgers: "Ledgers",
+  }[tab];
+  const isAdmin = user?.role === "admin";
 
   return (
     <div className="space-y-4">
@@ -533,7 +934,7 @@ export default function BooksAudit() {
           <BookOpenCheck className="w-6 h-6 text-primary" />
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Books &amp; Audit</h1>
-            <p className="text-xs sm:text-sm text-muted-foreground print:hidden">Trial Balance, Profit &amp; Loss, Balance Sheet and Journal vouchers.</p>
+            <p className="text-xs sm:text-sm text-muted-foreground print:hidden">Trial Balance, Profit &amp; Loss, Balance Sheet, Day Book and vouchers.</p>
             <p className="hidden print:block text-sm">{title} · {fmtDate(from)} to {fmtDate(to)}</p>
           </div>
         </div>
@@ -548,7 +949,11 @@ export default function BooksAudit() {
             <TabsTrigger value="trial-balance">Trial Balance</TabsTrigger>
             <TabsTrigger value="profit-loss">Profit &amp; Loss</TabsTrigger>
             <TabsTrigger value="balance-sheet">Balance Sheet</TabsTrigger>
+            <TabsTrigger value="day-book">Day Book</TabsTrigger>
             <TabsTrigger value="journal">Journal</TabsTrigger>
+            <TabsTrigger value="contra">Contra</TabsTrigger>
+            <TabsTrigger value="debit-note">Debit Note</TabsTrigger>
+            <TabsTrigger value="credit-note">Credit Note</TabsTrigger>
             <TabsTrigger value="ledgers">Ledgers</TabsTrigger>
           </TabsList>
         </div>
@@ -576,8 +981,12 @@ export default function BooksAudit() {
               <TabsContent value="profit-loss"><ProfitLossView from={from} to={to} /></TabsContent>
               <TabsContent value="balance-sheet"><BalanceSheetView from={from} to={to} /></TabsContent>
               <TabsContent value="journal">
-                <JournalTab from={from} to={to} ledgers={ledgerData?.ledgers ?? []} isAdmin={user?.role === "admin"} />
+                <JournalTab from={from} to={to} ledgers={ledgerData?.ledgers ?? []} isAdmin={isAdmin} />
               </TabsContent>
+              <TabsContent value="day-book"><DayBookTab from={from} to={to} /></TabsContent>
+              <TabsContent value="contra"><ContraTab from={from} to={to} isAdmin={isAdmin} /></TabsContent>
+              <TabsContent value="debit-note"><DebitNoteTab from={from} to={to} isAdmin={isAdmin} /></TabsContent>
+              <TabsContent value="credit-note"><CreditNoteTab from={from} to={to} /></TabsContent>
               <TabsContent value="ledgers">
                 {ledgerData ? <LedgersTab ledgers={ledgerData.ledgers} groups={ledgerData.groups} /> : <Loading />}
               </TabsContent>

@@ -188,3 +188,57 @@ test("another company can't post to these ledgers and store users can't open Boo
   assert.ok(!bLedgers.ledgers.some((l: any) => l.id === ids.capital));
   assert.equal((await call("storeA", "GET", `/books/trial-balance${RANGE}`)).status, 403);
 });
+
+test("a Debit Note sends stock back, lowers the supplier's dues and keeps the books balanced", async () => {
+  const bills = await ok("accountantA", "GET", "/purchase-returns/bills");
+  assert.equal(bills.length, 1);
+  const [item] = await ok("accountantA", "GET", `/purchase-returns/bills/${bills[0].id}/items`);
+  assert.equal(item.returnableQty, 10);
+
+  const tooMany = await call("accountantA", "POST", "/purchase-returns", { purchaseId: bills[0].id, items: [{ purchaseItemId: item.purchaseItemId, qty: 11 }] });
+  assert.equal(tooMany.status, 400);
+
+  const dn = await ok("accountantA", "POST", "/purchase-returns", {
+    purchaseId: bills[0].id, reason: "Damaged", items: [{ purchaseItemId: item.purchaseItemId, qty: 2 }],
+  });
+  assert.equal(dn.grandTotal, 200);
+  ids.debitNote = dn.id;
+  const stock = async () => (await pool.query(`SELECT current_stock::float8 AS s FROM products WHERE id = $1`, [ids.product])).rows[0].s;
+  const dues = async () => (await pool.query(`SELECT outstanding_balance::float8 AS b FROM entities WHERE id = $1`, [ids.vendor])).rows[0].b;
+  assert.equal(await stock(), 4);
+  assert.equal(await dues(), 300);
+
+  const tb = await ok("adminA", "GET", `/books/trial-balance${RANGE}`);
+  assert.equal(tbRow(tb, "Purchase Returns").credit, 200);
+  assert.equal(tbRow(tb, "Sundry Creditors (suppliers)").credit, 300);
+  assert.equal(tb.difference, 0);
+  const bs = await ok("adminA", "GET", `/books/balance-sheet${RANGE}`);
+  assert.equal(bsLine(bs, "assets", "Stock in hand"), 400);
+  assert.equal(bs.difference, 0);
+
+  const day = await ok("adminA", "GET", `/books/day-book${RANGE}`);
+  for (const kind of ["sale", "purchase", "receipt", "payment", "debit_note"]) {
+    assert.ok(day.some((r: any) => r.kind === kind), `day book has a ${kind}`);
+  }
+
+  // Only an admin cancels; cancelling restores stock and dues.
+  assert.equal((await call("accountantA", "POST", `/purchase-returns/${dn.id}/cancel`)).status, 403);
+  await ok("adminA", "POST", `/purchase-returns/${dn.id}/cancel`);
+  assert.equal(await stock(), 6);
+  assert.equal(await dues(), 500);
+  const [again] = await ok("accountantA", "GET", `/purchase-returns/bills/${bills[0].id}/items`);
+  assert.equal(again.returnableQty, 10);
+});
+
+test("a Contra transfer shows once in the Day Book and moves cash to bank", async () => {
+  const bank = await ok("adminA", "POST", "/accounts", { name: "Bank", type: "bank", openingBalance: 0 });
+  await ok("adminA", "POST", "/accounts/transfer", { fromAccountId: ids.account, toAccountId: bank.id, amount: 1000, notes: "Deposit" });
+  const day = await ok("accountantA", "GET", `/books/day-book${RANGE}`);
+  const contra = day.filter((r: any) => r.kind === "contra");
+  assert.equal(contra.length, 1);
+  assert.equal(contra[0].amount, 1000);
+  const tb = await ok("adminA", "GET", `/books/trial-balance${RANGE}`);
+  assert.equal(tbRow(tb, "Cash").debit, 9100);
+  assert.equal(tbRow(tb, "Bank").debit, 1000);
+  assert.equal(tb.difference, 0);
+});

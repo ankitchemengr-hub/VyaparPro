@@ -65,13 +65,15 @@ interface PeriodFigures {
   returnsTax: number;
   purchasesNet: number;
   purchasesTax: number;
+  purchaseReturnsNet: number;
+  purchaseReturnsTax: number;
   expenses: { name: string; amount: number }[];
   expensesTotal: number;
 }
 
 async function periodFigures(companyId: number, from: string, to: string): Promise<PeriodFigures> {
   const ps = [companyId, from, to];
-  const [sales, disc, ret, pur, exp] = await Promise.all([
+  const [sales, disc, ret, pur, exp, pret] = await Promise.all([
     pool.query(
       `SELECT COALESCE(SUM(grand_total - total_tax), 0) AS net, COALESCE(SUM(total_tax), 0) AS tax
        FROM invoices WHERE company_id = $1 AND status = 'saved' AND ${SALE_TYPES}
@@ -94,6 +96,10 @@ async function periodFigures(companyId: number, from: string, to: string): Promi
       `SELECT category_name AS name, COALESCE(SUM(amount), 0) AS amount FROM expenses
        WHERE company_id = $1 AND date BETWEEN $2::date AND $3::date
        GROUP BY category_name ORDER BY SUM(amount) DESC`, ps),
+    pool.query(
+      `SELECT COALESCE(SUM(grand_total - total_tax), 0) AS net, COALESCE(SUM(total_tax), 0) AS tax
+       FROM purchase_returns WHERE company_id = $1 AND status = 'saved'
+         AND ${IST("return_date")} BETWEEN $2::date AND $3::date`, ps),
   ]);
   const expenses = exp.rows.map((r: any) => ({ name: r.name, amount: n(r.amount) }));
   return {
@@ -103,6 +109,8 @@ async function periodFigures(companyId: number, from: string, to: string): Promi
     returnsTax: n(ret.rows[0].tax),
     purchasesNet: n(pur.rows[0].net),
     purchasesTax: n(pur.rows[0].tax),
+    purchaseReturnsNet: n(pret.rows[0].net),
+    purchaseReturnsTax: n(pret.rows[0].tax),
     expenses,
     expensesTotal: expenses.reduce((s, e) => s + e.amount, 0),
   };
@@ -264,7 +272,7 @@ export async function balanceSheet(companyId: number, to: string, from = fyStart
     from > BEGINNING ? profitAndLoss(companyId, BEGINNING, dayBefore(from)) : Promise.resolve(null),
     periodFigures(companyId, BEGINNING, to),
   ]);
-  const gstPayable = r2(upToTo.salesTax - upToTo.returnsTax - upToTo.purchasesTax);
+  const gstPayable = r2(upToTo.salesTax - upToTo.returnsTax - upToTo.purchasesTax + upToTo.purchaseReturnsTax);
 
   const byGroup = (g: LedgerGroup, sign: 1 | -1): Line[] =>
     ledgers.filter((l) => l.group === g && l.balance !== 0).map((l) => ({ name: l.name, amount: r2(sign * l.balance) }));
@@ -347,18 +355,19 @@ export async function trialBalance(companyId: number, to: string, from = fyStart
   add("Sundry Debtors (customers)", "Current Assets", parties.debtors - parties.customerAdvances);
   add("Sundry Creditors (suppliers)", "Current Liabilities", parties.supplierAdvances - parties.creditors);
   add("Output GST", "Duties & Taxes", -(upToTo.salesTax - upToTo.returnsTax));
-  add("Input GST", "Duties & Taxes", upToTo.purchasesTax);
+  add("Input GST", "Duties & Taxes", upToTo.purchasesTax - upToTo.purchaseReturnsTax);
 
   // Profit of earlier periods in the same (non-COGS) terms as this report.
   if (before) {
     const journalBefore = ledgersBefore.reduce((s, l) => s + (LEDGER_GROUPS[l.group].statement === "pl" ? l.balance : 0), 0);
-    const earlierProfit = before.salesNet - before.returnsNet - before.purchasesNet - before.expensesTotal - journalBefore;
+    const earlierProfit = before.salesNet - before.returnsNet - before.purchasesNet + before.purchaseReturnsNet - before.expensesTotal - journalBefore;
     add("Profit & Loss A/c (earlier years)", "Capital Account", -earlierProfit);
   }
 
   add("Sales", "Sales Accounts", -period.salesNet);
   add("Sales Returns", "Sales Accounts", period.returnsNet);
   add("Purchases", "Purchase Accounts", period.purchasesNet);
+  add("Purchase Returns", "Purchase Accounts", -period.purchaseReturnsNet);
   for (const e of period.expenses) add(e.name, "Expenses", e.amount);
   for (const l of ledgersPeriod) if (LEDGER_GROUPS[l.group].statement === "pl") add(l.name, LEDGER_GROUPS[l.group].label, l.balance);
 
@@ -387,5 +396,46 @@ export async function ledgerList(companyId: number) {
     openingBalance: n(row.opening_balance),
     isActive: row.is_active,
     balance: r2(signedOpening(row.group_code, n(row.opening_balance)) + n(row.movement)),
+  }));
+}
+
+// Day Book — every voucher in [from, to], oldest first: sales, purchases,
+// credit notes (sales returns), debit notes (purchase returns), Cash Book
+// receipts / payments, contra transfers between accounts, and Journals.
+// Transfers write an out and an in row; only the out row is listed.
+export async function dayBook(companyId: number, from: string, to: string) {
+  const r = await pool.query(
+    `SELECT * FROM (
+       SELECT ${IST("invoice_date")} AS day, created_at, 'sale' AS kind, id, invoice_no AS no, customer_name AS party, grand_total AS amount, NULL::text AS detail
+       FROM invoices WHERE company_id = $1 AND status = 'saved' AND deleted_at IS NULL AND ${SALE_TYPES}
+       UNION ALL
+       SELECT ${IST("bill_date")}, created_at, 'purchase', id, bill_no, vendor_name, grand_total, vendor_bill_no
+       FROM purchases WHERE company_id = $1 AND status = 'saved' AND deleted_at IS NULL
+       UNION ALL
+       SELECT ${IST("return_date")}, created_at, 'credit_note', id, return_no, customer_name, grand_total, 'Inv ' || invoice_no
+       FROM sales_returns WHERE company_id = $1 AND status = 'saved'
+       UNION ALL
+       SELECT ${IST("return_date")}, created_at, 'debit_note', id, return_no, vendor_name, grand_total, 'Bill ' || bill_no
+       FROM purchase_returns WHERE company_id = $1 AND status = 'saved'
+       UNION ALL
+       SELECT ${IST("t.created_at")}, t.created_at,
+              CASE WHEN t.receipt_no LIKE 'TRF-OUT-%' THEN 'contra' WHEN t.direction = 'in' THEN 'receipt' ELSE 'payment' END,
+              t.id, t.receipt_no,
+              CASE WHEN t.receipt_no LIKE 'TRF-OUT-%' THEN a.name || ' → ' || COALESCE(t.party_name, '') ELSE t.party_name END,
+              t.amount, CASE WHEN t.receipt_no LIKE 'TRF-OUT-%' THEN t.notes ELSE a.name END
+       FROM account_transactions t JOIN accounts a ON a.id = t.account_id
+       WHERE t.company_id = $1 AND COALESCE(t.receipt_no, '') NOT LIKE 'TRF-IN-%'
+       UNION ALL
+       SELECT voucher_date, created_at, 'journal', id, voucher_no, NULL, total, narration
+       FROM journal_vouchers WHERE company_id = $1 AND status = 'saved'
+     ) v
+     WHERE day BETWEEN $2::date AND $3::date
+     ORDER BY day, created_at, id
+     LIMIT 3000`,
+    [companyId, from, to],
+  );
+  return r.rows.map((row: any) => ({
+    date: row.day instanceof Date ? row.day.toISOString().slice(0, 10) : String(row.day).slice(0, 10),
+    kind: row.kind as string, id: row.id, no: row.no, party: row.party, amount: r2(n(row.amount)), detail: row.detail,
   }));
 }

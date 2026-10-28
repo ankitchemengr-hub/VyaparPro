@@ -3,7 +3,7 @@ import { pool } from "@workspace/db";
 import { getCompanyId } from "../lib/tenant";
 import { logger } from "../lib/logger";
 import {
-  LEDGER_GROUPS, isLedgerGroup, ledgerList, trialBalance, profitAndLoss, balanceSheet, todayIst, fyStart,
+  LEDGER_GROUPS, isLedgerGroup, ledgerList, trialBalance, profitAndLoss, balanceSheet, dayBook, todayIst, fyStart,
 } from "../lib/books";
 
 // Books & Audit (see lib/books.ts) — admin and accountant.
@@ -274,6 +274,18 @@ router.get("/books/balance-sheet", async (req, res): Promise<void> => {
   } catch (err) {
     logger.error({ err }, "GET /books/balance-sheet failed");
     res.status(500).json({ error: "Failed to build Balance Sheet" });
+  }
+});
+
+router.get("/books/day-book", async (req, res): Promise<void> => {
+  if (!allowed(req, res)) return;
+  const period = periodFromQuery(req);
+  if (!period) { res.status(400).json({ error: "Invalid date range" }); return; }
+  try {
+    res.json(await dayBook(getCompanyId(req), period.from, period.to));
+  } catch (err) {
+    logger.error({ err }, "GET /books/day-book failed");
+    res.status(500).json({ error: "Failed to build Day Book" });
   }
 });
 

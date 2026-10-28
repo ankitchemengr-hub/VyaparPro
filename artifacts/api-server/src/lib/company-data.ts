@@ -53,6 +53,8 @@ export const COMPANY_TABLES = [
   "expenses",
   "journal_vouchers",
   "journal_voucher_lines",
+  "purchase_returns",
+  "purchase_return_items",
   // History
   "audit_log",
 ] as const;

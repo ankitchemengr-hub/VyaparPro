@@ -658,6 +658,42 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
     )`,
     `CREATE INDEX IF NOT EXISTS journal_voucher_lines_voucher_idx ON journal_voucher_lines(voucher_id)`,
     `CREATE INDEX IF NOT EXISTS journal_voucher_lines_ledger_idx ON journal_voucher_lines(company_id, ledger_id)`,
+    // Debit Note: goods sent back to a supplier (routes/purchase-returns.ts).
+    `CREATE TABLE IF NOT EXISTS purchase_returns (
+      id                 SERIAL PRIMARY KEY,
+      company_id         INTEGER NOT NULL,
+      return_no          TEXT NOT NULL,
+      return_date        TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+      purchase_id        INTEGER,
+      bill_no            TEXT NOT NULL,
+      vendor_id          INTEGER,
+      vendor_name        TEXT,
+      reason             TEXT,
+      subtotal           NUMERIC(12, 2) NOT NULL DEFAULT 0,
+      total_tax          NUMERIC(12, 2) NOT NULL DEFAULT 0,
+      grand_total        NUMERIC(12, 2) NOT NULL DEFAULT 0,
+      status             TEXT NOT NULL DEFAULT 'saved',
+      created_by_user_id INTEGER,
+      cancelled_at       TIMESTAMP WITH TIME ZONE,
+      created_at         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+      CONSTRAINT purchase_returns_company_no_unique UNIQUE (company_id, return_no)
+    )`,
+    `CREATE INDEX IF NOT EXISTS purchase_returns_company_idx ON purchase_returns(company_id, return_date)`,
+    `CREATE INDEX IF NOT EXISTS purchase_returns_purchase_idx ON purchase_returns(purchase_id)`,
+    `CREATE TABLE IF NOT EXISTS purchase_return_items (
+      id               SERIAL PRIMARY KEY,
+      company_id       INTEGER NOT NULL,
+      return_id        INTEGER NOT NULL REFERENCES purchase_returns(id) ON DELETE CASCADE,
+      purchase_item_id INTEGER,
+      product_id       INTEGER NOT NULL,
+      product_name     TEXT NOT NULL,
+      qty              NUMERIC(12, 3) NOT NULL,
+      unit             TEXT NOT NULL,
+      rate             NUMERIC(12, 2) NOT NULL,
+      tax_pct          NUMERIC(5, 2) NOT NULL DEFAULT 0,
+      amount           NUMERIC(12, 2) NOT NULL
+    )`,
+    `CREATE INDEX IF NOT EXISTS purchase_return_items_return_idx ON purchase_return_items(return_id)`,
   ];
 
   for (const sql of patches) {
