@@ -1,5 +1,5 @@
-// Books & Audit: Trial Balance / P&L / Balance Sheet built from purchases,
-// sales and Cash Book entries, the "Difference" line going to zero once the
+// Books & Audit: Trial Balance / P&L / Balance Sheet built from GST purchase
+// bills, GST sales and Cash Book entries (non-GST bills stay out), the "Difference" line going to zero once the
 // capital is entered, and Journal vouchers. Needs TEST_DATABASE_URL.
 
 import { test, before, after } from "node:test";
@@ -85,14 +85,15 @@ before(async () => {
   ids.vendor = (await pool.query(`INSERT INTO entities (company_id, type, name, mobile) VALUES ($1, 'vendor', 'Supplier', '81') RETURNING id`, [A])).rows[0].id;
   ids.account = (await ok("adminA", "POST", "/accounts", { name: "Cash", type: "cash", openingBalance: 10000 })).id;
 
-  // Buy 10 @ 100, sell 4 @ 150 and get paid, pay the supplier 500.
+  // GST at 18%: buy 10 @ 100 (₹1,180), sell 4 @ 150 (₹708) and get paid,
+  // pay the supplier 500.
   await ok("adminA", "POST", "/purchases", {
-    billType: "non_gst", billDate: TODAY, vendorId: ids.vendor, placeOfSupply: "Maharashtra",
-    items: [{ productId: ids.product, qty: 10, unit: "QTY", rate: 100 }],
+    billType: "gst", billDate: TODAY, vendorId: ids.vendor, placeOfSupply: "Maharashtra",
+    items: [{ productId: ids.product, qty: 10, unit: "QTY", rate: 100, taxPct: 18 }],
   });
   const inv = await ok("adminA", "POST", "/invoices", {
-    invoiceType: "non_gst", invoiceDate: TODAY, customerId: ids.customer, placeOfSupply: "Maharashtra",
-    items: [{ productId: ids.product, qty: 4, unit: "QTY", rate: 150, mrp: 150 }],
+    invoiceType: "gst", invoiceDate: TODAY, customerId: ids.customer, placeOfSupply: "Maharashtra",
+    items: [{ productId: ids.product, qty: 4, unit: "QTY", rate: 150, mrp: 150, taxPct: 18 }],
   });
   await ok("adminA", "POST", "/account-transactions", {
     accountId: ids.account, direction: "in", amount: Number(inv.grandTotal), mode: "cash", partyEntityId: ids.customer, invoiceId: inv.id,
@@ -109,11 +110,13 @@ after(async () => {
 
 test("trial balance shows every ledger and the opening cash as a difference", async () => {
   const tb = await ok("adminA", "GET", `/books/trial-balance${RANGE}`);
-  assert.equal(tbRow(tb, "Cash").debit, 10100);
-  assert.equal(tbRow(tb, "Purchases").debit, 1000);
-  assert.equal(tbRow(tb, "Sales").credit, 600);
-  assert.equal(tbRow(tb, "Sundry Creditors (suppliers)").credit, 500);
-  assert.equal(tbRow(tb, "Sundry Debtors (customers)"), undefined, "customer has paid in full");
+  assert.equal(tbRow(tb, "Cash").debit, 10208);
+  assert.equal(tbRow(tb, "Purchases (GST)").debit, 1000);
+  assert.equal(tbRow(tb, "Input GST").debit, 180);
+  assert.equal(tbRow(tb, "Sales (GST)").credit, 600);
+  assert.equal(tbRow(tb, "Output GST").credit, 108);
+  assert.equal(tbRow(tb, "Sundry Creditors (suppliers)").credit, 680);
+  assert.equal(tbRow(tb, "Sundry Debtors (GST invoices)"), undefined, "customer has paid in full");
   assert.equal(tb.difference, 10000, "opening cash has no capital against it yet");
   assert.equal(tb.totals.debit, tb.totals.credit);
 });
@@ -139,12 +142,13 @@ test("entering the capital balances the Trial Balance and the Balance Sheet", as
 
   const bs = await ok("adminA", "GET", `/books/balance-sheet${RANGE}`);
   assert.equal(bsLine(bs, "assets", "Stock in hand"), 600);
-  assert.equal(bsLine(bs, "assets", "Cash"), 10100);
-  assert.equal(bsLine(bs, "liabilities", "Sundry Creditors (suppliers)"), 500);
+  assert.equal(bsLine(bs, "assets", "Cash"), 10208);
+  assert.equal(bsLine(bs, "assets", "GST input credit"), 72);
+  assert.equal(bsLine(bs, "liabilities", "Sundry Creditors (suppliers)"), 680);
   assert.equal(bsLine(bs, "liabilities", "Capital Account"), 10000);
   assert.equal(bs.profit.total, 200);
   assert.equal(bs.difference, 0);
-  assert.equal(bs.total, 10700);
+  assert.equal(bs.total, 10880);
 });
 
 test("a Journal moves both statements and must balance", async () => {
@@ -201,16 +205,17 @@ test("a Debit Note sends stock back, lowers the supplier's dues and keeps the bo
   const dn = await ok("accountantA", "POST", "/purchase-returns", {
     purchaseId: bills[0].id, reason: "Damaged", items: [{ purchaseItemId: item.purchaseItemId, qty: 2 }],
   });
-  assert.equal(dn.grandTotal, 200);
+  assert.equal(dn.grandTotal, 236);
   ids.debitNote = dn.id;
   const stock = async () => (await pool.query(`SELECT current_stock::float8 AS s FROM products WHERE id = $1`, [ids.product])).rows[0].s;
   const dues = async () => (await pool.query(`SELECT outstanding_balance::float8 AS b FROM entities WHERE id = $1`, [ids.vendor])).rows[0].b;
   assert.equal(await stock(), 4);
-  assert.equal(await dues(), 300);
+  assert.equal(await dues(), 444);
 
   const tb = await ok("adminA", "GET", `/books/trial-balance${RANGE}`);
-  assert.equal(tbRow(tb, "Purchase Returns").credit, 200);
-  assert.equal(tbRow(tb, "Sundry Creditors (suppliers)").credit, 300);
+  assert.equal(tbRow(tb, "Purchase Returns (GST)").credit, 200);
+  assert.equal(tbRow(tb, "Input GST").debit, 144);
+  assert.equal(tbRow(tb, "Sundry Creditors (suppliers)").credit, 444);
   assert.equal(tb.difference, 0);
   const bs = await ok("adminA", "GET", `/books/balance-sheet${RANGE}`);
   assert.equal(bsLine(bs, "assets", "Stock in hand"), 400);
@@ -225,7 +230,7 @@ test("a Debit Note sends stock back, lowers the supplier's dues and keeps the bo
   assert.equal((await call("accountantA", "POST", `/purchase-returns/${dn.id}/cancel`)).status, 403);
   await ok("adminA", "POST", `/purchase-returns/${dn.id}/cancel`);
   assert.equal(await stock(), 6);
-  assert.equal(await dues(), 500);
+  assert.equal(await dues(), 680);
   const [again] = await ok("accountantA", "GET", `/purchase-returns/bills/${bills[0].id}/items`);
   assert.equal(again.returnableQty, 10);
 });
@@ -238,7 +243,28 @@ test("a Contra transfer shows once in the Day Book and moves cash to bank", asyn
   assert.equal(contra.length, 1);
   assert.equal(contra[0].amount, 1000);
   const tb = await ok("adminA", "GET", `/books/trial-balance${RANGE}`);
-  assert.equal(tbRow(tb, "Cash").debit, 9100);
+  assert.equal(tbRow(tb, "Cash").debit, 9208);
   assert.equal(tbRow(tb, "Bank").debit, 1000);
   assert.equal(tb.difference, 0);
+});
+
+test("non-GST bills stay out of the books", async () => {
+  const before = await ok("adminA", "GET", `/books/trial-balance${RANGE}`);
+  const inv = await ok("adminA", "POST", "/invoices", {
+    invoiceType: "non_gst", invoiceDate: TODAY, customerId: ids.customer, placeOfSupply: "Maharashtra",
+    items: [{ productId: ids.product, qty: 1, unit: "QTY", rate: 150, mrp: 150 }],
+  });
+  await ok("adminA", "POST", "/purchases", {
+    billType: "non_gst", billDate: TODAY, vendorId: ids.vendor, placeOfSupply: "Maharashtra",
+    items: [{ productId: ids.product, qty: 1, unit: "QTY", rate: 90 }],
+  });
+  const tb = await ok("adminA", "GET", `/books/trial-balance${RANGE}`);
+  assert.equal(tbRow(tb, "Sales (GST)").credit, tbRow(before, "Sales (GST)").credit);
+  assert.equal(tbRow(tb, "Purchases (GST)").debit, tbRow(before, "Purchases (GST)").debit);
+  assert.equal(tbRow(tb, "Sundry Debtors (GST invoices)"), undefined, "the unpaid non-GST bill is not a GST debtor");
+  const pl = await ok("adminA", "GET", `/books/profit-loss${RANGE}`);
+  assert.equal(pl.sales, 600);
+  const day = await ok("adminA", "GET", `/books/day-book${RANGE}`);
+  assert.ok(!day.some((r: any) => r.kind === "sale" && r.id === inv.id), "non-GST invoice not in the Day Book");
+  assert.equal(day.filter((r: any) => r.kind === "purchase").length, 1);
 });

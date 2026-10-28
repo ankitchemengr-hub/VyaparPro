@@ -25,7 +25,7 @@ router.get("/purchase-returns/bills", async (req, res): Promise<void> => {
   const search = String(req.query.search ?? "").trim();
   try {
     const r = await pool.query(
-      `SELECT id, bill_no, vendor_bill_no, bill_date, vendor_id, vendor_name, grand_total
+      `SELECT id, bill_no, vendor_bill_no, bill_date, bill_type, vendor_id, vendor_name, grand_total
        FROM purchases
        WHERE company_id = $1 AND status = 'saved' AND deleted_at IS NULL
          AND ($2 = '' OR bill_no ILIKE '%' || $2 || '%' OR vendor_bill_no ILIKE '%' || $2 || '%' OR vendor_name ILIKE '%' || $2 || '%')
@@ -33,7 +33,7 @@ router.get("/purchase-returns/bills", async (req, res): Promise<void> => {
       [getCompanyId(req), search],
     );
     res.json(r.rows.map((b: any) => ({
-      id: b.id, billNo: b.bill_no, vendorBillNo: b.vendor_bill_no, billDate: b.bill_date,
+      id: b.id, billNo: b.bill_no, vendorBillNo: b.vendor_bill_no, billDate: b.bill_date, isGst: b.bill_type === "gst",
       vendorId: b.vendor_id, vendorName: b.vendor_name, grandTotal: Number(b.grand_total),
     })));
   } catch (err) {
@@ -80,6 +80,7 @@ router.get("/purchase-returns", async (req, res): Promise<void> => {
   try {
     const r = await pool.query(
       `SELECT pr.*, (pr.return_date AT TIME ZONE 'Asia/Kolkata')::date::text AS day, u.name AS created_by_name,
+              (SELECT p.bill_type = 'gst' FROM purchases p WHERE p.id = pr.purchase_id) AS is_gst,
               COALESCE(json_agg(json_build_object('productName', pri.product_name, 'qty', pri.qty, 'unit', pri.unit, 'amount', pri.amount) ORDER BY pri.id)
                 FILTER (WHERE pri.id IS NOT NULL), '[]') AS items
        FROM purchase_returns pr
@@ -92,7 +93,7 @@ router.get("/purchase-returns", async (req, res): Promise<void> => {
     res.json(r.rows.map((x: any) => ({
       id: x.id, returnNo: x.return_no, date: x.day, purchaseId: x.purchase_id, billNo: x.bill_no,
       vendorName: x.vendor_name, reason: x.reason, subtotal: Number(x.subtotal), totalTax: Number(x.total_tax),
-      grandTotal: Number(x.grand_total), status: x.status, createdByName: x.created_by_name,
+      grandTotal: Number(x.grand_total), status: x.status, createdByName: x.created_by_name, isGst: x.is_gst === true,
       items: x.items.map((i: any) => ({ ...i, qty: Number(i.qty), amount: Number(i.amount) })),
     })));
   } catch (err) {

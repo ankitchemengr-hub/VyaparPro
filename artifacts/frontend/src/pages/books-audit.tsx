@@ -684,11 +684,11 @@ function ContraTab({ from, to, isAdmin }: { from: string; to: string; isAdmin: b
 
 // ── Debit Note (purchase return) ─────────────────────────────────────
 
-interface PurchaseBill { id: number; billNo: string; vendorBillNo: string | null; billDate: string; vendorName: string | null; grandTotal: number }
+interface PurchaseBill { id: number; billNo: string; vendorBillNo: string | null; billDate: string; isGst: boolean; vendorName: string | null; grandTotal: number }
 interface ReturnableItem { purchaseItemId: number; productName: string; unit: string; taxPct: number; qty: number; amount: number; returnableQty: number; currentStock: number }
 interface DebitNote {
   id: number; returnNo: string; date: string; billNo: string; vendorName: string | null; reason: string | null;
-  grandTotal: number; totalTax: number; status: string; createdByName: string | null;
+  grandTotal: number; totalTax: number; status: string; createdByName: string | null; isGst: boolean;
   items: { productName: string; qty: number; unit: string; amount: number }[];
 }
 
@@ -774,6 +774,7 @@ function DebitNoteTab({ from, to, isAdmin }: { from: string; to: string; isAdmin
                   <button key={b.id} type="button" className="w-full text-left p-2.5 hover:bg-muted flex justify-between gap-2" onClick={() => setBill(b)}>
                     <span className="min-w-0">
                       <span className="font-medium">{b.billNo}</span>
+                      {!b.isGst && <Badge variant="secondary" className="ml-1.5">Non-GST</Badge>}
                       {b.vendorBillNo && <span className="text-xs text-muted-foreground"> · Supplier bill {b.vendorBillNo}</span>}
                       <span className="block text-xs text-muted-foreground truncate">{b.vendorName ?? "—"} · {new Date(b.billDate).toLocaleDateString("en-IN")}</span>
                     </span>
@@ -785,7 +786,10 @@ function DebitNoteTab({ from, to, isAdmin }: { from: string; to: string; isAdmin
           ) : (
             <>
               <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                <div><b>{bill.billNo}</b> · {bill.vendorName ?? "—"}</div>
+                <div>
+                  <b>{bill.billNo}</b> · {bill.vendorName ?? "—"}
+                  {!bill.isGst && <span className="block text-xs text-amber-700 dark:text-amber-400">Non-GST bill — stock and supplier dues change, but it stays out of these books.</span>}
+                </div>
                 <Button variant="ghost" size="sm" onClick={() => { setBill(null); setQtys({}); }}>Change bill</Button>
               </div>
               <div className="space-y-2">
@@ -833,6 +837,7 @@ function DebitNoteTab({ from, to, isAdmin }: { from: string; to: string; isAdmin
                   <div className="flex items-center gap-2">
                     <span className="font-semibold">{n.returnNo}</span>
                     <span className="text-xs text-muted-foreground">{fmtDate(n.date)} · Bill {n.billNo}</span>
+                    {!n.isGst && <Badge variant="secondary">Non-GST</Badge>}
                     {n.status === "cancelled" && <Badge variant="secondary">Cancelled</Badge>}
                   </div>
                   <div className="flex items-center gap-2">
@@ -858,13 +863,11 @@ function DebitNoteTab({ from, to, isAdmin }: { from: string; to: string; isAdmin
 
 // ── Credit Note (sales return) ───────────────────────────────────────
 
-interface SalesReturnRow { id: number; returnNo: string; returnDate: string; invoiceNo: string; customerName: string | null; grandTotal: number; status: string; reason: string | null }
-
-// Credit notes are the existing Sales Returns; this tab lists them for the period.
+// Credit notes are the existing Sales Returns; this tab lists the ones made
+// against GST invoices in the period (from the Day Book).
 function CreditNoteTab({ from, to }: { from: string; to: string }) {
-  const { data, isLoading, error } = useQuery<SalesReturnRow[]>({ queryKey: ["/api/sales-returns"], queryFn: () => getJson("/api/sales-returns") });
-  const dayOf = (iso: string) => new Date(new Date(iso).getTime() + 5.5 * 3600_000).toISOString().slice(0, 10);
-  const rows = (data ?? []).filter((r) => { const d = dayOf(r.returnDate); return d >= from && d <= to; });
+  const { data, isLoading, error } = useDayBook(from, to);
+  const rows = (data ?? []).filter((r) => r.kind === "credit_note");
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -881,17 +884,14 @@ function CreditNoteTab({ from, to }: { from: string; to: string }) {
             </TableHeader>
             <TableBody>
               {rows.map((r) => (
-                <TableRow key={r.id} className={r.status === "cancelled" ? "opacity-60" : ""}>
-                  <TableCell className="whitespace-nowrap text-sm">{fmtDate(dayOf(r.returnDate))}</TableCell>
+                <TableRow key={r.id}>
+                  <TableCell className="whitespace-nowrap text-sm">{fmtDate(r.date)}</TableCell>
                   <TableCell className="whitespace-nowrap">
-                    <div className="text-sm font-medium">{r.returnNo} {r.status === "cancelled" && <Badge variant="secondary">Cancelled</Badge>}</div>
-                    <div className="text-[11px] text-muted-foreground">Inv {r.invoiceNo}</div>
+                    <div className="text-sm font-medium">{r.no}</div>
+                    {r.detail && <div className="text-[11px] text-muted-foreground">{r.detail}</div>}
                   </TableCell>
-                  <TableCell className="min-w-[140px] text-sm">
-                    {r.customerName ?? "—"}
-                    {r.reason && <div className="text-[11px] text-muted-foreground">{r.reason}</div>}
-                  </TableCell>
-                  <TableCell className="text-right font-mono whitespace-nowrap">{rs(r.grandTotal)}</TableCell>
+                  <TableCell className="min-w-[140px] text-sm">{r.party ?? "—"}</TableCell>
+                  <TableCell className="text-right font-mono whitespace-nowrap">{rs(r.amount)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
