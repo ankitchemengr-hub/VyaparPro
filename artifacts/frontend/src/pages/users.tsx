@@ -36,7 +36,7 @@ const ROLE_LABELS: Record<Role, string> = {
   store: "Store",
   manufacturing: "Manufacturing",
   accountant: "Accountant",
-  gst_accountant: "GST Accountant / CA (read-only, GST bills only)",
+  gst_accountant: "GST Accountant / CA (read-only, GST bills and GST books only)",
   customer: "Customer (B2B portal)",
   counter: "Counter (shared retail/wholesale login)",
 };

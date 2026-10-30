@@ -1,8 +1,9 @@
 import type { Request, Response, NextFunction } from "express";
 
 // Read-only login for an outside CA / tax consultant. It sees GST invoices,
-// GST purchase bills, the payments allocated against those GST invoices, and
-// the GST reports — nothing else. This is a filtered VIEW only: no record is
+// GST purchase bills, the payments allocated against those GST invoices, the
+// GST reports, and Books & Audit (kept on GST bills only, see lib/books.ts) —
+// nothing else. This is a filtered VIEW only: no record is
 // hidden from, altered for, or removed from the admin's complete books.
 export const GST_ACCOUNTANT_ROLE = "gst_accountant";
 
@@ -27,6 +28,9 @@ const GST_ACCOUNTANT_ALLOWED_GETS: RegExp[] = [
   /^\/payment-receipts\/[^/]+$/,
   /^\/reports\/sales$/,
   /^\/reports\/tax$/,
+  // Books & Audit: statements, Day Book, Journals, ledgers, audit trail
+  // (GST entries only for this role) and the Tally export.
+  /^\/books(\/.*)?$/,
   // Needed to render/print an invoice (company letterhead, print layout).
   /^\/settings$/,
   /^\/print-settings$/,

@@ -2,16 +2,19 @@ import { Router, type IRouter } from "express";
 import { pool } from "@workspace/db";
 import { getCompanyId } from "../lib/tenant";
 import { logger } from "../lib/logger";
+import { GST_ACCOUNTANT_ROLE } from "../lib/gst-access";
 import {
   LEDGER_GROUPS, isLedgerGroup, ledgerList, trialBalance, profitAndLoss, balanceSheet, dayBook, todayIst, fyStart,
 } from "../lib/books";
 
-// Books & Audit (see lib/books.ts) — admin and accountant.
+// Books & Audit (see lib/books.ts) — admin and accountant; the GST Accountant / CA login reads.
 const router: IRouter = Router();
 
 function allowed(req: any, res: any, adminOnly = false): boolean {
   const role = req.session?.role;
   if (role === "admin" || (!adminOnly && role === "accountant")) return true;
+  // GST Accountant / CA login sees every statement (the books are GST-only) but changes nothing.
+  if (role === GST_ACCOUNTANT_ROLE && !adminOnly && req.method === "GET") return true;
   res.status(403).json({ error: "Forbidden" });
   return false;
 }

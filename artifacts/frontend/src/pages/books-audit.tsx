@@ -1,7 +1,9 @@
 // Books & Audit — Trial Balance, Profit & Loss, Balance Sheet, Journal
 // vouchers and the business's own ledgers. Figures come from /api/books/*
 // (api-server lib/books.ts); each statement shows one "Difference" line for
-// whatever the rest of the ERP records with no other side.
+// whatever the rest of the ERP records with no other side. The GST
+// Accountant / CA login sees the tabs without the forms; Tally import / export,
+// the audit trail and Tally's keys live in components/books-tally.tsx.
 
 import React from "react";
 import { Link, Redirect } from "wouter";
@@ -17,7 +19,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { BookOpenCheck, Loader2, Plus, Printer, Trash2, Info, Search, AlertTriangle } from "lucide-react";
+import { BookOpenCheck, Loader2, Plus, Printer, Trash2, Info, Search, AlertTriangle, Download } from "lucide-react";
+import { AuditTrailTab, ReadOnlyBadge, TallyKeysHint, TallyTab, downloadTallyXml, useAcceptKey, useTallyShortcuts } from "@/components/books-tally";
 
 interface Line { name: string; amount: number; note?: string }
 interface Group { group: string; lines: Line[] }
@@ -244,7 +247,7 @@ function BalanceSheetView({ from, to }: { from: string; to: string }) {
 
 interface DraftLine { ledgerId: string; side: "dr" | "cr"; amount: string }
 
-function JournalTab({ from, to, ledgers, isAdmin }: { from: string; to: string; ledgers: Ledger[]; isAdmin: boolean }) {
+function JournalTab({ from, to, ledgers, isAdmin, readOnly }: { from: string; to: string; ledgers: Ledger[]; isAdmin: boolean; readOnly: boolean }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [date, setDate] = React.useState(todayIst());
@@ -286,6 +289,8 @@ function JournalTab({ from, to, ledgers, isAdmin }: { from: string; to: string; 
     }
   }
 
+  useAcceptKey(!readOnly && balanced && !saving, save);
+
   async function cancel(v: Voucher) {
     if (!window.confirm(`Cancel ${v.voucherNo}? It stays in the list but no longer counts in any report.`)) return;
     try {
@@ -299,9 +304,9 @@ function JournalTab({ from, to, ledgers, isAdmin }: { from: string; to: string; 
 
   return (
     <div className="space-y-4">
-      <Card>
+      {!readOnly && <Card>
         <CardContent className="p-4 space-y-3">
-          <div className="font-semibold">New Journal voucher</div>
+          <div className="font-semibold">New Journal voucher <span className="text-xs font-normal text-muted-foreground hidden md:inline">· Ctrl+A to save</span></div>
           {active.length < 2 ? (
             <div className="text-sm text-muted-foreground">Add at least two ledgers in the Ledgers tab first.</div>
           ) : (
@@ -359,7 +364,7 @@ function JournalTab({ from, to, ledgers, isAdmin }: { from: string; to: string; 
             </>
           )}
         </CardContent>
-      </Card>
+      </Card>}
 
       {isLoading || error ? <Loading error={error} /> : (vouchers ?? []).length === 0 ? (
         <div className="py-8 text-center text-sm text-muted-foreground">No Journal vouchers in this period.</div>
@@ -405,7 +410,7 @@ function JournalTab({ from, to, ledgers, isAdmin }: { from: string; to: string; 
 
 // ── Ledgers ──────────────────────────────────────────────────────────
 
-function LedgersTab({ ledgers, groups }: { ledgers: Ledger[]; groups: LedgerGroupInfo[] }) {
+function LedgersTab({ ledgers, groups, readOnly }: { ledgers: Ledger[]; groups: LedgerGroupInfo[]; readOnly: boolean }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const empty = { id: 0, name: "", group: "", openingBalance: "", isActive: true };
@@ -432,7 +437,7 @@ function LedgersTab({ ledgers, groups }: { ledgers: Ledger[]; groups: LedgerGrou
 
   return (
     <div className="space-y-4">
-      <Card>
+      {!readOnly && <Card>
         <CardContent className="p-4 space-y-3">
           <div className="font-semibold">{form.id ? `Edit "${form.name}"` : "New ledger"}</div>
           <div className="grid gap-3 sm:grid-cols-3">
@@ -474,7 +479,7 @@ function LedgersTab({ ledgers, groups }: { ledgers: Ledger[]; groups: LedgerGrou
             what the ERP doesn't record elsewhere: capital, loans, fixed assets, depreciation, interest and similar.
           </p>
         </CardContent>
-      </Card>
+      </Card>}
 
       <div className="overflow-x-auto rounded-md border">
         <Table>
@@ -488,8 +493,8 @@ function LedgersTab({ ledgers, groups }: { ledgers: Ledger[]; groups: LedgerGrou
           <TableBody>
             {ledgers.map((l) => (
               <TableRow
-                key={l.id} className="cursor-pointer"
-                onClick={() => setForm({ id: l.id, name: l.name, group: l.group, openingBalance: l.openingBalance ? String(l.openingBalance) : "", isActive: l.isActive })}
+                key={l.id} className={readOnly ? "" : "cursor-pointer"}
+                onClick={() => !readOnly && setForm({ id: l.id, name: l.name, group: l.group, openingBalance: l.openingBalance ? String(l.openingBalance) : "", isActive: l.isActive })}
               >
                 <TableCell className="font-medium min-w-[140px]">
                   {l.name} {!l.isActive && <Badge variant="secondary" className="ml-1">Inactive</Badge>}
@@ -910,7 +915,32 @@ export default function BooksAudit() {
   const [to, setTo] = React.useState(today);
   const [from, setFrom] = React.useState(fyStart(today));
   const [tab, setTab] = React.useState("trial-balance");
-  const allowed = user?.role === "admin" || user?.role === "accountant";
+  const allowed = user?.role === "admin" || user?.role === "accountant" || user?.role === "gst_accountant";
+  const readOnly = user?.role === "gst_accountant";
+  const { toast } = useToast();
+  const fromRef = React.useRef<HTMLInputElement>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [exporting, setExporting] = React.useState(false);
+  async function exportTally() {
+    setExporting(true);
+    try {
+      await downloadTallyXml(from, to);
+    } catch (e) {
+      toast({ title: (e as Error).message, variant: "destructive" });
+    } finally {
+      setExporting(false);
+    }
+  }
+  useTallyShortcuts({
+    readOnly,
+    canBill: user?.role === "admin",
+    setTab,
+    onAction: (a) => {
+      if (a === "period") { if (tab === "ledgers") setTab("trial-balance"); setTimeout(() => fromRef.current?.focus(), 50); }
+      else if (a === "export") void exportTally();
+      else { setTab("tally"); setTimeout(() => fileInputRef.current?.click(), 50); }
+    },
+  });
 
   const { data: ledgerData } = useQuery<{ groups: LedgerGroupInfo[]; ledgers: Ledger[] }>({
     queryKey: ["/api/books/ledgers"],
@@ -924,6 +954,7 @@ export default function BooksAudit() {
   const title = {
     "trial-balance": "Trial Balance", "profit-loss": "Profit & Loss", "balance-sheet": "Balance Sheet", "day-book": "Day Book",
     journal: "Journal", contra: "Contra", "debit-note": "Debit Note", "credit-note": "Credit Note", ledgers: "Ledgers",
+    "audit-trail": "Audit Trail", tally: "Tally Import / Export",
   }[tab];
   const isAdmin = user?.role === "admin";
 
@@ -933,15 +964,21 @@ export default function BooksAudit() {
         <div className="flex items-center gap-2">
           <BookOpenCheck className="w-6 h-6 text-primary" />
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Books &amp; Audit</h1>
-            <p className="text-xs sm:text-sm text-muted-foreground print:hidden">Trial Balance, Profit &amp; Loss, Balance Sheet, Day Book and vouchers.</p>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight flex items-center gap-2">Books &amp; Audit {readOnly && <ReadOnlyBadge />}</h1>
+            <p className="text-xs sm:text-sm text-muted-foreground print:hidden">Trial Balance, Profit &amp; Loss, Balance Sheet, Day Book, vouchers, audit trail and Tally.</p>
             <p className="hidden print:block text-sm">{title} · {fmtDate(from)} to {fmtDate(to)}</p>
           </div>
         </div>
-        <Button variant="outline" size="sm" className="print:hidden" onClick={() => window.print()}>
-          <Printer className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline">Print</span>
-        </Button>
+        <div className="flex gap-2 print:hidden">
+          <Button variant="outline" size="sm" onClick={exportTally} disabled={exporting} title="Export to Tally XML (Alt+E)">
+            {exporting ? <Loader2 className="w-4 h-4 sm:mr-1 animate-spin" /> : <Download className="w-4 h-4 sm:mr-1" />}<span className="hidden sm:inline">Tally XML</span>
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => window.print()}>
+            <Printer className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline">Print</span>
+          </Button>
+        </div>
       </div>
+      <TallyKeysHint readOnly={readOnly} />
 
       <Tabs value={tab} onValueChange={setTab}>
         <div className="overflow-x-auto -mx-1 px-1 print:hidden">
@@ -952,9 +989,11 @@ export default function BooksAudit() {
             <TabsTrigger value="day-book">Day Book</TabsTrigger>
             <TabsTrigger value="journal">Journal</TabsTrigger>
             <TabsTrigger value="contra">Contra</TabsTrigger>
-            <TabsTrigger value="debit-note">Debit Note</TabsTrigger>
-            <TabsTrigger value="credit-note">Credit Note</TabsTrigger>
+            {!readOnly && <TabsTrigger value="debit-note">Debit Note</TabsTrigger>}
+            {!readOnly && <TabsTrigger value="credit-note">Credit Note</TabsTrigger>}
             <TabsTrigger value="ledgers">Ledgers</TabsTrigger>
+            <TabsTrigger value="audit-trail">Audit Trail</TabsTrigger>
+            <TabsTrigger value="tally">Tally</TabsTrigger>
           </TabsList>
         </div>
 
@@ -962,7 +1001,7 @@ export default function BooksAudit() {
           <div className="flex flex-wrap items-end gap-2 mt-3 print:hidden">
             <div>
               <Label className="text-xs">From</Label>
-              <Input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} className="w-[160px]" />
+              <Input ref={fromRef} type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} className="w-[160px]" />
             </div>
             <div>
               <Label className="text-xs">To</Label>
@@ -981,14 +1020,21 @@ export default function BooksAudit() {
               <TabsContent value="profit-loss"><ProfitLossView from={from} to={to} /></TabsContent>
               <TabsContent value="balance-sheet"><BalanceSheetView from={from} to={to} /></TabsContent>
               <TabsContent value="journal">
-                <JournalTab from={from} to={to} ledgers={ledgerData?.ledgers ?? []} isAdmin={isAdmin} />
+                <JournalTab from={from} to={to} ledgers={ledgerData?.ledgers ?? []} isAdmin={isAdmin} readOnly={readOnly} />
               </TabsContent>
               <TabsContent value="day-book"><DayBookTab from={from} to={to} /></TabsContent>
               <TabsContent value="contra"><ContraTab from={from} to={to} isAdmin={isAdmin} /></TabsContent>
-              <TabsContent value="debit-note"><DebitNoteTab from={from} to={to} isAdmin={isAdmin} /></TabsContent>
-              <TabsContent value="credit-note"><CreditNoteTab from={from} to={to} /></TabsContent>
+              {!readOnly && <TabsContent value="debit-note"><DebitNoteTab from={from} to={to} isAdmin={isAdmin} /></TabsContent>}
+              {!readOnly && <TabsContent value="credit-note"><CreditNoteTab from={from} to={to} /></TabsContent>}
+              <TabsContent value="audit-trail"><AuditTrailTab from={from} to={to} /></TabsContent>
+              <TabsContent value="tally">
+                <TallyTab
+                  from={from} to={to} readOnly={readOnly} fileInputRef={fileInputRef}
+                  groupLabel={(code) => ledgerData?.groups.find((g) => g.code === code)?.label ?? code}
+                />
+              </TabsContent>
               <TabsContent value="ledgers">
-                {ledgerData ? <LedgersTab ledgers={ledgerData.ledgers} groups={ledgerData.groups} /> : <Loading />}
+                {ledgerData ? <LedgersTab ledgers={ledgerData.ledgers} groups={ledgerData.groups} readOnly={readOnly} /> : <Loading />}
               </TabsContent>
             </>
           )}

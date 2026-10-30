@@ -96,7 +96,7 @@ export const moduleNavItems: NavItem[] = [
   { name: "Workers", href: "/workers", icon: HardHat, roles: ["admin", "accountant"], description: "Worker attendance" },
   { name: "Expenses", href: "/expenses", icon: Receipt, roles: ["admin", "accountant"], description: "Business expenses" },
   { name: "Reports", href: "/reports", icon: BarChart3, roles: ["admin", "accountant", "gst_accountant"], description: "Sales, tax, P&L reports" },
-  { name: "Books & Audit", href: "/books-audit", icon: BookOpenCheck, roles: ["admin", "accountant"], description: "Trial Balance, Profit & Loss, Balance Sheet and Journal vouchers" },
+  { name: "Books & Audit", href: "/books-audit", icon: BookOpenCheck, roles: ["admin", "accountant", "gst_accountant"], description: "GST books: Trial Balance, P&L, Balance Sheet, Day Book, audit trail and Tally import / export" },
   { name: "Subscriptions", href: "/subscriptions", icon: BadgeIndianRupee, roles: ["super_admin"], description: "Tenant subscriptions" },
   { name: "Price List", href: "/price-list", icon: Tag, roles: ["admin"], description: "Edit product pricing in bulk" },
   { name: "User Accounts", href: "/users", icon: KeyRound, roles: ["admin"], description: "Manage logins" },

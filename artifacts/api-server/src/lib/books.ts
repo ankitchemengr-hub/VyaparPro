@@ -13,6 +13,7 @@
 // Amounts are signed: positive = Debit, negative = Credit. Dates are IST
 // calendar days ("YYYY-MM-DD").
 import { pool } from "@workspace/db";
+import { gstCash } from "./gst-books";
 
 export const LEDGER_GROUPS = {
   capital: { label: "Capital Account", nature: "cr", statement: "bs" },
@@ -39,8 +40,9 @@ const BEGINNING = "1900-01-01";
 const IST = (col: string) => `(${col} AT TIME ZONE 'Asia/Kolkata')::date`;
 // The books are kept on GST bills only: GST sale invoices and GST purchase
 // bills, and the returns made against them. Non-GST bills (and the discount
-// expenses booked for them) stay out. Cash / bank, supplier dues, other
-// expenses and stock are the real figures — they can't be split by bill.
+// expenses booked for them) stay out. Cash / bank, supplier dues and stock
+// are built from the GST side only too (lib/gst-books.ts); expenses count in
+// full.
 const GST_SALE = `invoice_type = 'gst'`;
 const GST_PURCHASE = `bill_type = 'gst'`;
 // Expenses, minus the bill-discount expenses of non-GST invoices.
@@ -178,19 +180,10 @@ async function bookLedgerBalances(companyId: number, from: string, to: string): 
     });
 }
 
-// Cash Book accounts as on `to`: today's balance minus everything after it.
+// Cash Book accounts as on `to`, from their GST share only (lib/gst-books.ts):
+// opening + GST receipts − GST supplier payments − expenses ± contra.
 async function cashBalances(companyId: number, to: string) {
-  const r = await pool.query(
-    `SELECT a.id, a.name, a.type,
-            a.current_balance - COALESCE((
-              SELECT SUM(CASE WHEN t.direction = 'in' THEN t.amount ELSE -t.amount END)
-              FROM account_transactions t
-              WHERE t.company_id = a.company_id AND t.account_id = a.id AND ${IST("t.created_at")} > $2::date
-            ), 0) AS balance
-     FROM accounts a WHERE a.company_id = $1 ORDER BY a.name`,
-    [companyId, to],
-  );
-  return r.rows.map((row: any) => ({ id: row.id, name: row.name, type: row.type, balance: r2(n(row.balance)) }));
+  return (await gstCash(companyId, to)).accounts.map((a) => ({ id: a.id, name: a.name, type: a.type, balance: a.balance }));
 }
 
 // Customer / supplier balances as on `to`.
@@ -199,10 +192,9 @@ async function cashBalances(companyId: number, to: string) {
 // balance due, plus whatever was set against it (payments, returns) after
 // `to`. A customer's running balance mixes in non-GST bills, so it isn't used.
 //
-// Suppliers: the real balance (payments to a supplier aren't tied to a bill,
-// so GST and non-GST dues can't be told apart), split by sign — a supplier in
-// debit is an advance paid. Party ledgers keep debit − credit = change in
-// outstanding.
+// Suppliers: still due on GST purchase bills, with payments set against the
+// supplier's oldest bills first (lib/gst-books.ts). An advance isn't
+// attributable to a GST bill until one arrives.
 async function partyBalances(companyId: number, to: string) {
   const [cust, vend] = await Promise.all([
     pool.query(
@@ -214,37 +206,22 @@ async function partyBalances(companyId: number, to: string) {
        WHERE i.company_id = $1 AND i.status = 'saved' AND i.${GST_SALE} AND ${IST("i.invoice_date")} <= $2::date`,
       [companyId, to],
     ),
-    pool.query(
-      `SELECT COALESCE(SUM(GREATEST(b.bal, 0)), 0) AS positive,
-              COALESCE(SUM(LEAST(b.bal, 0)), 0) AS negative
-       FROM entities e
-       CROSS JOIN LATERAL (
-         SELECT e.outstanding_balance - COALESCE((
-           SELECT SUM(le.debit - le.credit) FROM ledger_entries le
-           WHERE le.company_id = e.company_id AND le.entity_id = e.id AND ${IST("le.date")} > $2::date
-         ), 0) AS bal
-       ) b
-       WHERE e.company_id = $1 AND e.type = 'vendor'`,
-      [companyId, to],
-    ),
+    gstCash(companyId, to),
   ]);
-  const v = vend.rows[0] ?? { positive: 0, negative: 0 };
   return {
     debtors: r2(n(cust.rows[0]?.due)),      // customers owe us on GST invoices
     customerAdvances: 0,                    // not attributable to GST bills
-    creditors: r2(n(v.positive)),           // we owe suppliers
-    supplierAdvances: r2(-n(v.negative)),   // suppliers owe us
+    creditors: r2([...vend.vendorDue.values()].reduce((a, b) => a + b, 0)),   // we owe suppliers on GST bills
+    supplierAdvances: 0,                    // not attributable to GST bills
   };
 }
 
-// Stock is valued at today's quantity × purchase price — the ERP keeps no
-// stock history to value it on a past date.
-async function stockValue(companyId: number): Promise<number> {
-  const r = await pool.query(
-    `SELECT COALESCE(SUM(GREATEST(current_stock, 0) * purchase_price), 0) AS value FROM products WHERE company_id = $1`,
-    [companyId],
-  );
-  return r2(n(r.rows[0].value));
+// Stock as on `to` from GST bills only: GST purchases less debit notes, less
+// the cost of what was sold on GST bills. (Today's quantity would include
+// stock bought on non-GST bills.)
+async function stockValue(companyId: number, to: string): Promise<number> {
+  const [p, cogs] = await Promise.all([periodFigures(companyId, BEGINNING, to), costOfGoodsSold(companyId, BEGINNING, to)]);
+  return r2(p.purchasesNet - p.purchaseReturnsNet - cogs);
 }
 
 // ── Statements ────────────────────────────────────────────────────────
@@ -289,7 +266,7 @@ export async function balanceSheet(companyId: number, to: string, from = fyStart
   const [cash, parties, stock, ledgers, current, earlier, upToTo] = await Promise.all([
     cashBalances(companyId, to),
     partyBalances(companyId, to),
-    stockValue(companyId),
+    stockValue(companyId, to),
     bookLedgerBalances(companyId, BEGINNING, to),
     profitAndLoss(companyId, from, to),
     from > BEGINNING ? profitAndLoss(companyId, BEGINNING, dayBefore(from)) : Promise.resolve(null),
@@ -322,7 +299,7 @@ export async function balanceSheet(companyId: number, to: string, from = fyStart
     {
       group: "Current Assets",
       lines: [
-        { name: "Stock in hand", amount: stock, note: "Today's stock × purchase price" },
+        { name: "Stock in hand", amount: stock, note: "GST purchases − cost of GST sales" },
         { name: "Sundry Debtors (GST invoices)", amount: parties.debtors },
         { name: "Advance to suppliers", amount: parties.supplierAdvances },
         ...(gstPayable < 0 ? [{ name: "GST input credit", amount: -gstPayable }] : []),
@@ -459,8 +436,15 @@ export async function dayBook(companyId: number, from: string, to: string) {
      LIMIT 3000`,
     [companyId, from, to],
   );
-  return r.rows.map((row: any) => ({
-    date: row.day instanceof Date ? row.day.toISOString().slice(0, 10) : String(row.day).slice(0, 10),
-    kind: row.kind as string, id: row.id, no: row.no, party: row.party, amount: r2(n(row.amount)), detail: row.detail,
-  }));
+  // Receipts / payments show only their GST share (lib/gst-books.ts); an
+  // entry with none is left out.
+  const { share } = await gstCash(companyId, to);
+  const cashKinds = new Set(["receipt", "payment", "contra"]);
+  return r.rows
+    .map((row: any) => ({
+      date: row.day instanceof Date ? row.day.toISOString().slice(0, 10) : String(row.day).slice(0, 10),
+      kind: row.kind as string, id: row.id, no: row.no, party: row.party,
+      amount: cashKinds.has(row.kind) ? share.get(row.id) ?? 0 : r2(n(row.amount)), detail: row.detail,
+    }))
+    .filter((row: any) => !cashKinds.has(row.kind) || row.amount > 0);
 }

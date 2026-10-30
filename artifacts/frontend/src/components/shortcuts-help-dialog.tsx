@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/dialog";
 import { SHORTCUTS, type ShortcutGroup } from "@/lib/keyboard/shortcuts";
 
-const GROUP_ORDER: ShortcutGroup[] = ["Global", "Navigation", "Billing"];
+const GROUP_ORDER: ShortcutGroup[] = ["Global", "Navigation", "Billing", "Books (Tally keys)"];
 
 export function ShortcutsHelpDialog({
   open,
@@ -18,7 +18,7 @@ export function ShortcutsHelpDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Keyboard shortcuts</DialogTitle>
           <DialogDescription>Press <kbd className="rounded border px-1 font-mono text-[11px]">?</kbd> any time to reopen this.</DialogDescription>
