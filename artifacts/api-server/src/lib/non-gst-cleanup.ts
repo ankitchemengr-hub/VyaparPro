@@ -19,9 +19,17 @@ import { logger } from "./logger";
 // still open — an unpaid balance, a payment not yet collected, a sales
 // return, an E-Way Bill, a GST amount, or a legal hold.
 //
-// Permanent removal of rows is deliberately not offered: books of account
-// must be kept for 8 financial years (Companies Act s.128, CGST s.36 /
-// Rule 56), and dropping rows would lower historical report totals.
+// "Permanent delete" (permanent: true) goes further, on the admin's explicit
+// choice: the bill row and everything that only describes the bill — line
+// items, its party-ledger lines, payment allocations, the auto "Discount"
+// expense, purchase attachments — are removed, so the bill drops out of every
+// report total (P&L, registers, dashboard). What really happened stays real:
+// stock_movements and current stock, Cash Book (account_transactions),
+// payments, party balances (entities.outstanding_balance) and salesman
+// commission are kept. The same eligibility rules apply, and bills hidden by
+// an earlier normal delete are picked up too. Statutory retention (Companies
+// Act s.128, CGST s.36 / Rule 56 — 8 years) is the admin's call; the screen
+// says so before they confirm.
 
 export type CleanupCategory = "sales" | "purchase";
 export const CLEANUP_CATEGORIES: CleanupCategory[] = ["sales", "purchase"];
@@ -120,18 +128,24 @@ function reasonSql(category: CleanupCategory): string {
   return `CASE
     WHEN b.legal_hold THEN 'Under legal hold'
     WHEN b.total_tax > 0 OR b.cgst > 0 OR b.sgst > 0 OR b.igst > 0 THEN 'Shows a GST amount (possible input credit) — check the bill type'
+    WHEN EXISTS (
+      SELECT 1 FROM purchase_returns pr
+       WHERE pr.company_id = b.company_id AND pr.purchase_id = b.id AND pr.status <> 'cancelled'
+    ) THEN 'Has a debit note (purchase return)'
     ELSE NULL END`;
 }
 
 // Every live Non-GST bill of this company in the range, each marked eligible
 // or not. `lock` row-locks them for the duration of the caller's transaction
 // so nothing can be paid/edited/returned between the check and the delete.
+// `includeHidden` also lists bills an earlier normal delete already hid — a
+// permanent delete removes those too.
 export async function classifyBills(
   db: Queryable,
   companyId: number,
   category: CleanupCategory,
   range: DateRange,
-  opts: { lock?: boolean } = {},
+  opts: { lock?: boolean; includeHidden?: boolean } = {},
 ): Promise<CleanupCandidate[]> {
   const t = TABLES[category];
   const { rows } = await db.query(
@@ -142,7 +156,7 @@ export async function classifyBills(
       WHERE b.company_id = $1
         AND b.${t.typeCol} = 'non_gst'
         AND b.status = 'saved'
-        AND b.deleted_at IS NULL
+        ${opts.includeHidden ? "" : "AND b.deleted_at IS NULL"}
         AND ($2::date IS NULL OR b.${t.dateCol} >= $2::date)
         AND b.${t.dateCol} < ($3::date + INTERVAL '1 day')
       ORDER BY b.${t.dateCol} ASC, b.id ASC
@@ -189,13 +203,14 @@ async function countLinkedRecords(db: Queryable, companyId: number, category: Cl
 
 const PREVIEW_ROW_LIMIT = 500;
 
-export async function previewCleanup(companyId: number, category: CleanupCategory, range: DateRange) {
-  const all = await classifyBills(pool, companyId, category, range);
+export async function previewCleanup(companyId: number, category: CleanupCategory, range: DateRange, permanent = false) {
+  const all = await classifyBills(pool, companyId, category, range, { includeHidden: permanent });
   const eligible = all.filter((c) => c.reason === null);
   const excluded = all.filter((c) => c.reason !== null);
   const linkedRecords = await countLinkedRecords(pool, companyId, category, eligible.map((c) => c.id));
   return {
     category,
+    permanent,
     dateFrom: range.from,
     dateTo: range.to,
     eligibleCount: eligible.length,
@@ -244,6 +259,8 @@ export interface RunDeleteParams {
   // Same key → same job; a double-click or a retried request never runs twice.
   idempotencyKey: string;
   operator: Operator;
+  // true = remove the rows for good (see the header comment); default hides.
+  permanent?: boolean;
   // Test seam: called after each batch inside the transaction.
   afterBatch?: (batchNo: number) => Promise<void>;
 }
@@ -253,12 +270,14 @@ export interface RunDeleteParams {
 // written) or, on any failure, none are and the job is marked failed.
 export async function runDelete(p: RunDeleteParams) {
   const t = TABLES[p.category];
+  const permanent = p.permanent === true;
   const created = await pool.query(
     `INSERT INTO non_gst_cleanup_jobs (company_id, category, trigger, action, date_from, date_to, status, idempotency_key, operator_user_id, operator_name)
-     VALUES ($1, $2, $3, 'delete', $4, $5, 'running', $6, $7, $8)
+     VALUES ($1, $2, $3, $9, $4, $5, 'running', $6, $7, $8)
      ON CONFLICT (company_id, idempotency_key) DO NOTHING
      RETURNING id`,
-    [p.companyId, p.category, p.trigger, p.range.from, p.range.to, p.idempotencyKey, p.operator.userId, p.operator.name],
+    [p.companyId, p.category, p.trigger, p.range.from, p.range.to, p.idempotencyKey, p.operator.userId, p.operator.name,
+      permanent ? "permanent_delete" : "delete"],
   );
   if (created.rowCount === 0) {
     const existing = await pool.query(
@@ -277,21 +296,25 @@ export async function runDelete(p: RunDeleteParams) {
 
     // Re-check every rule on locked rows — the preview the admin saw may be
     // minutes old, and a scheduled run has no preview at all.
-    const all = await classifyBills(client, p.companyId, p.category, p.range, { lock: true });
+    const all = await classifyBills(client, p.companyId, p.category, p.range, { lock: true, includeHidden: permanent });
     const eligible = all.filter((c) => c.reason === null);
     const excluded = all.filter((c) => c.reason !== null);
 
     let deleted = 0;
     for (let i = 0; i < eligible.length; i += BATCH_SIZE) {
       const ids = eligible.slice(i, i + BATCH_SIZE).map((c) => c.id);
-      const res = await client.query(
-        `UPDATE ${t.table}
-            SET deleted_at = NOW(), deleted_by_user_id = $3, delete_job_id = $4
-          WHERE company_id = $1 AND id = ANY($2::int[]) AND deleted_at IS NULL
-            AND ${t.typeCol} = 'non_gst' AND status = 'saved'`,
-        [p.companyId, ids, p.operator.userId, jobId],
-      );
-      deleted += res.rowCount ?? 0;
+      if (permanent) {
+        deleted += await purgeBills(client, p.companyId, p.category, ids);
+      } else {
+        const res = await client.query(
+          `UPDATE ${t.table}
+              SET deleted_at = NOW(), deleted_by_user_id = $3, delete_job_id = $4
+            WHERE company_id = $1 AND id = ANY($2::int[]) AND deleted_at IS NULL
+              AND ${t.typeCol} = 'non_gst' AND status = 'saved'`,
+          [p.companyId, ids, p.operator.userId, jobId],
+        );
+        deleted += res.rowCount ?? 0;
+      }
       if (p.afterBatch) await p.afterBatch(i / BATCH_SIZE);
     }
     if (deleted !== eligible.length) {
@@ -307,12 +330,14 @@ export async function runDelete(p: RunDeleteParams) {
        VALUES ($1, $2, $3, $4, $5, $6)`,
       [
         p.companyId,
-        `non_gst_${p.category}_deleted`,
-        `${t.label} cleanup (${p.trigger}): ${deleted} bill(s) worth ₹${totalValue.toFixed(2)} deleted, ${excluded.length} left alone — ${p.range.from ?? "start"} to ${p.range.to}. Report totals, stock and ledgers unchanged.`,
+        permanent ? `non_gst_${p.category}_permanently_deleted` : `non_gst_${p.category}_deleted`,
+        permanent
+          ? `${t.label} permanent delete (${p.trigger}): ${deleted} bill(s) worth ₹${totalValue.toFixed(2)} removed from every report, ${excluded.length} left alone — ${p.range.from ?? "start"} to ${p.range.to}. Stock, Cash Book and party balances unchanged.`
+          : `${t.label} cleanup (${p.trigger}): ${deleted} bill(s) worth ₹${totalValue.toFixed(2)} deleted, ${excluded.length} left alone — ${p.range.from ?? "start"} to ${p.range.to}. Report totals, stock and ledgers unchanged.`,
         p.operator.userId,
         p.operator.name,
         JSON.stringify({
-          jobId, category: p.category, trigger: p.trigger, dateFrom: p.range.from, dateTo: p.range.to,
+          jobId, category: p.category, trigger: p.trigger, permanent, dateFrom: p.range.from, dateTo: p.range.to,
           deletedCount: deleted, excludedCount: excluded.length, totalValue,
         }),
       ],
@@ -350,6 +375,34 @@ export async function runDelete(p: RunDeleteParams) {
   } finally {
     client.release();
   }
+}
+
+// Removes the given (already verified, row-locked) bills and the rows that
+// only describe them. Stock movements, Cash Book, payments, party balances and
+// commission are deliberately kept. Returns how many bills were removed.
+async function purgeBills(db: Queryable, companyId: number, category: CleanupCategory, ids: number[]): Promise<number> {
+  if (category === "sales") {
+    // account_transactions.invoice_id has a real FK; the rest are loose refs.
+    await db.query(`UPDATE account_transactions SET invoice_id = NULL WHERE company_id = $1 AND invoice_id = ANY($2::int[])`, [companyId, ids]);
+    await db.query(`UPDATE payments SET invoice_id = NULL WHERE company_id = $1 AND invoice_id = ANY($2::int[])`, [companyId, ids]);
+    await db.query(`DELETE FROM payment_allocations WHERE company_id = $1 AND invoice_id = ANY($2::int[])`, [companyId, ids]);
+    await db.query(`DELETE FROM expenses WHERE company_id = $1 AND invoice_id = ANY($2::int[])`, [companyId, ids]);
+    await db.query(`DELETE FROM ledger_entries WHERE company_id = $1 AND type LIKE 'invoice%' AND reference_id = ANY($2::int[])`, [companyId, ids]);
+    // invoice_items and dispatches cascade.
+    const res = await db.query(
+      `DELETE FROM invoices WHERE company_id = $1 AND id = ANY($2::int[]) AND invoice_type = 'non_gst' AND status = 'saved'`,
+      [companyId, ids],
+    );
+    return res.rowCount ?? 0;
+  }
+  await db.query(`DELETE FROM purchase_attachments WHERE company_id = $1 AND purchase_id = ANY($2::int[])`, [companyId, ids]);
+  await db.query(`DELETE FROM ledger_entries WHERE company_id = $1 AND type = 'purchase' AND reference_id = ANY($2::int[])`, [companyId, ids]);
+  // purchase_items cascade.
+  const res = await db.query(
+    `DELETE FROM purchases WHERE company_id = $1 AND id = ANY($2::int[]) AND bill_type = 'non_gst' AND status = 'saved'`,
+    [companyId, ids],
+  );
+  return res.rowCount ?? 0;
 }
 
 export async function setLegalHold(companyId: number, category: CleanupCategory, ids: number[], hold: boolean, operator: Operator) {

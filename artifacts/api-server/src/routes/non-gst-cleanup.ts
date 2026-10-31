@@ -95,14 +95,16 @@ router.get(`${BASE}/preview`, requireCompanyAdmin, async (req, res): Promise<voi
     res.status(400).json({ error: range });
     return;
   }
-  res.json(await previewCleanup(getCompanyId(req), categoryOf(req), range));
+  res.json(await previewCleanup(getCompanyId(req), categoryOf(req), range, req.query.mode === "permanent"));
 });
 
 // POST body: { from, to, idempotencyKey, confirm: "DELETE" }
+// or, to remove the bills for good: { ..., permanent: true, confirm: "PERMANENT" }
 router.post(`${BASE}/delete`, requireCompanyAdmin, async (req, res): Promise<void> => {
   const { from, to, idempotencyKey, confirm } = req.body ?? {};
-  if (confirm !== "DELETE") {
-    res.status(400).json({ error: "Confirmation missing — type DELETE to confirm" });
+  const permanent = req.body?.permanent === true;
+  if (confirm !== (permanent ? "PERMANENT" : "DELETE")) {
+    res.status(400).json({ error: `Confirmation missing — type ${permanent ? "PERMANENT" : "DELETE"} to confirm` });
     return;
   }
   if (typeof idempotencyKey !== "string" || idempotencyKey.length < 8 || idempotencyKey.length > 100) {
@@ -122,6 +124,7 @@ router.post(`${BASE}/delete`, requireCompanyAdmin, async (req, res): Promise<voi
       trigger: "manual",
       idempotencyKey: `manual:${idempotencyKey}`,
       operator: operatorOf(req),
+      permanent,
     });
     res.status(result.job?.status === "failed" ? 500 : 200).json(result);
   } catch (err) {
