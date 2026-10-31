@@ -21,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BookOpenCheck, Loader2, Plus, Printer, Trash2, Info, Search, AlertTriangle, Download } from "lucide-react";
 import { AuditTrailTab, ReadOnlyBadge, TallyKeysHint, TallyTab, downloadTallyXml, useAcceptKey, useTallyShortcuts } from "@/components/books-tally";
+import { GstReturnsTab } from "@/components/gst-returns";
 
 interface Line { name: string; amount: number; note?: string }
 interface Group { group: string; lines: Line[] }
@@ -950,11 +951,11 @@ export default function BooksAudit() {
 
   if (!allowed) return <Redirect to="/" />;
   const validRange = !!from && !!to && from <= to;
-  const showPeriod = tab !== "ledgers";
+  const showPeriod = tab !== "ledgers" && tab !== "gst-returns";
   const title = {
     "trial-balance": "Trial Balance", "profit-loss": "Profit & Loss", "balance-sheet": "Balance Sheet", "day-book": "Day Book",
     journal: "Journal", contra: "Contra", "debit-note": "Debit Note", "credit-note": "Credit Note", ledgers: "Ledgers",
-    "audit-trail": "Audit Trail", tally: "Tally Import / Export",
+    "audit-trail": "Audit Trail", tally: "Tally Import / Export", "gst-returns": "GST Returns",
   }[tab];
   const isAdmin = user?.role === "admin";
 
@@ -965,7 +966,7 @@ export default function BooksAudit() {
           <BookOpenCheck className="w-6 h-6 text-primary" />
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight flex items-center gap-2">Books &amp; Audit {readOnly && <ReadOnlyBadge />}</h1>
-            <p className="text-xs sm:text-sm text-muted-foreground print:hidden">Trial Balance, Profit &amp; Loss, Balance Sheet, Day Book, vouchers, audit trail and Tally.</p>
+            <p className="text-xs sm:text-sm text-muted-foreground print:hidden">Trial Balance, Profit &amp; Loss, Balance Sheet, Day Book, vouchers, GST returns, audit trail and Tally.</p>
             <p className="hidden print:block text-sm">{title} · {fmtDate(from)} to {fmtDate(to)}</p>
           </div>
         </div>
@@ -991,6 +992,7 @@ export default function BooksAudit() {
             <TabsTrigger value="contra">Contra</TabsTrigger>
             {!readOnly && <TabsTrigger value="debit-note">Debit Note</TabsTrigger>}
             {!readOnly && <TabsTrigger value="credit-note">Credit Note</TabsTrigger>}
+            <TabsTrigger value="gst-returns">GST Returns</TabsTrigger>
             <TabsTrigger value="ledgers">Ledgers</TabsTrigger>
             <TabsTrigger value="audit-trail">Audit Trail</TabsTrigger>
             <TabsTrigger value="tally">Tally</TabsTrigger>
@@ -1026,6 +1028,7 @@ export default function BooksAudit() {
               <TabsContent value="contra"><ContraTab from={from} to={to} isAdmin={isAdmin} /></TabsContent>
               {!readOnly && <TabsContent value="debit-note"><DebitNoteTab from={from} to={to} isAdmin={isAdmin} /></TabsContent>}
               {!readOnly && <TabsContent value="credit-note"><CreditNoteTab from={from} to={to} /></TabsContent>}
+              <TabsContent value="gst-returns"><GstReturnsTab /></TabsContent>
               <TabsContent value="audit-trail"><AuditTrailTab from={from} to={to} /></TabsContent>
               <TabsContent value="tally">
                 <TallyTab

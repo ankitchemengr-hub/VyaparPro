@@ -104,9 +104,11 @@ export async function gstCash(companyId: number, to: string): Promise<GstCash> {
       [companyId, to],
     ),
     // A supplier's dues from before the ERP (opening) come first and are not GST bills.
+    // An imported opening balance (ledger type 'opening', Settings → Data Import) is one of them.
     pool.query(
       `SELECT e.id, e.outstanding_balance - COALESCE((
-                SELECT SUM(le.debit - le.credit) FROM ledger_entries le WHERE le.company_id = e.company_id AND le.entity_id = e.id
+                SELECT SUM(le.debit - le.credit) FROM ledger_entries le
+                WHERE le.company_id = e.company_id AND le.entity_id = e.id AND le.type <> 'opening'
               ), 0) AS opening
        FROM entities e WHERE e.company_id = $1 AND e.type = 'vendor'`,
       [companyId],
