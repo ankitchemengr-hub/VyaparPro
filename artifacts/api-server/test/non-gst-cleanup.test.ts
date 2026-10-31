@@ -4,8 +4,9 @@
 // never point this at a real one; every run adds two test companies). Bills
 // are created through the real POST /invoices, /purchases and
 // /account-transactions routes so their stock / ledger / payment effects are
-// genuine, then every report, dashboard and balance is snapshotted before and
-// after delete and restore and must match exactly.
+// genuine. A delete is permanent: the bills leave every report, while stock,
+// Cash Book and party balances are snapshotted before and after and must
+// match exactly.
 //
 //   TEST_DATABASE_URL=postgres://... node test/run.mjs
 
@@ -133,10 +134,19 @@ async function financialSnapshot(company: "A" | "B") {
   };
 }
 
-async function deletedState(table: "invoices" | "purchases", company: number) {
-  const { rows } = await pool.query(`SELECT id, deleted_at IS NOT NULL AS deleted FROM ${table} WHERE company_id = $1 ORDER BY id`, [company]);
-  return Object.fromEntries(rows.map((r: any) => [r.id, r.deleted]));
+// id → false for every bill still in the table; any other id reads as true
+// (deleted — the row is gone).
+async function deletedState(table: "invoices" | "purchases", company: number): Promise<Record<number, boolean>> {
+  const { rows } = await pool.query(`SELECT id FROM ${table} WHERE company_id = $1 ORDER BY id`, [company]);
+  const present = Object.fromEntries(rows.map((r: any) => [r.id, false]));
+  return new Proxy(present, { get: (m, k) => (k in m ? m[k as any] : typeof k === "string" && /^\d+$/.test(k) ? true : undefined) });
 }
+
+// What a delete must never move: stock, Cash Book, party balances.
+const realFigures = (snap: any) => ({
+  stock: snap.stock, stockMovements: snap.stockMovements, partyBalances: snap.partyBalances,
+  cashBook: snap.cashBook, gstSalesTotals: snap.gstSalesTotals,
+});
 
 const key = () => randomUUID();
 
@@ -224,21 +234,24 @@ test("preview picks only paid, verified Non-GST sales of this company and explai
 test("non-admins cannot reach the cleanup feature", async () => {
   const r = await call("accountantA", "GET", `/non-gst-cleanup/sales/preview?from=${FROM}&to=${TO}`);
   assert.equal(r.status, 403);
-  const d = await call("accountantA", "POST", `/non-gst-cleanup/sales/delete`, { from: FROM, to: TO, idempotencyKey: key(), confirm: "DELETE" });
+  const d = await call("accountantA", "POST", `/non-gst-cleanup/sales/delete`, { from: FROM, to: TO, idempotencyKey: key(), confirm: "PERMANENT" });
   assert.equal(d.status, 403);
 });
 
 test("delete requires explicit confirmation", async () => {
   const r = await call("adminA", "POST", `/non-gst-cleanup/sales/delete`, { from: FROM, to: TO, idempotencyKey: key() });
   assert.equal(r.status, 400);
+  const weak = await call("adminA", "POST", `/non-gst-cleanup/sales/delete`, { from: FROM, to: TO, idempotencyKey: key(), confirm: "DELETE" });
+  assert.equal(weak.status, 400, "the confirmation word is PERMANENT");
   assert.equal((await deletedState("invoices", A))[ids.NS1], false);
 });
 
 test("Non-GST Sales delete affects only eligible Non-GST sales; GST, purchases and other tenants untouched", async () => {
   const idem = key();
-  const { job } = await ok("adminA", "POST", `/non-gst-cleanup/sales/delete`, { from: FROM, to: TO, idempotencyKey: idem, confirm: "DELETE" });
+  const { job } = await ok("adminA", "POST", `/non-gst-cleanup/sales/delete`, { from: FROM, to: TO, idempotencyKey: idem, confirm: "PERMANENT" });
   salesJobId = job.id;
   assert.equal(job.status, "succeeded");
+  assert.equal(job.action, "permanent_delete");
   assert.equal(job.processedCount, 1);
   assert.equal(job.excludedCount, 2);
 
@@ -251,30 +264,30 @@ test("Non-GST Sales delete affects only eligible Non-GST sales; GST, purchases a
   assert.ok(Object.values(await deletedState("invoices", B)).every((d) => d === false), "company B untouched");
 
   // Same confirmation replayed → same job, nothing runs twice.
-  const again = await ok("adminA", "POST", `/non-gst-cleanup/sales/delete`, { from: FROM, to: TO, idempotencyKey: idem, confirm: "DELETE" });
+  const again = await ok("adminA", "POST", `/non-gst-cleanup/sales/delete`, { from: FROM, to: TO, idempotencyKey: idem, confirm: "PERMANENT" });
   assert.equal(again.duplicate, true);
   assert.equal(again.job.id, salesJobId);
 
-  const audit = await pool.query(`SELECT * FROM audit_log WHERE company_id = $1 AND action = 'non_gst_sales_deleted'`, [A]);
+  const audit = await pool.query(`SELECT * FROM audit_log WHERE company_id = $1 AND action = 'non_gst_sales_permanently_deleted'`, [A]);
   assert.equal(audit.rowCount, 1);
   assert.equal(JSON.parse(audit.rows[0].metadata).jobId, salesJobId);
 });
 
-test("deleted sale disappears from lists and from non-admins; admin can still open it", async () => {
+test("deleted sale is gone from lists, reports and its linked rows; nobody can open it", async () => {
+  const count = async (sql: string) => Number((await pool.query(sql, [A, ids.NS1])).rows[0].n);
   const list = await ok("adminA", "GET", `/invoices`);
   assert.ok(!list.some((i: any) => i.id === ids.NS1));
   assert.ok(list.some((i: any) => i.id === ids.GS1));
+  assert.equal((await call("adminA", "GET", `/invoices/${ids.NS1}`)).status, 404);
   assert.equal((await call("accountantA", "GET", `/invoices/${ids.NS1}`)).status, 404);
-  const adminView = await ok("adminA", "GET", `/invoices/${ids.NS1}`);
-  assert.ok(adminView.deletedAt);
-  const edit = await call("adminA", "PATCH", `/invoices/${ids.NS1}`, { dueDate: "2026-02-01" });
-  assert.equal(edit.status, 409);
 
   const register = await ok("accountantA", "GET", `/reports/sales?from=${FROM}&to=${TO}&type=non_gst`);
-  const masked = register.items.filter((i: any) => i.deleted);
-  assert.equal(masked.length, 1);
-  assert.equal(masked[0].id, null);
-  assert.equal(masked[0].invoiceNo, "Deleted bill");
+  assert.ok(!register.items.some((i: any) => i.id === ids.NS1 || i.deleted), "no trace in the Other Sales register");
+  assert.notDeepEqual(register.totals, snapA0.otherSalesTotals, "Other Sales totals drop");
+
+  assert.equal(await count(`SELECT COUNT(*) n FROM invoice_items WHERE company_id = $1 AND invoice_id = $2`), 0);
+  assert.equal(await count(`SELECT COUNT(*) n FROM ledger_entries WHERE company_id = $1 AND type LIKE 'invoice%' AND reference_id = $2`), 0);
+  assert.equal(await count(`SELECT COUNT(*) n FROM payment_allocations WHERE company_id = $1 AND invoice_id = $2`), 0);
 });
 
 test("Non-GST Purchase delete affects only eligible Non-GST purchases and honours legal hold", async () => {
@@ -284,7 +297,7 @@ test("Non-GST Purchase delete affects only eligible Non-GST purchases and honour
   assert.deepEqual(p.excluded.map((r: any) => [r.id, r.reason]), [[ids.NP2, "Under legal hold"]]);
 
   const salesBefore = await deletedState("invoices", A);
-  const { job } = await ok("adminA", "POST", `/non-gst-cleanup/purchase/delete`, { from: FROM, to: TO, idempotencyKey: key(), confirm: "DELETE" });
+  const { job } = await ok("adminA", "POST", `/non-gst-cleanup/purchase/delete`, { from: FROM, to: TO, idempotencyKey: key(), confirm: "PERMANENT" });
   assert.equal(job.processedCount, 1);
   const pur = await deletedState("purchases", A);
   assert.equal(pur[ids.NP1], true);
@@ -296,8 +309,8 @@ test("Non-GST Purchase delete affects only eligible Non-GST purchases and honour
   assert.equal((await call("accountantA", "GET", `/purchases/${ids.NP1}`)).status, 404);
 });
 
-test("P&L, Sales, Other Sales, Purchase, Other Purchase, COGS, stock, ledgers and dashboard are unchanged after delete", async () => {
-  assert.deepEqual(await financialSnapshot("A"), snapA0);
+test("stock, Cash Book, party balances and GST sales stay real after delete; other tenants untouched", async () => {
+  assert.deepEqual(realFigures(await financialSnapshot("A")), realFigures(snapA0));
   assert.deepEqual(await financialSnapshot("B"), snapB0);
 });
 
@@ -367,50 +380,21 @@ test("a delete is final: there is no restore", async () => {
   assert.deepEqual(await financialSnapshot("B"), snapB0);
 });
 
-test("permanent delete removes Non-GST bills from every report; stock, Cash Book and party balances stay real", async () => {
-  const before = await financialSnapshot("A");
-  const count = async (sql: string, params: any[]) => Number((await pool.query(sql, params)).rows[0].n);
+test("bills hidden by the old hide-only delete are removed too; old schedules stay off until re-saved", async () => {
+  const ns5 = await sale("adminA", "non_gst", "2026-01-21", { productId: ids.productA, customerId: ids.customerA });
+  await payInFull("adminA", ns5, ids.customerA, ids.accountA);
+  await pool.query(`UPDATE invoices SET deleted_at = NOW() WHERE company_id = $1 AND id = $2`, [A, ns5.id]);
+  const before = realFigures(await financialSnapshot("A"));
 
-  // Permanent mode also picks up bills an earlier normal delete hid.
-  const p = await ok("adminA", "GET", `/non-gst-cleanup/sales/preview?from=${FROM}&to=${TO}&mode=permanent`);
-  assert.equal(p.permanent, true);
-  assert.deepEqual(p.eligible.map((r: any) => r.id).sort(), [ids.NS1, ids.NS4].sort());
-  assert.deepEqual(p.excluded.map((r: any) => r.id).sort(), [ids.NS2, ids.NS3].sort());
+  // A schedule saved before deletes became permanent never fires on its own.
+  await pool.query(`UPDATE non_gst_cleanup_settings SET permanent = false, enabled = true, next_run_at = NOW() - INTERVAL '1 minute' WHERE company_id = $1 AND category = 'sales'`, [A]);
+  assert.equal((await ok("adminA", "GET", `/non-gst-cleanup/sales/settings`)).enabled, false);
+  await cleanup.runDueSchedules();
+  assert.equal((await deletedState("invoices", A))[ns5.id], false, "old schedule did not run");
 
-  const weak = await call("adminA", "POST", `/non-gst-cleanup/sales/delete`, { from: FROM, to: TO, idempotencyKey: key(), confirm: "DELETE", permanent: true });
-  assert.equal(weak.status, 400, "permanent delete needs its own confirmation word");
-
-  const { job } = await ok("adminA", "POST", `/non-gst-cleanup/sales/delete`, { from: FROM, to: TO, idempotencyKey: key(), confirm: "PERMANENT", permanent: true });
-  assert.equal(job.status, "succeeded");
-  assert.equal(job.action, "permanent_delete");
-  assert.equal(job.processedCount, 2);
-
-  const gone = [ids.NS1, ids.NS4];
-  assert.equal(await count(`SELECT COUNT(*) n FROM invoices WHERE company_id = $1 AND id = ANY($2::int[])`, [A, gone]), 0);
-  assert.equal(await count(`SELECT COUNT(*) n FROM invoice_items WHERE company_id = $1 AND invoice_id = ANY($2::int[])`, [A, gone]), 0);
-  assert.equal(await count(`SELECT COUNT(*) n FROM ledger_entries WHERE company_id = $1 AND type LIKE 'invoice%' AND reference_id = ANY($2::int[])`, [A, gone]), 0);
-  assert.equal(await count(`SELECT COUNT(*) n FROM payment_allocations WHERE company_id = $1 AND invoice_id = ANY($2::int[])`, [A, gone]), 0);
-  assert.equal(await count(`SELECT COUNT(*) n FROM invoices WHERE company_id = $1 AND id = ANY($2::int[])`, [A, [ids.NS2, ids.NS3, ids.GS1]]), 3);
-
-  const register = await ok("adminA", "GET", `/reports/sales?from=${FROM}&to=${TO}&type=non_gst`);
-  assert.ok(!register.items.some((i: any) => gone.includes(i.id) || i.deleted), "no trace in the Other Sales register");
-  assert.notDeepEqual(register.totals, before.otherSalesTotals, "Other Sales totals drop");
-
-  // Purchase side: the hidden NP1 and the live NP2 both go; the GST bill stays.
-  const { job: pj } = await ok("adminA", "POST", `/non-gst-cleanup/purchase/delete`, { from: FROM, to: TO, idempotencyKey: key(), confirm: "PERMANENT", permanent: true });
-  assert.equal(pj.processedCount, 2);
-  assert.equal(await count(`SELECT COUNT(*) n FROM purchases WHERE company_id = $1 AND id = ANY($2::int[])`, [A, [ids.NP1, ids.NP2]]), 0);
-  assert.equal(await count(`SELECT COUNT(*) n FROM purchases WHERE company_id = $1 AND id = $2`, [A, ids.GP1]), 1);
-
-  const after = await financialSnapshot("A");
-  assert.deepEqual(after.gstSalesTotals, before.gstSalesTotals, "GST sales unchanged");
-  assert.deepEqual(after.stock, before.stock, "stock stays real");
-  assert.deepEqual(after.stockMovements, before.stockMovements, "stock history kept");
-  assert.deepEqual(after.partyBalances, before.partyBalances, "party balances stay real");
-  assert.deepEqual(after.cashBook, before.cashBook, "Cash Book unchanged");
-  assert.equal(after.otherPurchaseReport.lines, 0, "Other Purchase register is empty");
-  assert.deepEqual(await financialSnapshot("B"), snapB0, "company B untouched");
-
-  const audit = await pool.query(`SELECT 1 FROM audit_log WHERE company_id = $1 AND action IN ('non_gst_sales_permanently_deleted', 'non_gst_purchase_permanently_deleted')`, [A]);
-  assert.equal(audit.rowCount, 2);
+  const p = await ok("adminA", "GET", `/non-gst-cleanup/sales/preview?from=${FROM}&to=${TO}`);
+  assert.ok(p.eligible.some((r: any) => r.id === ns5.id), "hidden bill is listed");
+  await ok("adminA", "POST", `/non-gst-cleanup/sales/delete`, { from: FROM, to: TO, idempotencyKey: key(), confirm: "PERMANENT" });
+  assert.equal((await deletedState("invoices", A))[ns5.id], true);
+  assert.deepEqual(realFigures(await financialSnapshot("A")), before);
 });

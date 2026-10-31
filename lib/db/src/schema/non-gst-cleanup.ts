@@ -1,8 +1,8 @@
 import { pgTable, text, serial, timestamp, integer, numeric, boolean, index, unique } from "drizzle-orm/pg-core";
 
-// Settings → Data Management → Non-GST Data Cleanup. "Delete" here is a
-// retention-safe delete: the bill row stays (invoices/purchases.deleted_at),
-// so every financial total is unchanged. See artifacts/api-server/src/lib/non-gst-cleanup.ts.
+// Settings → Data Management → Non-GST Data Cleanup. A delete is permanent:
+// the bill drops out of every report while stock, Cash Book and party
+// balances stay as they are. See artifacts/api-server/src/lib/non-gst-cleanup.ts.
 
 // One row per company per category ("sales" | "purchase") — each category
 // has its own independent schedule.
@@ -14,6 +14,9 @@ export const nonGstCleanupSettingsTable = pgTable("non_gst_cleanup_settings", {
   frequency: text("frequency").notNull().default("monthly"), // daily | weekly | monthly | yearly
   // A scheduled run deletes eligible bills dated more than this many days ago.
   minAgeDays: integer("min_age_days").notNull().default(90),
+  // Saved under the permanent-delete rules; older schedules (from when a
+  // delete only hid bills) never fire until saved again.
+  permanent: boolean("permanent").notNull().default(false),
   nextRunAt: timestamp("next_run_at", { withTimezone: true }),
   lastRunAt: timestamp("last_run_at", { withTimezone: true }),
   lastJobId: integer("last_job_id"),

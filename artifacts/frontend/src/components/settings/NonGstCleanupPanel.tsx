@@ -1,9 +1,7 @@
 // Settings → Data Management → Non-GST Data Cleanup. Two independent tabs
 // (Sales, Purchase), each with its own delete-by-date-range flow and
-// automatic schedule. "Delete" hides bills from every
-// list and from non-admins; their amounts keep counting in reports, stock and
-// ledgers. "Permanent delete" removes them from every report too, while stock,
-// Cash Book and party balances stay as they are (see api-server
+// automatic schedule. A delete is permanent: bills drop out of every report,
+// while stock, Cash Book and party balances stay as they are (see api-server
 // lib/non-gst-cleanup.ts).
 
 import { useCallback, useEffect, useState } from "react";
@@ -30,7 +28,7 @@ const LABEL: Record<Category, { title: string; bill: string; party: string }> = 
   purchase: { title: "Non-GST Purchase", bill: "Bill", party: "Supplier" },
 };
 
-// Linked rows a permanent delete removes along with the bill; the rest stay.
+// Linked rows removed along with the bill; the rest stay.
 const PURGED_LINKS = new Set(["lineItems", "ledgerEntries", "paymentAllocations", "discountExpenses", "attachments"]);
 
 const LINKED_LABELS: Record<string, string> = {
@@ -45,7 +43,6 @@ const LINKED_LABELS: Record<string, string> = {
 
 interface Candidate { id: number; recordNo: string; recordDate: string; partyName: string | null; amount: number; reason: string | null }
 interface Preview {
-  permanent?: boolean;
   dateFrom: string | null; dateTo: string;
   eligibleCount: number; eligibleValue: number; excludedCount: number; excludedValue: number;
   linkedRecords: Record<string, number>;
@@ -97,9 +94,8 @@ export function NonGstCleanupPanel() {
       <div className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground flex gap-2">
         <ShieldAlert className="w-4 h-4 mt-0.5 shrink-0 text-primary" />
         <div>
-          <b>Hide from lists</b> removes Non-GST bills from every Sales and Purchase list; their amounts keep counting in reports.{" "}
-          <b>Permanent delete</b> erases them from every report too (P&amp;L, registers, dashboard, party ledger lines),
-          while stock, Cash Book and party balances stay as they are. GST bills are never touched.
+          Deleting erases Non-GST bills for good — from every list and every report (P&amp;L, registers, dashboard, party ledger lines).
+          Stock, Cash Book and party balances stay as they are. GST bills are never touched.
         </div>
       </div>
       <Tabs defaultValue="sales">
@@ -134,7 +130,6 @@ function DeleteCard({ category, onDone }: { category: Category; onDone: () => vo
   const [preset, setPreset] = useState<Preset>("monthly");
   const [range, setRange] = useState(() => presetRange("monthly"));
   const [preview, setPreview] = useState<Preview | null>(null);
-  const [permanent, setPermanent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
@@ -151,7 +146,7 @@ function DeleteCard({ category, onDone }: { category: Category; onDone: () => vo
   const loadPreview = async () => {
     setLoading(true);
     try {
-      const q = new URLSearchParams({ from: range.from, to: range.to, ...(permanent ? { mode: "permanent" } : {}) });
+      const q = new URLSearchParams({ from: range.from, to: range.to });
       setPreview(await api<Preview>(`/api/non-gst-cleanup/${category}/preview?${q}`));
     } catch (e: any) {
       toast({ title: "Preview failed", description: e.message, variant: "destructive" });
@@ -169,7 +164,7 @@ function DeleteCard({ category, onDone }: { category: Category; onDone: () => vo
     }
   };
 
-  const confirmWord = permanent ? "PERMANENT" : "DELETE";
+  const confirmWord = "PERMANENT";
   const linked = Object.entries(preview?.linkedRecords ?? {});
 
   const runDelete = async () => {
@@ -177,13 +172,11 @@ function DeleteCard({ category, onDone }: { category: Category; onDone: () => vo
     try {
       const { job } = await api<{ job: Job }>(`/api/non-gst-cleanup/${category}/delete`, {
         method: "POST",
-        body: JSON.stringify({ from: range.from, to: range.to, idempotencyKey, confirm: confirmWord, permanent }),
+        body: JSON.stringify({ from: range.from, to: range.to, idempotencyKey, confirm: confirmWord }),
       });
       toast({
-        title: `${job.processedCount} bill(s) ${permanent ? "permanently deleted" : "deleted"}`,
-        description: permanent
-          ? `${inr(job.totalValue)} removed from every report. ${job.excludedCount} left alone. Stock, Cash Book and party balances unchanged.`
-          : `${inr(job.totalValue)} removed from the lists. ${job.excludedCount} left alone. Report totals are unchanged.`,
+        title: `${job.processedCount} bill(s) permanently deleted`,
+        description: `${inr(job.totalValue)} removed from every report. ${job.excludedCount} left alone. Stock, Cash Book and party balances unchanged.`,
       });
       setConfirmOpen(false);
       setPreview(null);
@@ -205,14 +198,6 @@ function DeleteCard({ category, onDone }: { category: Category; onDone: () => vo
         <CardDescription>Pick a period, check what will be deleted, then confirm.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant={!permanent ? "default" : "outline"} onClick={() => { setPermanent(false); setPreview(null); }} data-testid={`mode-${category}-hide`}>
-            Hide from lists
-          </Button>
-          <Button size="sm" variant={permanent ? "destructive" : "outline"} onClick={() => { setPermanent(true); setPreview(null); }} data-testid={`mode-${category}-permanent`}>
-            Permanent delete (from reports too)
-          </Button>
-        </div>
         <div className="flex flex-wrap gap-2">
           {(["daily", "weekly", "monthly", "yearly", "custom"] as Preset[]).map((p) => (
             <Button key={p} size="sm" variant={preset === p ? "default" : "outline"} onClick={() => choosePreset(p)} data-testid={`preset-${category}-${p}`}>
@@ -245,17 +230,7 @@ function DeleteCard({ category, onDone }: { category: Category; onDone: () => vo
               <Stat label="Left alone" value={`${preview.excludedCount} · ${inr(preview.excludedValue)}`} />
             </div>
 
-            {preview.eligibleCount > 0 && !preview.permanent && (
-              <div className="text-sm">
-                <div className="font-medium mb-1">Linked records (kept unchanged)</div>
-                <div className="flex flex-wrap gap-2">
-                  {linked.map(([k, v]) => (
-                    <Badge key={k} variant="secondary">{LINKED_LABELS[k] ?? k}: {v}</Badge>
-                  ))}
-                </div>
-              </div>
-            )}
-            {preview.eligibleCount > 0 && preview.permanent && (
+            {preview.eligibleCount > 0 && (
               <div className="text-sm space-y-2">
                 <div>
                   <div className="font-medium mb-1 text-destructive">Removed with the bills</div>
@@ -304,7 +279,7 @@ function DeleteCard({ category, onDone }: { category: Category; onDone: () => vo
             <div className="flex justify-end">
               <Button variant="destructive" disabled={preview.eligibleCount === 0}
                 onClick={() => { setConfirmText(""); setConfirmOpen(true); }} data-testid={`button-delete-${category}`}>
-                <Trash2 className="w-4 h-4 mr-2" /> {permanent ? "Permanently delete" : "Delete"} {preview.eligibleCount} bill(s)
+                <Trash2 className="w-4 h-4 mr-2" /> Permanently delete {preview.eligibleCount} bill(s)
               </Button>
             </div>
           </div>
@@ -314,7 +289,7 @@ function DeleteCard({ category, onDone }: { category: Category; onDone: () => vo
       <Dialog open={confirmOpen} onOpenChange={(o) => !deleting && setConfirmOpen(o)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{permanent ? "Permanently delete" : "Delete"} {preview?.eligibleCount} {L.title} bill(s)?</DialogTitle>
+            <DialogTitle>Permanently delete {preview?.eligibleCount} {L.title} bill(s)?</DialogTitle>
             <DialogDescription>Check the numbers before you confirm.</DialogDescription>
           </DialogHeader>
           {preview && (
@@ -323,23 +298,16 @@ function DeleteCard({ category, onDone }: { category: Category; onDone: () => vo
                 <Stat label="Bills selected" value={String(preview.eligibleCount)} strong />
                 <Stat label="Total value" value={inr(preview.eligibleValue)} strong />
               </div>
-              {permanent ? (
-                <div className="space-y-2">
-                  <div className="text-muted-foreground">
-                    Period {fmtDate(preview.dateFrom)} – {fmtDate(preview.dateTo)}. These bills are erased for good and drop out of every report —
-                    P&amp;L, {category === "sales" ? "Sales" : "Purchase"} registers, dashboard and party ledger lines. Stock, Cash Book and party balances stay as they are.
-                  </div>
-                  <div className="rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs">
-                    This cannot be undone. Take a backup first (Backup &amp; Restore). The law asks businesses to keep books of
-                    account for 8 years — deleting them is your decision.
-                  </div>
-                </div>
-              ) : (
+              <div className="space-y-2">
                 <div className="text-muted-foreground">
-                  Period {fmtDate(preview.dateFrom)} – {fmtDate(preview.dateTo)}. These bills disappear from the {category === "sales" ? "Sales" : "Purchase"} lists
-                  and from non-admin users. P&amp;L, reports, stock and ledgers stay the same.
+                  Period {fmtDate(preview.dateFrom)} – {fmtDate(preview.dateTo)}. These bills are erased for good and drop out of every report —
+                  P&amp;L, {category === "sales" ? "Sales" : "Purchase"} registers, dashboard and party ledger lines. Stock, Cash Book and party balances stay as they are.
                 </div>
-              )}
+                <div className="rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs">
+                  This cannot be undone. Take a backup first (Backup &amp; Restore). The law asks businesses to keep books of
+                  account for 8 years — deleting them is your decision.
+                </div>
+              </div>
               <div className="space-y-1">
                 <Label htmlFor={`${category}-confirm`}>Type <span className="font-mono font-semibold">{confirmWord}</span> to confirm</Label>
                 <Input id={`${category}-confirm`} value={confirmText} onChange={(e) => setConfirmText(e.target.value)} autoComplete="off" />
@@ -349,7 +317,7 @@ function DeleteCard({ category, onDone }: { category: Category; onDone: () => vo
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmOpen(false)} disabled={deleting}>Cancel</Button>
             <Button variant="destructive" onClick={runDelete} disabled={deleting || confirmText !== confirmWord} data-testid={`button-confirm-delete-${category}`}>
-              {deleting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} {permanent ? "Delete for good" : "Delete bills"}
+              {deleting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Delete for good
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -445,7 +413,7 @@ function ScheduleCard({ category, refreshTick }: { category: Category; refreshTi
       <CardHeader>
         <CardTitle className="flex items-center gap-2"><CalendarClock className="w-5 h-5" /> Automatic cleanup</CardTitle>
         <CardDescription>
-          Deletes eligible {LABEL[category].title} bills older than the age you set. Every run checks the same rules as a manual delete.
+          Permanently deletes eligible {LABEL[category].title} bills older than the age you set. Every run checks the same rules as a manual delete.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -480,9 +448,6 @@ function ScheduleCard({ category, refreshTick }: { category: Category; refreshTi
           <Stat label="Last run" value={fmtDateTime(settings.lastRunAt)} />
           <Stat label="Last status" value={settings.lastJob ? settings.lastJob.status : "—"} />
           <Stat label="Last result" value={settings.lastJob ? `${settings.lastJob.processedCount} deleted · ${settings.lastJob.excludedCount} left` : "—"} />
-        </div>
-        <div className="text-xs text-muted-foreground flex items-center gap-1.5">
-          <Lock className="w-3 h-3" /> Permanent erasure is locked: accounting records must be kept for {settings.retentionYears} financial years, and erasing them would change past report totals.
         </div>
       </CardContent>
     </Card>

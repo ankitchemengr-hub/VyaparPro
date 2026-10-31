@@ -586,6 +586,8 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
       updated_at    TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
       CONSTRAINT non_gst_cleanup_settings_company_category_unique UNIQUE (company_id, category)
     )`,
+    // Schedules saved before deletes became permanent stay off until re-saved.
+    `ALTER TABLE non_gst_cleanup_settings ADD COLUMN IF NOT EXISTS permanent BOOLEAN NOT NULL DEFAULT false`,
     `CREATE TABLE IF NOT EXISTS non_gst_cleanup_jobs (
       id               SERIAL PRIMARY KEY,
       company_id       INTEGER NOT NULL,
