@@ -17,6 +17,7 @@ import {
   useListDemoLeads,
 } from "@workspace/api-client-react";
 import { DemoLeadsPanel } from "@/components/demo-leads-panel";
+import { NoticesPanel } from "@/components/notices-panel";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -504,10 +505,15 @@ export default function Subscriptions() {
               <span className="ml-1.5 rounded-full bg-blue-600 px-1.5 text-[10px] font-semibold text-white">{newLeadCount} new</span>
             )}
           </TabsTrigger>
+          <TabsTrigger value="notices" data-testid="tab-notices">Notices</TabsTrigger>
         </TabsList>
 
         <TabsContent value="leads">
           <DemoLeadsPanel />
+        </TabsContent>
+
+        <TabsContent value="notices">
+          <NoticesPanel />
         </TabsContent>
 
         {/* SUBSCRIPTIONS TABLE */}

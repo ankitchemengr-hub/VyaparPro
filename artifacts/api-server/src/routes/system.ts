@@ -6,6 +6,8 @@ import { getCurrentCompany } from "../lib/company";
 import { companyIdForHost, requestHost } from "../lib/custom-domains";
 import { requireAuth, requireSuperAdmin, getSession } from "../lib/tenant";
 import { SetActiveCompanyBody } from "@workspace/api-zod";
+import { timingSafeEqual } from "node:crypto";
+import { currentBanner, customerEmails } from "../lib/platform-notices";
 
 const router: IRouter = Router();
 
@@ -110,5 +112,29 @@ router.post(
     });
   },
 );
+
+// GET /system/notice-banner — PUBLIC (no auth). The planned-maintenance
+// notice every ERP screen (login included) shows as a banner, or null.
+router.get("/system/notice-banner", async (_req, res): Promise<void> => {
+  res.set("Cache-Control", "no-store");
+  res.json({ notice: await currentBanner() });
+});
+
+// GET /system/notify-list — for tools/uptime-watchdog only. Returns every
+// customer company's email so the watchdog can warn them when this server is
+// down. Needs the shared WATCHDOG_TOKEN (x-watchdog-token header); without
+// that env var set the route is off.
+router.get("/system/notify-list", async (req, res): Promise<void> => {
+  res.set("Cache-Control", "no-store");
+  const expected = process.env["WATCHDOG_TOKEN"]?.trim() ?? "";
+  const given = String(req.headers["x-watchdog-token"] ?? "");
+  const a = Buffer.from(given);
+  const b = Buffer.from(expected);
+  if (expected.length < 16 || a.length !== b.length || !timingSafeEqual(a, b)) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  res.json({ emails: await customerEmails(), notice: await currentBanner() });
+});
 
 export default router;

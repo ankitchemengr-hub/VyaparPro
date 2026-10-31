@@ -34,6 +34,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { CodeEntry } from "@/components/code-entry";
 import { Factory, Check, Eye, EyeOff } from "lucide-react";
+import { MaintenanceBanner } from "@/components/maintenance-banner";
 
 // Persisted login-screen company override, set via the hidden switcher. After a
 // super_admin signs in, the app jumps straight into this company instead of the
@@ -248,6 +249,7 @@ export default function Login() {
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-sidebar p-4">
       <div className="w-full max-w-md space-y-8">
+        <div className="overflow-hidden rounded-md empty:hidden"><MaintenanceBanner /></div>
         <div className="flex flex-col items-center justify-center text-center">
           <div
             onClick={handleLogoClick}

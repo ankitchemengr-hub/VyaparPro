@@ -1,0 +1,28 @@
+name = "erp-uptime-watchdog"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+# Every minute.
+[triggers]
+crons = ["* * * * *"]
+
+# Create once with:  npx wrangler kv namespace create STATE
+# then paste the printed id here.
+[[kv_namespaces]]
+binding = "STATE"
+id = "PASTE_KV_NAMESPACE_ID_HERE"
+
+[vars]
+# The Railway URL, not a custom domain, so the check hits the server itself.
+ERP_URL = "https://vyaparpro-production.up.railway.app"
+BRAND = "SHRADHA ERP"
+SENDER_NAME = "SHRADHA ERP"
+# Must be a sender verified in Brevo (the same address as SMTP_FROM on Railway).
+SENDER_EMAIL = "support@shradhaerp.com"
+OWNER_EMAIL = "ankitchemengr@gmail.com"
+# Minutes the ERP must stay down before customers are emailed.
+DOWN_MINUTES = "10"
+
+# Secrets (not in this file) — set with:
+#   npx wrangler secret put BREVO_API_KEY
+#   npx wrangler secret put WATCHDOG_TOKEN

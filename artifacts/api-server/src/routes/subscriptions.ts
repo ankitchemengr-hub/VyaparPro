@@ -10,6 +10,7 @@ import { COMPANY_TABLES } from "../lib/company-data";
 import { hashPassword } from "../lib/password";
 import { isUsernameTaken, suggestUsername, usernameTakenMessage } from "../lib/username";
 import { DomainError, listDomainRequests, adminSetDomainStatus } from "../lib/custom-domains";
+import { listNotices, createNotice, cancelNotice, customerEmails } from "../lib/platform-notices";
 
 const router: IRouter = Router();
 
@@ -709,6 +710,50 @@ router.delete("/subscriptions/:id", async (req, res): Promise<void> => {
   } finally {
     client.release();
   }
+});
+
+// ── Maintenance notices (lib/platform-notices.ts) ──────────────────────
+
+router.get("/subscriptions/notices", async (_req, res): Promise<void> => {
+  res.json({ notices: await listNotices(), recipients: (await customerEmails()).length });
+});
+
+// POST body: { title, message?, startsAt, endsAt (ISO), emailNow: boolean }
+router.post("/subscriptions/notices", async (req, res): Promise<void> => {
+  const { title, message, startsAt, endsAt, emailNow } = req.body ?? {};
+  const start = new Date(startsAt);
+  const end = new Date(endsAt);
+  if (typeof title !== "string" || !title.trim() || title.length > 200) {
+    res.status(400).json({ error: "Title is required" });
+    return;
+  }
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+    res.status(400).json({ error: "Enter a start and an end time; the end must be after the start" });
+    return;
+  }
+  if (end.getTime() < Date.now()) {
+    res.status(400).json({ error: "This window is already over" });
+    return;
+  }
+  const session = (req as any).session;
+  const result = await createNotice({
+    title: title.trim(),
+    message: typeof message === "string" ? message.slice(0, 2000) : "",
+    startsAt: start,
+    endsAt: end,
+    emailNow: emailNow === true,
+    createdBy: { userId: session?.userId ?? null, name: session?.name ?? null },
+  });
+  res.status(201).json(result);
+});
+
+router.post("/subscriptions/notices/:id/cancel", async (req, res): Promise<void> => {
+  const notice = await cancelNotice(Number(req.params.id));
+  if (!notice) {
+    res.status(404).json({ error: "Notice not found or already cancelled" });
+    return;
+  }
+  res.json({ notice });
 });
 
 export default router;

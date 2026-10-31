@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/use-auth";
 import { Redirect, useLocation } from "wouter";
 import { Menu, X, Search, Keyboard } from "lucide-react";
 import { NewActivityWatcher } from "../new-activity-watcher";
+import { MaintenanceBanner } from "../maintenance-banner";
 import { CommandPalette } from "../command-palette";
 import { ShortcutsHelpDialog } from "../shortcuts-help-dialog";
 import { useGlobalShortcuts } from "@/lib/keyboard/use-global-shortcuts";
@@ -120,6 +121,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             </div>
           </div>
         </header>
+        <MaintenanceBanner />
 
         <main id="main-content" tabIndex={-1} className="flex-1 p-6 overflow-x-hidden outline-none">
           {children}

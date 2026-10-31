@@ -588,6 +588,23 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
     )`,
     // Schedules saved before deletes became permanent stay off until re-saved.
     `ALTER TABLE non_gst_cleanup_settings ADD COLUMN IF NOT EXISTS permanent BOOLEAN NOT NULL DEFAULT false`,
+    // ── Platform maintenance notices (lib/platform-notices.ts) ──
+    `CREATE TABLE IF NOT EXISTS platform_notices (
+      id                  SERIAL PRIMARY KEY,
+      title               TEXT NOT NULL,
+      message             TEXT NOT NULL DEFAULT '',
+      starts_at           TIMESTAMP WITH TIME ZONE NOT NULL,
+      ends_at             TIMESTAMP WITH TIME ZONE NOT NULL,
+      status              TEXT NOT NULL DEFAULT 'scheduled',
+      announced_at        TIMESTAMP WITH TIME ZONE,
+      reminded_at         TIMESTAMP WITH TIME ZONE,
+      back_sent_at        TIMESTAMP WITH TIME ZONE,
+      last_send_count     INTEGER,
+      created_by_user_id  INTEGER,
+      created_by_name     TEXT,
+      created_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    )`,
+    `CREATE INDEX IF NOT EXISTS platform_notices_window_idx ON platform_notices(status, starts_at, ends_at)`,
     `CREATE TABLE IF NOT EXISTS non_gst_cleanup_jobs (
       id               SERIAL PRIMARY KEY,
       company_id       INTEGER NOT NULL,
