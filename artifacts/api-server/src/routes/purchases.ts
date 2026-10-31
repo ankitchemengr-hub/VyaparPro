@@ -67,6 +67,70 @@ async function generateBillNumber(client: any, companyId: number): Promise<strin
   return `PUR/${year}/${String(month).padStart(2, "0")}/${seqNum}`;
 }
 
+// Paid / unpaid status of purchase bills, read from the vendor's Khatabook
+// balance (entities.outstanding_balance — what we still owe them). Vendor
+// payments never touch purchases.balance_due (it always equals grand_total),
+// so the balance is the single source of truth: it is spread over the
+// vendor's bills NEWEST first, which means older bills are the ones counted
+// as paid (FIFO — a payment clears the oldest dues first).
+//   balance <= 0  → every bill paid; a negative balance is an advance we
+//                   gave, shown on the newest bill as "advance".
+//   otherwise     → newest bills absorb the balance: fully covered = unpaid,
+//                   partly = partial (dueAmount = what's left), rest = paid.
+// Bills without a linked vendor (cash purchases) get no status (null).
+export type PurchasePayStatus = {
+  paymentStatus: "paid" | "partial" | "unpaid" | "advance";
+  dueAmount: number;
+  advanceAmount: number;
+};
+
+async function purchasePayStatuses(companyId: number, vendorIds?: number[]): Promise<Map<number, PurchasePayStatus>> {
+  const out = new Map<number, PurchasePayStatus>();
+  const ids = vendorIds?.filter((v) => Number.isInteger(v));
+  if (vendorIds && !ids?.length) return out;
+  const { rows } = await pool.query(
+    `SELECT p.id, p.vendor_id, p.grand_total, e.outstanding_balance
+       FROM purchases p
+       JOIN entities e ON e.id = p.vendor_id AND e.company_id = p.company_id
+      WHERE p.company_id = $1 AND p.status <> 'cancelled'
+        ${ids ? "AND p.vendor_id = ANY($2::int[])" : ""}
+      ORDER BY p.vendor_id, p.bill_date DESC, p.id DESC`,
+    ids ? [companyId, ids] : [companyId],
+  );
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  let vendor: number | null = null;
+  let remaining = 0;
+  let advanceShown = false;
+  for (const r of rows) {
+    if (r.vendor_id !== vendor) {
+      vendor = r.vendor_id;
+      remaining = round2(Number(r.outstanding_balance) || 0);
+      advanceShown = false;
+    }
+    const total = round2(Number(r.grand_total) || 0);
+    if (remaining < 0) {
+      // We paid them more than every bill — show the advance once, on the newest bill.
+      out.set(r.id, advanceShown
+        ? { paymentStatus: "paid", dueAmount: 0, advanceAmount: 0 }
+        : { paymentStatus: "advance", dueAmount: 0, advanceAmount: round2(-remaining) });
+      advanceShown = true;
+      continue;
+    }
+    const due = round2(Math.min(total, remaining));
+    remaining = round2(remaining - due);
+    out.set(r.id, {
+      paymentStatus: due <= 0.009 ? "paid" : due >= total - 0.009 ? "unpaid" : "partial",
+      dueAmount: due,
+      advanceAmount: 0,
+    });
+  }
+  return out;
+}
+
+function withPayStatus(p: ReturnType<typeof formatPurchase>, s: PurchasePayStatus | undefined) {
+  return { ...p, paymentStatus: p.status === "cancelled" ? null : s?.paymentStatus ?? null, dueAmount: s?.dueAmount ?? null, advanceAmount: s?.advanceAmount ?? 0 };
+}
+
 function formatPurchase(row: any, items: any[], priceChanges?: PriceChange[]) {
   return {
     id: row.id,
@@ -248,7 +312,8 @@ router.get("/purchases", async (req, res): Promise<void> => {
   if (parsed.data.status) conditions.push(eq(purchasesTable.status, parsed.data.status));
   if (isGstAccountant(req)) conditions.push(eq(purchasesTable.billType, "gst"));
   const rows = await db.select().from(purchasesTable).where(and(...conditions)).orderBy(sql`${purchasesTable.createdAt} DESC`);
-  res.json(rows.map((r) => formatPurchase(r, [])));
+  const statuses = await purchasePayStatuses(companyId, parsed.data.vendorId ? [parsed.data.vendorId] : undefined);
+  res.json(rows.map((r) => withPayStatus(formatPurchase(r, []), statuses.get(r.id))));
 });
 
 // GET /purchases/report — date + product filtered line-item report
@@ -335,7 +400,8 @@ router.get("/purchases/:id", async (req, res): Promise<void> => {
     return;
   }
   const items = await db.select().from(purchaseItemsTable).where(and(eq(purchaseItemsTable.companyId, companyId), eq(purchaseItemsTable.purchaseId, parsed.data.id)));
-  res.json(formatPurchase(row, items));
+  const statuses = row.vendorId ? await purchasePayStatuses(companyId, [row.vendorId]) : new Map();
+  res.json(withPayStatus(formatPurchase(row, items), statuses.get(row.id)));
 });
 
 // POST /purchases

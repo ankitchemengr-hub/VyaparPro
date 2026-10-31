@@ -1649,12 +1649,126 @@ function PurchaseReportDialog({
 
 // ------------------------------ HISTORY ------------------------------
 
+// Paid / unpaid status from the vendor's Khatabook balance (server:
+// purchasePayStatuses — oldest bills count as paid first).
+function PayStatusBadge({ p }: { p: any }) {
+  if (p.status === "cancelled") return <Badge variant="destructive">Cancelled</Badge>;
+  const due = Number(p.dueAmount ?? 0);
+  switch (p.paymentStatus) {
+    case "paid":
+      return <Badge className="bg-green-600 hover:bg-green-600 text-white">Paid</Badge>;
+    case "partial":
+      return (
+        <Badge className="bg-amber-500 hover:bg-amber-500 text-white whitespace-nowrap" title={`₹${due.toFixed(2)} still to pay`}>
+          Partial · ₹{due.toLocaleString("en-IN", { maximumFractionDigits: 0 })} due
+        </Badge>
+      );
+    case "unpaid":
+      return <Badge className="bg-red-600 hover:bg-red-600 text-white">Unpaid</Badge>;
+    case "advance":
+      return (
+        <Badge className="bg-blue-600 hover:bg-blue-600 text-white whitespace-nowrap" title="Paid — and the vendor holds an advance from you">
+          Advance · ₹{Number(p.advanceAmount ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+        </Badge>
+      );
+    default:
+      // No linked vendor (cash purchase) — nothing in Khatabook to match.
+      return <Badge variant="outline">{p.status}</Badge>;
+  }
+}
+
+// Read-only view of one bill: header, items, totals, payment status.
+function ViewPurchaseDialog({ purchaseId, open, onOpenChange }: { purchaseId: number; open: boolean; onOpenChange: (v: boolean) => void }) {
+  const { data: purchase, isLoading } = useGetPurchase(purchaseId, {
+    query: { enabled: open, queryKey: getGetPurchaseQueryKey(purchaseId) },
+  });
+  const p: any = purchase;
+  const money = (v: unknown) => `₹${Number(v ?? 0).toFixed(2)}`;
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="w-[calc(100vw-1rem)] sm:w-full max-w-3xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+        <DialogHeader className="pr-8 text-left">
+          <DialogTitle className="break-all">Purchase Bill — {p?.billNo ?? "…"}</DialogTitle>
+          <DialogDescription>Read-only view. Use Edit to change the bill.</DialogDescription>
+        </DialogHeader>
+        {isLoading || !p ? (
+          <div className="py-10 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto text-muted-foreground" /></div>
+        ) : (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+              <div><div className="text-xs text-muted-foreground">Vendor</div><div className="font-medium">{p.vendorName ?? "—"}</div></div>
+              <div><div className="text-xs text-muted-foreground">Bill date</div><div className="font-medium">{new Date(p.billDate).toLocaleDateString("en-IN")}</div></div>
+              <div><div className="text-xs text-muted-foreground">Vendor bill no.</div><div className="font-medium">{p.vendorBillNo ?? "—"}</div></div>
+              <div><div className="text-xs text-muted-foreground">Type</div><div><Badge variant={p.billType === "gst" ? "default" : "secondary"}>{p.billType === "gst" ? "GST" : "Non-GST"}</Badge></div></div>
+              {p.vendorGstin && <div><div className="text-xs text-muted-foreground">Vendor GSTIN</div><div className="font-mono text-xs">{p.vendorGstin}</div></div>}
+              <div><div className="text-xs text-muted-foreground">Payment</div><div><PayStatusBadge p={p} /></div></div>
+            </div>
+
+            {/* Items — table on wider screens, stacked cards on phones */}
+            <div className="hidden sm:block border rounded-md overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Product</TableHead>
+                    <TableHead className="text-right">Qty</TableHead>
+                    <TableHead className="text-right">Rate</TableHead>
+                    <TableHead className="text-right">Disc %</TableHead>
+                    {p.billType === "gst" && <TableHead className="text-right">GST %</TableHead>}
+                    <TableHead className="text-right">Amount</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(p.items ?? []).map((it: any) => (
+                    <TableRow key={it.id}>
+                      <TableCell className="font-medium">{it.productName}</TableCell>
+                      <TableCell className="text-right tabular-nums">{Number(it.qty)} {it.unit}</TableCell>
+                      <TableCell className="text-right tabular-nums">{money(it.rate)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{Number(it.discountPct)}</TableCell>
+                      {p.billType === "gst" && <TableCell className="text-right tabular-nums">{Number(it.taxPct)}</TableCell>}
+                      <TableCell className="text-right tabular-nums font-medium">{money(it.amount)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            <div className="sm:hidden border rounded-md divide-y">
+              {(p.items ?? []).map((it: any) => (
+                <div key={it.id} className="p-3 text-sm space-y-1">
+                  <div className="font-medium">{it.productName}</div>
+                  <div className="flex justify-between gap-2 text-muted-foreground">
+                    <span>{Number(it.qty)} {it.unit} × {money(it.rate)}{Number(it.discountPct) ? ` − ${Number(it.discountPct)}%` : ""}{p.billType === "gst" ? ` + GST ${Number(it.taxPct)}%` : ""}</span>
+                    <span className="font-medium text-foreground tabular-nums shrink-0">{money(it.amount)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="ml-auto w-full sm:w-72 space-y-1">
+              <SumRow label="Subtotal" value={Number(p.subtotal)} muted />
+              {Number(p.totalDiscount) > 0 && <SumRow label="Discount" value={-Number(p.totalDiscount)} muted />}
+              {Number(p.cgst) > 0 && <SumRow label="CGST" value={Number(p.cgst)} muted />}
+              {Number(p.sgst) > 0 && <SumRow label="SGST" value={Number(p.sgst)} muted />}
+              {Number(p.igst) > 0 && <SumRow label="IGST" value={Number(p.igst)} muted />}
+              {Number(p.freight) > 0 && <SumRow label="Freight" value={Number(p.freight)} muted />}
+              {Number(p.roundOff) !== 0 && <SumRow label="Round off" value={Number(p.roundOff)} muted />}
+              <div className="flex justify-between font-bold border-t pt-1"><span>Total</span><span className="tabular-nums">{money(p.grandTotal)}</span></div>
+              {p.paymentStatus === "partial" && <div className="flex justify-between text-sm text-amber-700"><span>Still to pay</span><span className="tabular-nums">{money(p.dueAmount)}</span></div>}
+            </div>
+            {p.notes && <p className="text-sm text-muted-foreground whitespace-pre-wrap"><span className="font-medium text-foreground">Notes: </span>{p.notes}</p>}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function HistoryTab() {
   const { hasRole } = useAuth();
   const isAdmin = hasRole(["admin"]);
   const { data: purchases, isLoading } = useListPurchases();
   const { data: products } = useListProducts({});
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [viewingId, setViewingId] = useState<number | null>(null);
   const [reportOpen, setReportOpen] = useState(false);
   const [attachmentsFor, setAttachmentsFor] = useState<{ id: number; billNo: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; billNo: string } | null>(null);
@@ -1755,10 +1869,19 @@ function HistoryTab() {
                       ₹{Number(p.balanceDue).toFixed(2)}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={p.status === "cancelled" ? "destructive" : "outline"}>{p.status}</Badge>
+                      <PayStatusBadge p={p} />
                     </TableCell>
                     <TableCell>
                       <span className="inline-flex items-center gap-0.5">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          title="View bill"
+                          onClick={() => setViewingId(p.id)}
+                          data-testid={`button-view-purchase-${p.id}`}
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
                         <Button
                           size="icon"
                           variant="ghost"
@@ -1798,6 +1921,14 @@ function HistoryTab() {
           </div>
         </CardContent>
       </Card>
+
+      {viewingId !== null && (
+        <ViewPurchaseDialog
+          purchaseId={viewingId}
+          open={viewingId !== null}
+          onOpenChange={(open) => { if (!open) setViewingId(null); }}
+        />
+      )}
 
       {editingId !== null && (
         <EditPurchaseDialog
@@ -1990,9 +2121,9 @@ function EditPurchaseDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Edit Purchase — {purchase?.billNo}</DialogTitle>
+      <DialogContent className="w-[calc(100vw-1rem)] sm:w-full max-w-5xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+        <DialogHeader className="pr-8 text-left">
+          <DialogTitle className="break-all">Edit Purchase — {purchase?.billNo}</DialogTitle>
           <DialogDescription>
             Changes will reverse old stock movements and ledger entries, then re-apply with updated values.
           </DialogDescription>
