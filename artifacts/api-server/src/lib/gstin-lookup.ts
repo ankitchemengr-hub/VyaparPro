@@ -55,16 +55,25 @@ export async function lookupGstin(raw: string, log?: { warn: (o: object, msg: st
     if (data?.error || !data?.taxpayerInfo) return { found: false, gstin, state: stateFromCode, error: data?.message ?? "GSTIN not found" };
 
     const info = data.taxpayerInfo;
+    // Never fill a form with another business's details: the provider has
+    // answered with its own sample record (AppyFlow Technologies) instead of
+    // the GSTIN asked for, e.g. on a trial key.
+    const answered = String(info.gstin ?? "").trim().toUpperCase();
+    if (answered && answered !== gstin) {
+      log?.warn({ asked: gstin, answered }, "GSTIN lookup provider answered for a different GSTIN");
+      return { found: false, gstin, state: stateFromCode, error: `The GST lookup service sent details of another GSTIN (${answered}). Check the API key / plan on appyflow.in.` };
+    }
     const pradr = info.pradr?.addr ?? {};
-    const addressParts = [pradr.bno, pradr.bnm, pradr.st, pradr.loc, pradr.dst, pradr.stcd, pradr.pncd]
-      .filter((p: any) => p && String(p).trim().length > 0);
+    const addressParts = [pradr.flno, pradr.bno, pradr.bnm, pradr.st, pradr.loc, pradr.city, pradr.dst, pradr.stcd, pradr.pncd]
+      .map((p: any) => String(p ?? "").trim())
+      .filter((p: string, i: number, all: string[]) => p.length > 0 && all.indexOf(p) === i);
     return {
       found: true,
       gstin,
       legalName: info.lgnm ?? undefined,
       tradeName: info.tradeNam ?? undefined,
       address: addressParts.length > 0 ? addressParts.join(", ") : undefined,
-      city: (pradr.dst || pradr.loc) ? String(pradr.dst || pradr.loc) : undefined,
+      city: (pradr.city || pradr.dst || pradr.loc) ? String(pradr.city || pradr.dst || pradr.loc) : undefined,
       state: pradr.stcd ?? stateFromCode,
       pinCode: pradr.pncd ? String(pradr.pncd) : undefined,
       status: info.sts ?? undefined,
