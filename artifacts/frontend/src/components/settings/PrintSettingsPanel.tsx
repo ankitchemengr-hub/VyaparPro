@@ -374,8 +374,10 @@ export function PrintSettingsPanel() {
                   rows={4}
                   value={(form.terms ?? []).join("\n")}
                   onChange={(e) => set("terms", e.target.value.split("\n"))}
+                  placeholder={"Goods once sold will not be taken back.\nSubject to <your city> jurisdiction."}
                   data-testid="input-terms"
                 />
+                <p className="text-xs text-muted-foreground">Printed on GST and Non-GST bills. Add your own line such as "Subject to &lt;your city&gt; jurisdiction."</p>
               </div>
               <div className="space-y-1">
                 <Label htmlFor="footerNote">Footer Note</Label>

@@ -48,10 +48,12 @@ const DEFAULT_PRINT_SETTINGS = {
   email: "",
   gstin: "",
   footerNote: "",
+  // No city here — a new company adds its own "Subject to … jurisdiction."
+  // (Older companies' Solapur line is kept in their stored config; see the
+  // print_settings patch in lib/bootstrap.ts.)
   terms: [
     "Goods once sold will not be taken back.",
     "Interest @ 24% p.a. on overdue bills.",
-    "Subject to Solapur jurisdiction.",
   ],
   bankName: "",
   bankAccount: "",

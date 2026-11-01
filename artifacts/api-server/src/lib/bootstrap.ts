@@ -605,6 +605,20 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
       created_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
     )`,
     `CREATE INDEX IF NOT EXISTS platform_notices_window_idx ON platform_notices(status, starts_at, ends_at)`,
+    // Default bill terms used to end with "Subject to Solapur jurisdiction."
+    // (routes/settings.ts DEFAULT_PRINT_SETTINGS). Companies that existed then
+    // and never saved Print Settings keep exactly those terms; companies
+    // created later get the new default without a city.
+    `INSERT INTO print_settings (company_id, config)
+     SELECT c.id, '{"terms":["Goods once sold will not be taken back.","Interest @ 24% p.a. on overdue bills.","Subject to Solapur jurisdiction."]}'::jsonb
+       FROM companies c
+      WHERE c.created_at < '2026-11-01T08:30:00Z'
+        AND NOT EXISTS (SELECT 1 FROM print_settings p WHERE p.company_id = c.id)
+     ON CONFLICT (company_id) DO NOTHING`,
+    `UPDATE print_settings p
+        SET config = p.config || '{"terms":["Goods once sold will not be taken back.","Interest @ 24% p.a. on overdue bills.","Subject to Solapur jurisdiction."]}'::jsonb
+       FROM companies c
+      WHERE c.id = p.company_id AND c.created_at < '2026-11-01T08:30:00Z' AND NOT (p.config ? 'terms')`,
     `CREATE TABLE IF NOT EXISTS non_gst_cleanup_jobs (
       id               SERIAL PRIMARY KEY,
       company_id       INTEGER NOT NULL,
