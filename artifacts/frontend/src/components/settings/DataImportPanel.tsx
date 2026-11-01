@@ -194,7 +194,7 @@ function ImportFlow({ kind }: { kind: Kind }) {
             )}
             {kind === "parties" && fillFromGst && (
               <div className="text-muted-foreground">
-                {done.gstLookup ? `Address filled from the GST registry for ${done.gstFilled ?? 0} parties.` : "GST lookup is not set up on the server (APPYFLOW_GST_API_KEY), so addresses were not filled."}
+                {done.gstLookup ? `Address filled from the GST registry for ${done.gstFilled ?? 0} parties.` : "GST lookup is not set up on the server (Cashfree or Appyflow keys in Railway Variables), so addresses were not filled."}
               </div>
             )}
             {kind === "items" && <div className="text-muted-foreground">Opening stock value {inr(done.stockValue ?? 0)} (at purchase price). Check Inventory.</div>}
