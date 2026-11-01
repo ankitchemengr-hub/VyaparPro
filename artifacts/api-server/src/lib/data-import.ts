@@ -7,8 +7,11 @@
 // Existing records are never changed: a party or item already in the ERP is
 // skipped, so importing the same file twice adds nothing the second time.
 import type { PoolClient } from "pg";
+import type { GstinDetails } from "./gstin-lookup";
 
 export const MAX_ROWS = 5000;
+// At most this many GSTIN lookups per import (each costs a provider credit).
+export const MAX_GST_LOOKUPS = 200;
 
 const n = (v: unknown) => { const x = Number(String(v ?? "").replace(/[,₹\s]/g, "")); return Number.isFinite(x) ? x : NaN; };
 const r2 = (v: number) => Math.round(v * 100) / 100;
@@ -53,8 +56,12 @@ function partyType(v: unknown, fallback: "customer" | "vendor"): "customer" | "v
 
 export async function importParties(
   db: PoolClient, companyId: number,
-  opts: { rows: PartyRow[]; defaultType: "customer" | "vendor"; pricingTier: "retail" | "wholesale"; asOn: string; dryRun: boolean; userId: number | null; userName: string | null },
-): Promise<{ results: RowResult[]; created: number; openingTotal: { customer: number; vendor: number } }> {
+  opts: {
+    rows: PartyRow[]; defaultType: "customer" | "vendor"; pricingTier: "retail" | "wholesale"; asOn: string; dryRun: boolean; userId: number | null; userName: string | null;
+    // Fills a new party's blank address, city, state and PIN from its GSTIN.
+    lookup?: (gstin: string) => Promise<GstinDetails>;
+  },
+): Promise<{ results: RowResult[]; created: number; openingTotal: { customer: number; vendor: number }; gstFilled: number }> {
   const existing = await db.query(`SELECT type, name, mobile, gstin FROM entities WHERE company_id = $1 AND type IN ('customer', 'vendor')`, [companyId]);
   const seen = new Set<string>();
   const mark = (type: string, name: string, mobile: string, gstin: string) => {
@@ -104,6 +111,22 @@ export async function importParties(
     });
   }
 
+  let gstFilled = 0;
+  if (!opts.dryRun && opts.lookup) {
+    const want = toCreate.filter((p) => p.gstin && (!p.address || !p.state || !p.pinCode)).slice(0, MAX_GST_LOOKUPS);
+    for (let i = 0; i < want.length; i += 8) {
+      await Promise.all(want.slice(i, i + 8).map(async (p) => {
+        const d = await opts.lookup!(p.gstin!);
+        if (!d.found) { if (!p.state && d.state) p.state = d.state; return; }
+        p.address ||= d.address?.slice(0, 500) ?? null;
+        p.city ||= d.city?.slice(0, 100) ?? null;
+        p.state ||= d.state?.slice(0, 100) ?? null;
+        p.pinCode ||= d.pinCode?.slice(0, 10) ?? null;
+        gstFilled++;
+      }));
+    }
+  }
+
   if (!opts.dryRun && toCreate.length) {
     // Codes from the company-wide entity code counter (see routes/entities.ts),
     // skipping any already typed in by hand.
@@ -133,7 +156,7 @@ export async function importParties(
     }
     await db.query(`UPDATE entity_code_sequence SET last_number = GREATEST(last_number, $2) WHERE company_id = $1 AND entity_type = 'all'`, [companyId, last]);
   }
-  return { results, created: toCreate.length, openingTotal };
+  return { results, created: toCreate.length, openingTotal, gstFilled };
 }
 
 // ── Items ────────────────────────────────────────────────────────────

@@ -154,3 +154,31 @@ test("items: opening stock, GST rate parsing, codes, duplicates", async () => {
   const log = (await pool.query(`SELECT action FROM audit_log WHERE company_id = $1 ORDER BY id`, [A])).rows.map((r: any) => r.action);
   assert.ok(log.includes("parties_imported") && log.includes("items_imported"));
 });
+
+test("parties: blank address filled from the GSTIN lookup, only for new parties", async () => {
+  const { importParties } = await import("../src/lib/data-import");
+  const asked: string[] = [];
+  const lookup = async (g: string) => {
+    asked.push(g);
+    return { found: true, gstin: g, legalName: "REG NAME", address: "1, MG Road, Pune", city: "Pune", state: "Maharashtra", pinCode: "411001" };
+  };
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const out = await importParties(client, A, {
+      rows: [
+        { row: 2, name: "Lookup Co", gstin: "27AAPFU0939F1ZV" },
+        { row: 3, name: "Has Address", gstin: "27AAACR5055K1Z7", address: "Own address", city: "Nashik", state: "Maharashtra", pinCode: "422001" },
+        { row: 4, name: "Sharma Traders", gstin: "08ABCDE1234F1Z5" },
+      ],
+      defaultType: "customer", pricingTier: "retail", asOn: "2025-04-01", dryRun: false, userId: null, userName: null, lookup,
+    });
+    assert.deepEqual(asked, ["27AAPFU0939F1ZV"], "existing parties and filled rows are not looked up");
+    assert.equal(out.gstFilled, 1);
+    const r = (await client.query(`SELECT name, address, city, state, pin_code FROM entities WHERE company_id = $1 AND name = 'Lookup Co'`, [A])).rows[0];
+    assert.deepEqual(r, { name: "Lookup Co", address: "1, MG Road, Pune", city: "Pune", state: "Maharashtra", pin_code: "411001" });
+  } finally {
+    await client.query("ROLLBACK");
+    client.release();
+  }
+});

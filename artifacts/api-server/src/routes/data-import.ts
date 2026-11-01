@@ -4,6 +4,7 @@ import { getCompanyId } from "../lib/tenant";
 import { logger } from "../lib/logger";
 import { todayIst } from "../lib/books";
 import { importParties, importItems, MAX_ROWS } from "../lib/data-import";
+import { lookupGstin, gstLookupConfigured } from "../lib/gstin-lookup";
 
 // Settings → Data Import (admin only). POST { rows, dryRun, … } — dryRun
 // (the default) only reports what each row would do.
@@ -32,6 +33,7 @@ async function run(req: any, res: any, what: "parties" | "items"): Promise<void>
           rows: rowsIn, asOn, dryRun, userId, userName: session?.name ?? null,
           defaultType: req.body?.defaultType === "vendor" ? "vendor" : "customer",
           pricingTier: req.body?.pricingTier === "wholesale" ? "wholesale" : "retail",
+          lookup: req.body?.fillFromGst === true ? (g: string) => lookupGstin(g, req.log) : undefined,
         })
       : await importItems(client, companyId, { rows: rowsIn, dryRun, userId });
     if (dryRun) {
@@ -45,7 +47,7 @@ async function run(req: any, res: any, what: "parties" | "items"): Promise<void>
       );
       await client.query("COMMIT");
     }
-    res.json({ dryRun, asOn, ...out });
+    res.json({ dryRun, asOn, gstLookup: gstLookupConfigured(), ...out });
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
     logger.error({ err }, `POST /data-import/${what} failed`);

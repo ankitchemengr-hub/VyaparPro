@@ -49,6 +49,7 @@ import { useToast } from "@/hooks/use-toast";
 import { shareInvoiceImage } from "@/lib/share-invoice";
 import { usePrintTitle } from "@/lib/print-with-title";
 import { useRoleFeature, FEATURE_BILLING_RATE_EDIT } from "@/lib/permissions";
+import { GstinFetchButton, type GstinDetails } from "@/components/gstin-fetch";
 
 type QtyMode = "unit" | "box";
 
@@ -2065,7 +2066,10 @@ function CustomerSearchDialog({
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">GSTIN</Label>
-                <Input value={newCustomer.gstin} onChange={(e) => setNewCustomer({ ...newCustomer, gstin: e.target.value })} placeholder="Optional" />
+                <div className="flex gap-1">
+                  <Input value={newCustomer.gstin} onChange={(e) => setNewCustomer({ ...newCustomer, gstin: e.target.value.toUpperCase() })} placeholder="Optional" />
+                  <GstinFetchButton gstin={newCustomer.gstin} onFetched={(d) => setNewCustomer((c) => fillFromGstin(c, d))} />
+                </div>
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Pricing Tier</Label>
@@ -2102,6 +2106,18 @@ function CustomerSearchDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+// A GSTIN lookup fills the address; the name only when none is typed yet.
+function fillFromGstin<T extends { name: string; address: string; city: string; state: string }>(c: T, d: GstinDetails): T {
+  if (!d.found) return d.state ? { ...c, state: d.state } : c;
+  return {
+    ...c,
+    name: c.name.trim() ? c.name : (d.tradeName || d.legalName || ""),
+    address: d.address ?? c.address,
+    city: d.city ?? c.city,
+    state: d.state ?? c.state,
+  };
 }
 
 function CustomerEditDialog({
@@ -2167,7 +2183,10 @@ function CustomerEditDialog({
           </div>
           <div className="space-y-1">
             <Label className="text-xs">GSTIN</Label>
-            <Input value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value })} />
+            <div className="flex gap-1">
+              <Input value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value.toUpperCase() })} />
+              <GstinFetchButton gstin={form.gstin} onFetched={(d) => setForm((f) => fillFromGstin(f, d))} />
+            </div>
           </div>
           <div className="col-span-2 space-y-1">
             <Label className="text-xs">Address</Label>

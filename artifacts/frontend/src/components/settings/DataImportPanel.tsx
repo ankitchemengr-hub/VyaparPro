@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -84,7 +85,7 @@ function guessMapping(headers: string[], kind: Kind): Record<string, string> {
 }
 
 interface Result { row: number; name: string; status: "new" | "exists" | "error"; reason?: string; detail?: string }
-interface Response { dryRun: boolean; asOn: string; created: number; results: Result[]; openingTotal?: { customer: number; vendor: number }; stockValue?: number }
+interface Response { dryRun: boolean; asOn: string; created: number; results: Result[]; openingTotal?: { customer: number; vendor: number }; stockValue?: number; gstFilled?: number; gstLookup?: boolean }
 
 const inr = (v: number) => `₹${Math.abs(v).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
@@ -109,6 +110,7 @@ function ImportFlow({ kind }: { kind: Kind }) {
   const [defaultType, setDefaultType] = useState<"customer" | "vendor">("customer");
   const [pricingTier, setPricingTier] = useState<"retail" | "wholesale">("wholesale");
   const [asOn, setAsOn] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }));
+  const [fillFromGst, setFillFromGst] = useState(false);
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<Response | null>(null);
   const [done, setDone] = useState<Response | null>(null);
@@ -150,7 +152,7 @@ function ImportFlow({ kind }: { kind: Kind }) {
     try {
       const r = await fetch(`/api/data-import/${kind}`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows, dryRun, defaultType, pricingTier, asOn }),
+        body: JSON.stringify({ rows, dryRun, defaultType, pricingTier, asOn, fillFromGst }),
       });
       const body = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(body.error || `Failed (${r.status})`);
@@ -188,6 +190,11 @@ function ImportFlow({ kind }: { kind: Kind }) {
               <div className="text-muted-foreground">
                 Opening as on {done.asOn}: customers {inr(done.openingTotal.customer)} receivable, suppliers {inr(done.openingTotal.vendor)} payable.
                 Each party's khata starts with an "Opening balance (imported)" line.
+              </div>
+            )}
+            {kind === "parties" && fillFromGst && (
+              <div className="text-muted-foreground">
+                {done.gstLookup ? `Address filled from the GST registry for ${done.gstFilled ?? 0} parties.` : "GST lookup is not set up on the server (APPYFLOW_GST_API_KEY), so addresses were not filled."}
               </div>
             )}
             {kind === "items" && <div className="text-muted-foreground">Opening stock value {inr(done.stockValue ?? 0)} (at purchase price). Check Inventory.</div>}
@@ -238,6 +245,13 @@ function ImportFlow({ kind }: { kind: Kind }) {
                 <div className="space-y-1">
                   <Label>Opening balance as on</Label>
                   <Input type="date" value={asOn} onChange={(e) => { setAsOn(e.target.value); setPreview(null); }} />
+                </div>
+                <div className="sm:col-span-3 flex items-start gap-2">
+                  <Switch id="fill-gst" checked={fillFromGst} onCheckedChange={setFillFromGst} />
+                  <Label htmlFor="fill-gst" className="font-normal text-sm leading-snug">
+                    Fill blank address, city, state and PIN from the GST registry for parties with a GSTIN
+                    <span className="block text-xs text-muted-foreground">Done while importing, up to 200 parties; each lookup uses one GST lookup credit.</span>
+                  </Label>
                 </div>
               </>
             )}

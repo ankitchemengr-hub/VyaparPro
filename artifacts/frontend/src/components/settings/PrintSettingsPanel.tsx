@@ -32,6 +32,7 @@ import { InvoiceTemplateSelector } from "@/components/invoice-templates/InvoiceT
 import { SAMPLE_INVOICE, SAMPLE_MAPS } from "@/components/invoice-templates/sample";
 import { PaymentQr } from "@/components/invoice-templates/parts";
 import { useCompanyLogo } from "@/hooks/use-company-logo";
+import { GstinFetchButton } from "@/components/gstin-fetch";
 
 const MAX_QR_IMAGE_BYTES = 500 * 1024;
 const MAX_WATERMARK_IMAGE_BYTES = 500 * 1024;
@@ -338,7 +339,20 @@ export function PrintSettingsPanel() {
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="gstin">GSTIN</Label>
-                  <Input id="gstin" value={form.gstin} onChange={(e) => set("gstin", e.target.value)} data-testid="input-gstin" />
+                  <div className="flex gap-1">
+                    <Input id="gstin" value={form.gstin} onChange={(e) => set("gstin", e.target.value.toUpperCase())} data-testid="input-gstin" />
+                    <GstinFetchButton
+                      gstin={form.gstin}
+                      onFetched={(d) => {
+                        if (!d.found) return;
+                        // The shop name stays as typed; the registered names fill blanks.
+                        if (!form.companyName.trim() && (d.tradeName || d.legalName)) set("companyName", (d.tradeName || d.legalName)!);
+                        if (d.legalName && d.legalName !== (form.companyName.trim() || d.tradeName)) set("gstLegalName", d.legalName);
+                        if (d.address) set("addressLine", d.address);
+                      }}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">Fetch fills the GST legal name and address from the GST registry.</p>
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="addressLine">Address</Label>
