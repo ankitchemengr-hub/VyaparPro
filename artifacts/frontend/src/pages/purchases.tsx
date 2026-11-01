@@ -57,6 +57,7 @@ import {
   Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
+import { GstinFetchButton } from "@/components/gstin-fetch";
 
 function ProductCombobox({
   products,
@@ -1050,12 +1051,24 @@ function AddVendorDialog({
             </div>
             <div className="space-y-2">
               <Label>GSTIN</Label>
-              <Input
-                value={gstin}
-                onChange={(e) => setGstin(e.target.value)}
-                placeholder="27AAACA1234A1Z5"
-                data-testid="input-new-vendor-gstin"
-              />
+              <div className="flex gap-1">
+                <Input
+                  value={gstin}
+                  onChange={(e) => setGstin(e.target.value.toUpperCase())}
+                  placeholder="27AAACA1234A1Z5"
+                  data-testid="input-new-vendor-gstin"
+                />
+                <GstinFetchButton
+                  gstin={gstin}
+                  onFetched={(d) => {
+                    if (d.state) setState(d.state);
+                    if (!d.found) return;
+                    if (!name.trim() && (d.tradeName || d.legalName)) setName((d.tradeName || d.legalName)!);
+                    if (d.city) setCity(d.city);
+                    if (d.address) setAddress(d.address);
+                  }}
+                />
+              </div>
             </div>
             <div className="space-y-2">
               <Label>City</Label>

@@ -28,9 +28,13 @@ export function GstinFetchButton({ gstin, onFetched, className }: { gstin: strin
         return;
       }
       onFetched(data);
+      // The registry's status confirms the GSTIN is live — a cancelled or
+      // suspended one should not be billed against.
+      const active = !data.status || /^active$/i.test(data.status);
       toast({
-        title: "Details fetched",
-        description: `${data.tradeName || data.legalName || data.gstin} — ${data.state ?? ""}${data.status && data.status !== "Active" ? ` (GSTIN ${data.status})` : ""}`,
+        title: active ? "GSTIN verified — Active" : `GSTIN is ${data.status}`,
+        description: `${data.legalName ?? ""}${data.tradeName && data.tradeName !== data.legalName ? ` (${data.tradeName})` : ""} — ${data.state ?? ""}${active ? "" : ". Check with the party before billing."}`,
+        variant: active ? undefined : "destructive",
       });
     } catch {
       toast({ title: "Fetch failed", description: "Could not reach GST registry.", variant: "destructive" });

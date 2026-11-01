@@ -122,7 +122,12 @@ export default function Customers() {
         if (data.state) editForm.setValue("state", data.state);
         if (data.pinCode) editForm.setValue("pinCode", data.pinCode);
       }
-      toast({ title: "Details fetched", description: `${name || data.gstin} — ${data.state ?? ""}` });
+      const active = !data.status || /^active$/i.test(data.status);
+      toast({
+        title: active ? "GSTIN verified — Active" : `GSTIN is ${data.status}`,
+        description: `${data.legalName || name || data.gstin} — ${data.state ?? ""}${active ? "" : ". Check with the party before billing."}`,
+        variant: active ? undefined : "destructive",
+      });
     } catch {
       toast({ title: "Fetch failed", description: "Could not reach GST registry.", variant: "destructive" });
     } finally {
