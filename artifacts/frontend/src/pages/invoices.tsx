@@ -12,6 +12,7 @@ import {
 import { RecordPaymentDialog } from "@/components/record-payment-dialog";
 import { InvoiceReceiptDialog } from "@/components/invoice-receipt-dialog";
 import { BillAge } from "@/components/bill-age";
+import { ConvertQuotationDialog } from "@/components/convert-quotation-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -25,7 +26,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { format, startOfMonth, startOfDay, subDays } from "date-fns";
-import { Pencil, Trash2, Loader2, UserCircle2, Eye, CalendarIcon, X, IndianRupee, Filter, AlertTriangle } from "lucide-react";
+import { Pencil, Trash2, Loader2, UserCircle2, Eye, CalendarIcon, X, IndianRupee, Filter, AlertTriangle, Plus, FileOutput } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
@@ -98,11 +99,11 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
   };
 
   const clearFilters = () => {
-    setSearch(""); setType("all"); setPayStatus("all");
+    setSearch(""); setType(initialType); setPayStatus("all");
     setDateFrom(undefined); setDateTo(undefined); setCreatedByUserId("all"); setLossOnly(false); setBelowRateOnly(false);
   };
 
-  const hasFilters = !!search || type !== "all" || payStatus !== "all" || !!dateFrom || !!dateTo || createdByUserId !== "all" || lossOnly || belowRateOnly;
+  const hasFilters = !!search || type !== initialType || payStatus !== "all" || !!dateFrom || !!dateTo || createdByUserId !== "all" || lossOnly || belowRateOnly;
 
   // Salesman scoping is enforced server-side from their session entity — no need
   // (and incorrect) to send user.id here, which is the user-account id, not the
@@ -124,6 +125,7 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
     id: number; invoiceNo: string; customerId: number | null; balanceDue: number; grandTotal: number; customerName: string | null;
   } | null>(null);
   const [viewingReceiptInvoiceId, setViewingReceiptInvoiceId] = useState<number | null>(null);
+  const [convertingQuotation, setConvertingQuotation] = useState<{ id: number; invoiceNo: string } | null>(null);
 
   const noPayTypes = new Set(["quotation", "proforma_invoice", "sale_order", "delivery_challan"]);
   const getPayStatus = (inv: any): string => {
@@ -139,7 +141,10 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
   // Admin only: number of lines on this sale sold below cost (server-computed
   // from the cost snapshotted at billing time). Absent for other roles.
   const lossItems = (inv: any): number => (isAdmin ? Number(inv.lossItemCount ?? 0) : 0);
+  // Quotations live only under the Quotations menu, never in the Invoices list.
+  const isQuotationsPage = initialType === "quotation";
   const payFiltered = (invoices ?? []).filter((inv) => {
+    if (!isQuotationsPage && (inv.invoiceType as string) === "quotation") return false;
     if (payStatus === "all" || payStatus === "cancelled") return true;
     return getPayStatus(inv) === payStatus;
   });
@@ -172,6 +177,11 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight">{pageTitle ?? "Invoices"}</h1>
+        {isQuotationsPage && (
+          <Button onClick={() => setLocation("/billing?docType=quotation")} data-testid="button-new-quotation">
+            <Plus className="w-4 h-4 mr-1.5" /> New Quotation
+          </Button>
+        )}
       </div>
 
       <Card>
@@ -197,7 +207,7 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-80 space-y-4" align="end">
-                <div className="space-y-1.5">
+                {!isQuotationsPage && <div className="space-y-1.5">
                   <Label className="text-xs">Invoice Type</Label>
                   <Select value={type} onValueChange={setType}>
                     <SelectTrigger className="w-full" data-testid="select-invoice-type">
@@ -207,14 +217,13 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
                       <SelectItem value="all">All Types</SelectItem>
                       <SelectItem value="gst">GST</SelectItem>
                       <SelectItem value="non_gst">Non-GST</SelectItem>
-                      <SelectItem value="quotation">Quotation</SelectItem>
                       <SelectItem value="proforma_invoice">Proforma Invoice</SelectItem>
                       <SelectItem value="bill_of_supply">Bill of Supply</SelectItem>
                       <SelectItem value="delivery_challan">Delivery Challan</SelectItem>
                       <SelectItem value="sale_order">Sale Order</SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
+                </div>}
 
                 <div className="space-y-1.5">
                   <Label className="text-xs">Payment Status</Label>
@@ -468,6 +477,18 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
                         );
                         if (ps === "not_paid") return <Badge variant="destructive">Not Paid</Badge>;
                         if (ps === "cancelled") return <Badge variant="destructive">Cancelled</Badge>;
+                        if (invoice.invoiceType === "quotation") {
+                          return invoice.convertedInvoiceId ? (
+                            <Badge
+                              className="cursor-pointer bg-green-600 text-white hover:bg-green-700 whitespace-nowrap"
+                              onClick={() => setLocation(`/invoices/${invoice.convertedInvoiceId}`)}
+                              title="Open the invoice made from this quotation"
+                              data-testid={`badge-converted-${invoice.id}`}
+                            >
+                              Invoiced · {invoice.convertedInvoiceNo}
+                            </Badge>
+                          ) : <Badge variant="secondary">Open</Badge>;
+                        }
                         return <Badge variant="secondary">{invoice.status}</Badge>;
                       })()}
                     </TableCell>
@@ -498,7 +519,20 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
-                        {(isAdmin || isSalesman || isStore) && invoice.status !== "cancelled" && (() => {
+                        {(isAdmin || isSalesman || isStore) && invoice.invoiceType === "quotation" && invoice.status !== "cancelled" && !invoice.convertedInvoiceId && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-primary"
+                            onClick={() => setConvertingQuotation({ id: invoice.id, invoiceNo: invoice.invoiceNo })}
+                            data-testid={`button-convert-quotation-${invoice.id}`}
+                            aria-label="Convert to Invoice"
+                            title="Convert to Invoice"
+                          >
+                            <FileOutput className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {(isAdmin || isSalesman || isStore) && invoice.status !== "cancelled" && invoice.invoiceType !== "quotation" && (() => {
                           const ps = getPayStatus(invoice);
                           const isPaid = ps === "paid";
                           return (
@@ -567,6 +601,8 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
           </Table>
         </CardContent>
       </Card>
+
+      <ConvertQuotationDialog quotation={convertingQuotation} onClose={() => setConvertingQuotation(null)} />
 
       <RecordPaymentDialog
         open={!!payingInvoice}

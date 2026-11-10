@@ -300,6 +300,7 @@ function parseSearch(search: string) {
     customer: params.get("customer"),
     edit: params.get("edit"),
     invoiceType: params.get("invoiceType"),
+    docType: params.get("docType"),
   };
 }
 
@@ -320,7 +321,10 @@ export default function Billing() {
   });
   const [showCustomerSearch, setShowCustomerSearch] = useState(false);
   const [showCustomerEdit, setShowCustomerEdit] = useState(false);
-  const [docType, setDocType] = useState<string>("invoice");
+  // ?docType=quotation (Quotations → New Quotation) opens straight on that document type.
+  const [docType, setDocType] = useState<string>(
+    () => (DOC_TYPE_OPTIONS.some((o) => o.value === params.docType) ? params.docType! : "invoice")
+  );
   const [invoiceSubtype, setInvoiceSubtype] = useState<"gst" | "non_gst">(
     () => (params.invoiceType === "gst" ? "gst" : "non_gst")
   );
