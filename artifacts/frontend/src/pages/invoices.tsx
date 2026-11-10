@@ -11,6 +11,7 @@ import {
 } from "@workspace/api-client-react";
 import { RecordPaymentDialog } from "@/components/record-payment-dialog";
 import { InvoiceReceiptDialog } from "@/components/invoice-receipt-dialog";
+import { BillAge } from "@/components/bill-age";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -365,7 +366,8 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Invoice No</TableHead>
+                {/* Phones show the bill's short date here instead of its number. */}
+                <TableHead><span className="sm:hidden">Date</span><span className="hidden sm:inline">Invoice No</span></TableHead>
                 <TableHead className="hidden sm:table-cell">Date</TableHead>
                 <TableHead className="hidden md:table-cell">Type</TableHead>
                 <TableHead>Customer</TableHead>
@@ -373,6 +375,7 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
                 {isAdmin && <TableHead className="hidden lg:table-cell">Salesman</TableHead>}
                 <TableHead className="text-right">Total</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead className="whitespace-nowrap" title="Days since the bill date while unpaid">Due</TableHead>
                 {showPartyBalance && <TableHead className="text-right whitespace-nowrap">Khata Bal</TableHead>}
                 <TableHead className="text-right w-24 sm:w-32">Actions</TableHead>
               </TableRow>
@@ -380,11 +383,11 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={(isAdmin ? 9 : 7) + (showPartyBalance ? 1 : 0)} className="text-center py-8">Loading...</TableCell>
+                  <TableCell colSpan={(isAdmin ? 10 : 8) + (showPartyBalance ? 1 : 0)} className="text-center py-8">Loading...</TableCell>
                 </TableRow>
               ) : displayedInvoices.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={(isAdmin ? 9 : 7) + (showPartyBalance ? 1 : 0)} className="text-center py-8">No invoices found.</TableCell>
+                  <TableCell colSpan={(isAdmin ? 10 : 8) + (showPartyBalance ? 1 : 0)} className="text-center py-8">No invoices found.</TableCell>
                 </TableRow>
               ) : (
                 displayedInvoices.map((invoice) => {
@@ -405,7 +408,13 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
                     }
                   >
                     <TableCell className={bySalesman ? "font-mono font-semibold italic text-amber-900 dark:text-amber-200" : "font-medium"}>
-                      {invoice.invoiceNo}
+                      <span className="sm:hidden whitespace-nowrap not-italic font-sans" data-testid={`text-short-date-${invoice.id}`}>
+                        {(() => {
+                          const d = new Date(invoice.invoiceDate);
+                          return format(d, d.getFullYear() === new Date().getFullYear() ? "dd MMM" : "dd MMM yy");
+                        })()}
+                      </span>
+                      <span className="hidden sm:inline">{invoice.invoiceNo}</span>
                       {belowRate && (
                         <Badge className="ml-2 bg-rose-600 text-white border-transparent hover:bg-rose-700 text-[10px] px-1.5 py-0" data-testid={`badge-below-rate-${invoice.id}`}>
                           <AlertTriangle className="w-3 h-3 mr-0.5" /> Below rate
@@ -461,6 +470,9 @@ export default function Invoices({ initialType = "all", pageTitle }: { initialTy
                         if (ps === "cancelled") return <Badge variant="destructive">Cancelled</Badge>;
                         return <Badge variant="secondary">{invoice.status}</Badge>;
                       })()}
+                    </TableCell>
+                    <TableCell>
+                      <BillAge payStatus={getPayStatus(invoice)} invoiceDate={invoice.invoiceDate} testId={`text-bill-age-${invoice.id}`} />
                     </TableCell>
                     {showPartyBalance && (
                       <TableCell className="text-right whitespace-nowrap text-xs font-semibold" data-testid={`text-party-balance-${invoice.id}`}>

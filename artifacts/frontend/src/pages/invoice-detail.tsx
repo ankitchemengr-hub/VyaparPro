@@ -29,6 +29,7 @@ import { getTemplate } from "@/components/invoice-templates/registry";
 import { FALLBACK_PRINT_SETTINGS } from "@/components/invoice-templates/defaults";
 import { useCompanyLogo } from "@/hooks/use-company-logo";
 import { RecordPaymentDialog } from "@/components/record-payment-dialog";
+import { BillAge } from "@/components/bill-age";
 
 export default function InvoiceDetail() {
   const [, params] = useRoute("/invoices/:id");
@@ -212,6 +213,9 @@ export default function InvoiceDetail() {
           {invPayStatus === "not_paid" && <Badge variant="destructive">Not Paid</Badge>}
           {invPayStatus === "cancelled" && <Badge variant="destructive">Cancelled</Badge>}
           {invPayStatus === "na" && <Badge variant="secondary">{invoice.status}</Badge>}
+          {(invPayStatus === "paid" || invPayStatus === "partial" || invPayStatus === "not_paid") && (
+            <BillAge payStatus={invPayStatus} invoiceDate={invoice.invoiceDate} long className="text-sm" testId="text-bill-age" />
+          )}
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {!isCustomer && (
