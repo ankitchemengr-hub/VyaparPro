@@ -5657,6 +5657,9 @@ components:
           type: string
         accountId:
           type: integer
+        discount:
+          type: number
+          description: Discount given to the customer on top of amount — clears dues like a payment but no money reaches any account; recorded as a Discount expense. Admin only.
 
     Account:
       type: object

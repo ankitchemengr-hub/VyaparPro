@@ -1875,7 +1875,8 @@ export const LogPaymentBody = zod.object({
   "amount": zod.number(),
   "mode": zod.enum(['cash', 'cheque', 'upi', 'bank_transfer', 'other']),
   "notes": zod.string().optional(),
-  "accountId": zod.number().optional()
+  "accountId": zod.number().optional(),
+  "discount": zod.number().optional().describe('Discount given to the customer on top of amount — clears dues like a payment but no money reaches any account; recorded as a Discount expense. Admin only.')
 })
 
 export const LogPaymentResponse = zod.object({

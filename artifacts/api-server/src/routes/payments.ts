@@ -437,6 +437,20 @@ router.post("/payments", async (req, res): Promise<void> => {
   const session = (req as any).session;
   const isAdmin = session?.role === "admin";
 
+  // Discount given while taking the payment: settles dues like the cash does,
+  // but no money reaches any account. Only the admin's direct-commit path
+  // below handles it — a pending salesman payment has nowhere to keep it
+  // until approval.
+  const discount = Math.round(Number(parsed.data.discount ?? 0) * 100) / 100;
+  if (!(discount >= 0) || !(parsed.data.amount >= 0) || parsed.data.amount + discount <= 0) {
+    res.status(400).json({ error: "Amount and discount must be zero or more, and not both zero" });
+    return;
+  }
+  if (discount > 0 && !isAdmin) {
+    res.status(403).json({ error: "Only the admin can give a discount while taking a payment" });
+    return;
+  }
+
   // Resolve customer
   const WALKIN_LOCK_KEY = 7421953;
   let customer;
@@ -507,7 +521,7 @@ router.post("/payments", async (req, res): Promise<void> => {
       );
       const payment = mapPaymentRow(insertRes.rows[0]);
 
-      if (parsed.data.accountId) {
+      if (parsed.data.accountId && parsed.data.amount > 0) {
         const upd = await client.query(
           `UPDATE accounts SET current_balance = current_balance + $1
            WHERE id = $2 AND is_active = true AND company_id = $3
@@ -562,16 +576,46 @@ router.post("/payments", async (req, res): Promise<void> => {
         }
       }
 
+      // Cash and discount settle the customer's dues as one receipt, so the
+      // bill allocation and the receipt's balance before/after cover both.
       const { allocations } = await applyEntityPayment(client, {
         companyId,
         entityId: customerId,
-        amount: parsed.data.amount,
+        amount: Math.round((parsed.data.amount + discount) * 100) / 100,
         mode: parsed.data.mode,
         receiptNo: receiptId,
         referenceId: payment.id,
         isCustomerReceipt: true,
         startInvoiceId: parsed.data.invoiceId ?? null,
+        ...(discount > 0
+          ? { description: `Payment received (${parsed.data.mode}) ₹${parsed.data.amount} + discount ₹${discount}` }
+          : {}),
       });
+
+      if (discount > 0) {
+        // Reporting-only, like a bill discount's expense: no account and no
+        // invoice_id (that column belongs to the invoice's own bill-discount
+        // expense, which invoice edits rewrite).
+        const cat = await client.query(
+          `INSERT INTO expense_categories (company_id, name)
+           VALUES ($1, 'Discount')
+           ON CONFLICT (company_id, name) DO UPDATE SET name = EXCLUDED.name
+           RETURNING id`,
+          [companyId],
+        );
+        const invoiceNo = parsed.data.invoiceId
+          ? (await client.query(`SELECT invoice_no FROM invoices WHERE id = $1 AND company_id = $2`, [parsed.data.invoiceId, companyId])).rows[0]?.invoice_no
+          : null;
+        await client.query(
+          `INSERT INTO expenses (company_id, date, category_id, category_name, amount, payment_mode, account_id, paid_to, notes, created_by_user_id)
+           VALUES ($1, (NOW() AT TIME ZONE 'Asia/Kolkata')::date, $2, 'Discount', $3, 'cash', NULL, $4, $5, $6)`,
+          [
+            companyId, cat.rows[0].id, String(discount), customer.name,
+            `Discount on payment ${receiptId}${invoiceNo ? ` (Invoice ${invoiceNo})` : ""}`,
+            session.userId ?? null,
+          ],
+        );
+      }
 
       await client.query("COMMIT");
       res.status(201).json({ ...formatPayment(payment), allocations });

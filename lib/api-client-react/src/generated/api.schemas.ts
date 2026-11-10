@@ -1763,6 +1763,8 @@ export interface PaymentInput {
   mode: PaymentInputMode;
   notes?: string;
   accountId?: number;
+  /** Discount given to the customer on top of amount — clears dues like a payment but no money reaches any account; recorded as a Discount expense. Admin only. */
+  discount?: number;
 }
 
 export type AccountType = typeof AccountType[keyof typeof AccountType];

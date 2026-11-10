@@ -31,6 +31,7 @@ import {
   CheckCircle2, Hash, Printer,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/use-auth";
 import { useGetPrintSettings } from "@workspace/api-client-react";
 import { FALLBACK_PRINT_SETTINGS } from "@/components/invoice-templates/defaults";
 import { useCompanyLogo } from "@/hooks/use-company-logo";
@@ -107,7 +108,13 @@ export function RecordPaymentDialog({
   });
   const advanceCredit = entity && Number(entity.outstandingBalance) < 0 ? Math.abs(Number(entity.outstandingBalance)) : 0;
 
+  const { user } = useAuth();
+  // The server takes a discount only on the admin's direct payment, not on a
+  // salesman's pending one.
+  const canDiscount = user?.role === "admin";
+
   const [amount, setAmount] = useState(0);
+  const [discount, setDiscount] = useState(0);
   const [mode, setMode] = useState<PayMode>("cash");
   const [ref, setRef] = useState("");
   const [notes, setNotes] = useState("");
@@ -125,6 +132,7 @@ export function RecordPaymentDialog({
   useEffect(() => {
     if (!open) return;
     setAmount(maxAmount != null ? Number(maxAmount) : 0);
+    setDiscount(0);
     setMode("cash");
     setRef("");
     setNotes("");
@@ -155,6 +163,9 @@ export function RecordPaymentDialog({
       .catch(() => {});
   }, [open]);
 
+  const discountGiven = canDiscount ? discount : 0;
+  const settled = amount + discountGiven;
+
   const handleSubmit = () => {
     if (matchingAccounts.length > 0 && !accountId) {
       setAccountError(true);
@@ -170,6 +181,7 @@ export function RecordPaymentDialog({
           amount,
           mode,
           ...(accountId ? { accountId } : {}),
+          ...(canDiscount && discount > 0 ? { discount } : {}),
           notes: [
             invoiceNo ? `Invoice ${invoiceNo}` : "",
             ref ? `Ref: ${ref}` : "",
@@ -201,7 +213,7 @@ export function RecordPaymentDialog({
           });
           toast({
             title: payment.status === "approved" ? "Payment recorded" : "Payment logged — pending approval",
-            description: `Receipt ${payment.receiptId} • ₹${amount.toLocaleString()} via ${modeLabels[mode]}`,
+            description: `Receipt ${payment.receiptId} • ₹${amount.toLocaleString()} via ${modeLabels[mode]}${discountGiven > 0 ? ` + ₹${discountGiven.toLocaleString()} discount` : ""}`,
           });
         },
         onError: async (err: any) => {
@@ -277,7 +289,10 @@ export function RecordPaymentDialog({
                   <span className="font-mono text-sm font-medium">{success.receiptId}</span>
                 </div>
               )}
-              <p className="text-sm text-muted-foreground">₹{amount.toLocaleString()} via {modeLabels[mode]}</p>
+              <p className="text-sm text-muted-foreground">
+                ₹{amount.toLocaleString()} via {modeLabels[mode]}
+                {discountGiven > 0 && <> + ₹{discountGiven.toLocaleString()} discount (added to Expenses)</>}
+              </p>
               {!success.approved && (
                 <p className="text-xs text-amber-600 dark:text-amber-400">
                   Pending admin approval before the ledger is updated.
@@ -323,6 +338,12 @@ export function RecordPaymentDialog({
                   <span>₹{amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
                 <div className="text-xs text-muted-foreground mt-1">{rupeesInWords(amount)}</div>
+                {discountGiven > 0 && (
+                  <div className="flex justify-between mt-2">
+                    <span>Discount</span>
+                    <span>₹{discountGiven.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                )}
               </div>
 
               {success.allocations.length > 0 && (
@@ -356,7 +377,7 @@ export function RecordPaymentDialog({
               )}
               {success.balanceBefore != null && (
                 <div className="text-xs text-muted-foreground">
-                  Customer balance: ₹{success.balanceBefore.toLocaleString()} → ₹{(success.balanceBefore - amount).toLocaleString()}
+                  Customer balance: ₹{success.balanceBefore.toLocaleString()} → ₹{(success.balanceBefore - settled).toLocaleString()}
                 </div>
               )}
             </div>
@@ -400,6 +421,36 @@ export function RecordPaymentDialog({
                 </p>
               )}
             </div>
+
+            {canDiscount && (
+              <div className="space-y-1.5">
+                <Label htmlFor="pay-discount">Discount (₹) <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                <NumberInput
+                  id="pay-discount"
+                  min={0}
+                  step="any"
+                  value={discount}
+                  onChange={(v) => {
+                    setDiscount(v);
+                    // Keep "cash + discount" at the balance due when the amount
+                    // is still the pre-filled full balance.
+                    if (maxAmount != null && amount + discount === Number(maxAmount)) {
+                      setAmount(Math.max(0, Math.round((Number(maxAmount) - v) * 100) / 100));
+                    }
+                  }}
+                  data-testid="input-pay-discount"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Clears the customer's balance like cash, and goes to Expenses under "Discount".
+                  {discount > 0 && ` Settles ₹${settled.toLocaleString()} in total.`}
+                </p>
+                {maxAmount != null && settled > Number(maxAmount) + 0.005 && (
+                  <p className="text-xs text-amber-600">
+                    Cash + discount is more than this bill's balance due — the extra goes to older dues or becomes advance credit.
+                  </p>
+                )}
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <Label>Payment Mode</Label>
@@ -491,11 +542,11 @@ export function RecordPaymentDialog({
               </Button>
               <Button
                 onClick={handleSubmit}
-                disabled={logPayment.isPending || amount <= 0}
+                disabled={logPayment.isPending || amount < 0 || discountGiven < 0 || settled <= 0}
                 data-testid="button-submit-payment"
               >
                 {logPayment.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Record ₹{amount.toLocaleString()} {modeLabels[mode]}
+                Record ₹{amount.toLocaleString()} {modeLabels[mode]}{discountGiven > 0 ? ` + ₹${discountGiven.toLocaleString()} off` : ""}
               </Button>
             </>
           )}
