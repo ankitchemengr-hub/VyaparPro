@@ -211,19 +211,27 @@ function KhatabookTab({ type }: { type: PartyType }) {
                 <button
                   key={e.id}
                   type="button"
-                  className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/50 text-left"
+                  className="w-full flex items-center gap-3 px-3 sm:px-4 py-3 hover:bg-muted/50 text-left"
                   onClick={() => { openedFromList = true; setLocation(khatabookPartyUrl(type, e.id)); }}
                   data-testid={`row-khatabook-${type}-${e.id}`}
                 >
+                  {/* Full name, wrapping onto a second line on phones instead of
+                      being cut off; the due date sits under it so the amount
+                      column on the right stays narrow. */}
                   <div className="min-w-0 flex-1">
-                    <div className="font-medium truncate">{e.name}</div>
-                    <div className="text-xs text-muted-foreground truncate">{e.mobile}</div>
+                    <div className="font-medium leading-snug break-words">{e.name}</div>
+                    <div className="text-xs text-muted-foreground break-words">
+                      {e.mobile}
+                      {e.nextDueDate && <span className="whitespace-nowrap">{e.mobile ? " · " : ""}Due {e.nextDueDate}</span>}
+                    </div>
                   </div>
                   <div className="text-right shrink-0">
-                    <div className={`font-mono font-semibold text-sm sm:text-base ${e.outstandingBalance * sign > 0 ? "text-emerald-600" : e.outstandingBalance * sign < 0 ? "text-red-600" : "text-muted-foreground"}`}>
+                    <div className={`font-mono font-semibold text-sm sm:text-base whitespace-nowrap ${e.outstandingBalance * sign > 0 ? "text-emerald-600" : e.outstandingBalance * sign < 0 ? "text-red-600" : "text-muted-foreground"}`}>
                       {formatRs(e.outstandingBalance)}
                     </div>
-                    {e.nextDueDate && <div className="text-[10px] text-muted-foreground">Due {e.nextDueDate}</div>}
+                    <div className="text-[10px] text-muted-foreground whitespace-nowrap">
+                      {e.outstandingBalance * sign > 0 ? "You'll get" : e.outstandingBalance * sign < 0 ? "You'll give" : "Settled"}
+                    </div>
                   </div>
                   <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
                 </button>
