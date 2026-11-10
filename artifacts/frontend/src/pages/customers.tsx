@@ -30,6 +30,7 @@ import { Link } from "wouter";
 import { Search, UserPlus, Pencil, Loader2, RefreshCw, MessageCircle, MapPin, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
+import { GSTIN_RE } from "@/components/gstin-fetch";
 
 type FilterType = EntityType | "all";
 
@@ -234,6 +235,18 @@ export default function Customers() {
       pricingTier: "retail",
     },
   });
+
+  // A complete GSTIN typed into Add looks itself up — once per GSTIN — so the
+  // name, address and PIN fill without pressing Fetch.
+  const addGstin = form.watch("gstin");
+  const lastAutoGstin = React.useRef("");
+  React.useEffect(() => {
+    const val = (addGstin ?? "").trim().toUpperCase();
+    if (!showAdd || !GSTIN_RE.test(val) || val === lastAutoGstin.current) return;
+    lastAutoGstin.current = val;
+    void fetchGstinDetails(val, "add");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addGstin, showAdd]);
 
   const openAdd = () => {
     form.reset({

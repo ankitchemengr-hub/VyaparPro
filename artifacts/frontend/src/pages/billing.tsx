@@ -49,7 +49,7 @@ import { useToast } from "@/hooks/use-toast";
 import { shareInvoiceImage } from "@/lib/share-invoice";
 import { usePrintTitle } from "@/lib/print-with-title";
 import { useRoleFeature, FEATURE_BILLING_RATE_EDIT } from "@/lib/permissions";
-import { GstinFetchButton, type GstinDetails } from "@/components/gstin-fetch";
+import { GstinFetchButton, gstinPartyName, type GstinDetails } from "@/components/gstin-fetch";
 
 type QtyMode = "unit" | "box";
 
@@ -1882,13 +1882,13 @@ function CustomerSearchDialog({
   const [step, setStep] = useState<"mobile" | "found" | "not_found">("mobile");
   const [foundCustomer, setFoundCustomer] = useState<any>(null);
   const [newCustomer, setNewCustomer] = useState({
-    name: "", gstin: "", address: "", city: "", state: "Maharashtra", pricingTier: "retail" as "retail" | "wholesale",
+    name: "", gstin: "", address: "", city: "", state: "Maharashtra", pinCode: "", pricingTier: "retail" as "retail" | "wholesale",
   });
 
   const reset = () => {
     setSearchMode("mobile");
     setMobileInput(""); setSearchMobile(""); setNameInput(""); setStep("mobile"); setFoundCustomer(null);
-    setNewCustomer({ name: "", gstin: "", address: "", city: "", state: "Maharashtra", pricingTier: "retail" });
+    setNewCustomer({ name: "", gstin: "", address: "", city: "", state: "Maharashtra", pinCode: "", pricingTier: "retail" });
   };
 
   const { data: lookupResult, isFetching: isLooking } = useLookupEntityByMobile(
@@ -1932,7 +1932,7 @@ function CustomerSearchDialog({
 
   const handleCreate = () => {
     createEntity.mutate(
-      { data: { type: "customer", mobile: mobileInput, ...newCustomer } },
+      { data: { type: "customer", mobile: mobileInput, ...newCustomer, pinCode: newCustomer.pinCode || undefined } },
       {
         onSuccess: (created) => {
           queryClient.invalidateQueries({ queryKey: getListEntitiesQueryKey() });
@@ -2093,7 +2093,7 @@ function CustomerSearchDialog({
                 <Label className="text-xs">GSTIN</Label>
                 <div className="flex gap-1">
                   <Input value={newCustomer.gstin} onChange={(e) => setNewCustomer({ ...newCustomer, gstin: e.target.value.toUpperCase() })} placeholder="Optional" />
-                  <GstinFetchButton gstin={newCustomer.gstin} onFetched={(d) => setNewCustomer((c) => fillFromGstin(c, d))} />
+                  <GstinFetchButton auto gstin={newCustomer.gstin} onFetched={(d) => setNewCustomer((c) => fillFromGstin(c, d))} />
                 </div>
               </div>
               <div className="space-y-1">
@@ -2118,6 +2118,10 @@ function CustomerSearchDialog({
                 <Label className="text-xs">State</Label>
                 <Input value={newCustomer.state} onChange={(e) => setNewCustomer({ ...newCustomer, state: e.target.value })} />
               </div>
+              <div className="space-y-1">
+                <Label className="text-xs">PIN Code</Label>
+                <Input value={newCustomer.pinCode} inputMode="numeric" maxLength={6} onChange={(e) => setNewCustomer({ ...newCustomer, pinCode: e.target.value.replace(/\D/g, "") })} />
+              </div>
             </div>
             <div className="flex gap-2">
               <Button variant="outline" className="flex-1" onClick={() => { setStep("mobile"); setSearchMobile(""); }}>Back</Button>
@@ -2133,15 +2137,17 @@ function CustomerSearchDialog({
   );
 }
 
-// A GSTIN lookup fills the address; the name only when none is typed yet.
-function fillFromGstin<T extends { name: string; address: string; city: string; state: string }>(c: T, d: GstinDetails): T {
+// A GSTIN lookup fills the registered name (it replaces whatever was typed
+// while searching — a GST bill must carry the registry's name), address and PIN.
+function fillFromGstin<T extends { name: string; address: string; city: string; state: string; pinCode?: string }>(c: T, d: GstinDetails): T {
   if (!d.found) return d.state ? { ...c, state: d.state } : c;
   return {
     ...c,
-    name: c.name.trim() ? c.name : (d.tradeName || d.legalName || ""),
+    name: gstinPartyName(d) || c.name,
     address: d.address ?? c.address,
     city: d.city ?? c.city,
     state: d.state ?? c.state,
+    ...("pinCode" in c && d.pinCode ? { pinCode: d.pinCode } : {}),
   };
 }
 

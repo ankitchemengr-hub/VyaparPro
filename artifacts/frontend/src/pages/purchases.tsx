@@ -57,7 +57,7 @@ import {
   Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
-import { GstinFetchButton } from "@/components/gstin-fetch";
+import { GstinFetchButton, gstinPartyName } from "@/components/gstin-fetch";
 
 function ProductCombobox({
   products,
@@ -1059,11 +1059,12 @@ function AddVendorDialog({
                   data-testid="input-new-vendor-gstin"
                 />
                 <GstinFetchButton
+                  auto
                   gstin={gstin}
                   onFetched={(d) => {
                     if (d.state) setState(d.state);
                     if (!d.found) return;
-                    if (!name.trim() && (d.tradeName || d.legalName)) setName((d.tradeName || d.legalName)!);
+                    if (gstinPartyName(d)) setName(gstinPartyName(d));
                     if (d.city) setCity(d.city);
                     if (d.address) setAddress(d.address);
                   }}
