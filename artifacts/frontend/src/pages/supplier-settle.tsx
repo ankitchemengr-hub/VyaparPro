@@ -150,12 +150,10 @@ export default function SupplierSettle() {
 
                       {isOpen && (
                         <div className="mt-3 border-t pt-3 space-y-3">
-                          {/* Kept to the three figures the owner works from: what we
-                              owe them, what their material has brought in from the
-                              market, and what the market still owes for it. */}
-                          <div className="grid grid-cols-3 gap-2 text-sm">
+                          {/* Kept to the two figures the owner works from: what we
+                              owe them, and what the market still owes for their material. */}
+                          <div className="grid grid-cols-2 gap-2 text-sm">
                             <div className="min-w-0"><div className="text-xs text-muted-foreground">Total to pay</div><div className="font-mono font-semibold text-red-600 break-all">{rs(s.supplierDue)}</div></div>
-                            <div className="min-w-0"><div className="text-xs text-muted-foreground">Collected from market</div><div className="font-mono text-emerald-600 break-all">{rs(s.collected)}</div></div>
                             <div className="min-w-0"><div className="text-xs text-muted-foreground">Pending in market</div><div className="font-mono text-amber-600 break-all">{rs(s.pendingFromCustomers)}</div></div>
                           </div>
                           {s.products.length > 0 && (
@@ -165,7 +163,6 @@ export default function SupplierSettle() {
                                   <TableRow>
                                     <TableHead>Material</TableHead>
                                     <TableHead className="text-right">Bought</TableHead>
-                                    <TableHead className="text-right">Collected</TableHead>
                                     <TableHead className="text-right">In stock</TableHead>
                                   </TableRow>
                                 </TableHeader>
@@ -174,7 +171,6 @@ export default function SupplierSettle() {
                                     <TableRow key={p.productId}>
                                       <TableCell className="font-medium min-w-[140px]">{p.productName}</TableCell>
                                       <TableCell className="text-right whitespace-nowrap">{qty(p.purchasedQty)} {p.unit}<div className="text-xs text-muted-foreground">{rs(p.purchasedValue)}</div></TableCell>
-                                      <TableCell className="text-right whitespace-nowrap font-mono text-emerald-600">{rs(p.collected)}</TableCell>
                                       <TableCell className="text-right whitespace-nowrap">{qty(p.stockQty)} {p.unit}<div className="text-xs text-muted-foreground">{rs(p.stockValue)}</div></TableCell>
                                     </TableRow>
                                   ))}
