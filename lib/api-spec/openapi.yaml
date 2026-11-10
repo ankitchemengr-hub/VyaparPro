@@ -1074,9 +1074,10 @@ paths:
             type: integer
         - name: type
           in: query
+          description: Document type — the Quotations page lists type=quotation.
           schema:
             type: string
-            enum: [gst, non_gst]
+            enum: [gst, non_gst, quotation, proforma_invoice, bill_of_supply, delivery_challan, sale_order]
         - name: month
           in: query
           schema:
@@ -5182,6 +5183,16 @@ components:
         status:
           type: string
           enum: [draft, saved, cancelled]
+        sourceQuotationId:
+          type: ["integer", "null"]
+          description: The quotation this invoice was converted from.
+        sourceQuotationNo:
+          type: ["string", "null"]
+        convertedInvoiceId:
+          type: ["integer", "null"]
+          description: On a quotation — the live (not cancelled) invoice it was converted into. Null while it is still open.
+        convertedInvoiceNo:
+          type: ["string", "null"]
         items:
           type: array
           items:
@@ -5271,6 +5282,9 @@ components:
         billDiscount:
           type: number
           description: Flat discount applied after Grand Total, subtracted from it. Automatically logged as an expense (category "Discount") for reporting.
+        fromQuotationId:
+          type: integer
+          description: Convert to Invoice — the quotation this invoice is made from. The invoice gets its own number from its own series; the quotation stays in the Quotations list, marked converted.
         items:
           type: array
           items:

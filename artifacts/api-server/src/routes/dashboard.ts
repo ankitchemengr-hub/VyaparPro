@@ -306,7 +306,7 @@ router.get("/dashboard/top-products", async (req, res): Promise<void> => {
        SUM(ii.amount) as "totalRevenue"
      FROM invoice_items ii
      JOIN invoices i ON i.id = ii.invoice_id
-     WHERE i.company_id = $1 AND i.status = 'saved'
+     WHERE i.company_id = $1 AND i.status = 'saved' AND ${SALE_TYPES_FILTER}
      GROUP BY ii.product_id, ii.product_name
      ORDER BY "totalRevenue" DESC
      LIMIT 10`,
@@ -338,7 +338,7 @@ router.get("/dashboard/sales-trend", async (req, res): Promise<void> => {
        COALESCE(COUNT(i.id), 0) AS "invoiceCount"
      FROM days
      LEFT JOIN invoices i
-       ON i.invoice_date::date = days.d AND i.status = 'saved' AND i.company_id = $1
+       ON i.invoice_date::date = days.d AND i.status = 'saved' AND i.company_id = $1 AND ${SALE_TYPES_FILTER}
      GROUP BY days.d
      ORDER BY days.d ASC`,
     [companyId]
@@ -376,7 +376,7 @@ router.get("/dashboard/liters-sold", async (req, res): Promise<void> => {
          THEN ii.total_liters ELSE 0 END), 0) AS "lastMonth"
      FROM invoice_items ii
      JOIN invoices i ON i.id = ii.invoice_id
-     WHERE i.company_id = $1 AND i.status = 'saved'`,
+     WHERE i.company_id = $1 AND i.status = 'saved' AND ${SALE_TYPES_FILTER}`,
     [companyId]
   );
 
@@ -404,7 +404,7 @@ router.get("/dashboard/liters-balance", async (req, res): Promise<void> => {
       `SELECT COALESCE(SUM(ii.total_liters), 0) AS liters
        FROM invoice_items ii
        JOIN invoices i ON i.id = ii.invoice_id
-       WHERE i.company_id = $1 AND i.status = 'saved'`,
+       WHERE i.company_id = $1 AND i.status = 'saved' AND ${SALE_TYPES_FILTER}`,
       [companyId]
     ),
     queryOne(
@@ -496,7 +496,7 @@ router.get("/dashboard/finance-overview", async (req, res): Promise<void> => {
   const companyId = getCompanyId(req);
   const [purchaseRow, saleRow, dueRow] = await Promise.all([
     queryOne(`SELECT COALESCE(SUM(grand_total), 0) AS total FROM purchases WHERE company_id = $1 AND status != 'cancelled'`, [companyId]),
-    queryOne(`SELECT COALESCE(SUM(grand_total), 0) AS total FROM invoices WHERE company_id = $1 AND status = 'saved' AND invoice_type != 'quotation'`, [companyId]),
+    queryOne(`SELECT COALESCE(SUM(grand_total), 0) AS total FROM invoices WHERE company_id = $1 AND status = 'saved' AND ${SALE_TYPES_FILTER}`, [companyId]),
     queryOne(`SELECT COALESCE(SUM(outstanding_balance), 0) AS total FROM entities WHERE company_id = $1 AND type = 'customer'`, [companyId]),
   ]);
 

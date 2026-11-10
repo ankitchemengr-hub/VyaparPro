@@ -569,6 +569,9 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
     `ALTER TABLE invoices ADD COLUMN IF NOT EXISTS deleted_by_user_id INTEGER`,
     `ALTER TABLE invoices ADD COLUMN IF NOT EXISTS delete_job_id INTEGER`,
     `ALTER TABLE invoices ADD COLUMN IF NOT EXISTS legal_hold BOOLEAN NOT NULL DEFAULT false`,
+    // Quotation → invoice conversion (POST /invoices with fromQuotationId).
+    `ALTER TABLE invoices ADD COLUMN IF NOT EXISTS source_quotation_id INTEGER`,
+    `CREATE INDEX IF NOT EXISTS invoices_source_quotation_idx ON invoices(source_quotation_id) WHERE source_quotation_id IS NOT NULL`,
     `ALTER TABLE purchases ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE`,
     `ALTER TABLE purchases ADD COLUMN IF NOT EXISTS deleted_by_user_id INTEGER`,
     `ALTER TABLE purchases ADD COLUMN IF NOT EXISTS delete_job_id INTEGER`,

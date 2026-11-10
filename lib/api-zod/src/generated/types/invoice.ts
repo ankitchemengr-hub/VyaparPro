@@ -69,6 +69,20 @@ export interface Invoice {
   amountPaid?: number;
   balanceDue?: number;
   status: InvoiceStatus;
+  /**
+     * The quotation this invoice was converted from.
+     * @nullable
+     */
+  sourceQuotationId?: number | null;
+  /** @nullable */
+  sourceQuotationNo?: string | null;
+  /**
+     * On a quotation — the live (not cancelled) invoice it was converted into. Null while it is still open.
+     * @nullable
+     */
+  convertedInvoiceId?: number | null;
+  /** @nullable */
+  convertedInvoiceNo?: string | null;
   items?: InvoiceItem[];
   createdAt?: string;
 }

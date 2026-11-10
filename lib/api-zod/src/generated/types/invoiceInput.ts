@@ -26,5 +26,7 @@ export interface InvoiceInput {
   roundOff?: number;
   /** Flat discount applied after Grand Total, subtracted from it. Automatically logged as an expense (category "Discount") for reporting. */
   billDiscount?: number;
+  /** Convert to Invoice — the quotation this invoice is made from. The invoice gets its own number from its own series; the quotation stays in the Quotations list, marked converted. */
+  fromQuotationId?: number;
   items: InvoiceItemInput[];
 }

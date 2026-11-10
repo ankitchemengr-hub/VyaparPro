@@ -301,6 +301,7 @@ function parseSearch(search: string) {
     edit: params.get("edit"),
     invoiceType: params.get("invoiceType"),
     docType: params.get("docType"),
+    fromQuotation: params.get("fromQuotation"),
   };
 }
 
@@ -314,6 +315,10 @@ export default function Billing() {
   const params = parseSearch(window.location.search);
   const editId = params.edit ? Number(params.edit) : null;
   const isEditMode = editId !== null && !Number.isNaN(editId);
+  // Convert to Invoice: pre-filled from this quotation; saving makes a new
+  // invoice with its own number and leaves the quotation as it is.
+  const convertFromId = !isEditMode && params.fromQuotation ? Number(params.fromQuotation) : null;
+  const isConvertMode = convertFromId !== null && !Number.isNaN(convertFromId);
 
   // ── All useState hooks ──
   const [customer, setCustomer] = useState<any>(() => {
@@ -388,12 +393,12 @@ export default function Billing() {
   // a moment ago on Purchases / Price List / Inventory is what gets billed.
   const { data: products } = useListProducts({ forSale: true }, { query: { refetchOnMount: "always" } as any });
   const { data: salesmanEntities } = useListEntities({ type: "salesman" } as any);
-  const { data: existingInvoice } = useGetInvoice(editId as number, { query: { enabled: isEditMode } as any });
+  const { data: existingInvoice } = useGetInvoice((editId ?? convertFromId) as number, { query: { enabled: isEditMode || isConvertMode } as any });
   // Invoices don't store the customer's pricing tier, only a name/GSTIN
   // snapshot — fetched separately so editing an invoice for a wholesale
   // customer doesn't silently default the tier (and rate) back to retail.
   const { data: existingCustomerEntity } = useGetEntity(existingInvoice?.customerId as number, {
-    query: { enabled: isEditMode && !!existingInvoice?.customerId } as any,
+    query: { enabled: (isEditMode || isConvertMode) && !!existingInvoice?.customerId } as any,
   });
 
   // Print / "Save as PDF" names the file after document.title — pin it to the
@@ -401,7 +406,7 @@ export default function Billing() {
   // or the edit view's Print button).
   usePrintTitle(
     savedInvoice ? String(savedInvoice.invoiceNo)
-      : existingInvoice ? String(existingInvoice.invoiceNo)
+      : isEditMode && existingInvoice ? String(existingInvoice.invoiceNo)
       : null,
   );
   const { data: printSettingsData } = useGetPrintSettings();
@@ -472,7 +477,7 @@ export default function Billing() {
 }, [pricingKey]);
 
   useEffect(() => {
-    if (!isEditMode || !existingInvoice || prefilled) return;
+    if ((!isEditMode && !isConvertMode) || !existingInvoice || prefilled) return;
     // Wait for the customer's real pricing tier before prefilling — otherwise
     // it would default to "retail" and, combined with the rate-sync effect
     // above, silently reprice a wholesale customer's items if the invoice
@@ -480,10 +485,14 @@ export default function Billing() {
     if (existingInvoice.customerId && !existingCustomerEntity) return;
     // Products give each line its box size / litres — wait for them too.
     if (!products) return;
-    const et = existingInvoice.invoiceType as string;
+    // Converting a quotation: bill it as the GST / Non-GST invoice picked in
+    // the Convert dialog, dated today.
+    const et = isConvertMode
+      ? (params.invoiceType === "gst" ? "gst" : "non_gst")
+      : existingInvoice.invoiceType as string;
     if (et === "gst" || et === "non_gst") { setDocType("invoice"); setInvoiceSubtype(et); }
     else { setDocType(et); }
-    setInvoiceDate(String(existingInvoice.invoiceDate).slice(0, 10));
+    if (!isConvertMode) setInvoiceDate(String(existingInvoice.invoiceDate).slice(0, 10));
     setPlaceOfSupply(existingInvoice.placeOfSupply || "Maharashtra");
     setFreight(Number(existingInvoice.freight ?? 0));
     setBillDiscount(Number(existingInvoice.billDiscount ?? 0));
@@ -504,24 +513,32 @@ export default function Billing() {
     pricingKeyRef.current = `${et}|${prefillTier ?? ""}`;
     setItems((existingInvoice.items ?? []).map((it: any) => {
       const prod = (products ?? []).find((x: any) => x.id === it.productId);
+      // A quotation carries no GST, so a converted line takes the product's
+      // GST rate on top of the quoted rate (none on a Non-GST invoice).
+      const taxPct = isConvertMode
+        ? (isGstInvoiceType(et) ? (Number(prod?.taxRate) || 18) : 0)
+        : Number(it.taxPct);
+      const base = Number(it.qty) * Number(it.rate);
+      const disc = Number(it.discountAmt) > 0 ? Number(it.discountAmt) : base * Number(it.discountPct) / 100;
       return {
         productId: it.productId, name: it.productName, unit: it.unit,
         qty: Number(it.qty), qtyMode: "unit" as QtyMode, unitsPerBox: resolvePack(prod),
-        rate: Number(it.rate), mrp: Number(it.mrp), taxPct: Number(it.taxPct),
-        // Editing a saved invoice — keep its recorded rates; the history
-        // auto-fill must not silently reprice existing lines.
+        rate: Number(it.rate), mrp: Number(it.mrp), taxPct,
+        // Editing a saved invoice (or converting a quotation) — keep its
+        // recorded rates; the history auto-fill must not silently reprice them.
         rateEdited: true,
-        savedCost: it.costPrice != null && Number(it.costPrice) > 0
+        savedCost: !isConvertMode && it.costPrice != null && Number(it.costPrice) > 0
           ? { cost: Number(it.costPrice), source: "saved" as CostSource, gstPct: Number(it.costGstPct ?? 0) || 0 }
           : null,
         discountPct: Number(it.discountPct), discountAmt: Number(it.discountAmt),
-        amount: Number(it.amount), litersPerBox: Number(prod?.litersPerBox ?? 0) || 0,
+        amount: isConvertMode ? Math.round((base - disc) * (1 + taxPct / 100) * 100) / 100 : Number(it.amount),
+        litersPerBox: Number(prod?.litersPerBox ?? 0) || 0,
         packagingUnit: prod?.packagingUnit?.trim() || "Box",
         description: it.description ?? "",
       };
     }));
     setPrefilled(true);
-  }, [isEditMode, existingInvoice, existingCustomerEntity, prefilled, products]);
+  }, [isEditMode, isConvertMode, existingInvoice, existingCustomerEntity, prefilled, products]);
 
   useEffect(() => {
     if (!params.cart || !products) return;
@@ -887,6 +904,7 @@ export default function Billing() {
         discountPct: i.discountPct, discountAmt: i.discountAmt, cessPct: 0,
         ...(i.description?.trim() ? { description: i.description.trim() } : {}),
       })),
+      ...(isConvertMode ? { fromQuotationId: convertFromId } : {}),
     };
     if (isEditMode && editId) {
       updateInvoice.mutate({ id: editId, data: payload as any }, {
@@ -907,6 +925,7 @@ export default function Billing() {
     createInvoice.mutate({ data: payload as any }, {
       onSuccess: (invoice) => {
         queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
+        if (isConvertMode) queryClient.invalidateQueries({ queryKey: getGetInvoiceQueryKey(convertFromId as number) });
         setSaved(true);
         setSavedInvoice(invoice);
         if ((invoice.invoiceType as string) !== "quotation") {
@@ -1049,7 +1068,7 @@ export default function Billing() {
     setSearchOpen(false);
     window.scrollTo({ top: 0 });
   };
-  const exitBilling = () => setLocation(isEditMode ? "/invoices" : "/catalog");
+  const exitBilling = () => setLocation(isEditMode ? "/invoices" : isConvertMode ? "/quotations" : "/catalog");
   const totalQtyAll = items.reduce((s, i) => s + billedUnits(i), 0);
   const totalLtrAll = items.reduce((s, i) => s + lineLiters(i), 0);
 
@@ -1068,7 +1087,9 @@ export default function Billing() {
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <h1 className="text-xl md:text-2xl font-bold tracking-tight">
-            {isEditMode ? `Edit Invoice ${existingInvoice?.invoiceNo ?? ""}` : "Create Invoice"}
+            {isEditMode ? `Edit Invoice ${existingInvoice?.invoiceNo ?? ""}`
+              : isConvertMode ? `Convert ${existingInvoice?.invoiceNo ?? "Quotation"} to Invoice`
+              : "Create Invoice"}
           </h1>
           <Badge variant="secondary" className="md:hidden ml-auto">{docLabel}</Badge>
           {isEditMode && (

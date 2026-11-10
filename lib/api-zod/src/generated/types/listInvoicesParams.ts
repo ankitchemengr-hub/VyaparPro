@@ -20,6 +20,9 @@ productId?: number;
  * Only invoices created by this staff user account
  */
 createdByUserId?: number;
+/**
+ * Document type — the Quotations page lists type=quotation.
+ */
 type?: ListInvoicesType;
 month?: string;
 year?: number;

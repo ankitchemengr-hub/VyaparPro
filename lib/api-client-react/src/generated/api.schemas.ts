@@ -1402,6 +1402,20 @@ export interface Invoice {
   amountPaid?: number;
   balanceDue?: number;
   status: InvoiceStatus;
+  /**
+     * The quotation this invoice was converted from.
+     * @nullable
+     */
+  sourceQuotationId?: number | null;
+  /** @nullable */
+  sourceQuotationNo?: string | null;
+  /**
+     * On a quotation — the live (not cancelled) invoice it was converted into. Null while it is still open.
+     * @nullable
+     */
+  convertedInvoiceId?: number | null;
+  /** @nullable */
+  convertedInvoiceNo?: string | null;
   items?: InvoiceItem[];
   createdAt?: string;
 }
@@ -1453,6 +1467,8 @@ export interface InvoiceInput {
   roundOff?: number;
   /** Flat discount applied after Grand Total, subtracted from it. Automatically logged as an expense (category "Discount") for reporting. */
   billDiscount?: number;
+  /** Convert to Invoice — the quotation this invoice is made from. The invoice gets its own number from its own series; the quotation stays in the Quotations list, marked converted. */
+  fromQuotationId?: number;
   items: InvoiceItemInput[];
 }
 
@@ -3503,6 +3519,9 @@ productId?: number;
  * Only invoices created by this staff user account
  */
 createdByUserId?: number;
+/**
+ * Document type — the Quotations page lists type=quotation.
+ */
 type?: ListInvoicesType;
 month?: string;
 year?: number;
@@ -3525,6 +3544,11 @@ export type ListInvoicesType = typeof ListInvoicesType[keyof typeof ListInvoices
 export const ListInvoicesType = {
   gst: 'gst',
   non_gst: 'non_gst',
+  quotation: 'quotation',
+  proforma_invoice: 'proforma_invoice',
+  bill_of_supply: 'bill_of_supply',
+  delivery_challan: 'delivery_challan',
+  sale_order: 'sale_order',
 } as const;
 
 export type ListInvoicesStatus = typeof ListInvoicesStatus[keyof typeof ListInvoicesStatus];

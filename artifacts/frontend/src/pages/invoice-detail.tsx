@@ -17,7 +17,8 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { ArrowLeft, Printer, Loader2, LayoutTemplate, IndianRupee, MessageCircle, Share2, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Printer, Loader2, LayoutTemplate, IndianRupee, MessageCircle, Share2, AlertTriangle, FileOutput } from "lucide-react";
+import { ConvertQuotationDialog } from "@/components/convert-quotation-dialog";
 import { format } from "date-fns";
 import { shareInvoiceImage } from "@/lib/share-invoice";
 import { usePrintTitle } from "@/lib/print-with-title";
@@ -53,6 +54,7 @@ export default function InvoiceDetail() {
   const [templateOverride, setTemplateOverride] = useState<string | null>(null);
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [convertOpen, setConvertOpen] = useState(false);
   const sheetContainerRef = useRef<HTMLDivElement>(null);
 
   // Print / "Save as PDF" takes its default filename from document.title, so
@@ -178,6 +180,8 @@ export default function InvoiceDetail() {
   }
 
   const isGst = invoice.invoiceType === "gst";
+  const isQuotation = invoice.invoiceType === "quotation";
+  const canConvert = ["admin", "salesman", "store"].includes(user?.role ?? "");
   const isAdmin = user?.role === "admin";
   // Customer portal login: view / share / print only — no staff actions.
   const isCustomer = user?.role === "customer";
@@ -207,17 +211,43 @@ export default function InvoiceDetail() {
             <ArrowLeft className="h-4 w-4 mr-1 sm:mr-2" />
             <span>{backTo ? (backTo.startsWith("/khatabook") ? "Back to Khatabook" : "Back") : isCustomer ? "Back to my bills" : "Back to invoices"}</span>
           </Button>
-          <Badge variant={isGst ? "default" : "secondary"}>{isGst ? "GST" : "Non-GST"}</Badge>
+          {isQuotation
+            ? <Badge variant="outline">Quotation</Badge>
+            : <Badge variant={isGst ? "default" : "secondary"}>{isGst ? "GST" : "Non-GST"}</Badge>}
+          {isQuotation && invoice.status !== "cancelled" && (invoice.convertedInvoiceId ? (
+            <Badge
+              className="cursor-pointer bg-green-600 text-white hover:bg-green-700"
+              onClick={() => setLocation(`/invoices/${invoice.convertedInvoiceId}`)}
+              data-testid="badge-converted"
+            >
+              Invoiced · {invoice.convertedInvoiceNo}
+            </Badge>
+          ) : <Badge variant="secondary">Open</Badge>)}
+          {invoice.sourceQuotationId && invoice.sourceQuotationNo && (
+            <Badge
+              variant="outline"
+              className="cursor-pointer"
+              onClick={() => setLocation(`/invoices/${invoice.sourceQuotationId}`)}
+              data-testid="badge-source-quotation"
+            >
+              From {invoice.sourceQuotationNo}
+            </Badge>
+          )}
           {invPayStatus === "paid" && <Badge className="bg-green-600 text-white hover:bg-green-700">Paid</Badge>}
           {invPayStatus === "partial" && <Badge className="bg-amber-500 text-white hover:bg-amber-600">Partially Paid</Badge>}
           {invPayStatus === "not_paid" && <Badge variant="destructive">Not Paid</Badge>}
           {invPayStatus === "cancelled" && <Badge variant="destructive">Cancelled</Badge>}
-          {invPayStatus === "na" && <Badge variant="secondary">{invoice.status}</Badge>}
+          {invPayStatus === "na" && !isQuotation && <Badge variant="secondary">{invoice.status}</Badge>}
           {(invPayStatus === "paid" || invPayStatus === "partial" || invPayStatus === "not_paid") && (
             <BillAge payStatus={invPayStatus} invoiceDate={invoice.invoiceDate} long className="text-sm" testId="text-bill-age" />
           )}
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          {isQuotation && canConvert && invoice.status !== "cancelled" && !invoice.convertedInvoiceId && (
+            <Button size="sm" onClick={() => setConvertOpen(true)} data-testid="button-convert-quotation">
+              <FileOutput className="h-4 w-4 mr-2" />Convert to Invoice
+            </Button>
+          )}
           {!isCustomer && (
           <Button variant="outline" size="sm" onClick={() => setSelectorOpen(true)} data-testid="button-choose-template">
             <LayoutTemplate className="h-4 w-4 sm:mr-2" />
@@ -335,6 +365,10 @@ export default function InvoiceDetail() {
         onSelect={setTemplateOverride}
       />
 
+      <ConvertQuotationDialog
+        quotation={convertOpen ? { id: invoice.id, invoiceNo: invoice.invoiceNo } : null}
+        onClose={() => setConvertOpen(false)}
+      />
       <RecordPaymentDialog
         open={payDialogOpen}
         onOpenChange={setPayDialogOpen}

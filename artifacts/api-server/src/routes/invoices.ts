@@ -278,8 +278,9 @@ router.get("/invoices", async (req, res): Promise<void> => {
     for (const r of balRows.rows) partyBalanceById.set(r.id, Number(r.outstanding_balance));
   }
 
+  const linkFor = await loadQuotationLinks(companyId, invoices);
   res.json(invoices.map((inv) => ({
-    ...formatInvoice(inv, [], creatorNameById.get(inv.createdByUserId ?? -1) ?? null),
+    ...formatInvoice(inv, [], creatorNameById.get(inv.createdByUserId ?? -1) ?? null, null, null, linkFor(inv)),
     ...(session?.role === "admin" ? { lossItemCount: lossCountById.get(inv.id) ?? 0 } : {}),
     ...(showPartyBalance && inv.customerId != null ? { partyBalance: partyBalanceById.get(inv.customerId) ?? null } : {}),
   })));
@@ -300,6 +301,42 @@ router.post("/invoices", async (req, res): Promise<void> => {
 
   try {
     await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
+
+    // Convert to Invoice: the quotation is locked so a double click can't turn
+    // it into two invoices. It keeps its own QTN number and stays in the
+    // Quotations list; this invoice takes the next number of its own series.
+    const sourceQuotationId = data.fromQuotationId ?? null;
+    if (sourceQuotationId != null) {
+      const qRes = await client.query(
+        `SELECT id, invoice_type, status, deleted_at, salesman_id, created_by_user_id
+         FROM invoices WHERE id = $1 AND company_id = $2 FOR UPDATE`,
+        [sourceQuotationId, companyId]
+      );
+      const q = qRes.rows[0];
+      const hidden = !q
+        || (session?.role === "salesman" && (!session.entityId || q.salesman_id !== session.entityId))
+        || (session?.role === "store" && q.created_by_user_id !== session.userId);
+      let refusal: { status: number; error: string } | null = null;
+      if (hidden || q.invoice_type !== "quotation") {
+        refusal = { status: 404, error: "Quotation not found" };
+      } else if (q.status === "cancelled" || q.deleted_at) {
+        refusal = { status: 409, error: "This quotation is cancelled — restore it before converting." };
+      } else if (data.invoiceType === "quotation") {
+        refusal = { status: 400, error: "Pick an invoice type (GST / Non-GST) to convert this quotation into." };
+      } else {
+        const done = await client.query(
+          `SELECT invoice_no FROM invoices
+           WHERE company_id = $1 AND source_quotation_id = $2 AND status <> 'cancelled' LIMIT 1`,
+          [companyId, sourceQuotationId]
+        );
+        if (done.rows[0]) refusal = { status: 409, error: `This quotation is already converted to invoice ${done.rows[0].invoice_no}.` };
+      }
+      if (refusal) {
+        await client.query("ROLLBACK");
+        res.status(refusal.status).json({ error: refusal.error });
+        return;
+      }
+    }
 
     // Generate invoice number
     const invoiceNo = await generateInvoiceNumber(client, companyId, data.invoiceType);
@@ -437,8 +474,8 @@ router.post("/invoices", async (req, res): Promise<void> => {
       `INSERT INTO invoices (invoice_no, invoice_date, due_date, invoice_type, customer_id, customer_name,
         customer_gstin, billing_address, shipping_address, place_of_supply, salesman_id, salesman_name,
         po_number, e_way_bill_no, subtotal, total_discount, total_tax, cgst, sgst, igst, freight,
-        round_off, bill_discount, grand_total, balance_due, status, created_by_user_id, company_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)
+        round_off, bill_discount, grand_total, balance_due, status, created_by_user_id, company_id, source_quotation_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29)
        RETURNING *`,
       [
         invoiceNo,
@@ -469,6 +506,7 @@ router.post("/invoices", async (req, res): Promise<void> => {
         "saved",
         session?.userId ?? 1,
         companyId,
+        sourceQuotationId,
       ]
     );
     const invRow = invoiceQueryResult.rows[0];
@@ -607,7 +645,8 @@ router.post("/invoices", async (req, res): Promise<void> => {
     const customerBalance = await getCustomerBalanceSnapshot(companyId, invRow.id, fullInv.customerId ?? null);
     const customerMobile = await getCustomerMobile(companyId, fullInv.customerId ?? null);
 
-    res.status(201).json(formatInvoice(fullInv, items, null, customerBalance, customerMobile));
+    const linkFor = await loadQuotationLinks(companyId, [fullInv]);
+    res.status(201).json(formatInvoice(fullInv, items, null, customerBalance, customerMobile, linkFor(fullInv)));
   } catch (err) {
     await client.query("ROLLBACK");
     logger.error({ err }, "Failed to create invoice");
@@ -673,7 +712,8 @@ router.get("/invoices/:id", async (req, res): Promise<void> => {
     ? null
     : await getCustomerBalanceSnapshot(companyId, inv.id, inv.customerId ?? null);
   const customerMobile = await getCustomerMobile(companyId, inv.customerId ?? null);
-  const body = formatInvoice(inv, items, createdByName, customerBalance, customerMobile);
+  const linkFor = await loadQuotationLinks(companyId, [inv]);
+  const body = formatInvoice(inv, items, createdByName, customerBalance, customerMobile, linkFor(inv));
   // Purchase cost / margin is internal, not GST data.
   if (isGstAccountant(req)) body.items = body.items.map((it) => ({ ...it, costPrice: null, costGstPct: null }));
   // A customer viewing their own bill sees neither our cost nor our audit marks.
@@ -849,6 +889,15 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
     // Determine if this is a quotation (before or after edit — either way skip stock/ledger)
     const isQuotationEdit = (data.invoiceType ?? existing.invoice_type) === "quotation";
     const wasQuotation = existing.invoice_type === "quotation";
+    // A quotation never turns into an invoice by editing its type — it would
+    // keep its QTN number and drop out of the Quotations list. Convert to
+    // Invoice (POST /invoices with fromQuotationId) makes a new, properly
+    // numbered invoice instead.
+    if (wasQuotation && !isQuotationEdit) {
+      await client.query("ROLLBACK");
+      res.status(409).json({ error: "Use \"Convert to Invoice\" on the quotation — the invoice gets its own invoice number and the quotation stays in Quotations." });
+      return;
+    }
 
     // 1. Reverse old line-item stock movements (inward) — skip for quotations
     const oldItemsRes = await client.query(`SELECT * FROM invoice_items WHERE invoice_id = $1 AND company_id = $2`, [invoiceId, companyId]);
@@ -1410,12 +1459,52 @@ async function getCustomerMobile(companyId: number, customerId: number | null): 
   return row?.mobile ?? null;
 }
 
+type QuotationLink = { sourceQuotationNo: string | null; convertedInvoiceId: number | null; convertedInvoiceNo: string | null };
+const NO_QUOTATION_LINK: QuotationLink = { sourceQuotationNo: null, convertedInvoiceId: null, convertedInvoiceNo: null };
+
+// Convert to Invoice links, both ways: for a quotation, the live (not
+// cancelled) invoice made from it; for such an invoice, its quotation's no.
+async function loadQuotationLinks(
+  companyId: number,
+  invs: { id: number; invoiceType: string; sourceQuotationId: number | null }[],
+): Promise<(inv: { id: number; sourceQuotationId: number | null }) => QuotationLink> {
+  const quotationIds = invs.filter((i) => i.invoiceType === "quotation").map((i) => i.id);
+  const sourceIds = [...new Set(invs.map((i) => i.sourceQuotationId).filter((v): v is number => v != null))];
+  const [converted, sources] = await Promise.all([
+    quotationIds.length > 0
+      ? pool.query(
+          `SELECT DISTINCT ON (source_quotation_id) source_quotation_id, id, invoice_no
+           FROM invoices
+           WHERE company_id = $1 AND source_quotation_id = ANY($2::int[]) AND status <> 'cancelled'
+           ORDER BY source_quotation_id, id DESC`,
+          [companyId, quotationIds],
+        )
+      : null,
+    sourceIds.length > 0
+      ? pool.query(`SELECT id, invoice_no FROM invoices WHERE company_id = $1 AND id = ANY($2::int[])`, [companyId, sourceIds])
+      : null,
+  ]);
+  const convertedByQuotation = new Map<number, { id: number; invoiceNo: string }>(
+    (converted?.rows ?? []).map((r) => [r.source_quotation_id, { id: r.id, invoiceNo: r.invoice_no }]),
+  );
+  const quotationNoById = new Map<number, string>((sources?.rows ?? []).map((r) => [r.id, r.invoice_no]));
+  return (inv) => {
+    const c = convertedByQuotation.get(inv.id);
+    return {
+      sourceQuotationNo: inv.sourceQuotationId != null ? quotationNoById.get(inv.sourceQuotationId) ?? null : null,
+      convertedInvoiceId: c?.id ?? null,
+      convertedInvoiceNo: c?.invoiceNo ?? null,
+    };
+  };
+}
+
 function formatInvoice(
   inv: any,
   items: any[],
   createdByName: string | null = null,
   customerBalance: { before: number; after: number } | null = null,
   customerMobile: string | null = null,
+  quotationLink: QuotationLink = NO_QUOTATION_LINK,
 ) {
   return {
     id: inv.id,
@@ -1451,6 +1540,8 @@ function formatInvoice(
     balanceDue: Number(inv.balanceDue),
     status: inv.status,
     belowListRate: Boolean(inv.belowListRate),
+    sourceQuotationId: inv.sourceQuotationId ?? null,
+    ...quotationLink,
     deletedAt: inv.deletedAt ? (inv.deletedAt?.toISOString?.() ?? inv.deletedAt) : null,
     items: items.map(formatItem),
     createdAt: inv.createdAt?.toISOString?.() ?? inv.createdAt,

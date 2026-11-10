@@ -14,6 +14,10 @@ async function queryOne(text: string, params: any[] = []): Promise<any> {
   return result.rows[0] ?? {};
 }
 
+// Real sales only — quotations, proforma, sale orders and delivery challans
+// aren't revenue, liters sold or commission (same rule as the dashboard).
+const SALE_TYPES = `i.invoice_type NOT IN ('quotation', 'proforma_invoice', 'sale_order', 'delivery_challan')`;
+
 // `allowGstAccountant` opens a report to the read-only GST login — only for
 // reports that are (or are forced to be) GST-only.
 function requireAdmin(req: any, res: any, allowGstAccountant = false): boolean {
@@ -56,7 +60,7 @@ router.get("/reports/sales", async (req, res): Promise<void> => {
   const search = String((req.query as any).search ?? "").trim();
 
   const params: any[] = [companyId];
-  const where: string[] = [`company_id = $1`, `status = 'saved'`];
+  const where: string[] = [`company_id = $1`, `status = 'saved'`, SALE_TYPES.replace("i.", "")];
   if (from) { params.push(new Date(from)); where.push(`invoice_date >= $${params.length}`); }
   if (to) { const d = new Date(to); d.setHours(23,59,59,999); params.push(d); where.push(`invoice_date <= $${params.length}`); }
   if (type === "gst" || type === "non_gst") { params.push(type); where.push(`invoice_type = $${params.length}`); }
@@ -121,7 +125,7 @@ router.get("/reports/sales/item-wise", async (req, res): Promise<void> => {
   const search = String((req.query as any).search ?? "").trim();
 
   const params: any[] = [companyId];
-  const where: string[] = [`i.company_id = $1`, `i.status = 'saved'`];
+  const where: string[] = [`i.company_id = $1`, `i.status = 'saved'`, SALE_TYPES];
   if (from) { params.push(new Date(from)); where.push(`i.invoice_date >= $${params.length}`); }
   if (to) { const d = new Date(to); d.setHours(23,59,59,999); params.push(d); where.push(`i.invoice_date <= $${params.length}`); }
   if (type === "gst" || type === "non_gst") { params.push(type); where.push(`i.invoice_type = $${params.length}`); }
@@ -169,7 +173,7 @@ router.get("/reports/sales/customer-wise", async (req, res): Promise<void> => {
   const search = String((req.query as any).search ?? "").trim();
 
   const params: any[] = [companyId];
-  const where: string[] = [`i.company_id = $1`, `i.status = 'saved'`];
+  const where: string[] = [`i.company_id = $1`, `i.status = 'saved'`, SALE_TYPES];
   if (from) { params.push(new Date(from)); where.push(`i.invoice_date >= $${params.length}`); }
   if (to) { const d = new Date(to); d.setHours(23,59,59,999); params.push(d); where.push(`i.invoice_date <= $${params.length}`); }
   if (type === "gst" || type === "non_gst") { params.push(type); where.push(`i.invoice_type = $${params.length}`); }
@@ -361,7 +365,7 @@ router.get("/reports/profit-loss", async (req, res): Promise<void> => {
   const companyId = getCompanyId(req);
   const { from, to } = req.query as any;
   const ps: any[] = [companyId];
-  let salesClause = "i.company_id = $1 AND i.status = 'saved'";
+  let salesClause = `i.company_id = $1 AND i.status = 'saved' AND ${SALE_TYPES}`;
   let purClause = "p.company_id = $1 AND p.status = 'saved'";
   let expClause = "e.company_id = $1";
   if (from) {
@@ -427,7 +431,7 @@ router.get("/reports/bill-wise-profit", async (req, res): Promise<void> => {
   const search = String((req.query as any).search ?? "").trim();
 
   const params: any[] = [companyId];
-  const where: string[] = [`i.company_id = $1`, `i.status = 'saved'`];
+  const where: string[] = [`i.company_id = $1`, `i.status = 'saved'`, SALE_TYPES];
   if (from) { params.push(new Date(from)); where.push(`i.invoice_date >= $${params.length}`); }
   if (to) { const d = new Date(to); d.setHours(23,59,59,999); params.push(d); where.push(`i.invoice_date <= $${params.length}`); }
   if (type === "gst" || type === "non_gst") { params.push(type); where.push(`i.invoice_type = $${params.length}`); }
@@ -502,7 +506,7 @@ router.get("/reports/commission", async (req, res): Promise<void> => {
   const companyId = getCompanyId(req);
   const { from, to } = req.query as any;
   const params: any[] = [companyId];
-  const where: string[] = [`i.company_id = $1`, `i.status = 'saved'`, `i.salesman_id IS NOT NULL`];
+  const where: string[] = [`i.company_id = $1`, `i.status = 'saved'`, SALE_TYPES, `i.salesman_id IS NOT NULL`];
   if (from) { params.push(new Date(from)); where.push(`i.invoice_date >= $${params.length}`); }
   if (to) { const d = new Date(to); d.setHours(23, 59, 59, 999); params.push(d); where.push(`i.invoice_date <= $${params.length}`); }
 

@@ -50,6 +50,9 @@ export const invoicesTable = pgTable("invoices", {
   deleteJobId: integer("delete_job_id"),
   // Blocks the cleanup from ever deleting this bill.
   legalHold: boolean("legal_hold").notNull().default(false),
+  // Set on an invoice made with "Convert to Invoice" — the quotation it came
+  // from. The quotation itself is left as it was (own QTN number, no stock).
+  sourceQuotationId: integer("source_quotation_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (t) => [
