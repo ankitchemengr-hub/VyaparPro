@@ -25,6 +25,7 @@ import CustomerProfile from "@/pages/customer-profile";
 import InactiveCustomers from "@/pages/inactive-customers";
 import Khatabook from "@/pages/khatabook";
 import SupplierSettle from "@/pages/supplier-settle";
+import StockInvestment from "@/pages/stock-investment";
 import BooksAudit from "@/pages/books-audit";
 import Payments from "@/pages/payments";
 import Rewards from "@/pages/rewards";
@@ -108,6 +109,7 @@ function ProtectedRoutes() {
         <Route path="/customers/:id" component={CustomerProfile} />
         <Route path="/khatabook" component={Khatabook} />
         <Route path="/supplier-settle" component={SupplierSettle} />
+        <Route path="/stock-investment" component={StockInvestment} />
         <Route path="/books-audit" component={BooksAudit} />
         <Route path="/payments" component={Payments} />
         <Route path="/rewards" component={Rewards} />

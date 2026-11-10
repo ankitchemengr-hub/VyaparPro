@@ -31,7 +31,19 @@ const r2 = (n: number) => (Number.isFinite(n) ? Math.round(n * 100) / 100 : 0);
 const r3 = (n: number) => (Number.isFinite(n) ? Math.round(n * 1000) / 1000 : 0);
 
 interface Lot { vendorId: number; qty: number; unitCost: number; left: number }
-interface SaleLine { productId: number; qty: number; unitValue: number; paidRatio: number }
+interface SaleLine { productId: number; qty: number; unitValue: number; paidRatio: number; date: string }
+
+// One piece of a sale as it is matched to stock: `cost` is null when it
+// couldn't be traced to any purchase (opening stock, no BOM).
+export interface SoldPiece {
+  productId: number;
+  date: string;
+  qty: number;
+  value: number;
+  cost: number | null;
+  paidRatio: number;
+  viaBom: boolean;
+}
 
 export interface SupplierProductRow {
   productId: number;
@@ -107,7 +119,11 @@ export async function cashPosition(companyId: number, supplierDue: number): Prom
   return { cashInHand, supplierDue: due, investment: r2(cashInHand - due) };
 }
 
-export async function buildSupplierSettle(companyId: number): Promise<Omit<SupplierSettleReport, "cash">> {
+// `onSold` sees every sale piece as it is matched (Stock Investment uses it).
+export async function buildSupplierSettle(
+  companyId: number,
+  opts: { onSold?: (piece: SoldPiece) => void } = {},
+): Promise<Omit<SupplierSettleReport, "cash">> {
   const noPay = NO_PAY_INVOICE_TYPES as string[];
   const [vendorsRes, lotsRes, salesRes, paidRes, productsRes, bomRes] = await Promise.all([
     pool.query(
@@ -129,7 +145,7 @@ export async function buildSupplierSettle(companyId: number): Promise<Omit<Suppl
     // One line per invoice line, net of returns; value is its share of the
     // invoice's grand total, collected in the invoice's paid ratio.
     pool.query(
-      `SELECT ii.product_id,
+      `SELECT ii.product_id, to_char(i.invoice_date AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD') AS invoice_date,
               (ii.qty - COALESCE(ret.qty, 0))::float8 AS qty,
               CASE WHEN ii.qty > 0 AND t.lines_total > 0
                    THEN ii.amount * i.grand_total / t.lines_total / ii.qty ELSE 0 END::float8 AS unit_value,
@@ -232,6 +248,7 @@ export async function buildSupplierSettle(companyId: number): Promise<Omit<Suppl
         a.costOfSold += cost;
         a.collected += value * line.paidRatio;
         a.costOfCollected += cost * line.paidRatio;
+        opts.onSold?.({ productId: line.productId, date: line.date, qty: take, value, cost, paidRatio: line.paidRatio, viaBom });
         lot.left -= take;
         need -= take;
       }
@@ -249,19 +266,20 @@ export async function buildSupplierSettle(companyId: number): Promise<Omit<Suppl
       for (const m of parts) {
         if (m.qty <= EPS) continue;
         const share = totalW > EPS ? m.w / totalW : 1 / parts.length;
-        consume({ productId: m.materialId, qty: m.qty, unitValue: (value * share) / m.qty, paidRatio: line.paidRatio }, true, depth + 1);
+        consume({ productId: m.materialId, qty: m.qty, unitValue: (value * share) / m.qty, paidRatio: line.paidRatio, date: line.date }, true, depth + 1);
       }
       return;
     }
     // Can't be traced to any purchase. A raw material used beyond what was
     // ever bought adds its value but not its quantity (a different item).
+    opts.onSold?.({ productId: line.productId, date: line.date, qty: need, value: need * line.unitValue, cost: null, paidRatio: line.paidRatio, viaBom });
     if (!viaBom) unattributed.soldQty += need;
     unattributed.soldValue += need * line.unitValue;
     unattributed.collected += need * line.unitValue * line.paidRatio;
   };
 
   for (const row of salesRes.rows as any[]) {
-    consume({ productId: row.product_id, qty: Number(row.qty), unitValue: Number(row.unit_value), paidRatio: Number(row.paid_ratio) }, false, 0);
+    consume({ productId: row.product_id, qty: Number(row.qty), unitValue: Number(row.unit_value), paidRatio: Number(row.paid_ratio), date: String(row.invoice_date) }, false, 0);
   }
 
   // Stock still on hand, per supplier lot.
