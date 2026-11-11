@@ -993,6 +993,7 @@ function formatProduct(p: any) {
     packagingUnit: p.packagingUnit ?? "Box",
     notForSale: p.notForSale,
     addForManufacturing: p.addForManufacturing,
+    showMrpOnInvoice: !!p.showMrpOnInvoice,
     minStockThreshold: p.minStockThreshold != null ? Number(p.minStockThreshold) : null,
     // Rows from the list query above carry `hasImage` (no raw bytes fetched);
     // rows from a full `.select()` (single-product GET, create/update

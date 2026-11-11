@@ -147,7 +147,10 @@ export default function InvoiceDetail() {
   const upbByProduct = new Map<number, number>(
     (products ?? []).map((p: any) => [p.id, Number(p.unitsPerBox ?? 0) || 0]),
   );
-  const maps = { lpbByProduct, upbByProduct };
+  const mrpProducts = new Set<number>(
+    (products ?? []).filter((p: any) => p.showMrpOnInvoice).map((p: any) => p.id),
+  );
+  const maps = { lpbByProduct, upbByProduct, mrpProducts };
 
   // Print settings gate the printable sheet only, not the whole page — `settings`
   // already has a safe fallback (FALLBACK_PRINT_SETTINGS) above, so there's no

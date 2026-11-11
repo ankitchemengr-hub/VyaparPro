@@ -7,6 +7,7 @@ import { format } from "date-fns";
 import { inr, num, lineLiters, rupeesInWords } from "./helpers";
 import { PaymentQr, CompanyLogo } from "./parts";
 import type { TemplateProps } from "./types";
+import { printedMrp } from "./types";
 
 const DEFAULT_TERMS = [
   "Goods once sold will not be taken back.",
@@ -18,6 +19,7 @@ export function A5CompactTemplate({ invoice, maps, settings, computed }: Templat
   const { lpbByProduct, upbByProduct } = maps;
   const { isGst, isInterstate, placeOfSupply, totalQty, totalLtr, totalBox, hasAnyDisc, roundOff, items } =
     computed;
+  const showMrp = items.some((item: any) => printedMrp(item, maps) != null);
 
   const companyName = (isGst && settings.gstLegalName) || settings.companyName || "SHRADHA ENTERPRISES";
   // Legacy badge rendering: first word on line 1, abbreviated second word on
@@ -137,6 +139,7 @@ export function A5CompactTemplate({ invoice, maps, settings, computed }: Templat
             {isGst && <th className="border-r border-black px-2 py-1 text-left w-20">HSN</th>}
             <th className="border-r border-black px-2 py-1 text-left w-12">Unit</th>
             <th className="border-r border-black px-2 py-1 text-right w-14">QTY</th>
+            {showMrp && <th className="border-r border-black px-2 py-1 text-right w-20">MRP</th>}
             <th className="border-r border-black px-2 py-1 text-right w-20">RATE</th>
             <th className="border-r border-black px-2 py-1 text-right w-16">LTR/KGS</th>
             <th className="border-r border-black px-2 py-1 text-right w-16">BOX</th>
@@ -148,7 +151,7 @@ export function A5CompactTemplate({ invoice, maps, settings, computed }: Templat
         <tbody>
           <tr>
             <td
-              colSpan={isGst ? (hasAnyDisc ? 11 : 10) : hasAnyDisc ? 10 : 9}
+              colSpan={(isGst ? (hasAnyDisc ? 11 : 10) : hasAnyDisc ? 10 : 9) + (showMrp ? 1 : 0)}
               className="px-2 py-0.5 font-semibold"
             >
               PRODUCT:-
@@ -182,6 +185,11 @@ export function A5CompactTemplate({ invoice, maps, settings, computed }: Templat
                 <td className="border-r border-black px-2 py-1 text-right align-top">
                   {num(item.qty, 0)}
                 </td>
+                {showMrp && (
+                  <td className="border-r border-black px-2 py-1 text-right align-top">
+                    {printedMrp(item, maps) != null ? `₹ ${inr(printedMrp(item, maps)!)}` : ""}
+                  </td>
+                )}
                 <td className="border-r border-black px-2 py-1 text-right align-top">
                   ₹ {inr(item.rate)}
                 </td>
@@ -216,6 +224,7 @@ export function A5CompactTemplate({ invoice, maps, settings, computed }: Templat
                 <td className="border-r border-black px-2 py-3"></td>
                 <td className="border-r border-black px-2 py-3"></td>
                 <td className="border-r border-black px-2 py-3"></td>
+                {showMrp && <td className="border-r border-black px-2 py-3"></td>}
                 {hasAnyDisc && <td className="border-r border-black px-2 py-3"></td>}
                 {isGst && <td className="border-r border-black px-2 py-3"></td>}
                 <td className="px-2 py-3"></td>
@@ -230,6 +239,7 @@ export function A5CompactTemplate({ invoice, maps, settings, computed }: Templat
             <td className="border-r border-black px-2 py-1 text-right" data-testid="text-total-qty">
               {num(totalQty, 0)}
             </td>
+            {showMrp && <td className="border-r border-black px-2 py-1"></td>}
             <td className="border-r border-black px-2 py-1"></td>
             <td className="border-r border-black px-2 py-1 text-right" data-testid="text-total-ltr">
               {totalLtr > 0 ? num(totalLtr, 3) : ""}

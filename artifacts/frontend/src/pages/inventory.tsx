@@ -21,6 +21,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -555,6 +556,7 @@ export type ProductForm = {
   minStockThreshold: string;
   notForSale: boolean;
   addForManufacturing: boolean;
+  showMrpOnInvoice: boolean;
   imageUrl: string;
 };
 
@@ -565,7 +567,7 @@ const emptyForm: ProductForm = {
   retailDiscountPct: "", retailNonGstDiscountPct: "", wholesaleDiscountPct: "", wholesaleNonGstDiscountPct: "",
   gstPrice: "", nonGstPrice: "",
   hsnCode: "", taxRate: "18", commissionPerLiter: "0", volumeUnit: "liter", litersPerBox: "", unitsPerBox: "", packagingUnit: "Box", openingStock: "0",
-  minStockThreshold: "5", notForSale: false, addForManufacturing: false, imageUrl: "",
+  minStockThreshold: "5", notForSale: false, addForManufacturing: false, showMrpOnInvoice: false, imageUrl: "",
 };
 
 // Suggests an item code from the product name's first couple of significant
@@ -661,6 +663,7 @@ export function ProductDialog({ open, onOpenChange, product, isAdmin, initialVal
         minStockThreshold: product.minStockThreshold != null ? String(product.minStockThreshold) : "5",
         notForSale: !!product.notForSale,
         addForManufacturing: !!product.addForManufacturing,
+        showMrpOnInvoice: !!product.showMrpOnInvoice,
         // Not prefilled from product.imageUrl (that's a display URL now, not
         // resubmittable data) — stays empty until the user picks/clears a
         // photo, so an unrelated field edit doesn't overwrite the saved image.
@@ -791,6 +794,7 @@ export function ProductDialog({ open, onOpenChange, product, isAdmin, initialVal
       minStockThreshold: form.minStockThreshold ? Number(form.minStockThreshold) : undefined,
       notForSale: form.notForSale,
       addForManufacturing: form.addForManufacturing,
+      showMrpOnInvoice: form.showMrpOnInvoice,
       // On edit, only send imageUrl if the photo was actually touched this
       // session — otherwise omit it entirely so the existing stored image is
       // left alone. "" is sent as-is (not collapsed to undefined) so clearing
@@ -1041,6 +1045,14 @@ export function ProductDialog({ open, onOpenChange, product, isAdmin, initialVal
                   placeholder="0.00"
                   data-testid="input-mrp"
                 />
+                <label className="flex items-center gap-2 text-xs cursor-pointer pt-0.5">
+                  <Checkbox
+                    checked={form.showMrpOnInvoice}
+                    onCheckedChange={(v) => set("showMrpOnInvoice", v === true)}
+                    data-testid="checkbox-show-mrp"
+                  />
+                  Show MRP on invoice print
+                </label>
               </div>
             </div>
             <div className="rounded-lg border bg-muted/30 p-4 space-y-3">

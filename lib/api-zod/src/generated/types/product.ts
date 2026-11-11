@@ -83,6 +83,8 @@ export interface Product {
   packagingUnit?: string;
   notForSale: boolean;
   addForManufacturing: boolean;
+  /** Print the MRP of this product in its own column on invoices. */
+  showMrpOnInvoice?: boolean;
   /** @nullable */
   minStockThreshold?: number | null;
   /** @nullable */

@@ -566,6 +566,7 @@ export const ListProductsResponseItem = zod.object({
   "packagingUnit": zod.string().optional().describe('Name of the outer packaging this product ships in (e.g. Box, Barrel, Drum, Carton) — shown as \"1 <packagingUnit> = N <unit>\" and on invoice qty-in-packaging displays.'),
   "notForSale": zod.boolean(),
   "addForManufacturing": zod.boolean(),
+  "showMrpOnInvoice": zod.boolean().optional().describe('Print the MRP of this product in its own column on invoices.'),
   "minStockThreshold": zod.number().nullish(),
   "imageUrl": zod.string().nullish(),
   "createdAt": zod.string().optional()
@@ -607,6 +608,7 @@ export const CreateProductBody = zod.object({
   "packagingUnit": zod.string().optional(),
   "notForSale": zod.boolean().optional(),
   "addForManufacturing": zod.boolean().optional(),
+  "showMrpOnInvoice": zod.boolean().optional().describe('Print the MRP of this product in its own column on invoices.'),
   "minStockThreshold": zod.number().optional(),
   "imageUrl": zod.string().optional()
 })
@@ -645,6 +647,7 @@ export const CreateProductResponse = zod.object({
   "packagingUnit": zod.string().optional().describe('Name of the outer packaging this product ships in (e.g. Box, Barrel, Drum, Carton) — shown as \"1 <packagingUnit> = N <unit>\" and on invoice qty-in-packaging displays.'),
   "notForSale": zod.boolean(),
   "addForManufacturing": zod.boolean(),
+  "showMrpOnInvoice": zod.boolean().optional().describe('Print the MRP of this product in its own column on invoices.'),
   "minStockThreshold": zod.number().nullish(),
   "imageUrl": zod.string().nullish(),
   "createdAt": zod.string().optional()
@@ -692,6 +695,7 @@ export const GetProductResponse = zod.object({
   "packagingUnit": zod.string().optional().describe('Name of the outer packaging this product ships in (e.g. Box, Barrel, Drum, Carton) — shown as \"1 <packagingUnit> = N <unit>\" and on invoice qty-in-packaging displays.'),
   "notForSale": zod.boolean(),
   "addForManufacturing": zod.boolean(),
+  "showMrpOnInvoice": zod.boolean().optional().describe('Print the MRP of this product in its own column on invoices.'),
   "minStockThreshold": zod.number().nullish(),
   "imageUrl": zod.string().nullish(),
   "createdAt": zod.string().optional()
@@ -732,6 +736,7 @@ export const UpdateProductBody = zod.object({
   "packagingUnit": zod.string().optional(),
   "notForSale": zod.boolean().optional(),
   "addForManufacturing": zod.boolean().optional(),
+  "showMrpOnInvoice": zod.boolean().optional().describe('Print the MRP of this product in its own column on invoices.'),
   "minStockThreshold": zod.number().optional(),
   "imageUrl": zod.string().optional(),
   "commissionPerLiter": zod.number().optional(),
@@ -772,6 +777,7 @@ export const UpdateProductResponse = zod.object({
   "packagingUnit": zod.string().optional().describe('Name of the outer packaging this product ships in (e.g. Box, Barrel, Drum, Carton) — shown as \"1 <packagingUnit> = N <unit>\" and on invoice qty-in-packaging displays.'),
   "notForSale": zod.boolean(),
   "addForManufacturing": zod.boolean(),
+  "showMrpOnInvoice": zod.boolean().optional().describe('Print the MRP of this product in its own column on invoices.'),
   "minStockThreshold": zod.number().nullish(),
   "imageUrl": zod.string().nullish(),
   "createdAt": zod.string().optional()

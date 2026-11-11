@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { inr, num, lineLiters, rupeesInWords, buildUpiUri } from "./helpers";
 import type { Computed, ProductMaps, PrintSettings, TemplateTheme } from "./types";
+import { printedMrp } from "./types";
 
 // "Scan & Pay" QR, shared by every template. Encodes a UPI deep link built
 // from the configured UPI ID + the invoice's live grand total, so it always
@@ -61,6 +62,7 @@ export function ItemsTable({ computed, settings, maps, theme, grandTotal }: Item
   const showHsn = isGst && settings.showHsn;
   const showLtr = settings.showLtrColumn;
   const showBox = settings.showBoxColumn;
+  const showMrp = items.some((item: any) => printedMrp(item, maps) != null);
   const cell = `px-2 py-1.5 ${theme.rule}`;
   const minRows = settings.fillerRows ? 6 : 0;
 
@@ -73,6 +75,7 @@ export function ItemsTable({ computed, settings, maps, theme, grandTotal }: Item
           {showHsn && <th className={`${cell} w-20`}>HSN</th>}
           <th className={`${cell} w-12`}>UNIT</th>
           <th className={`${cell} w-14 text-right`}>QTY</th>
+          {showMrp && <th className={`${cell} w-20 text-right`}>MRP</th>}
           <th className={`${cell} w-20 text-right`}>RATE</th>
           {showLtr && <th className={`${cell} w-16 text-right`}>LTR/KGS</th>}
           {showBox && <th className={`${cell} w-16 text-right`}>BOX</th>}
@@ -104,6 +107,11 @@ export function ItemsTable({ computed, settings, maps, theme, grandTotal }: Item
               {showHsn && <td className={`${cell} align-top font-mono`}>{item.hsnCode ?? ""}</td>}
               <td className={`${cell} align-top uppercase`}>{item.unit}</td>
               <td className={`${cell} align-top text-right`}>{num(item.qty, 0)}</td>
+              {showMrp && (
+                <td className={`${cell} align-top text-right`}>
+                  {printedMrp(item, maps) != null ? `₹ ${inr(printedMrp(item, maps)!)}` : ""}
+                </td>
+              )}
               <td className={`${cell} align-top text-right`}>₹ {inr(item.rate)}</td>
               {showLtr && <td className={`${cell} align-top text-right`}>{ltr > 0 ? num(ltr, 3) : ""}</td>}
               {showBox && <td className={`${cell} align-top text-right`}>{boxCount > 0 ? num(boxCount, 2) : ""}</td>}
@@ -120,6 +128,7 @@ export function ItemsTable({ computed, settings, maps, theme, grandTotal }: Item
             {showHsn && <td className={cell}></td>}
             <td className={cell}></td>
             <td className={cell}></td>
+            {showMrp && <td className={cell}></td>}
             {showLtr && <td className={cell}></td>}
             {showBox && <td className={cell}></td>}
             <td className={cell}></td>
@@ -134,6 +143,7 @@ export function ItemsTable({ computed, settings, maps, theme, grandTotal }: Item
           {showHsn && <td className={cell}></td>}
           <td className={cell}></td>
           <td className={`${cell} text-right`} data-testid="text-total-qty">{num(totalQty, 0)}</td>
+          {showMrp && <td className={cell}></td>}
           <td className={cell}></td>
           {showLtr && <td className={`${cell} text-right`} data-testid="text-total-ltr">{totalLtr > 0 ? num(totalLtr, 3) : ""}</td>}
           {showBox && <td className={`${cell} text-right`} data-testid="text-total-box">{totalBox > 0 ? num(totalBox, 2) : ""}</td>}

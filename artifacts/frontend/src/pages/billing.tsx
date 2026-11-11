@@ -420,6 +420,7 @@ export default function Billing() {
   const printMaps = {
     lpbByProduct: new Map<number, number>((products ?? []).map((p: any) => [p.id, Number(p.litersPerBox ?? 0) || 0])),
     upbByProduct: new Map<number, number>((products ?? []).map((p: any) => [p.id, Number(p.unitsPerBox ?? 0) || 0])),
+    mrpProducts: new Set<number>((products ?? []).filter((p: any) => p.showMrpOnInvoice).map((p: any) => p.id)),
   };
 
   // ── All useEffect hooks ──

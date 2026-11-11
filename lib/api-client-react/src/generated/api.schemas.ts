@@ -898,6 +898,8 @@ export interface Product {
   packagingUnit?: string;
   notForSale: boolean;
   addForManufacturing: boolean;
+  /** Print the MRP of this product in its own column on invoices. */
+  showMrpOnInvoice?: boolean;
   /** @nullable */
   minStockThreshold?: number | null;
   /** @nullable */
@@ -952,6 +954,8 @@ export interface ProductInput {
   packagingUnit?: string;
   notForSale?: boolean;
   addForManufacturing?: boolean;
+  /** Print the MRP of this product in its own column on invoices. */
+  showMrpOnInvoice?: boolean;
   minStockThreshold?: number;
   imageUrl?: string;
 }
@@ -991,6 +995,8 @@ export interface ProductUpdate {
   packagingUnit?: string;
   notForSale?: boolean;
   addForManufacturing?: boolean;
+  /** Print the MRP of this product in its own column on invoices. */
+  showMrpOnInvoice?: boolean;
   minStockThreshold?: number;
   imageUrl?: string;
   commissionPerLiter?: number;

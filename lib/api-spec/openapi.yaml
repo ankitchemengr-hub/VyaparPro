@@ -4625,6 +4625,9 @@ components:
           type: boolean
         addForManufacturing:
           type: boolean
+        showMrpOnInvoice:
+          type: boolean
+          description: Print the MRP of this product in its own column on invoices.
         minStockThreshold:
           type: ["number", "null"]
         imageUrl:
@@ -4698,6 +4701,9 @@ components:
           type: boolean
         addForManufacturing:
           type: boolean
+        showMrpOnInvoice:
+          type: boolean
+          description: Print the MRP of this product in its own column on invoices.
         minStockThreshold:
           type: number
         imageUrl:
@@ -4759,6 +4765,9 @@ components:
           type: boolean
         addForManufacturing:
           type: boolean
+        showMrpOnInvoice:
+          type: boolean
+          description: Print the MRP of this product in its own column on invoices.
         minStockThreshold:
           type: number
         imageUrl:

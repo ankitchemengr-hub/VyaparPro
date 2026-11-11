@@ -55,6 +55,8 @@ export const productsTable = pgTable("products", {
   packagingUnit: text("packaging_unit").notNull().default("Box"),
   notForSale: boolean("not_for_sale").notNull().default(false),
   addForManufacturing: boolean("add_for_manufacturing").notNull().default(false),
+  // Print this product's MRP in its own column on invoices.
+  showMrpOnInvoice: boolean("show_mrp_on_invoice").notNull().default(false),
   minStockThreshold: numeric("min_stock_threshold", { precision: 12, scale: 3 }),
   nonGstPrice: numeric("non_gst_price", { precision: 12, scale: 2 }),
   imageUrl: text("image_url"),
