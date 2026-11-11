@@ -26,7 +26,7 @@ interface Totals {
   purchasedValue: number; soldValue: number; costOfSold: number;
   collected: number; costOfCollected: number; profitCollected: number;
   pendingFromCustomers: number; stockValue: number;
-  paidToSupplier: number; supplierDue: number; payNow: number;
+  paidToSupplier: number; supplierDue: number; payNow: number; canPay: number;
   investment: number;
 }
 interface SupplierRow extends Totals {
@@ -36,7 +36,14 @@ interface Report {
   suppliers: SupplierRow[];
   totals: Totals;
   unattributed: { soldQty: number; soldValue: number; collected: number };
-  cash?: { cashInHand: number; supplierDue: number; investment: number };
+  cash?: {
+    cashInHand: number; supplierDue: number; investment: number;
+    canPay: number; shortBy: number;
+    flow: {
+      fromCustomers: number; toSuppliers: number; otherIn: number; otherOut: number;
+      openingAndAdjustments: number; customerDiscount: number;
+    };
+  };
 }
 
 // Amounts arrive as JSON numbers; a NaN on the server arrives as null, so
@@ -54,6 +61,19 @@ function Stat({ label, value, hint, tone }: { label: string; value: string; hint
         {hint && <div className="text-[11px] text-muted-foreground mt-0.5">{hint}</div>}
       </CardContent>
     </Card>
+  );
+}
+
+// One line of "Where the money went": money in green, money out red.
+function FlowLine({ label, value }: { label: string; value: number }) {
+  const v = num(value);
+  return (
+    <div className="flex justify-between gap-2">
+      <span className="text-muted-foreground">{label}</span>
+      <span className={`font-mono ${v < -0.005 ? "text-red-600" : v > 0.005 ? "text-green-600" : ""}`}>
+        {v < -0.005 ? "− " : v > 0.005 ? "+ " : ""}{rs(Math.abs(v))}
+      </span>
+    </div>
   );
 }
 
@@ -81,6 +101,8 @@ export default function SupplierSettle() {
     (!q || String(s.vendorName ?? "").toLowerCase().includes(q) || String(s.mobile ?? "").includes(q)) && (!onlyPayNow || num(s.payNow) > 0.005),
   );
   const t = data?.totals;
+  const short = num(data?.cash?.shortBy) > 0.005;
+  const flow = data?.cash?.flow;
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -100,8 +122,14 @@ export default function SupplierSettle() {
         <div className="py-10 text-center text-destructive text-sm">{(error as Error).message}</div>
       ) : t ? (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-4 max-w-3xl">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 max-w-4xl">
             <Stat label="Pay suppliers now" value={rs(t.payNow)} tone="text-red-600" hint="Their share of money already collected" />
+            <Stat
+              label="Can pay from cash"
+              value={rs(data?.cash?.canPay)}
+              tone={short ? "text-amber-600" : "text-green-600"}
+              hint={short ? `Cash is ${rs(data?.cash?.shortBy)} short — see where it went below` : "Cash covers it all"}
+            />
             <Stat label="Still to collect" value={rs(t.pendingFromCustomers)} tone="text-amber-600" hint="Sold, customer not paid yet" />
             <Stat
               label="Investment"
@@ -110,6 +138,27 @@ export default function SupplierSettle() {
               hint={`Cash ${rs(data?.cash?.cashInHand)} − supplier dues ${rs(data?.cash?.supplierDue)}`}
             />
           </div>
+
+          {flow && (
+            <Card className="max-w-3xl">
+              <CardContent className="p-3 sm:p-4 space-y-1.5 text-sm">
+                <div className="font-semibold">Where the money went</div>
+                <FlowLine label="Opening balance & adjustments" value={flow.openingAndAdjustments} />
+                <FlowLine label="Received from customers" value={flow.fromCustomers} />
+                <FlowLine label="Other money in" value={flow.otherIn} />
+                <FlowLine label="Paid to suppliers" value={-flow.toSuppliers} />
+                <FlowLine label="Expenses & other payments" value={-flow.otherOut} />
+                <div className="flex justify-between gap-2 border-t pt-1.5 font-semibold">
+                  <span>Cash now</span><span className="font-mono">{rs(data?.cash?.cashInHand)}</span>
+                </div>
+                {num(flow.customerDiscount) > 0.005 && (
+                  <div className="text-xs text-muted-foreground">
+                    Discount given to customers: {rs(flow.customerDiscount)} — bills marked paid but no money came in, so it is not counted in "Pay suppliers now".
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative flex-1 min-w-[200px] max-w-sm">
@@ -143,6 +192,9 @@ export default function SupplierSettle() {
                           <div className="text-right shrink-0">
                             <div className="text-[11px] text-muted-foreground">Pay now</div>
                             <div className={`font-mono font-bold ${s.payNow > 0.005 ? "text-red-600" : "text-muted-foreground"}`}>{rs(s.payNow)}</div>
+                            {s.canPay < s.payNow - 0.005 && (
+                              <div className="text-[11px] text-amber-600">from cash {rs(s.canPay)}</div>
+                            )}
                           </div>
                           <ChevronDown className={`w-4 h-4 mt-1 shrink-0 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`} />
                         </div>
@@ -180,7 +232,10 @@ export default function SupplierSettle() {
                           )}
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             {s.payNow > 0.005 ? (
-                              <Badge variant="destructive">Pay {rs(s.payNow)} to {s.vendorName}</Badge>
+                              <Badge variant="destructive">
+                                Pay {rs(s.canPay < s.payNow - 0.005 ? s.canPay : s.payNow)} to {s.vendorName}
+                                {s.canPay < s.payNow - 0.005 && ` now (${rs(s.payNow - s.canPay)} later)`}
+                              </Badge>
                             ) : (
                               <Badge variant="secondary">Nothing to pay from collected money</Badge>
                             )}
@@ -202,7 +257,8 @@ export default function SupplierSettle() {
             <div>
               Sales are matched to suppliers oldest-purchase-first for each product. A product you make is broken down through its BOM,
               so selling it counts as selling its raw materials. A sale counts as collected as far as its bill is paid.
-              Amounts include GST.
+              Amounts include GST. A discount given while taking a payment is not counted as collected.
+              When cash is short, it is shared among suppliers in proportion to what each should get.
               {num(data?.unattributed?.soldValue) > 0.005 && (
                 <> Sales of {rs(data?.unattributed?.soldValue)} could not be matched to any purchase (opening stock, or a made product with no BOM) and are not counted for any supplier.</>
               )}

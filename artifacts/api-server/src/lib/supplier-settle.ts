@@ -21,6 +21,8 @@ import { NO_PAY_INVOICE_TYPES } from "./entity-payment";
 // its share of the invoice's grand total (what the customer owes). A sale is
 // "collected" in the same ratio its invoice has been paid (amount_paid /
 // grand_total), so a fully paid bill means that material's money is in.
+// A discount given while taking a payment marks the bill paid without any
+// money arriving, so that part doesn't count as collected.
 //
 // Bills deleted by Non-GST Data Cleanup still count (they are real sales and
 // purchases); cancelled ones don't. Sales returns put quantity back.
@@ -82,6 +84,8 @@ export interface SupplierSettleRow {
   // What to pay the supplier now: their share of collected money not yet paid,
   // never more than what is actually due to them.
   payNow: number;
+  // The part of payNow the cash on hand covers (see limitToCash).
+  canPay: number;
   // The rest of their share of collected money: material that was already
   // paid for, so this money is the business's to keep for buying material
   // again (costOfCollected - payNow).
@@ -98,11 +102,75 @@ export interface CashPosition {
   investment: number;
 }
 
+// How the cash on hand came to be what it is, from the Cash Book log of the
+// active accounts (transfers between them left out).
+export interface CashFlow {
+  fromCustomers: number;
+  toSuppliers: number;
+  otherIn: number;
+  // Expenses, withdrawals and any other money paid out.
+  otherOut: number;
+  // Opening balances and direct balance corrections: whatever the log above
+  // doesn't explain, so the lines always add up to cashInHand.
+  openingAndAdjustments: number;
+  // Discount given to customers while taking payments — settled their bills
+  // but never came in as money.
+  customerDiscount: number;
+}
+
 export interface SupplierSettleReport {
   suppliers: SupplierSettleRow[];
   totals: Omit<SupplierSettleRow, "vendorId" | "vendorName" | "mobile" | "products">;
   unattributed: { soldQty: number; soldValue: number; collected: number };
-  cash: CashPosition;
+  cash: CashPosition & { canPay: number; shortBy: number; flow: CashFlow };
+}
+
+// Pay now is what the suppliers' share of collected money adds up to, but that
+// money may already have gone on expenses or other purchases. When the cash on
+// hand can't cover it all, each supplier's canPay is cut in the same ratio.
+export function limitToCash(report: Omit<SupplierSettleReport, "cash">, cashInHand: number): { canPay: number; shortBy: number } {
+  const total = report.totals.payNow;
+  const available = Math.max(0, cashInHand);
+  const ratio = total > available && total > 0 ? available / total : 1;
+  for (const s of report.suppliers) s.canPay = r2(s.payNow * ratio);
+  report.totals.canPay = r2(report.suppliers.reduce((sum, s) => sum + s.canPay, 0));
+  return { canPay: report.totals.canPay, shortBy: r2(Math.max(0, total - available)) };
+}
+
+// Discount part of each customer payment receipt: whatever it settled beyond
+// the money that came in.
+const RECEIPT_DISCOUNT_SQL = `
+  SELECT pa.receipt_no, pa.alloc, p.cash, GREATEST(0, pa.alloc - p.cash) AS discount
+    FROM (SELECT receipt_no, SUM(allocated_amount) AS alloc FROM payment_allocations WHERE company_id = $1 GROUP BY receipt_no) pa
+    JOIN (SELECT receipt_id, SUM(amount) AS cash FROM payments WHERE company_id = $1 AND status = 'approved' GROUP BY receipt_id) p
+      ON p.receipt_id = pa.receipt_no`;
+
+export async function cashFlow(companyId: number, cashInHand: number): Promise<CashFlow> {
+  const [flowRes, discRes] = await Promise.all([
+    pool.query(
+      `SELECT
+         COALESCE(SUM(t.amount) FILTER (WHERE t.direction = 'in' AND (COALESCE(e.type = 'customer', false) OR t.invoice_id IS NOT NULL)), 0)::float8 AS from_customers,
+         COALESCE(SUM(t.amount) FILTER (WHERE t.direction = 'in' AND NOT (COALESCE(e.type = 'customer', false) OR t.invoice_id IS NOT NULL)), 0)::float8 AS other_in,
+         COALESCE(SUM(t.amount) FILTER (WHERE t.direction = 'out' AND e.type = 'vendor'), 0)::float8 AS to_suppliers,
+         COALESCE(SUM(t.amount) FILTER (WHERE t.direction = 'out' AND e.type IS DISTINCT FROM 'vendor'), 0)::float8 AS other_out
+         FROM account_transactions t
+         JOIN accounts a ON a.id = t.account_id AND a.company_id = t.company_id AND a.is_active = true
+         LEFT JOIN entities e ON e.id = t.party_entity_id AND e.company_id = t.company_id
+        WHERE t.company_id = $1 AND COALESCE(t.receipt_no, '') NOT LIKE 'TRF-%'`,
+      [companyId],
+    ),
+    pool.query(`SELECT COALESCE(SUM(discount), 0)::float8 AS discount FROM (${RECEIPT_DISCOUNT_SQL}) d`, [companyId]),
+  ]);
+  const f = flowRes.rows[0] ?? {};
+  const fromCustomers = r2(Number(f.from_customers ?? 0));
+  const otherIn = r2(Number(f.other_in ?? 0));
+  const toSuppliers = r2(Number(f.to_suppliers ?? 0));
+  const otherOut = r2(Number(f.other_out ?? 0));
+  return {
+    fromCustomers, toSuppliers, otherIn, otherOut,
+    openingAndAdjustments: r2(cashInHand - (fromCustomers + otherIn - toSuppliers - otherOut)),
+    customerDiscount: r2(Number(discRes.rows[0]?.discount ?? 0)),
+  };
 }
 
 // The Investment card: cash on hand minus everything owed to suppliers —
@@ -143,13 +211,15 @@ export async function buildSupplierSettle(
       [companyId],
     ),
     // One line per invoice line, net of returns; value is its share of the
-    // invoice's grand total, collected in the invoice's paid ratio.
+    // invoice's grand total, collected in the invoice's paid ratio (money
+    // only — a payment's discount part is taken back out, spread over the
+    // bills that receipt settled in proportion).
     pool.query(
       `SELECT ii.product_id, to_char(i.invoice_date AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD') AS invoice_date,
               (ii.qty - COALESCE(ret.qty, 0))::float8 AS qty,
               CASE WHEN ii.qty > 0 AND t.lines_total > 0
                    THEN ii.amount * i.grand_total / t.lines_total / ii.qty ELSE 0 END::float8 AS unit_value,
-              CASE WHEN i.grand_total > 0 THEN LEAST(1, GREATEST(0, i.amount_paid / i.grand_total)) ELSE 1 END::float8 AS paid_ratio
+              CASE WHEN i.grand_total > 0 THEN LEAST(1, GREATEST(0, (i.amount_paid - COALESCE(disc.discount, 0)) / i.grand_total)) ELSE 1 END::float8 AS paid_ratio
          FROM invoice_items ii
          JOIN invoices i ON i.id = ii.invoice_id AND i.company_id = ii.company_id
          JOIN (SELECT invoice_id, SUM(amount) AS lines_total FROM invoice_items WHERE company_id = $1 GROUP BY invoice_id) t
@@ -161,6 +231,13 @@ export async function buildSupplierSettle(
             WHERE sri.company_id = $1 AND sr.status <> 'cancelled' AND sri.invoice_item_id IS NOT NULL
             GROUP BY sri.invoice_item_id
          ) ret ON ret.invoice_item_id = ii.id
+         LEFT JOIN (
+           SELECT al.invoice_id, SUM(al.allocated_amount * rd.discount / rd.alloc) AS discount
+             FROM payment_allocations al
+             JOIN (${RECEIPT_DISCOUNT_SQL}) rd ON rd.receipt_no = al.receipt_no AND rd.discount > 0 AND rd.alloc > 0
+            WHERE al.company_id = $1
+            GROUP BY al.invoice_id
+         ) disc ON disc.invoice_id = i.id
         WHERE i.company_id = $1 AND i.status = 'saved' AND NOT (i.invoice_type = ANY($2::text[]))
           AND ii.qty - COALESCE(ret.qty, 0) > 0
         ORDER BY i.invoice_date ASC, i.id ASC, ii.id ASC`,
@@ -337,6 +414,7 @@ export async function buildSupplierSettle(
       paidToSupplier,
       supplierDue,
       payNow,
+      canPay: payNow,
       investment: r2(Math.max(0, costOfCollected - payNow)),
       products,
     });
@@ -358,6 +436,7 @@ export async function buildSupplierSettle(
       paidToSupplier: tot((s) => s.paidToSupplier),
       supplierDue: tot((s) => s.supplierDue),
       payNow: tot((s) => s.payNow),
+      canPay: tot((s) => s.canPay),
       investment: tot((s) => s.investment),
     },
     unattributed: { soldQty: r3(unattributed.soldQty), soldValue: r2(unattributed.soldValue), collected: r2(unattributed.collected) },

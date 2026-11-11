@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { getCompanyId } from "../lib/tenant";
 import { logger } from "../lib/logger";
 import { pool } from "@workspace/db";
-import { buildSupplierSettle, cashPosition } from "../lib/supplier-settle";
+import { buildSupplierSettle, cashFlow, cashPosition, limitToCash } from "../lib/supplier-settle";
 
 // Supplier Settle (see lib/supplier-settle.ts) — admin only: it shows the
 // business's profit and what it owes each supplier.
@@ -21,7 +21,8 @@ router.get("/supplier-settle", async (req, res): Promise<void> => {
       `SELECT COALESCE(SUM(GREATEST(outstanding_balance, 0)), 0)::float8 AS due FROM entities WHERE company_id = $1 AND type = 'vendor'`,
       [companyId],
     );
-    res.json({ ...report, cash: await cashPosition(companyId, Number(due.rows[0]?.due ?? 0)) });
+    const cash = await cashPosition(companyId, Number(due.rows[0]?.due ?? 0));
+    res.json({ ...report, cash: { ...cash, ...limitToCash(report, cash.cashInHand), flow: await cashFlow(companyId, cash.cashInHand) } });
   } catch (err) {
     logger.error({ err }, "GET /supplier-settle failed");
     res.status(500).json({ error: "Failed to load Supplier Settle" });

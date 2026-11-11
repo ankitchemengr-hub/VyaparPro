@@ -257,6 +257,53 @@ test("Investment = cash on hand minus everything owed to suppliers", async () =>
   assert.equal(rep.cash.investment, start + 250 - 500);
 });
 
+test("a discount given while taking a payment is not counted as collected money", async () => {
+  const cust = (await pool.query(`INSERT INTO entities (company_id, type, name, mobile) VALUES ($1, 'customer', 'Disc Cust', '93') RETURNING id`, [A])).rows[0].id;
+  const collectedNow = (rep: any) => Math.round((rep.totals.collected + rep.unattributed.collected) * 100) / 100;
+  const before = await ok("adminA", "GET", "/supplier-settle");
+  const inv = await ok("adminA", "POST", "/invoices", {
+    invoiceType: "non_gst", invoiceDate: "2026-04-25", customerId: cust, placeOfSupply: "Maharashtra",
+    items: [{ productId: ids.product, qty: 2, unit: "QTY", rate: 150, mrp: 150 }],
+  });
+  assert.equal(Number(inv.grandTotal), 300);
+  await ok("adminA", "POST", "/payments", {
+    customerId: cust, invoiceId: inv.id, amount: 200, discount: 100, mode: "cash", accountId: ids.account,
+  });
+  const after = await ok("adminA", "GET", "/supplier-settle");
+  assert.equal(Number((await pool.query(`SELECT balance_due FROM invoices WHERE id = $1`, [inv.id])).rows[0].balance_due), 0);
+  assert.equal(Math.round((collectedNow(after) - collectedNow(before)) * 100) / 100, 200, "only the cash part counts");
+  assert.equal(Math.round((after.cash.flow.customerDiscount - before.cash.flow.customerDiscount) * 100) / 100, 100);
+});
+
+test("Where the money went adds up to the cash on hand", async () => {
+  const rep = await ok("adminA", "GET", "/supplier-settle");
+  const f = rep.cash.flow;
+  assert.equal(Math.round((f.openingAndAdjustments + f.fromCustomers + f.otherIn - f.toSuppliers - f.otherOut) * 100) / 100, rep.cash.cashInHand);
+  assert.ok(f.fromCustomers > 0);
+  assert.ok(f.toSuppliers >= 500, "the Payment Outs to suppliers above");
+});
+
+test("when cash is short, what can be paid now is shared out in proportion", async () => {
+  let rep = await ok("adminA", "GET", "/supplier-settle");
+  assert.equal(rep.cash.canPay, rep.totals.payNow, "plenty of cash: pay it all");
+  assert.equal(rep.cash.shortBy, 0);
+  const payNow = rep.totals.payNow;
+  assert.ok(payNow > 100);
+  // Spend all but 100 on something else (an expense / withdrawal).
+  await ok("adminA", "POST", "/account-transactions", {
+    accountId: ids.account, direction: "out", amount: rep.cash.cashInHand - 100, mode: "cash", partyName: "Owner",
+  });
+  rep = await ok("adminA", "GET", "/supplier-settle");
+  assert.equal(rep.cash.cashInHand, 100);
+  assert.equal(rep.cash.shortBy, Math.round((payNow - 100) * 100) / 100);
+  assert.ok(Math.abs(rep.cash.canPay - 100) <= 0.05, `canPay ${rep.cash.canPay}`);
+  for (const s of rep.suppliers) {
+    assert.ok(s.canPay <= s.payNow + 0.005);
+    assert.ok(Math.abs(s.canPay - s.payNow * 100 / payNow) <= 0.01);
+  }
+  assert.equal(rep.totals.payNow, payNow, "what is owed from collected money doesn't change");
+});
+
 test("only the company admin can open it (not accountant, store or super admin), and another company sees none of it", async () => {
   assert.equal((await call("accountantA", "GET", "/supplier-settle")).status, 403);
   // Platform super admin switched into company A still can't open it.
