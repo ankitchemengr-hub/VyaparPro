@@ -22,6 +22,10 @@ export const accountTransactionsTable = pgTable("account_transactions", {
   // as partyEntityId — see the PATCH route's comment.
   invoiceId: integer("invoice_id").references(() => invoicesTable.id),
   notes: text("notes"),
+  // Payment Out to a supplier only: discount the supplier gave on top of
+  // `amount`. It cleared their dues along with the payment but never left the
+  // account, and counts as other income in GET /reports/profit-loss.
+  discount: numeric("discount", { precision: 14, scale: 2 }).notNull().default("0"),
   createdById: integer("created_by_id"),
   createdByName: text("created_by_name"),
   createdByRole: text("created_by_role"),

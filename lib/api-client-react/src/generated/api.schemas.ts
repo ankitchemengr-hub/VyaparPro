@@ -1931,6 +1931,11 @@ export interface AccountTransactionInput {
   notes?: string;
   /** Admin-only override to let a "Payment Out" push the account balance negative instead of being blocked. */
   allowNegative?: boolean;
+  /**
+   * Payment Out to a supplier only — discount the supplier gave on top of amount. Clears what we owe like the payment does, but no money leaves the account; counted as other income (profit).
+   * @minimum 0
+   */
+  discount?: number;
 }
 
 export type UpdateAccountTransactionInputMode = typeof UpdateAccountTransactionInputMode[keyof typeof UpdateAccountTransactionInputMode];
@@ -3147,6 +3152,8 @@ export interface ProfitLossReport {
   salesTax: number;
   salesTotal: number;
   purchases: number;
+  /** Discounts received from suppliers on payments in the period — added to net profit. */
+  otherIncome?: number;
   expensesByCategory: ProfitLossReportExpensesByCategoryItem[];
 }
 

@@ -134,6 +134,37 @@ test("a discount alone (no cash) still settles the leftover", async () => {
   assert.equal(Number(after.current_balance), Number(before.current_balance));
 });
 
+test("supplier discount on Payment Out clears their dues, leaves the account alone, and adds to profit", async () => {
+  const vendor = (await pool.query(
+    `INSERT INTO entities (company_id, type, name, mobile, outstanding_balance) VALUES ($1, 'vendor', 'Disc Supplier', '81', 1000) RETURNING id`, [A],
+  )).rows[0].id;
+  const plBefore = await ok("admin", "GET", "/reports/profit-loss");
+  const acctBefore = Number((await pool.query(`SELECT current_balance FROM accounts WHERE id = $1`, [ids.account])).rows[0].current_balance);
+
+  await ok("admin", "POST", "/account-transactions", {
+    accountId: ids.account, direction: "out", amount: 900, discount: 100, mode: "cash", partyEntityId: vendor, allowNegative: true,
+  });
+
+  const v = (await pool.query(`SELECT outstanding_balance FROM entities WHERE id = $1`, [vendor])).rows[0];
+  assert.equal(Number(v.outstanding_balance), 0, "cash + discount cleared the ₹1000 due");
+  const acctAfter = Number((await pool.query(`SELECT current_balance FROM accounts WHERE id = $1`, [ids.account])).rows[0].current_balance);
+  assert.equal(acctAfter, acctBefore - 900, "only the cash left the account");
+
+  const plAfter = await ok("admin", "GET", "/reports/profit-loss");
+  assert.equal(plAfter.otherIncome - (plBefore.otherIncome ?? 0), 100);
+  assert.equal(Math.round((plAfter.netProfit - plBefore.netProfit) * 100) / 100, 100, "net profit up by the discount");
+
+  // A discount needs a supplier on a Payment Out.
+  assert.equal((await call("admin", "POST", "/account-transactions", {
+    accountId: ids.account, direction: "in", amount: 10, discount: 5, mode: "cash", partyEntityId: ids.customer,
+  })).status, 400);
+  assert.equal((await call("admin", "POST", "/account-transactions", {
+    accountId: ids.account, direction: "out", amount: 10, discount: 5, mode: "cash", partyEntityId: ids.customer, allowNegative: true,
+  })).status, 400);
+  const plLast = await ok("admin", "GET", "/reports/profit-loss");
+  assert.equal(plLast.otherIncome, plAfter.otherIncome, "refused entries left no trace");
+});
+
 test("salesman cannot give a discount; zero amount and zero discount is refused", async () => {
   const r = await call("salesman", "POST", "/payments", { customerId: ids.customer, amount: 100, discount: 10, mode: "cash" });
   assert.equal(r.status, 403);

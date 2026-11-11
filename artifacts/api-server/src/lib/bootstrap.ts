@@ -591,6 +591,8 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
     )`,
     // Schedules saved before deletes became permanent stay off until re-saved.
     `ALTER TABLE non_gst_cleanup_settings ADD COLUMN IF NOT EXISTS permanent BOOLEAN NOT NULL DEFAULT false`,
+    // Discount a supplier gave on a Payment Out (routes/accounts.ts) — profit.
+    `ALTER TABLE account_transactions ADD COLUMN IF NOT EXISTS discount NUMERIC(14, 2) NOT NULL DEFAULT 0`,
     // ── Platform maintenance notices (lib/platform-notices.ts) ──
     `CREATE TABLE IF NOT EXISTS platform_notices (
       id                  SERIAL PRIMARY KEY,

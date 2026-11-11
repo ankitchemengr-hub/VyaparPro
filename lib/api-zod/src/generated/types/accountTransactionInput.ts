@@ -22,4 +22,9 @@ export interface AccountTransactionInput {
   notes?: string;
   /** Admin-only override to let a "Payment Out" push the account balance negative instead of being blocked. */
   allowNegative?: boolean;
+  /**
+   * Payment Out to a supplier only — discount the supplier gave on top of amount. Clears what we owe like the payment does, but no money leaves the account; counted as other income (profit).
+   * @minimum 0
+   */
+  discount?: number;
 }

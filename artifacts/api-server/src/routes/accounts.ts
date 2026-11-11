@@ -26,6 +26,9 @@ const FINANCIAL_ROLES = new Set(["admin", "accountant"]);
 // must work for that identity exactly like a company's own "admin" role.
 const WRITE_ROLES = new Set(["admin", "super_admin"]);
 
+// A bad request found mid-transaction: rolled back and answered as a 400.
+class AccountTxnValidationError extends Error {}
+
 function requireFinancialRead(req: any, res: any): boolean {
   const role = (req as any).session?.role;
   if (!role || !FINANCIAL_ROLES.has(role)) {
@@ -346,6 +349,11 @@ router.post("/account-transactions", async (req, res): Promise<void> => {
   const session = (req as any).session;
   const companyId = getCompanyId(req);
   const { accountId, direction, amount, mode, partyName, partyMobile, partyEntityId, invoiceId, notes, allowNegative } = parsed.data;
+  const discount = Math.round((parsed.data.discount ?? 0) * 100) / 100;
+  if (discount > 0 && !(direction === "out" && partyEntityId)) {
+    res.status(400).json({ error: "A discount can only be added to a Payment Out linked to a supplier" });
+    return;
+  }
 
   // invoiceId only ever makes sense on a customer "Payment In" — validated
   // properly below once we know the party's type, but reject the
@@ -404,8 +412,8 @@ router.post("/account-transactions", async (req, res): Promise<void> => {
 
     const ins = await client.query(
       `INSERT INTO account_transactions
-        (company_id, account_id, direction, amount, mode, party_name, party_mobile, party_entity_id, invoice_id, notes, receipt_no, created_by_id, created_by_name, created_by_role)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+        (company_id, account_id, direction, amount, mode, party_name, party_mobile, party_entity_id, invoice_id, notes, receipt_no, created_by_id, created_by_name, created_by_role, discount)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
        RETURNING *`,
       [
         companyId,
@@ -422,6 +430,7 @@ router.post("/account-transactions", async (req, res): Promise<void> => {
         session?.userId ?? null,
         session?.name ?? session?.username ?? null,
         session?.role ?? null,
+        discount,
       ],
     );
     const txn = ins.rows[0];
@@ -452,11 +461,16 @@ router.post("/account-transactions", async (req, res): Promise<void> => {
       const party = partyRes.rows[0];
       const isVendorPayout = direction === "out" && party?.type === "vendor";
       const isCustomerReceipt = direction === "in" && party?.type === "customer";
+      if (discount > 0 && !isVendorPayout) {
+        throw new AccountTxnValidationError("A discount can only be added to a Payment Out linked to a supplier");
+      }
       if (isVendorPayout || isCustomerReceipt) {
+        // The supplier's discount clears their dues along with the cash, in
+        // the same ledger line; only the cash left the account above.
         const result = await applyEntityPayment(client, {
           companyId,
           entityId: party.id,
-          amount,
+          amount: Math.round((amount + discount) * 100) / 100,
           mode,
           receiptNo,
           referenceId: txn.id,
@@ -466,7 +480,9 @@ router.post("/account-transactions", async (req, res): Promise<void> => {
           // settle that bill first — honour it here (the ₹ Record Payment
           // button, by contrast, just wants oldest-invoice-first / FIFO).
           pinStartInvoice: isCustomerReceipt && invoiceId != null,
-          description: isVendorPayout ? `Payment made (${mode})` : `Payment received (${mode})`,
+          description: isVendorPayout
+            ? (discount > 0 ? `Payment made (${mode}) ₹${amount} + discount received ₹${discount}` : `Payment made (${mode})`)
+            : `Payment received (${mode})`,
         });
         allocations = result.allocations;
         if (isCustomerReceipt) {
@@ -503,6 +519,10 @@ router.post("/account-transactions", async (req, res): Promise<void> => {
     });
   } catch (err) {
     await client.query("ROLLBACK");
+    if (err instanceof AccountTxnValidationError) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
     logger.error({ err }, "Failed to record account transaction");
     res.status(500).json({ error: "Failed to record transaction" });
   } finally {

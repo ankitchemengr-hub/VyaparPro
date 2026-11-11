@@ -935,7 +935,7 @@ function PnLTab() {
   const { data, isLoading } = useGetProfitLossReport(params, { query: { queryKey: getGetProfitLossReportQueryKey(params) } });
 
   return (
-    <ReportCard title="Profit & Loss" description="Revenue − COGS − Expenses = Net Profit. (Excludes GST.)">
+    <ReportCard title="Profit & Loss" description="Revenue − COGS + Supplier Discounts − Expenses = Net Profit. (Excludes GST.)">
       <FilterBar>
         <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
       </FilterBar>
@@ -962,7 +962,8 @@ function PnLTab() {
               className="md:order-3 bg-emerald-50 dark:bg-emerald-950/40"
             />
             <StatTile label="Operating Expenses" value={fmt(data.expenses)} className="md:order-4" />
-            <StatTile label="Purchases (Period)" value={fmt(data.purchases)} className="col-span-2 md:col-span-1 md:order-6" />
+            <StatTile label="Purchases (Period)" value={fmt(data.purchases)} className="md:order-6" />
+            <StatTile label="Supplier Discounts" value={fmt(data.otherIncome ?? 0)} sub={<>Added to profit</>} className="md:order-4" />
           </div>
 
           <div>

@@ -2169,6 +2169,8 @@ export const ListAccountTransactionsResponse = zod.array(ListAccountTransactions
  */
 export const createAccountTransactionBodyAmountMin = 0.01;
 
+export const createAccountTransactionBodyDiscountMin = 0;
+
 
 
 export const CreateAccountTransactionBody = zod.object({
@@ -2181,7 +2183,8 @@ export const CreateAccountTransactionBody = zod.object({
   "partyEntityId": zod.number().optional(),
   "invoiceId": zod.number().optional().describe('Optional — apply this \"Payment In\" against one specific outstanding invoice for the linked customer first; any remainder spills over to their other outstanding invoices, latest first (see `allocations` on the response).'),
   "notes": zod.string().optional(),
-  "allowNegative": zod.boolean().optional().describe('Admin-only override to let a \"Payment Out\" push the account balance negative instead of being blocked.')
+  "allowNegative": zod.boolean().optional().describe('Admin-only override to let a \"Payment Out\" push the account balance negative instead of being blocked.'),
+  "discount": zod.number().min(createAccountTransactionBodyDiscountMin).optional().describe('Payment Out to a supplier only — discount the supplier gave on top of amount. Clears what we owe like the payment does, but no money leaves the account; counted as other income (profit).')
 })
 
 export const CreateAccountTransactionResponse = zod.object({
@@ -3749,6 +3752,7 @@ export const GetProfitLossReportResponse = zod.object({
   "salesTax": zod.number(),
   "salesTotal": zod.number(),
   "purchases": zod.number(),
+  "otherIncome": zod.number().optional().describe('Discounts received from suppliers on payments in the period — added to net profit.'),
   "expensesByCategory": zod.array(zod.object({
   "categoryName": zod.string(),
   "total": zod.number()

@@ -5829,6 +5829,10 @@ components:
         allowNegative:
           type: boolean
           description: Admin-only override to let a "Payment Out" push the account balance negative instead of being blocked.
+        discount:
+          type: number
+          minimum: 0
+          description: Payment Out to a supplier only — discount the supplier gave on top of amount. Clears what we owe like the payment does, but no money leaves the account; counted as other income (profit).
 
     UpdateAccountTransactionInput:
       type: object
@@ -7354,6 +7358,7 @@ components:
         salesTax: { type: number }
         salesTotal: { type: number }
         purchases: { type: number }
+        otherIncome: { type: number, description: "Discounts received from suppliers on payments in the period — added to net profit." }
         expensesByCategory:
           type: array
           items:

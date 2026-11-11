@@ -368,11 +368,13 @@ router.get("/reports/profit-loss", async (req, res): Promise<void> => {
   let salesClause = `i.company_id = $1 AND i.status = 'saved' AND ${SALE_TYPES}`;
   let purClause = "p.company_id = $1 AND p.status = 'saved'";
   let expClause = "e.company_id = $1";
+  let discClause = "t.company_id = $1 AND t.direction = 'out' AND t.discount > 0";
   if (from) {
     ps.push(new Date(from));
     salesClause += ` AND i.invoice_date >= $${ps.length}`;
     purClause += ` AND p.bill_date >= $${ps.length}`;
     expClause += ` AND e.date >= $${ps.length}`;
+    discClause += ` AND t.created_at >= $${ps.length}`;
   }
   if (to) {
     const d = new Date(to); d.setHours(23,59,59,999);
@@ -380,9 +382,10 @@ router.get("/reports/profit-loss", async (req, res): Promise<void> => {
     salesClause += ` AND i.invoice_date <= $${ps.length}`;
     purClause += ` AND p.bill_date <= $${ps.length}`;
     expClause += ` AND e.date <= $${ps.length}`;
+    discClause += ` AND t.created_at <= $${ps.length}`;
   }
 
-  const [salesRow, cogsRow, purchaseRow, expRow, expByCat] = await Promise.all([
+  const [salesRow, cogsRow, purchaseRow, expRow, expByCat, discRow] = await Promise.all([
     queryOne(`SELECT COALESCE(SUM(subtotal),0) AS revenue, COALESCE(SUM(total_tax),0) AS tax, COALESCE(SUM(grand_total),0) AS total FROM invoices i WHERE ${salesClause}`, ps),
     queryOne(
       // Prefer the cost snapshotted on the item at sale time (cost_price) so
@@ -397,13 +400,16 @@ router.get("/reports/profit-loss", async (req, res): Promise<void> => {
     queryOne(`SELECT COALESCE(SUM(subtotal),0) AS purchases FROM purchases p WHERE ${purClause}`, ps),
     queryOne(`SELECT COALESCE(SUM(amount),0) AS total FROM expenses e WHERE ${expClause}`, ps),
     queryMany(`SELECT e.category_name, COALESCE(SUM(e.amount),0) AS total FROM expenses e WHERE ${expClause} GROUP BY e.category_name ORDER BY SUM(e.amount) DESC`, ps),
+    // Discounts suppliers gave on Payment Out entries (routes/accounts.ts).
+    queryOne(`SELECT COALESCE(SUM(t.discount),0) AS total FROM account_transactions t WHERE ${discClause}`, ps),
   ]);
 
   const revenue = Number(salesRow.revenue);
   const cogs = Number(cogsRow.cogs);
   const grossProfit = revenue - cogs;
   const expenses = Number(expRow.total);
-  const netProfit = grossProfit - expenses;
+  const otherIncome = Number(discRow.total);
+  const netProfit = grossProfit + otherIncome - expenses;
   const grossMargin = revenue > 0 ? (grossProfit / revenue) * 100 : 0;
   const netMargin = revenue > 0 ? (netProfit / revenue) * 100 : 0;
 
@@ -418,6 +424,7 @@ router.get("/reports/profit-loss", async (req, res): Promise<void> => {
     salesTax: Number(salesRow.tax),
     salesTotal: Number(salesRow.total),
     purchases: Number(purchaseRow.purchases),
+    otherIncome,
     expensesByCategory: expByCat.map((r: any) => ({ categoryName: r.category_name, total: Number(r.total) })),
   });
 });

@@ -75,7 +75,7 @@ export function CashEntryDialog({
   onClose: () => void;
   onCreated: (txn: AccountTransaction) => void;
   /** Pre-lock the party to a known entity (e.g. opened from that party's Khatabook ledger) instead of the free-text search. */
-  presetEntity?: { id: number; name: string; mobile: string; balance: number } | null;
+  presetEntity?: { id: number; name: string; mobile: string; balance: number; type?: string } | null;
 }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -90,6 +90,8 @@ export function CashEntryDialog({
   const [partyMobile, setPartyMobile] = useState("");
   const [partyEntityId, setPartyEntityId] = useState<number | null>(null);
   const [partyEntityBalance, setPartyEntityBalance] = useState<number | null>(null);
+  const [partyType, setPartyType] = useState<string | null>(null);
+  const [discount, setDiscount] = useState<string>("");
   const [invoiceId, setInvoiceId] = useState<number | null>(null);
   const [notes, setNotes] = useState("");
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
@@ -140,6 +142,8 @@ export function CashEntryDialog({
       setPartyMobile(presetEntity?.mobile ?? "");
       setPartyEntityId(presetEntity?.id ?? null);
       setPartyEntityBalance(presetEntity?.balance ?? null);
+      setPartyType(presetEntity?.type ?? null);
+      setDiscount("");
       setInvoiceId(null);
       setNotes("");
       setNameOpen(false);
@@ -188,6 +192,7 @@ export function CashEntryDialog({
     setPartyName(e.name);
     setPartyMobile(e.mobile);
     setPartyEntityBalance(Number((e as any).outstandingBalance ?? 0));
+    setPartyType(e.type);
     setInvoiceId(null);
     setNameOpen(false);
     setMobileOpen(false);
@@ -196,13 +201,24 @@ export function CashEntryDialog({
   const clearLinkedEntity = () => {
     setPartyEntityId(null);
     setPartyEntityBalance(null);
+    setPartyType(null);
+    setDiscount("");
     setInvoiceId(null);
   };
+
+  // Only a Payment Out to a linked supplier can carry a discount — it clears
+  // their dues with the cash and counts as profit.
+  const canDiscount = !isIn && !!partyEntityId && partyType === "vendor";
+  const disc = canDiscount ? Number(discount) || 0 : 0;
 
   const handleSubmit = (allowNegative = false, skipBalanceWarning = false) => {
     const amt = Number(amount);
     if (!accountId || !amt || amt <= 0) {
       toast({ title: "Pick an account and enter a positive amount", variant: "destructive" });
+      return;
+    }
+    if (disc < 0) {
+      toast({ title: "Discount can't be negative", variant: "destructive" });
       return;
     }
     // A "Payment In" against a customer who currently owes nothing (already
@@ -232,6 +248,7 @@ export function CashEntryDialog({
           invoiceId: invoiceId ?? undefined,
           notes: notes.trim() || undefined,
           ...(allowNegative ? { allowNegative: true } : {}),
+          ...(disc > 0 ? { discount: disc } : {}),
         },
       },
       {
@@ -253,7 +270,7 @@ export function CashEntryDialog({
           queryClient.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() });
           toast({
             title: direction === "in" ? "Payment recorded" : "Payment issued",
-            description: `Receipt ${txn.receiptNo ?? `#${txn.id}`}`,
+            description: `Receipt ${txn.receiptNo ?? `#${txn.id}`}${disc > 0 ? ` • ₹${disc.toLocaleString("en-IN")} discount added to profit` : ""}`,
           });
           onCreated(txn);
           onClose();
@@ -365,6 +382,25 @@ export function CashEntryDialog({
                 <span className={cn("font-semibold", formatEntityBalance(partyEntityBalance).className)}>
                   {formatEntityBalance(partyEntityBalance).text}
                 </span>
+              </div>
+            )}
+
+            {canDiscount && (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Discount from supplier (₹) <span className="font-normal text-muted-foreground">(optional)</span></Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={discount}
+                  onChange={(e) => setDiscount(e.target.value)}
+                  placeholder="0.00"
+                  data-testid="input-entry-discount"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Clears the supplier's dues along with the payment, but doesn't leave your account — it's added to your profit.
+                  {disc > 0 && Number(amount) > 0 && ` Settles ₹${(Number(amount) + disc).toLocaleString("en-IN")} in total.`}
+                </p>
               </div>
             )}
 

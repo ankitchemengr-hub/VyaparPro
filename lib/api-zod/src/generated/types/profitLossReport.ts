@@ -18,5 +18,7 @@ export interface ProfitLossReport {
   salesTax: number;
   salesTotal: number;
   purchases: number;
+  /** Discounts received from suppliers on payments in the period — added to net profit. */
+  otherIncome?: number;
   expensesByCategory: ProfitLossReportExpensesByCategoryItem[];
 }

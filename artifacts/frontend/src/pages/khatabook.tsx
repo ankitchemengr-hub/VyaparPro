@@ -452,7 +452,7 @@ function KhatabookPartyPage({
       open={entryDirection !== null}
       direction={entryDirection ?? "in"}
       accounts={activeAccounts}
-      presetEntity={party ? { id: party.id, name: party.name, mobile: party.mobile, balance: ledger?.outstandingBalance ?? 0 } : null}
+      presetEntity={party ? { id: party.id, name: party.name, mobile: party.mobile, balance: ledger?.outstandingBalance ?? 0, type } : null}
       onClose={() => setEntryDirection(null)}
       onCreated={handleEntryCreated}
     />
