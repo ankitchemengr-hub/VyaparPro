@@ -1,4 +1,4 @@
-// Bank Reconciliation: upload a bank statement (PDF / Excel / CSV), see each
+// Bank Reconciliation (Books & Audit card): upload a bank statement (PDF / Excel / CSV), see each
 // line matched to the books — OK the suggestions, link the unknown ones
 // (Suspense) to a customer, supplier, expense, transfer or anything else.
 // Server: api-server routes/bank-recon.ts + lib/bank-recon.ts.
@@ -22,7 +22,7 @@ import { useAuth } from "@/contexts/use-auth";
 import { cn } from "@/lib/utils";
 import { parseStatementFile, StatementPasswordError, type StatementRow } from "@/lib/bank-statement";
 import {
-  Landmark, Upload, Loader2, Check, CheckCheck, Link2, EyeOff, Undo2, Trash2, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, AlertTriangle,
+  Upload, Loader2, Check, CheckCheck, Link2, EyeOff, Undo2, Trash2, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, AlertTriangle,
 } from "lucide-react";
 
 type Suggestion = {
@@ -64,7 +64,7 @@ function Amount({ line }: { line: { debit: number; credit: number } }) {
   );
 }
 
-export default function BankReconciliation() {
+export function BankReconTab() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const { hasRole } = useAuth();
@@ -128,12 +128,9 @@ export default function BankReconciliation() {
   const shown = groups[tab];
 
   return (
-    <div className="p-4 sm:p-6 space-y-4 max-w-6xl mx-auto">
+    <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight flex items-center gap-2"><Landmark className="h-6 w-6" />Bank Reconciliation</h1>
-          <p className="text-sm text-muted-foreground">Upload the bank statement, OK the matched entries and link the rest.</p>
-        </div>
+        <p className="text-sm text-muted-foreground">Upload the bank statement, OK the matched entries and link the rest.</p>
         <div className="flex items-center gap-2">
           <Select value={acctId} onValueChange={(v) => setAccountId(v)}>
             <SelectTrigger className="w-[200px]" data-testid="select-bank-account"><SelectValue placeholder="Bank account" /></SelectTrigger>

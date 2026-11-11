@@ -22,10 +22,14 @@ import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, Table
 import {
   BookOpenCheck, Loader2, Plus, Printer, Trash2, Info, Search, AlertTriangle, Download,
   Scale, TrendingUp, Landmark, CalendarDays, NotebookPen, ArrowLeftRight, FileMinus, FilePlus,
-  Receipt, BookUser, History, FileUp, type LucideIcon,
+  Receipt, BookUser, History, FileUp, Building2, Banknote, Warehouse, PackageCheck, type LucideIcon,
 } from "lucide-react";
 import { AuditTrailTab, ReadOnlyBadge, TallyKeysHint, TallyTab, downloadTallyXml, useAcceptKey, useTallyShortcuts } from "@/components/books-tally";
 import { GstReturnsTab } from "@/components/gst-returns";
+import { BankReconTab } from "@/components/bank-recon-tab";
+import { ChequeRegisterTab } from "@/components/cheque-register";
+import { GodownsTab } from "@/components/godowns-tab";
+import { BatchesTab } from "@/components/batches-tab";
 
 // The page's sections, shown as searchable cards. writeOnly ones are hidden
 // from the read-only (GST Accountant / CA) login. keywords only feed search.
@@ -38,6 +42,10 @@ const BOOK_SECTIONS: { key: string; title: string; description: string; keywords
   { key: "contra", title: "Contra", description: "Cash ↔ bank transfers", keywords: "transfer cash bank deposit withdraw", icon: ArrowLeftRight },
   { key: "debit-note", title: "Debit Note", description: "Goods returned to a supplier", keywords: "purchase return supplier", icon: FileMinus, writeOnly: true },
   { key: "credit-note", title: "Credit Note", description: "Goods returned by a customer", keywords: "sales return customer", icon: FilePlus, writeOnly: true },
+  { key: "bank-recon", title: "Bank Reconciliation", description: "Upload a bank statement, match it with the books", keywords: "bank statement pdf excel brs reconcile suspense", icon: Building2, writeOnly: true },
+  { key: "cheques", title: "Cheque Register", description: "Cheques / PDC received and issued", keywords: "cheque check pdc post dated bounce clear", icon: Banknote, writeOnly: true },
+  { key: "godowns", title: "Godowns", description: "Stock in each godown, transfers", keywords: "godown warehouse location stock transfer", icon: Warehouse, writeOnly: true },
+  { key: "batches", title: "Batch & Expiry", description: "Batch-wise stock and expiry alerts", keywords: "batch expiry expire lot mfg", icon: PackageCheck, writeOnly: true },
   { key: "gst-returns", title: "GST Returns", description: "GSTR-1 with HSN summary, for the portal", keywords: "gstr gst tax return gstr1 hsn json", icon: Receipt },
   { key: "ledgers", title: "Ledgers", description: "Your own ledgers and groups", keywords: "ledger account group", icon: BookUser },
   { key: "audit-trail", title: "Audit Trail", description: "Who changed what, and when", keywords: "audit log history changes", icon: History },
@@ -973,11 +981,12 @@ export default function BooksAudit() {
 
   if (!allowed) return <Redirect to="/" />;
   const validRange = !!from && !!to && from <= to;
-  const showPeriod = tab !== "ledgers" && tab !== "gst-returns";
+  const showPeriod = !["ledgers", "gst-returns", "bank-recon", "cheques", "godowns", "batches"].includes(tab);
   const title = {
     "trial-balance": "Trial Balance", "profit-loss": "Profit & Loss", "balance-sheet": "Balance Sheet", "day-book": "Day Book",
     journal: "Journal", contra: "Contra", "debit-note": "Debit Note", "credit-note": "Credit Note", ledgers: "Ledgers",
     "audit-trail": "Audit Trail", tally: "Tally Import / Export", "gst-returns": "GST Returns",
+    "bank-recon": "Bank Reconciliation", cheques: "Cheque Register", godowns: "Godowns", batches: "Batch & Expiry",
   }[tab];
   const isAdmin = user?.role === "admin";
   const q = sectionSearch.trim().toLowerCase();
@@ -1079,6 +1088,10 @@ export default function BooksAudit() {
               {!readOnly && <TabsContent value="debit-note"><DebitNoteTab from={from} to={to} isAdmin={isAdmin} /></TabsContent>}
               {!readOnly && <TabsContent value="credit-note"><CreditNoteTab from={from} to={to} /></TabsContent>}
               <TabsContent value="gst-returns"><GstReturnsTab /></TabsContent>
+              {!readOnly && <TabsContent value="bank-recon"><BankReconTab /></TabsContent>}
+              {!readOnly && <TabsContent value="cheques"><ChequeRegisterTab /></TabsContent>}
+              {!readOnly && <TabsContent value="godowns"><GodownsTab /></TabsContent>}
+              {!readOnly && <TabsContent value="batches"><BatchesTab /></TabsContent>}
               <TabsContent value="audit-trail"><AuditTrailTab from={from} to={to} /></TabsContent>
               <TabsContent value="tally">
                 <TallyTab

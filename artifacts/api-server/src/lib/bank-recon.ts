@@ -322,7 +322,7 @@ const EXPENSE_MODE_BY_ACCOUNT: Record<string, string> = { bank: "bank", upi: "up
 
 // Inserts one Cash Book entry dated on the statement's day (noon IST) and
 // moves the account's balance with it.
-async function addTxn(client: Q, p: {
+export async function addTxn(client: Q, p: {
   companyId: number; accountId: number; direction: "in" | "out"; amount: number; mode: string; date: string;
   partyName?: string | null; partyEntityId?: number | null; invoiceId?: number | null; notes?: string | null;
   user: ReconUser; receiptNo?: string | null;
@@ -343,6 +343,102 @@ async function addTxn(client: Q, p: {
     [p.direction === "in" ? p.amount : -p.amount, p.companyId, p.accountId],
   );
   return { id, receiptNo: receiptNo ?? "" };
+}
+
+// Money in from / out to a customer or supplier, booked in the Cash Book on
+// `date`: a customer receipt clears their bills (the one named first, else
+// oldest first), a supplier payment their dues; money the other way (a
+// supplier's refund, a refund to a customer) raises what they owe / we owe.
+// Shared by the statement lines here and the Cheque Register.
+export async function bookPartyMoney(client: Q, p: {
+  companyId: number; accountId: number; accountType: string; entityId: number; credit: boolean; amount: number; date: string;
+  user: ReconUser; invoiceId?: number | null; notes?: string | null; via?: string; mode?: string;
+}): Promise<{ txnId: number; receiptNo: string; entityId: number; invoiceId: number | null; label: string }> {
+  const { companyId, credit, amount, date } = p;
+  const via = p.via ?? "bank statement";
+  const e = (await client.query(
+    `SELECT id, name, type FROM entities WHERE company_id = $1 AND id = $2 AND type IN ('customer', 'vendor')`,
+    [companyId, p.entityId],
+  )).rows[0];
+  if (!e) throw new ReconError("Pick a customer or supplier");
+  const isCustomerReceipt = credit && e.type === "customer";
+  const isVendorPayout = !credit && e.type === "vendor";
+  let invoiceId: number | null = null;
+  if (p.invoiceId != null) {
+    if (!isCustomerReceipt) throw new ReconError("A bill can only be picked for money received from a customer");
+    const inv = (await client.query(
+      `SELECT id FROM invoices WHERE id = $1 AND company_id = $2 AND customer_id = $3 AND status <> 'cancelled' AND deleted_at IS NULL`,
+      [p.invoiceId, companyId, e.id],
+    )).rows[0];
+    if (!inv) throw new ReconError("That bill is not this customer's");
+    invoiceId = inv.id;
+  }
+  const mode = p.mode ?? MODE_BY_ACCOUNT[p.accountType] ?? "other";
+  const txn = await addTxn(client, {
+    companyId, accountId: p.accountId, direction: credit ? "in" : "out", amount, mode, date, user: p.user,
+    partyName: e.name, partyEntityId: e.id, invoiceId, notes: p.notes ?? null,
+  });
+  let label: string;
+  if (isCustomerReceipt || isVendorPayout) {
+    const r = await applyEntityPayment(client, {
+      companyId, entityId: e.id, amount, mode, receiptNo: txn.receiptNo, referenceId: txn.id, date,
+      isCustomerReceipt, startInvoiceId: invoiceId, pinStartInvoice: invoiceId != null,
+      description: isVendorPayout ? `Payment made (${via})` : `Payment received (${via})`,
+    });
+    const bills = r.allocations.map((a) => a.invoiceNo).join(", ");
+    label = isCustomerReceipt
+      ? `Received from ${e.name}${bills ? ` — ${bills}` : ""} · ${txn.receiptNo}`
+      : `Paid to ${e.name} · ${txn.receiptNo}`;
+  } else {
+    const bal = (await client.query(
+      `UPDATE entities SET outstanding_balance = outstanding_balance + $1 WHERE id = $2 AND company_id = $3 RETURNING outstanding_balance`,
+      [amount, e.id, companyId],
+    )).rows[0];
+    await client.query(
+      `INSERT INTO ledger_entries (company_id, entity_id, date, description, debit, credit, balance, type, reference_id, reference_no)
+       VALUES ($1, $2, $3::date::timestamptz, $4, $5, 0, $6, 'adjustment', $7, $8)`,
+      [companyId, e.id, date, credit ? `Refund received (${via})` : `Refund paid (${via})`, amount, Number(bal.outstanding_balance), txn.id, txn.receiptNo],
+    );
+    label = credit ? `Refund from ${e.name} · ${txn.receiptNo}` : `Refund to ${e.name} · ${txn.receiptNo}`;
+  }
+  return { txnId: txn.id, receiptNo: txn.receiptNo, entityId: e.id, invoiceId, label };
+}
+
+// Takes back what bookPartyMoney did: the bill allocations, the Cash Book
+// entry and the account balance, with a reversing line in the party's ledger
+// so their account history stays complete.
+export async function reversePartyMoney(client: Q, companyId: number, p: {
+  entityId: number | null; credit: boolean; txnId: number | null; receiptNo: string | null; amount: number; what?: string;
+}): Promise<void> {
+  const e = p.entityId ? (await client.query(`SELECT id, type FROM entities WHERE company_id = $1 AND id = $2`, [companyId, p.entityId])).rows[0] : null;
+  const t = p.txnId ? (await client.query(`SELECT amount::float AS amount FROM account_transactions WHERE company_id = $1 AND id = $2`, [companyId, p.txnId])).rows[0] : null;
+  const amount = round2(t?.amount ?? p.amount);
+  if (e) {
+    const settled = (p.credit && e.type === "customer") || (!p.credit && e.type === "vendor");
+    if (settled && p.receiptNo) {
+      const allocs = (await client.query(
+        `DELETE FROM payment_allocations WHERE company_id = $1 AND receipt_no = $2 RETURNING invoice_id, allocated_amount::float AS amt`,
+        [companyId, p.receiptNo],
+      )).rows;
+      for (const a of allocs) {
+        await client.query(
+          `UPDATE invoices SET amount_paid = amount_paid - $1, balance_due = balance_due + $1 WHERE company_id = $2 AND id = $3`,
+          [a.amt, companyId, a.invoice_id],
+        );
+      }
+    }
+    const bal = (await client.query(
+      `UPDATE entities SET outstanding_balance = outstanding_balance + $1 WHERE id = $2 AND company_id = $3 RETURNING outstanding_balance`,
+      [settled ? amount : -amount, e.id, companyId],
+    )).rows[0];
+    await client.query(
+      `INSERT INTO ledger_entries (company_id, entity_id, date, description, debit, credit, balance, type, reference_id, reference_no)
+       VALUES ($1, $2, NOW(), $3, $4, $5, $6, 'adjustment', $7, $8)`,
+      [companyId, e.id, `${p.what ?? "Bank statement link undone"} (${p.receiptNo ?? ""})`, settled ? amount : 0, settled ? 0 : amount,
+       Number(bal.outstanding_balance), p.txnId, p.receiptNo],
+    );
+  }
+  await dropTxn(client, companyId, p.txnId);
 }
 
 async function lockPendingLine(client: Q, companyId: number, lineId: number) {
@@ -399,53 +495,11 @@ export async function confirmLine(client: Q, companyId: number, user: ReconUser,
     }
 
     case "party": {
-      const e = (await client.query(
-        `SELECT id, name, type, mobile FROM entities WHERE company_id = $1 AND id = $2 AND type IN ('customer', 'vendor')`,
-        [companyId, action.entityId],
-      )).rows[0];
-      if (!e) throw new ReconError("Pick a customer or supplier");
-      const isCustomerReceipt = credit && e.type === "customer";
-      const isVendorPayout = !credit && e.type === "vendor";
-      let invoiceId: number | null = null;
-      if (action.invoiceId != null) {
-        if (!isCustomerReceipt) throw new ReconError("A bill can only be picked for money received from a customer");
-        const inv = (await client.query(
-          `SELECT id FROM invoices WHERE id = $1 AND company_id = $2 AND customer_id = $3 AND status <> 'cancelled' AND deleted_at IS NULL`,
-          [action.invoiceId, companyId, e.id],
-        )).rows[0];
-        if (!inv) throw new ReconError("That bill is not this customer's");
-        invoiceId = inv.id;
-      }
-      const txn = await addTxn(client, {
-        companyId, accountId: line.account_id, direction, amount, mode, date, user,
-        partyName: e.name, partyEntityId: e.id, invoiceId, notes: narrationNote(line),
+      const r = await bookPartyMoney(client, {
+        companyId, accountId: line.account_id, accountType: line.account_type, entityId: action.entityId, credit, amount, date, user,
+        invoiceId: action.invoiceId ?? null, notes: narrationNote(line),
       });
-      let label: string;
-      if (isCustomerReceipt || isVendorPayout) {
-        const r = await applyEntityPayment(client, {
-          companyId, entityId: e.id, amount, mode, receiptNo: txn.receiptNo, referenceId: txn.id, date,
-          isCustomerReceipt, startInvoiceId: invoiceId, pinStartInvoice: invoiceId != null,
-          description: isVendorPayout ? `Payment made (bank statement)` : `Payment received (bank statement)`,
-        });
-        const bills = r.allocations.map((a) => a.invoiceNo).join(", ");
-        label = isCustomerReceipt
-          ? `Received from ${e.name}${bills ? ` — ${bills}` : ""} · ${txn.receiptNo}`
-          : `Paid to ${e.name} · ${txn.receiptNo}`;
-      } else {
-        // Money the other way: a supplier refunding us, or us refunding a
-        // customer — what they owe / we owe moves up by the amount.
-        const bal = (await client.query(
-          `UPDATE entities SET outstanding_balance = outstanding_balance + $1 WHERE id = $2 AND company_id = $3 RETURNING outstanding_balance`,
-          [amount, e.id, companyId],
-        )).rows[0];
-        await client.query(
-          `INSERT INTO ledger_entries (company_id, entity_id, date, description, debit, credit, balance, type, reference_id, reference_no)
-           VALUES ($1, $2, $3::date::timestamptz, $4, $5, 0, $6, 'adjustment', $7, $8)`,
-          [companyId, e.id, date, credit ? "Refund received (bank statement)" : "Refund paid (bank statement)", amount, Number(bal.outstanding_balance), txn.id, txn.receiptNo],
-        );
-        label = credit ? `Refund from ${e.name} · ${txn.receiptNo}` : `Refund to ${e.name} · ${txn.receiptNo}`;
-      }
-      return done({ matched_kind: "party", account_txn_id: txn.id, receipt_no: txn.receiptNo, entity_id: e.id, invoice_id: invoiceId }, label);
+      return done({ matched_kind: "party", account_txn_id: r.txnId, receipt_no: r.receiptNo, entity_id: r.entityId, invoice_id: r.invoiceId }, r.label);
     }
 
     case "expense": {
@@ -529,7 +583,7 @@ export async function ignoreLine(client: Q, companyId: number, user: ReconUser, 
   );
 }
 
-async function dropTxn(client: Q, companyId: number, txnId: number | null): Promise<void> {
+export async function dropTxn(client: Q, companyId: number, txnId: number | null): Promise<void> {
   if (!txnId) return;
   const t = (await client.query(
     `DELETE FROM account_transactions WHERE company_id = $1 AND id = $2 RETURNING account_id, direction, amount::float AS amount`,
@@ -554,38 +608,12 @@ export async function undoLine(client: Q, companyId: number, user: ReconUser, li
     switch (line.matched_kind) {
       case "existing":
         break;
-      case "party": {
-        const e = (await client.query(`SELECT id, type FROM entities WHERE company_id = $1 AND id = $2`, [companyId, line.entity_id])).rows[0];
-        const t = (await client.query(`SELECT amount::float AS amount FROM account_transactions WHERE company_id = $1 AND id = $2`, [companyId, line.account_txn_id])).rows[0];
-        const amount = round2(t?.amount ?? (credit ? Number(line.credit) : Number(line.debit)));
-        if (e) {
-          const settled = (credit && e.type === "customer") || (!credit && e.type === "vendor");
-          if (settled && line.receipt_no) {
-            const allocs = (await client.query(
-              `DELETE FROM payment_allocations WHERE company_id = $1 AND receipt_no = $2 RETURNING invoice_id, allocated_amount::float AS amt`,
-              [companyId, line.receipt_no],
-            )).rows;
-            for (const a of allocs) {
-              await client.query(
-                `UPDATE invoices SET amount_paid = amount_paid - $1, balance_due = balance_due + $1 WHERE company_id = $2 AND id = $3`,
-                [a.amt, companyId, a.invoice_id],
-              );
-            }
-          }
-          const bal = (await client.query(
-            `UPDATE entities SET outstanding_balance = outstanding_balance + $1 WHERE id = $2 AND company_id = $3 RETURNING outstanding_balance`,
-            [settled ? amount : -amount, e.id, companyId],
-          )).rows[0];
-          await client.query(
-            `INSERT INTO ledger_entries (company_id, entity_id, date, description, debit, credit, balance, type, reference_id, reference_no)
-             VALUES ($1, $2, NOW(), $3, $4, $5, $6, 'adjustment', $7, $8)`,
-            [companyId, e.id, `Bank statement link undone (${line.receipt_no ?? ""})`, settled ? amount : 0, settled ? 0 : amount,
-             Number(bal.outstanding_balance), line.account_txn_id, line.receipt_no],
-          );
-        }
-        await dropTxn(client, companyId, line.account_txn_id);
+      case "party":
+        await reversePartyMoney(client, companyId, {
+          entityId: line.entity_id, credit, txnId: line.account_txn_id, receiptNo: line.receipt_no,
+          amount: credit ? Number(line.credit) : Number(line.debit),
+        });
         break;
-      }
       case "expense":
         if (line.expense_id) await client.query(`DELETE FROM expenses WHERE company_id = $1 AND id = $2`, [companyId, line.expense_id]);
         await dropTxn(client, companyId, line.account_txn_id);

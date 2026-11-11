@@ -593,6 +593,8 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
     `ALTER TABLE non_gst_cleanup_settings ADD COLUMN IF NOT EXISTS permanent BOOLEAN NOT NULL DEFAULT false`,
     // Discount a supplier gave on a Payment Out (routes/accounts.ts) — profit.
     `ALTER TABLE account_transactions ADD COLUMN IF NOT EXISTS discount NUMERIC(14, 2) NOT NULL DEFAULT 0`,
+    // Product → "Show MRP on invoice" (an MRP column in the printed bill).
+    `ALTER TABLE products ADD COLUMN IF NOT EXISTS show_mrp_on_invoice BOOLEAN NOT NULL DEFAULT false`,
     // ── Platform maintenance notices (lib/platform-notices.ts) ──
     `CREATE TABLE IF NOT EXISTS platform_notices (
       id                  SERIAL PRIMARY KEY,
@@ -763,6 +765,83 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
     )`,
     `CREATE INDEX IF NOT EXISTS bank_statement_lines_account_idx ON bank_statement_lines(company_id, account_id, status, txn_date)`,
     `CREATE INDEX IF NOT EXISTS bank_statement_lines_txn_idx ON bank_statement_lines(account_txn_id)`,
+    // Cheque / PDC register (routes/cheques.ts): cheques received from
+    // customers and issued to suppliers, booked in the Cash Book on clearing.
+    `CREATE TABLE IF NOT EXISTS cheques (
+      id              SERIAL PRIMARY KEY,
+      company_id      INTEGER NOT NULL,
+      direction       TEXT NOT NULL,
+      entity_id       INTEGER,
+      party_name      TEXT NOT NULL DEFAULT '',
+      cheque_no       TEXT NOT NULL,
+      bank_name       TEXT,
+      cheque_date     DATE NOT NULL,
+      amount          NUMERIC(14, 2) NOT NULL,
+      invoice_id      INTEGER,
+      status          TEXT NOT NULL DEFAULT 'pending',
+      account_id      INTEGER,
+      account_txn_id  INTEGER,
+      receipt_no      TEXT,
+      cleared_on      DATE,
+      bounced_on      DATE,
+      bounce_reason   TEXT,
+      notes           TEXT,
+      created_by_name TEXT,
+      created_at      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    )`,
+    `CREATE INDEX IF NOT EXISTS cheques_company_idx ON cheques(company_id, status, cheque_date)`,
+    // Godowns (routes/godowns.ts): stock kept away from the main store.
+    // Billing and purchases keep using the product's total stock; the main
+    // godown holds whatever the other godowns don't.
+    `CREATE TABLE IF NOT EXISTS godowns (
+      id          SERIAL PRIMARY KEY,
+      company_id  INTEGER NOT NULL,
+      name        TEXT NOT NULL,
+      address     TEXT,
+      is_active   BOOLEAN NOT NULL DEFAULT true,
+      created_at  TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+      CONSTRAINT godowns_company_name_unique UNIQUE (company_id, name)
+    )`,
+    `CREATE TABLE IF NOT EXISTS godown_stock (
+      company_id  INTEGER NOT NULL,
+      godown_id   INTEGER NOT NULL REFERENCES godowns(id),
+      product_id  INTEGER NOT NULL,
+      qty         NUMERIC(14, 3) NOT NULL DEFAULT 0,
+      PRIMARY KEY (godown_id, product_id)
+    )`,
+    `CREATE INDEX IF NOT EXISTS godown_stock_company_idx ON godown_stock(company_id, product_id)`,
+    `CREATE TABLE IF NOT EXISTS godown_transfers (
+      id              SERIAL PRIMARY KEY,
+      company_id      INTEGER NOT NULL,
+      transfer_date   DATE NOT NULL,
+      from_godown_id  INTEGER,
+      to_godown_id    INTEGER,
+      product_id      INTEGER NOT NULL,
+      product_name    TEXT NOT NULL,
+      qty             NUMERIC(14, 3) NOT NULL,
+      note            TEXT,
+      created_by_name TEXT,
+      created_at      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    )`,
+    `CREATE INDEX IF NOT EXISTS godown_transfers_company_idx ON godown_transfers(company_id, transfer_date)`,
+    // Batch & expiry (routes/batches.ts), entered against purchase bill items
+    // or as opening batches for stock already on hand.
+    `CREATE TABLE IF NOT EXISTS product_batches (
+      id               SERIAL PRIMARY KEY,
+      company_id       INTEGER NOT NULL,
+      product_id       INTEGER NOT NULL,
+      batch_no         TEXT NOT NULL,
+      mfg_date         DATE,
+      expiry_date      DATE,
+      qty              NUMERIC(14, 3) NOT NULL,
+      purchase_id      INTEGER,
+      purchase_item_id INTEGER,
+      bill_no          TEXT,
+      created_by_name  TEXT,
+      created_at       TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    )`,
+    `CREATE INDEX IF NOT EXISTS product_batches_company_idx ON product_batches(company_id, product_id)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS product_batches_purchase_item_unique ON product_batches(company_id, purchase_item_id) WHERE purchase_item_id IS NOT NULL`,
   ];
 
   for (const sql of patches) {
