@@ -16,12 +16,33 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { BookOpenCheck, Loader2, Plus, Printer, Trash2, Info, Search, AlertTriangle, Download } from "lucide-react";
+import {
+  BookOpenCheck, Loader2, Plus, Printer, Trash2, Info, Search, AlertTriangle, Download,
+  Scale, TrendingUp, Landmark, CalendarDays, NotebookPen, ArrowLeftRight, FileMinus, FilePlus,
+  Receipt, BookUser, History, FileUp, type LucideIcon,
+} from "lucide-react";
 import { AuditTrailTab, ReadOnlyBadge, TallyKeysHint, TallyTab, downloadTallyXml, useAcceptKey, useTallyShortcuts } from "@/components/books-tally";
 import { GstReturnsTab } from "@/components/gst-returns";
+
+// The page's sections, shown as searchable cards. writeOnly ones are hidden
+// from the read-only (GST Accountant / CA) login. keywords only feed search.
+const BOOK_SECTIONS: { key: string; title: string; description: string; keywords: string; icon: LucideIcon; writeOnly?: boolean }[] = [
+  { key: "trial-balance", title: "Trial Balance", description: "Debit and credit of every ledger", keywords: "tb dr cr", icon: Scale },
+  { key: "profit-loss", title: "Profit & Loss", description: "Sales, cost, expenses and net profit", keywords: "pl p&l income profit loss", icon: TrendingUp },
+  { key: "balance-sheet", title: "Balance Sheet", description: "Assets, liabilities and capital", keywords: "bs assets liabilities capital", icon: Landmark },
+  { key: "day-book", title: "Day Book", description: "Every entry, day by day", keywords: "daybook daily entries", icon: CalendarDays },
+  { key: "journal", title: "Journal", description: "Journal vouchers between ledgers", keywords: "voucher jv", icon: NotebookPen },
+  { key: "contra", title: "Contra", description: "Cash ↔ bank transfers", keywords: "transfer cash bank deposit withdraw", icon: ArrowLeftRight },
+  { key: "debit-note", title: "Debit Note", description: "Goods returned to a supplier", keywords: "purchase return supplier", icon: FileMinus, writeOnly: true },
+  { key: "credit-note", title: "Credit Note", description: "Goods returned by a customer", keywords: "sales return customer", icon: FilePlus, writeOnly: true },
+  { key: "gst-returns", title: "GST Returns", description: "GSTR-1 with HSN summary, for the portal", keywords: "gstr gst tax return gstr1 hsn json", icon: Receipt },
+  { key: "ledgers", title: "Ledgers", description: "Your own ledgers and groups", keywords: "ledger account group", icon: BookUser },
+  { key: "audit-trail", title: "Audit Trail", description: "Who changed what, and when", keywords: "audit log history changes", icon: History },
+  { key: "tally", title: "Tally", description: "Import or export Tally data", keywords: "tally xml import export", icon: FileUp },
+];
 
 interface Line { name: string; amount: number; note?: string }
 interface Group { group: string; lines: Line[] }
@@ -916,6 +937,7 @@ export default function BooksAudit() {
   const [to, setTo] = React.useState(today);
   const [from, setFrom] = React.useState(fyStart(today));
   const [tab, setTab] = React.useState("trial-balance");
+  const [sectionSearch, setSectionSearch] = React.useState("");
   const allowed = user?.role === "admin" || user?.role === "accountant" || user?.role === "gst_accountant";
   const readOnly = user?.role === "gst_accountant";
   const { toast } = useToast();
@@ -958,6 +980,10 @@ export default function BooksAudit() {
     "audit-trail": "Audit Trail", tally: "Tally Import / Export", "gst-returns": "GST Returns",
   }[tab];
   const isAdmin = user?.role === "admin";
+  const q = sectionSearch.trim().toLowerCase();
+  const visibleSections = BOOK_SECTIONS
+    .filter((s) => !(readOnly && s.writeOnly))
+    .filter((s) => !q || `${s.title} ${s.description} ${s.keywords}`.toLowerCase().includes(q));
 
   return (
     <div className="space-y-4">
@@ -982,21 +1008,45 @@ export default function BooksAudit() {
       <TallyKeysHint readOnly={readOnly} />
 
       <Tabs value={tab} onValueChange={setTab}>
-        <div className="overflow-x-auto -mx-1 px-1 print:hidden">
-          <TabsList>
-            <TabsTrigger value="trial-balance">Trial Balance</TabsTrigger>
-            <TabsTrigger value="profit-loss">Profit &amp; Loss</TabsTrigger>
-            <TabsTrigger value="balance-sheet">Balance Sheet</TabsTrigger>
-            <TabsTrigger value="day-book">Day Book</TabsTrigger>
-            <TabsTrigger value="journal">Journal</TabsTrigger>
-            <TabsTrigger value="contra">Contra</TabsTrigger>
-            {!readOnly && <TabsTrigger value="debit-note">Debit Note</TabsTrigger>}
-            {!readOnly && <TabsTrigger value="credit-note">Credit Note</TabsTrigger>}
-            <TabsTrigger value="gst-returns">GST Returns</TabsTrigger>
-            <TabsTrigger value="ledgers">Ledgers</TabsTrigger>
-            <TabsTrigger value="audit-trail">Audit Trail</TabsTrigger>
-            <TabsTrigger value="tally">Tally</TabsTrigger>
-          </TabsList>
+        <div className="space-y-2 print:hidden">
+          <div className="relative max-w-sm">
+            <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={sectionSearch}
+              onChange={(e) => setSectionSearch(e.target.value)}
+              placeholder="Search Books & Audit…"
+              className="pl-8"
+              data-testid="input-books-search"
+            />
+          </div>
+          {visibleSections.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-2">Nothing matches "{sectionSearch}".</p>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
+              {visibleSections.map((s) => {
+                const Icon = s.icon;
+                const active = tab === s.key;
+                return (
+                  <button
+                    key={s.key}
+                    type="button"
+                    onClick={() => setTab(s.key)}
+                    aria-pressed={active}
+                    className={`text-left rounded-lg border p-2.5 sm:p-3 transition-colors ${
+                      active ? "border-primary bg-primary/10 ring-1 ring-primary" : "bg-card hover:bg-accent"
+                    }`}
+                    data-testid={`card-books-${s.key}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Icon className={`w-4 h-4 shrink-0 ${active ? "text-primary" : "text-muted-foreground"}`} />
+                      <span className="text-sm font-medium leading-tight">{s.title}</span>
+                    </div>
+                    <p className="hidden sm:block text-xs text-muted-foreground mt-1 leading-snug">{s.description}</p>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {showPeriod && (
