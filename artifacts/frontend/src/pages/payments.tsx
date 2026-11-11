@@ -89,18 +89,38 @@ function PickCustomerDialog({
   );
 }
 
-const todayISO = () => new Date().toISOString().slice(0, 10);
-const firstOfMonth = () => {
-  const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
-};
+// Local dates (toISOString would give yesterday's date before 5:30 am IST).
+const ymd = (d: Date) => format(d, "yyyy-MM-dd");
+
+type Period = "today" | "week" | "month" | "all" | "custom";
+const PERIODS: { value: Period; label: string }[] = [
+  { value: "today", label: "Today" },
+  { value: "week", label: "This Week" },
+  { value: "month", label: "This Month" },
+  { value: "all", label: "All" },
+  { value: "custom", label: "Custom" },
+];
+
+// From/To for a quick period. The week runs Monday–Sunday, like the dashboard.
+function periodRange(period: Exclude<Period, "custom">): { from: string; to: string } {
+  const now = new Date();
+  if (period === "all") return { from: "", to: "" };
+  if (period === "today") return { from: ymd(now), to: ymd(now) };
+  if (period === "week") {
+    const start = new Date(now);
+    start.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+    return { from: ymd(start), to: ymd(now) };
+  }
+  return { from: ymd(new Date(now.getFullYear(), now.getMonth(), 1)), to: ymd(now) };
+}
 
 export default function Payments() {
   const { hasRole } = useAuth();
   const isAdmin = hasRole(["admin"]);
   const [status, setStatus] = useState<PaymentStatus | "all">("all");
-  const [from, setFrom] = useState<string>(firstOfMonth());
-  const [to, setTo] = useState<string>(todayISO());
+  const [period, setPeriod] = useState<Period>("month");
+  const [from, setFrom] = useState<string>(() => periodRange("month").from);
+  const [to, setTo] = useState<string>(() => periodRange("month").to);
   const [pickCustomerOpen, setPickCustomerOpen] = useState(false);
   const [payingCustomer, setPayingCustomer] = useState<{ id: number; name: string } | null>(null);
 
@@ -124,8 +144,15 @@ export default function Payments() {
 
   const totalInRange = filteredPayments.reduce((s, p) => s + Number(p.amount || 0), 0);
 
-  const clearDates = () => { setFrom(""); setTo(""); };
-  const hasActiveFilters = status !== "all" || !!from || !!to;
+  const choosePeriod = (p: Period) => {
+    setPeriod(p);
+    if (p !== "custom") {
+      const r = periodRange(p);
+      setFrom(r.from);
+      setTo(r.to);
+    }
+  };
+  const hasActiveFilters = status !== "all";
 
   const handleApprove = (id: number) => {
     approvePayment.mutate({ id }, {
@@ -181,22 +208,12 @@ export default function Payments() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">From</Label>
-                  <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} data-testid="filter-payment-from" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">To</Label>
-                  <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} data-testid="filter-payment-to" />
-                </div>
-              </div>
               {hasActiveFilters && (
                 <Button
                   variant="ghost"
                   size="sm"
                   className="w-full"
-                  onClick={() => { setStatus("all"); clearDates(); }}
+                  onClick={() => setStatus("all")}
                   data-testid="button-clear-dates"
                 >
                   <X className="w-4 h-4 mr-1" /> Clear filters
@@ -210,6 +227,36 @@ export default function Payments() {
             </div>
             <div className="text-2xl font-bold font-mono text-green-600">₹{totalInRange.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</div>
           </div>
+        </CardContent>
+        {/* On the page itself, not in the filter popover: a date field inside
+            the popover didn't open its picker on phones. */}
+        <CardContent className="pt-0 pb-3 space-y-2">
+          <div className="flex gap-1.5 overflow-x-auto -mx-1 px-1">
+            {PERIODS.map((p) => (
+              <Button
+                key={p.value}
+                size="sm"
+                variant={period === p.value ? "default" : "outline"}
+                className="shrink-0"
+                onClick={() => choosePeriod(p.value)}
+                data-testid={`filter-payment-period-${p.value}`}
+              >
+                {p.label}
+              </Button>
+            ))}
+          </div>
+          {period === "custom" && (
+            <div className="grid grid-cols-2 gap-2 max-w-sm">
+              <div className="space-y-1">
+                <Label className="text-xs" htmlFor="payment-from">From</Label>
+                <Input id="payment-from" type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} data-testid="filter-payment-from" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs" htmlFor="payment-to">To</Label>
+                <Input id="payment-to" type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} data-testid="filter-payment-to" />
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
