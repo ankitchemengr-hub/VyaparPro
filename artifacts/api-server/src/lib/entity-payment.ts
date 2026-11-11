@@ -174,11 +174,13 @@ export interface ApplyEntityPaymentParams {
   pinStartInvoice?: boolean;
   /** Defaults to "Payment received (<mode>)". Pass e.g. "Payment made (<mode>)" for a vendor payout. */
   description?: string;
+  /** Ledger date (YYYY-MM-DD) — e.g. a bank statement's value date. Defaults to now. */
+  date?: string | null;
 }
 
 export async function applyEntityPayment(
   client: { query: (text: string, params?: any[]) => Promise<any> },
-  { companyId, entityId, amount, mode, receiptNo, referenceId, isCustomerReceipt, startInvoiceId, pinStartInvoice, description }: ApplyEntityPaymentParams,
+  { companyId, entityId, amount, mode, receiptNo, referenceId, isCustomerReceipt, startInvoiceId, pinStartInvoice, description, date }: ApplyEntityPaymentParams,
 ): Promise<{ newBalance: number; allocations: PaymentAllocation[] }> {
   // Old dues that sit on the account but on no open bill (opening balance,
   // bills settled outside the allocator, challans…) are the OLDEST money owed,
@@ -224,8 +226,8 @@ export async function applyEntityPayment(
 
   await client.query(
     `INSERT INTO ledger_entries (company_id, entity_id, date, description, debit, credit, balance, type, reference_id, reference_no)
-     VALUES ($1, $2, NOW(), $3, 0, $4, $5, 'payment', $6, $7)`,
-    [companyId, entityId, description ?? `Payment received (${mode})`, amount, newBalance, referenceId, receiptNo],
+     VALUES ($1, $2, COALESCE($8::date::timestamptz, NOW()), $3, 0, $4, $5, 'payment', $6, $7)`,
+    [companyId, entityId, description ?? `Payment received (${mode})`, amount, newBalance, referenceId, receiptNo, date ?? null],
   );
 
   let allocations: PaymentAllocation[] = [];

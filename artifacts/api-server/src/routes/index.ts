@@ -35,6 +35,7 @@ import booksRouter from "./books";
 import booksTallyRouter from "./books-tally";
 import dataImportRouter from "./data-import";
 import gstReturnsRouter from "./gst-returns";
+import bankReconRouter from "./bank-recon";
 import purchaseReturnsRouter from "./purchase-returns";
 import systemAdminRouter from "./system-admin";
 import portalRouter from "./portal";
@@ -98,6 +99,7 @@ router.use(booksRouter);
 router.use(booksTallyRouter);
 router.use(dataImportRouter);
 router.use(gstReturnsRouter);
+router.use(bankReconRouter);
 router.use(purchaseReturnsRouter);
 // Company-admin-only; mounted before the subscriptions super_admin guard.
 router.use(nonGstCleanupRouter);

@@ -732,6 +732,37 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
       amount           NUMERIC(12, 2) NOT NULL
     )`,
     `CREATE INDEX IF NOT EXISTS purchase_return_items_return_idx ON purchase_return_items(return_id)`,
+    // Bank Reconciliation (lib/bank-recon.ts): lines read from an uploaded
+    // bank statement, each matched to a Cash Book entry or booked from it.
+    `CREATE TABLE IF NOT EXISTS bank_statement_lines (
+      id              SERIAL PRIMARY KEY,
+      company_id      INTEGER NOT NULL,
+      account_id      INTEGER NOT NULL,
+      txn_date        DATE NOT NULL,
+      description     TEXT NOT NULL DEFAULT '',
+      ref_no          TEXT,
+      debit           NUMERIC(14, 2) NOT NULL DEFAULT 0,
+      credit          NUMERIC(14, 2) NOT NULL DEFAULT 0,
+      balance         NUMERIC(14, 2),
+      line_hash       TEXT NOT NULL,
+      file_name       TEXT,
+      status          TEXT NOT NULL DEFAULT 'pending',
+      matched_kind    TEXT,
+      account_txn_id  INTEGER,
+      other_txn_id    INTEGER,
+      entity_id       INTEGER,
+      invoice_id      INTEGER,
+      expense_id      INTEGER,
+      receipt_no      TEXT,
+      matched_label   TEXT,
+      matched_by_name TEXT,
+      matched_at      TIMESTAMP WITH TIME ZONE,
+      created_by_name TEXT,
+      created_at      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+      CONSTRAINT bank_statement_lines_hash_unique UNIQUE (company_id, account_id, line_hash)
+    )`,
+    `CREATE INDEX IF NOT EXISTS bank_statement_lines_account_idx ON bank_statement_lines(company_id, account_id, status, txn_date)`,
+    `CREATE INDEX IF NOT EXISTS bank_statement_lines_txn_idx ON bank_statement_lines(account_txn_id)`,
   ];
 
   for (const sql of patches) {

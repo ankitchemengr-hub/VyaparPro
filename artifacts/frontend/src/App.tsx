@@ -38,6 +38,7 @@ import Users from "@/pages/users";
 import MyAccount from "@/pages/my-account";
 import Accounts from "@/pages/accounts";
 import CashBook from "@/pages/cashbook";
+import BankReconciliation from "@/pages/bank-reconciliation";
 import Workers from "@/pages/workers";
 import Expenses from "@/pages/expenses";
 import Bom from "@/pages/bom";
@@ -120,6 +121,7 @@ function ProtectedRoutes() {
         <Route path="/reports" component={Reports} />
         <Route path="/accounts" component={Accounts} />
         <Route path="/cashbook" component={CashBook} />
+        <Route path="/bank-reconciliation" component={BankReconciliation} />
         <Route path="/workers" component={Workers} />
         <Route path="/expenses" component={Expenses} />
         <Route path="/settings" component={Settings} />
