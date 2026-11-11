@@ -6,7 +6,7 @@
 // the audit trail and Tally's keys live in components/books-tally.tsx.
 
 import React from "react";
-import { Link, Redirect } from "wouter";
+import { Link, Redirect, useLocation, useSearch } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/use-auth";
 import { useToast } from "@/hooks/use-toast";
@@ -20,7 +20,7 @@ import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
-  BookOpenCheck, Loader2, Plus, Printer, Trash2, Info, Search, AlertTriangle, Download,
+  BookOpenCheck, ArrowLeft, Loader2, Plus, Trash2, Info, Search, AlertTriangle,
   Scale, TrendingUp, Landmark, CalendarDays, NotebookPen, ArrowLeftRight, FileMinus, FilePlus,
   Receipt, BookUser, History, FileUp, Building2, Banknote, Warehouse, PackageCheck, type LucideIcon,
 } from "lucide-react";
@@ -944,22 +944,34 @@ export default function BooksAudit() {
   const today = todayIst();
   const [to, setTo] = React.useState(today);
   const [from, setFrom] = React.useState(fyStart(today));
-  const [tab, setTab] = React.useState("trial-balance");
   const [sectionSearch, setSectionSearch] = React.useState("");
   const allowed = user?.role === "admin" || user?.role === "accountant" || user?.role === "gst_accountant";
   const readOnly = user?.role === "gst_accountant";
+  // The open card lives in the URL (?s=…): a card opens its feature on its
+  // own screen, and the phone's Back button returns to the cards.
+  const [, navigate] = useLocation();
+  const section = new URLSearchParams(useSearch()).get("s");
+  const openSection = BOOK_SECTIONS.find((s) => s.key === section && !(readOnly && s.writeOnly));
+  const open = !!openSection;
+  const tab = openSection?.key ?? "trial-balance";
+  const fromCards = React.useRef(false);
+  const setTab = React.useCallback((key: string) => {
+    if (!open) fromCards.current = true;
+    navigate(`/books-audit?s=${encodeURIComponent(key)}`, { replace: open });
+    window.scrollTo({ top: 0 });
+  }, [navigate, open]);
+  const backToCards = () => {
+    if (fromCards.current) { fromCards.current = false; window.history.back(); }
+    else navigate("/books-audit", { replace: true });
+  };
   const { toast } = useToast();
   const fromRef = React.useRef<HTMLInputElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
-  const [exporting, setExporting] = React.useState(false);
   async function exportTally() {
-    setExporting(true);
     try {
       await downloadTallyXml(from, to);
     } catch (e) {
       toast({ title: (e as Error).message, variant: "destructive" });
-    } finally {
-      setExporting(false);
     }
   }
   useTallyShortcuts({
@@ -1001,23 +1013,25 @@ export default function BooksAudit() {
           <BookOpenCheck className="w-6 h-6 text-primary" />
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight flex items-center gap-2">Books &amp; Audit {readOnly && <ReadOnlyBadge />}</h1>
-            <p className="text-xs sm:text-sm text-muted-foreground print:hidden">Trial Balance, Profit &amp; Loss, Balance Sheet, Day Book, vouchers, GST returns, audit trail and Tally.</p>
+            <p className={`text-xs sm:text-sm text-muted-foreground print:hidden ${open ? "hidden sm:block" : ""}`}>Trial Balance, Profit &amp; Loss, Balance Sheet, Day Book, vouchers, GST returns, audit trail and Tally.</p>
             <p className="hidden print:block text-sm">{title} · {fmtDate(from)} to {fmtDate(to)}</p>
           </div>
-        </div>
-        <div className="flex gap-2 print:hidden">
-          <Button variant="outline" size="sm" onClick={exportTally} disabled={exporting} title="Export to Tally XML (Alt+E)">
-            {exporting ? <Loader2 className="w-4 h-4 sm:mr-1 animate-spin" /> : <Download className="w-4 h-4 sm:mr-1" />}<span className="hidden sm:inline">Tally XML</span>
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => window.print()}>
-            <Printer className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline">Print</span>
-          </Button>
         </div>
       </div>
       <TallyKeysHint readOnly={readOnly} />
 
       <Tabs value={tab} onValueChange={setTab}>
-        <div className="space-y-2 print:hidden">
+        {openSection && (
+          <div className="flex items-center gap-2 print:hidden">
+            <Button variant="outline" size="sm" onClick={backToCards} data-testid="button-books-back">
+              <ArrowLeft className="w-4 h-4 mr-1" />Books &amp; Audit
+            </Button>
+            <h2 className="text-lg sm:text-xl font-semibold flex items-center gap-2 min-w-0">
+              <openSection.icon className="w-5 h-5 text-primary shrink-0" /><span className="leading-tight">{title}</span>
+            </h2>
+          </div>
+        )}
+        {!open && <div className="space-y-2 print:hidden">
           <div className="relative max-w-sm">
             <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -1056,9 +1070,9 @@ export default function BooksAudit() {
               })}
             </div>
           )}
-        </div>
+        </div>}
 
-        {showPeriod && (
+        {open && showPeriod && (
           <div className="flex flex-wrap items-end gap-2 mt-3 print:hidden">
             <div>
               <Label className="text-xs">From</Label>
@@ -1072,7 +1086,7 @@ export default function BooksAudit() {
           </div>
         )}
 
-        <div className="mt-3">
+        {open && <div className="mt-3">
           {!validRange && showPeriod ? (
             <div className="py-8 text-center text-sm text-destructive">Choose a valid date range.</div>
           ) : (
@@ -1104,7 +1118,7 @@ export default function BooksAudit() {
               </TabsContent>
             </>
           )}
-        </div>
+        </div>}
       </Tabs>
     </div>
   );
