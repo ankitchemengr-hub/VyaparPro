@@ -114,3 +114,55 @@
     box-shadow: none;
   }
 }
+
+/* Marketing-site building blocks: one primary (royal blue) and one
+   secondary button style, used as plain classes on links. */
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-blue-600/20 transition-colors hover:bg-blue-700 focus-visible:outline-offset-2;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 transition-colors hover:border-slate-400 hover:bg-slate-50;
+  }
+  .btn-lg {
+    @apply px-6 py-3 text-[15px];
+  }
+  .eyebrow {
+    @apply inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700;
+  }
+  .section-title {
+    @apply text-3xl sm:text-4xl font-bold tracking-tight text-slate-900;
+  }
+  .section-lead {
+    @apply mt-4 text-base sm:text-lg text-slate-600 leading-relaxed;
+  }
+}
+
+/* Faint grid behind the hero. */
+.hero-grid {
+  background-image:
+    linear-gradient(to right, rgba(37, 99, 235, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(37, 99, 235, 0.06) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, #000 40%, transparent 100%);
+}
+
+@keyframes float-y {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.float-slow { animation: float-y 6s ease-in-out infinite; }
+.float-slower { animation: float-y 8s ease-in-out infinite; }
+
+/* Sections fade up once as they scroll into view (see useReveal). Hidden
+   only once the script is running, so the page never stays blank. */
+.reveal-ready .reveal { opacity: 0; transform: translateY(16px); transition: opacity 0.6s ease, transform 0.6s ease; }
+.reveal-ready .reveal.is-visible { opacity: 1; transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .float-slow, .float-slower { animation: none; }
+  .reveal-ready .reveal { opacity: 1; transform: none; transition: none; }
+}
+
+html { scroll-behavior: smooth; }
+section[id] { scroll-margin-top: 72px; }

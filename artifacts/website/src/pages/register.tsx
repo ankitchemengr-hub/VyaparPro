@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useSearch } from "wouter";
+import { usePageMeta } from "@/lib/seo";
 import {
   useListPortalPlans, useRegisterPortalCustomer, useCreatePortalPaymentOrder, useVerifyPortalPayment,
 } from "@workspace/api-client-react";
@@ -39,6 +40,7 @@ function useRazorpayScript() {
 }
 
 export default function PortalRegister() {
+  usePageMeta("Create Your Account", "Register your business on SHRADHA ERP — GST billing, inventory, purchases and accounts in one cloud ERP.");
   const search = useSearch();
   const [, setLocation] = useLocation();
   const { toast } = useToast();

@@ -7,7 +7,8 @@ import { useAuth } from "@/contexts/use-auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, ExternalLink, RefreshCw, PlayCircle, Receipt, MessageCircle, Building2, LogOut, Globe } from "lucide-react";
+import { Loader2, ExternalLink, RefreshCw, PlayCircle, Receipt, MessageCircle, LogOut, Globe } from "lucide-react";
+import { BrandLogo } from "@/components/site/brand-logo";
 
 const STATUS_TONE: Record<string, string> = {
   active: "bg-teal-100 text-teal-700 hover:bg-teal-100",
@@ -42,8 +43,8 @@ export default function PortalDashboard() {
     <div className="min-h-screen bg-slate-50">
       <header className="bg-white border-b">
         <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2 font-bold text-slate-900">
-            <Building2 className="w-6 h-6 text-blue-600" /> SHRADHA ERP
+          <Link href="/" aria-label="SHRADHA ERP home">
+            <BrandLogo />
           </Link>
           <button onClick={handleLogout} className="text-sm text-slate-500 hover:text-slate-900 flex items-center gap-1.5">
             <LogOut className="w-4 h-4" /> Logout

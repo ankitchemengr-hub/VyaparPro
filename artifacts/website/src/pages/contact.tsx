@@ -10,8 +10,10 @@ import { Loader2, Phone, Mail, MessageCircle, CheckCircle2 } from "lucide-react"
 import { SiteHeader } from "@/components/site/site-header";
 import { SiteFooter } from "@/components/site/site-footer";
 import { LEGAL } from "@/lib/legal";
+import { usePageMeta } from "@/lib/seo";
 
 export default function SiteContact() {
+  usePageMeta("Contact Us & Book a Demo", "Talk to the SHRADHA ERP team — book a free demo, ask about plans, or get help moving your business data.");
   const { toast } = useToast();
   const createDemo = useCreateDemoRequest();
   const [submitted, setSubmitted] = useState(false);

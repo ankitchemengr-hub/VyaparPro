@@ -5,8 +5,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Check, Loader2 } from "lucide-react";
 import { SiteHeader } from "@/components/site/site-header";
 import { SiteFooter } from "@/components/site/site-footer";
+import { usePageMeta } from "@/lib/seo";
 
 export default function SitePricing() {
+  usePageMeta("Pricing", "SHRADHA ERP plans for every stage of your business — GST billing, inventory and free updates. Start with a free trial.");
   const { data: plans = [], isLoading } = useListPortalPlans();
 
   return (

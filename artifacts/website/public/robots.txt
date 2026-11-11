@@ -5,3 +5,5 @@ Disallow: /subscription
 Disallow: /payments
 Disallow: /domain
 Disallow: /reset-password
+
+Sitemap: https://www.shradhaerp.com/sitemap.xml

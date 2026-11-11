@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { SiteHeader } from "@/components/site/site-header";
 import { SiteFooter } from "@/components/site/site-footer";
 import { LEGAL, LEGAL_HAS_PLACEHOLDERS } from "@/lib/legal";
+import { usePageMeta } from "@/lib/seo";
 
 export type LegalSection = { id: string; title: string; body: ReactNode };
 
@@ -20,6 +21,7 @@ export function LegalPage({ path, title, intro, sections }: {
   intro: ReactNode;
   sections: LegalSection[];
 }) {
+  usePageMeta(title, `${title} for ${LEGAL.brand}, a product of ${LEGAL.legalName}.`);
   return (
     <div className="min-h-screen bg-white text-slate-900">
       <SiteHeader />

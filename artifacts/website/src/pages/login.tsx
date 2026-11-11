@@ -7,13 +7,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Building2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { BrandLogo } from "@/components/site/brand-logo";
+import { usePageMeta } from "@/lib/seo";
 import { SiteFooter } from "@/components/site/site-footer";
 import { CodeEntry, apiErrorText } from "@/components/code-entry";
 
 // The customer portal reuses the ERP's own session/login (POST /auth/login)
 // — a tenant's admin-role user IS the portal login, no separate identity.
 export default function PortalLogin() {
+  usePageMeta("Customer Login", "Log in to your SHRADHA ERP customer portal to manage your subscription and open your ERP.");
   const { toast } = useToast();
   const loginMutation = useLogin();
   const { isAuthenticated, isLoading } = useAuth();
@@ -51,8 +54,8 @@ export default function PortalLogin() {
       <div className="flex-1 flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-sm">
           <div className="text-center mb-6">
-            <Link href="/" className="inline-flex items-center gap-2 font-bold text-xl text-slate-900">
-              <Building2 className="w-7 h-7 text-blue-600" /> SHRADHA ERP
+            <Link href="/" className="inline-flex" aria-label="SHRADHA ERP home">
+              <BrandLogo />
             </Link>
             <p className="text-sm text-slate-500 mt-1">Customer Portal Login</p>
           </div>
