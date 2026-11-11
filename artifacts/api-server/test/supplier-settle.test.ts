@@ -272,15 +272,6 @@ test("a discount given while taking a payment is not counted as collected money"
   const after = await ok("adminA", "GET", "/supplier-settle");
   assert.equal(Number((await pool.query(`SELECT balance_due FROM invoices WHERE id = $1`, [inv.id])).rows[0].balance_due), 0);
   assert.equal(Math.round((collectedNow(after) - collectedNow(before)) * 100) / 100, 200, "only the cash part counts");
-  assert.equal(Math.round((after.cash.flow.customerDiscount - before.cash.flow.customerDiscount) * 100) / 100, 100);
-});
-
-test("Where the money went adds up to the cash on hand", async () => {
-  const rep = await ok("adminA", "GET", "/supplier-settle");
-  const f = rep.cash.flow;
-  assert.equal(Math.round((f.openingAndAdjustments + f.fromCustomers + f.otherIn - f.toSuppliers - f.otherOut) * 100) / 100, rep.cash.cashInHand);
-  assert.ok(f.fromCustomers > 0);
-  assert.ok(f.toSuppliers >= 500, "the Payment Outs to suppliers above");
 });
 
 test("when cash is short, what can be paid now is shared out in proportion", async () => {

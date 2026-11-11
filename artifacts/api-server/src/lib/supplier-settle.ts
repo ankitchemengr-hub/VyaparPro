@@ -102,27 +102,11 @@ export interface CashPosition {
   investment: number;
 }
 
-// How the cash on hand came to be what it is, from the Cash Book log of the
-// active accounts (transfers between them left out).
-export interface CashFlow {
-  fromCustomers: number;
-  toSuppliers: number;
-  otherIn: number;
-  // Expenses, withdrawals and any other money paid out.
-  otherOut: number;
-  // Opening balances and direct balance corrections: whatever the log above
-  // doesn't explain, so the lines always add up to cashInHand.
-  openingAndAdjustments: number;
-  // Discount given to customers while taking payments — settled their bills
-  // but never came in as money.
-  customerDiscount: number;
-}
-
 export interface SupplierSettleReport {
   suppliers: SupplierSettleRow[];
   totals: Omit<SupplierSettleRow, "vendorId" | "vendorName" | "mobile" | "products">;
   unattributed: { soldQty: number; soldValue: number; collected: number };
-  cash: CashPosition & { canPay: number; shortBy: number; flow: CashFlow };
+  cash: CashPosition & { canPay: number; shortBy: number };
 }
 
 // Pay now is what the suppliers' share of collected money adds up to, but that
@@ -144,34 +128,6 @@ const RECEIPT_DISCOUNT_SQL = `
     FROM (SELECT receipt_no, SUM(allocated_amount) AS alloc FROM payment_allocations WHERE company_id = $1 GROUP BY receipt_no) pa
     JOIN (SELECT receipt_id, SUM(amount) AS cash FROM payments WHERE company_id = $1 AND status = 'approved' GROUP BY receipt_id) p
       ON p.receipt_id = pa.receipt_no`;
-
-export async function cashFlow(companyId: number, cashInHand: number): Promise<CashFlow> {
-  const [flowRes, discRes] = await Promise.all([
-    pool.query(
-      `SELECT
-         COALESCE(SUM(t.amount) FILTER (WHERE t.direction = 'in' AND (COALESCE(e.type = 'customer', false) OR t.invoice_id IS NOT NULL)), 0)::float8 AS from_customers,
-         COALESCE(SUM(t.amount) FILTER (WHERE t.direction = 'in' AND NOT (COALESCE(e.type = 'customer', false) OR t.invoice_id IS NOT NULL)), 0)::float8 AS other_in,
-         COALESCE(SUM(t.amount) FILTER (WHERE t.direction = 'out' AND e.type = 'vendor'), 0)::float8 AS to_suppliers,
-         COALESCE(SUM(t.amount) FILTER (WHERE t.direction = 'out' AND e.type IS DISTINCT FROM 'vendor'), 0)::float8 AS other_out
-         FROM account_transactions t
-         JOIN accounts a ON a.id = t.account_id AND a.company_id = t.company_id AND a.is_active = true
-         LEFT JOIN entities e ON e.id = t.party_entity_id AND e.company_id = t.company_id
-        WHERE t.company_id = $1 AND COALESCE(t.receipt_no, '') NOT LIKE 'TRF-%'`,
-      [companyId],
-    ),
-    pool.query(`SELECT COALESCE(SUM(discount), 0)::float8 AS discount FROM (${RECEIPT_DISCOUNT_SQL}) d`, [companyId]),
-  ]);
-  const f = flowRes.rows[0] ?? {};
-  const fromCustomers = r2(Number(f.from_customers ?? 0));
-  const otherIn = r2(Number(f.other_in ?? 0));
-  const toSuppliers = r2(Number(f.to_suppliers ?? 0));
-  const otherOut = r2(Number(f.other_out ?? 0));
-  return {
-    fromCustomers, toSuppliers, otherIn, otherOut,
-    openingAndAdjustments: r2(cashInHand - (fromCustomers + otherIn - toSuppliers - otherOut)),
-    customerDiscount: r2(Number(discRes.rows[0]?.discount ?? 0)),
-  };
-}
 
 // The Investment card: cash on hand minus everything owed to suppliers —
 // e.g. 10 lakh in hand and 9 lakh due to suppliers leaves 1 lakh to invest.

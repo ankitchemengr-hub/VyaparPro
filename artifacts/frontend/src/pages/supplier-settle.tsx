@@ -39,10 +39,6 @@ interface Report {
   cash?: {
     cashInHand: number; supplierDue: number; investment: number;
     canPay: number; shortBy: number;
-    flow: {
-      fromCustomers: number; toSuppliers: number; otherIn: number; otherOut: number;
-      openingAndAdjustments: number; customerDiscount: number;
-    };
   };
 }
 
@@ -61,19 +57,6 @@ function Stat({ label, value, hint, tone }: { label: string; value: string; hint
         {hint && <div className="text-[11px] text-muted-foreground mt-0.5">{hint}</div>}
       </CardContent>
     </Card>
-  );
-}
-
-// One line of "Where the money went": money in green, money out red.
-function FlowLine({ label, value }: { label: string; value: number }) {
-  const v = num(value);
-  return (
-    <div className="flex justify-between gap-2">
-      <span className="text-muted-foreground">{label}</span>
-      <span className={`font-mono ${v < -0.005 ? "text-red-600" : v > 0.005 ? "text-green-600" : ""}`}>
-        {v < -0.005 ? "− " : v > 0.005 ? "+ " : ""}{rs(Math.abs(v))}
-      </span>
-    </div>
   );
 }
 
@@ -102,7 +85,6 @@ export default function SupplierSettle() {
   );
   const t = data?.totals;
   const short = num(data?.cash?.shortBy) > 0.005;
-  const flow = data?.cash?.flow;
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -128,7 +110,7 @@ export default function SupplierSettle() {
               label="Can pay from cash"
               value={rs(data?.cash?.canPay)}
               tone={short ? "text-amber-600" : "text-green-600"}
-              hint={short ? `Cash is ${rs(data?.cash?.shortBy)} short — see where it went below` : "Cash covers it all"}
+              hint={short ? `Cash is ${rs(data?.cash?.shortBy)} short` : "Cash covers it all"}
             />
             <Stat label="Still to collect" value={rs(t.pendingFromCustomers)} tone="text-amber-600" hint="Sold, customer not paid yet" />
             <Stat
@@ -138,27 +120,6 @@ export default function SupplierSettle() {
               hint={`Cash ${rs(data?.cash?.cashInHand)} − supplier dues ${rs(data?.cash?.supplierDue)}`}
             />
           </div>
-
-          {flow && (
-            <Card className="max-w-3xl">
-              <CardContent className="p-3 sm:p-4 space-y-1.5 text-sm">
-                <div className="font-semibold">Where the money went</div>
-                <FlowLine label="Opening balance & adjustments" value={flow.openingAndAdjustments} />
-                <FlowLine label="Received from customers" value={flow.fromCustomers} />
-                <FlowLine label="Other money in" value={flow.otherIn} />
-                <FlowLine label="Paid to suppliers" value={-flow.toSuppliers} />
-                <FlowLine label="Expenses & other payments" value={-flow.otherOut} />
-                <div className="flex justify-between gap-2 border-t pt-1.5 font-semibold">
-                  <span>Cash now</span><span className="font-mono">{rs(data?.cash?.cashInHand)}</span>
-                </div>
-                {num(flow.customerDiscount) > 0.005 && (
-                  <div className="text-xs text-muted-foreground">
-                    Discount given to customers: {rs(flow.customerDiscount)} — bills marked paid but no money came in, so it is not counted in "Pay suppliers now".
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
 
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative flex-1 min-w-[200px] max-w-sm">
