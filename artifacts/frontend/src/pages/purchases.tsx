@@ -58,6 +58,7 @@ import {
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
 import { GstinFetchButton, gstinPartyName } from "@/components/gstin-fetch";
+import { BillAge } from "@/components/bill-age";
 
 function ProductCombobox({
   products,
@@ -1854,6 +1855,7 @@ function HistoryTab() {
                   <TableHead className="text-right">Amount</TableHead>
                   <TableHead className="hidden sm:table-cell text-right">Balance Due</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="whitespace-nowrap" title="Days since the bill date while unpaid">Due</TableHead>
                   <TableHead className="w-20"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -1884,6 +1886,13 @@ function HistoryTab() {
                     </TableCell>
                     <TableCell>
                       <PayStatusBadge p={p} />
+                    </TableCell>
+                    <TableCell>
+                      <BillAge
+                        payStatus={p.status === "cancelled" ? "cancelled" : p.paymentStatus === "paid" || p.paymentStatus === "advance" ? "paid" : p.paymentStatus === "partial" ? "partial" : p.paymentStatus === "unpaid" ? "not_paid" : "na"}
+                        invoiceDate={p.billDate}
+                        testId={`text-bill-age-${p.id}`}
+                      />
                     </TableCell>
                     <TableCell>
                       <span className="inline-flex items-center gap-0.5">
