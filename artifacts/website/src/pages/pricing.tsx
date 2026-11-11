@@ -6,6 +6,7 @@ import { Check, Loader2 } from "lucide-react";
 import { SiteHeader } from "@/components/site/site-header";
 import { SiteFooter } from "@/components/site/site-footer";
 import { usePageMeta } from "@/lib/seo";
+import { PlanPrice, cycleSavingsText, type PlanWithOffer } from "@/components/site/pricing-bits";
 
 export default function SitePricing() {
   usePageMeta("Pricing", "SHRADHA ERP plans for every stage of your business — GST billing, inventory and free updates. Start with a free trial.");
@@ -18,6 +19,9 @@ export default function SitePricing() {
         <h1 className="text-3xl sm:text-4xl font-bold text-center">Plans for every stage of your business</h1>
         <p className="text-center text-slate-500 mt-3">All plans include GST billing, inventory, and free updates. Cancel any time.</p>
         <p className="text-center text-xs text-slate-400 mt-1">Prices are exclusive of 18% GST. A GST tax invoice is emailed after every payment.</p>
+        {cycleSavingsText(plans as PlanWithOffer[]) && (
+          <p className="text-center text-sm font-medium text-emerald-700 mt-3">{cycleSavingsText(plans as PlanWithOffer[])}</p>
+        )}
 
         {isLoading ? (
           <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-blue-600" /></div>
@@ -39,7 +43,7 @@ export default function SitePricing() {
                       {isCustom ? (
                         <div className="text-2xl font-bold">Custom Pricing</div>
                       ) : (
-                        <div className="text-3xl font-bold">₹{p.priceMonthly.toLocaleString("en-IN")}<span className="text-sm font-normal text-slate-500">/mo + GST</span></div>
+                        <PlanPrice plan={p as PlanWithOffer} />
                       )}
                       {p.trialDays > 0 && <p className="text-xs text-teal-600 mt-1">{p.trialDays}-day free trial</p>}
                     </div>

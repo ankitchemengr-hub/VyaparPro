@@ -18,6 +18,7 @@ import {
 } from "@workspace/api-client-react";
 import { DemoLeadsPanel } from "@/components/demo-leads-panel";
 import { NoticesPanel } from "@/components/notices-panel";
+import { PlansOffersPanel } from "@/components/plans-offers-panel";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -490,7 +491,7 @@ export default function Subscriptions() {
       </div>
 
       <Tabs defaultValue="subscriptions">
-        <TabsList>
+        <TabsList className="h-auto flex-wrap justify-start">
           <TabsTrigger value="subscriptions">Subscriptions</TabsTrigger>
           <TabsTrigger value="charts">Analytics</TabsTrigger>
           <TabsTrigger value="alerts">
@@ -506,6 +507,7 @@ export default function Subscriptions() {
             )}
           </TabsTrigger>
           <TabsTrigger value="notices" data-testid="tab-notices">Notices</TabsTrigger>
+          <TabsTrigger value="plans-offers" data-testid="tab-plans-offers">Plans &amp; Offers</TabsTrigger>
         </TabsList>
 
         <TabsContent value="leads">
@@ -514,6 +516,10 @@ export default function Subscriptions() {
 
         <TabsContent value="notices">
           <NoticesPanel />
+        </TabsContent>
+
+        <TabsContent value="plans-offers">
+          <PlansOffersPanel />
         </TabsContent>
 
         {/* SUBSCRIPTIONS TABLE */}

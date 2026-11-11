@@ -18,6 +18,7 @@ import {
 import { usePageMeta } from "@/lib/seo";
 import { useReveal } from "@/lib/use-reveal";
 import { cn } from "@/lib/utils";
+import { PlanPrice, cycleSavingsText, type PlanWithOffer } from "@/components/site/pricing-bits";
 
 const MODULES = [
   { icon: ShoppingCart, title: "Sales Management", desc: "Quotations, invoices, sales returns and customer orders from one fast billing screen." },
@@ -289,7 +290,11 @@ export default function SiteHome() {
         {pricingPlans.length > 0 && (
           <section id="pricing" className="py-20 sm:py-28 bg-slate-50 border-y border-slate-100">
             <div className="max-w-7xl mx-auto px-4 sm:px-6">
-              <SectionHeading eyebrow="Pricing" title="Simple, Transparent Pricing" lead="Start free. Upgrade any time. Prices exclude 18% GST." />
+              <SectionHeading
+                eyebrow="Pricing"
+                title="Simple, Transparent Pricing"
+                lead={`Start free. Upgrade any time. Prices exclude 18% GST.${cycleSavingsText(plans as PlanWithOffer[]) ? ` ${cycleSavingsText(plans as PlanWithOffer[])}` : ""}`}
+              />
               <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
                 {pricingPlans.map((p) => {
                   const popular = p.slug === "business";
@@ -306,9 +311,7 @@ export default function SiteHome() {
                       )}
                       <h3 className="font-semibold text-lg">{p.name}</h3>
                       <p className="mt-1 text-xs text-slate-500 min-h-8">{p.tagline}</p>
-                      <div className="mt-4 text-3xl font-bold tracking-tight">
-                        ₹{p.priceMonthly.toLocaleString("en-IN")}<span className="text-sm font-normal text-slate-500">/mo</span>
-                      </div>
+                      <PlanPrice plan={p as PlanWithOffer} className="mt-4" />
                       <ul className="mt-5 space-y-2 text-sm text-slate-600 flex-1">
                         {p.features.slice(0, 4).map((f) => (
                           <li key={f} className="flex items-start gap-2"><Check className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" /> {f}</li>

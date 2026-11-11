@@ -28,7 +28,7 @@ export const PLAN_MONTHS: Record<string, number> = {
 // The subscription/company registry is the PLATFORM console — it spans all
 // tenants, so only the cross-company super_admin may touch it. Re-check the DB
 // on every call so a stale cookie role can't grant access.
-async function requireSuperAdmin(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function requireSuperAdmin(req: Request, res: Response, next: NextFunction): Promise<void> {
   const session = (req as any).session;
   if (!session?.userId) {
     res.status(401).json({ error: "Not authenticated" });

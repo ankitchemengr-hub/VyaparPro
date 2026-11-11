@@ -17,10 +17,11 @@ import { sendMail, passwordResetEmail, adminNotifyEmail } from "../lib/mailer";
 import { PLAN_MONTHS, addMonths, daysBetween } from "./subscriptions";
 import {
   ensureSubscriptionInvoiceSchema, saveCompanyBillingDetails, issueInvoiceForPayment,
-  emailInvoice, renderInvoicePdf, withGst, GST_RATE,
+  emailInvoice, renderInvoicePdf, GST_RATE,
 } from "../lib/subscription-invoice";
 import { DomainError, getDomainState, requestDomain, verifyDomain, removeDomain } from "../lib/custom-domains";
 import { sendWelcomeEmail } from "../lib/customer-emails";
+import { PricingError, activeOffer, ensurePricingSchema, getCycleDiscounts, normalizeCoupon, quotePlan, recordCouponUse } from "../lib/plan-pricing";
 import { CodeError, createChallenge, verifyChallenge, resendChallenge, trustDevice, forgetTrustedDevices } from "../lib/auth-codes";
 
 const router: IRouter = Router();
@@ -31,12 +32,16 @@ const router: IRouter = Router();
 // throws (caught by app.ts's global TenantContextError handler) if there's
 // no session, exactly like every other authenticated route in this codebase.
 
-// GET /portal/plans — public pricing-page tiers.
+// GET /portal/plans — public pricing-page tiers, with any running offer and
+// the discounts for paying several months at once (Plans & Offers).
 router.get("/portal/plans", async (_req, res): Promise<void> => {
+  await ensurePricingSchema();
   const { rows } = await pool.query(
-    `SELECT id, slug, name, tagline, price_monthly, max_users, max_companies, features, trial_days, is_active
+    `SELECT id, slug, name, tagline, price_monthly, max_users, max_companies, features, trial_days, is_active,
+            offer_price, offer_label, offer_ends_at
      FROM subscription_plans WHERE is_active = true ORDER BY sort_order ASC`,
   );
+  const cycleDiscounts = await getCycleDiscounts();
   res.json(rows.map((r) => ({
     id: r.id,
     slug: r.slug,
@@ -48,7 +53,26 @@ router.get("/portal/plans", async (_req, res): Promise<void> => {
     features: r.features ?? [],
     trialDays: r.trial_days,
     isActive: r.is_active,
+    offer: activeOffer(r),
+    cycleDiscounts,
   })));
+});
+
+// POST /portal/quote { planSlug, billingCycle, couponCode? } — public: the
+// exact price breakdown the payment will charge, so the signup / renewal
+// screen can show it and check a coupon before paying.
+router.post("/portal/quote", async (req, res): Promise<void> => {
+  const planSlug = typeof req.body?.planSlug === "string" ? req.body.planSlug : "";
+  const billingCycle = typeof req.body?.billingCycle === "string" ? req.body.billingCycle : "monthly";
+  try {
+    res.json(await quotePlan(pool, { planSlug, billingCycle, couponCode: req.body?.couponCode }));
+  } catch (err) {
+    if (err instanceof PricingError) {
+      res.status(err.status).json({ error: err.message });
+      return;
+    }
+    throw err;
+  }
 });
 
 // GET /portal/faqs — public FAQ accordion content.
@@ -297,8 +321,9 @@ router.post("/portal/verify-email/resend", async (req, res): Promise<void> => {
 });
 
 // POST /portal/payments/create-order — server-side Razorpay order creation.
-// The amount is always recomputed here from the plan's stored price, never
-// taken from the client, so a tampered request can't buy a cheaper plan.
+// The amount is always recomputed here from the plan's stored price, offer,
+// cycle discount and coupon (lib/plan-pricing.ts) — never taken from the
+// client, so a tampered request can't buy a cheaper plan.
 router.post("/portal/payments/create-order", async (req, res): Promise<void> => {
   const parsed = CreatePortalPaymentOrderBody.safeParse(req.body);
   if (!parsed.success) {
@@ -320,20 +345,21 @@ router.post("/portal/payments/create-order", async (req, res): Promise<void> => 
     res.status(404).json({ error: "Subscription not found" });
     return;
   }
-  const planRes = await pool.query(`SELECT * FROM subscription_plans WHERE slug = $1 AND is_active = true`, [planSlug]);
-  const plan = planRes.rows[0];
-  if (!plan) {
-    res.status(404).json({ error: "Plan not found" });
-    return;
+  // The coupon isn't in the generated request schema (zod drops unknown
+  // keys), so it's read from the raw body.
+  const couponCode = normalizeCoupon(req.body?.couponCode) || null;
+  let quote;
+  try {
+    // Pricing-page prices are before GST — 18% GST is added on top here.
+    quote = await quotePlan(pool, { planSlug, billingCycle, couponCode });
+  } catch (err) {
+    if (err instanceof PricingError) {
+      res.status(err.status).json({ error: err.message });
+      return;
+    }
+    throw err;
   }
-  const months = PLAN_MONTHS[billingCycle] ?? 1;
-  const baseAmount = Number(plan.price_monthly) * months;
-  if (!(baseAmount > 0)) {
-    res.status(400).json({ error: "This plan requires custom pricing — please contact sales" });
-    return;
-  }
-  // Pricing-page prices are before GST — 18% GST is added on top here.
-  const { taxable, gst, total: amount } = withGst(baseAmount);
+  const { taxable, gst, total: amount } = quote;
   await ensureSubscriptionInvoiceSchema();
 
   try {
@@ -358,12 +384,14 @@ router.post("/portal/payments/create-order", async (req, res): Promise<void> => 
     const order = (await orderRes.json()) as { id: string };
 
     await pool.query(
-      `INSERT INTO subscription_payments (company_id, subscription_id, plan_tier, billing_cycle, amount, razorpay_order_id, status, taxable_amount, gst_amount)
-       VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8)`,
-      [sub.company_id, subscriptionId, planSlug, billingCycle, String(amount), order.id, String(taxable), String(gst)],
+      `INSERT INTO subscription_payments (company_id, subscription_id, plan_tier, billing_cycle, amount, razorpay_order_id, status, taxable_amount, gst_amount,
+                                          list_amount, discount_amount, coupon_code)
+       VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8, $9, $10, $11)`,
+      [sub.company_id, subscriptionId, planSlug, billingCycle, String(amount), order.id, String(taxable), String(gst),
+        String(quote.listAmount), String(quote.totalDiscount), quote.coupon?.code ?? null],
     );
 
-    res.status(201).json({ orderId: order.id, amount, taxable, gst, gstRate: GST_RATE, currency: "INR", keyId });
+    res.status(201).json({ orderId: order.id, amount, taxable, gst, gstRate: GST_RATE, currency: "INR", keyId, quote });
   } catch (err) {
     logger.error({ err }, "Razorpay order creation errored");
     res.status(502).json({ error: "Could not create payment order" });
@@ -401,7 +429,12 @@ async function activateAndInvoicePayment(
   const months = PLAN_MONTHS[payment.billing_cycle] ?? 1;
   const now = new Date();
   const curEnd = new Date(sub.subscription_end_date);
-  const base = curEnd > now ? curEnd : now;
+  // A paid signup that was never paid for (no trial) already has its end
+  // date one period ahead from registration — start the paid period now,
+  // or the first payment would buy two periods. A trial or a paid account
+  // still extends from its current end date.
+  const neverPaid = !sub.last_payment_date && sub.subscription_status === "suspended";
+  const base = !neverPaid && curEnd > now ? curEnd : now;
   const newEnd = addMonths(base, months);
 
   await client.query(
@@ -412,6 +445,8 @@ async function activateAndInvoicePayment(
      WHERE id = $5`,
     [payment.billing_cycle, payment.plan_tier, payment.amount, newEnd, payment.subscription_id],
   );
+
+  await recordCouponUse(client, payment.coupon_code);
 
   const inv = await issueInvoiceForPayment(client, payment.id, { start: base, end: newEnd });
   return { invoiceId: inv.id, created: inv.created };

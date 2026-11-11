@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Loader2, Building2, Globe } from "lucide-react";
+import { CheckoutBox, CYCLES, type BillingCycle, type PlanWithOffer } from "@/components/site/pricing-bits";
 
 declare global {
   interface Window { Razorpay: any; }
@@ -61,11 +62,16 @@ export default function PortalSubscription() {
   const createOrder = useCreatePortalPaymentOrder();
   const verifyPayment = useVerifyPortalPayment();
   const [paying, setPaying] = useState(false);
+  const [cycle, setCycle] = useState<BillingCycle | null>(null);
+  const [coupon, setCoupon] = useState("");
 
   if (authLoading) return null;
   if (!isAuthenticated) return <Redirect to="/login" />;
 
-  const currentPlan = plans.find((p) => p.slug === sub?.planTier);
+  const currentPlan = plans.find((p) => p.slug === sub?.planTier) as PlanWithOffer | undefined;
+  // Renew for the same period as before unless the customer picks another.
+  const subCycle = CYCLES.some((c) => c.value === sub?.billingCycle) ? (sub!.billingCycle as BillingCycle) : "monthly";
+  const renewCycle = cycle ?? subCycle;
 
   const handleRenew = () => {
     if (!sub || !user) return;
@@ -74,8 +80,12 @@ export default function PortalSubscription() {
       return;
     }
     setPaying(true);
+    // couponCode isn't in the generated request type; the server reads it.
+    const order: Parameters<typeof createOrder.mutate>[0]["data"] & { couponCode?: string } = {
+      subscriptionId: sub.id, planSlug: sub.planTier ?? "", billingCycle: renewCycle, ...(coupon ? { couponCode: coupon } : {}),
+    };
     createOrder.mutate(
-      { data: { subscriptionId: sub.id, planSlug: sub.planTier ?? "", billingCycle: (sub.billingCycle as any) ?? "monthly" } },
+      { data: order },
       {
         onSuccess: (order) => {
           const rzp = new window.Razorpay({
@@ -84,7 +94,7 @@ export default function PortalSubscription() {
             amount: Math.round(order.amount * 100),
             currency: order.currency,
             name: "SHRADHA ERP",
-            description: `${currentPlan?.name ?? "Subscription"} — Renewal`,
+            description: `${currentPlan?.name ?? "Subscription"} — Renewal (${CYCLES.find((c) => c.value === renewCycle)?.label ?? "Monthly"})`,
             theme: { color: "#2563eb" },
             handler: (response: any) => {
               verifyPayment.mutate(
@@ -145,6 +155,16 @@ export default function PortalSubscription() {
                 <div><span className="text-slate-500">Status</span><div><Badge variant="outline" className="capitalize">{sub.subscriptionStatus}</Badge></div></div>
               </div>
               <Separator />
+              {currentPlan && currentPlan.priceMonthly > 0 && (
+                <CheckoutBox
+                  planSlug={currentPlan.slug}
+                  cycleDiscounts={currentPlan.cycleDiscounts}
+                  cycle={renewCycle}
+                  onCycle={setCycle}
+                  coupon={coupon}
+                  onCoupon={setCoupon}
+                />
+              )}
               <div className="flex flex-wrap gap-3">
                 <Button onClick={handleRenew} disabled={paying} className="bg-blue-600 hover:bg-blue-700">
                   {paying && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Renew Now

@@ -43,6 +43,7 @@ import purchaseReturnsRouter from "./purchase-returns";
 import systemAdminRouter from "./system-admin";
 import portalRouter from "./portal";
 import nonGstCleanupRouter from "./non-gst-cleanup";
+import planOffersRouter from "./plan-offers";
 import { requireAuth } from "../lib/tenant";
 import { restrictGstAccountant } from "../lib/gst-access";
 
@@ -113,6 +114,8 @@ router.use(nonGstCleanupRouter);
 // super_admin guard, so anything after it is 403'd for company admins. These
 // backup routes are company-admin-only and must stay reachable.
 router.use(systemAdminRouter);
+// Plans & Offers — super_admin only, each route guarded on its own path.
+router.use(planOffersRouter);
 router.use(subscriptionsRouter);
 
 export default router;

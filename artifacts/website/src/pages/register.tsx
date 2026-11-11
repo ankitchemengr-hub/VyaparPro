@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useSearch } from "wouter";
 import { usePageMeta } from "@/lib/seo";
+import { CheckoutBox, CYCLES, type BillingCycle, type PlanWithOffer } from "@/components/site/pricing-bits";
 import {
   useListPortalPlans, useRegisterPortalCustomer, useCreatePortalPaymentOrder, useVerifyPortalPayment,
 } from "@workspace/api-client-react";
@@ -77,15 +78,23 @@ export default function PortalRegister() {
     }
   }, [plans, preselectedPlan]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const selectedPlan = plans.find((p) => p.slug === form.planSlug);
+  const selectedPlan = plans.find((p) => p.slug === form.planSlug) as PlanWithOffer | undefined;
+  // Paid straight away (no free trial): choose the period and a coupon here.
+  const paysNow = !!selectedPlan && selectedPlan.trialDays === 0 && selectedPlan.priceMonthly > 0;
+  const [cycle, setCycle] = useState<BillingCycle>("monthly");
+  const [coupon, setCoupon] = useState("");
 
   const runPayment = (subscriptionId: number, planSlug: string) => {
     if (!razorpayReady) {
       toast({ title: "Payment is still loading", description: "Please try again in a moment.", variant: "destructive" });
       return;
     }
+    // couponCode isn't in the generated request type; the server reads it.
+    const order: Parameters<typeof createOrder.mutate>[0]["data"] & { couponCode?: string } = {
+      subscriptionId, planSlug, billingCycle: cycle, ...(coupon ? { couponCode: coupon } : {}),
+    };
     createOrder.mutate(
-      { data: { subscriptionId, planSlug, billingCycle: "monthly" } },
+      { data: order },
       {
         onSuccess: (order) => {
           const rzp = new window.Razorpay({
@@ -94,7 +103,7 @@ export default function PortalRegister() {
             amount: Math.round(order.amount * 100),
             currency: order.currency,
             name: "SHRADHA ERP",
-            description: `${selectedPlan?.name ?? "Subscription"} — Monthly`,
+            description: `${selectedPlan?.name ?? "Subscription"} — ${CYCLES.find((c) => c.value === cycle)?.label ?? "Monthly"}`,
             prefill: { name: form.ownerName, email: form.email, contact: form.mobile },
             theme: { color: "#2563eb" },
             handler: (response: any) => {
@@ -169,7 +178,7 @@ export default function PortalRegister() {
           gstin: form.gstin.trim() || undefined,
           referralCode: form.referralCode.trim() || undefined,
           planSlug: form.planSlug,
-          billingCycle: "monthly",
+          billingCycle: paysNow ? cycle : "monthly",
         },
       },
       {
@@ -302,13 +311,32 @@ export default function PortalRegister() {
                     <SelectContent>
                       {plans.map((p) => (
                         <SelectItem key={p.slug} value={p.slug}>
-                          {p.name} — {p.priceMonthly > 0 ? `₹${p.priceMonthly.toLocaleString("en-IN")}/mo + GST` : "Custom pricing"}
+                          {p.name} — {p.priceMonthly > 0
+                            ? `₹${((p as PlanWithOffer).offer?.price ?? p.priceMonthly).toLocaleString("en-IN")}/mo + GST${(p as PlanWithOffer).offer ? ` (${(p as PlanWithOffer).offer!.label || "offer"})` : ""}`
+                            : "Custom pricing"}
                           {p.trialDays > 0 ? ` (${p.trialDays}-day free trial)` : ""}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
+                {paysNow && selectedPlan && (
+                  <div className="col-span-2">
+                    <CheckoutBox
+                      planSlug={selectedPlan.slug}
+                      cycleDiscounts={selectedPlan.cycleDiscounts}
+                      cycle={cycle}
+                      onCycle={setCycle}
+                      coupon={coupon}
+                      onCoupon={setCoupon}
+                    />
+                  </div>
+                )}
+                {selectedPlan && selectedPlan.trialDays > 0 && (
+                  <p className="col-span-2 text-xs text-slate-500">
+                    {selectedPlan.trialDays}-day free trial — no payment now. Choose monthly or yearly billing and use a coupon when you renew.
+                  </p>
+                )}
               </div>
 
               <div className="flex items-start gap-2 pt-2">
