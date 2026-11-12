@@ -1965,35 +1965,25 @@ function HistoryTab() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Bill #</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Vendor</TableHead>
-                  <TableHead className="hidden md:table-cell">Vendor Bill</TableHead>
-                  <TableHead className="hidden sm:table-cell">Type</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
-                  <TableHead className="hidden sm:table-cell text-right">Balance Due</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="whitespace-nowrap" title="Days since the bill date while unpaid">Due</TableHead>
-                  <TableHead className="w-20"></TableHead>
+                  <TableHead className="w-20">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {shown.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-10 text-muted-foreground text-sm">
+                    <TableCell colSpan={6} className="text-center py-10 text-muted-foreground text-sm">
                       No bill matches "{search.trim()}".
                     </TableCell>
                   </TableRow>
                 )}
                 {shown.map((p: any) => (
                   <TableRow key={p.id} data-testid={`row-purchase-${p.id}`}>
-                    <TableCell className="font-medium">
-                      <span className="inline-flex items-center gap-1">
-                        <FileText className="w-3.5 h-3.5" />
-                        {p.billNo}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="text-muted-foreground whitespace-nowrap">
                       {new Date(p.billDate).toLocaleDateString("en-IN")}
                     </TableCell>
                     <TableCell>
@@ -2004,17 +1994,8 @@ function HistoryTab() {
                         </div>
                       )}
                     </TableCell>
-                    <TableCell className="hidden md:table-cell text-muted-foreground">{p.vendorBillNo ?? "—"}</TableCell>
-                    <TableCell className="hidden sm:table-cell">
-                      <Badge variant={p.billType === "gst" ? "default" : "secondary"}>
-                        {p.billType === "gst" ? "GST" : "Non-GST"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums font-medium">
+                    <TableCell className="text-right tabular-nums font-medium whitespace-nowrap">
                       ₹{Number(p.grandTotal).toFixed(2)}
-                    </TableCell>
-                    <TableCell className="hidden sm:table-cell text-right tabular-nums">
-                      ₹{Number(p.balanceDue).toFixed(2)}
                     </TableCell>
                     <TableCell>
                       <PayStatusBadge p={p} />
