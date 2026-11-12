@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
-import { Link } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import {
   useListPurchases,
   useCreatePurchase,
@@ -27,7 +27,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { ProductDialog } from "@/pages/inventory";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,7 +47,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Truck, Plus, Trash2, Loader2, FileText, Save, UserPlus, Pencil, ChevronsUpDown, Check,
-  Paperclip, BarChart2, Download, Eye, File as FileIcon, X, FileImage,
+  Paperclip, BarChart2, Download, Eye, File as FileIcon, X, FileImage, ArrowLeft, History, ChevronRight,
 } from "lucide-react";
 import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
@@ -504,10 +503,13 @@ function LineItemsEditor({
 const SMART_ORDER_PREFILL_KEY = "smart_order_prefill";
 
 export default function Purchases() {
-  // Store users only enter new bills — no Purchase History tab at all.
+  // Store users only enter new bills — no Purchase History at all, so they
+  // go straight to the entry form. Everyone else first sees two cards; a card
+  // opens its own screen (?s=new / ?s=history) and Back returns to the cards.
   const { hasRole } = useAuth();
   const showHistory = !hasRole(["store"]);
-  const [tab, setTab] = useState("new");
+  const [, navigate] = useLocation();
+  const section = new URLSearchParams(useSearch()).get("s");
   const [smartOrderPrefill, setSmartOrderPrefill] = useState<{ productId: number; qty: number } | null>(() => {
     try {
       const raw = sessionStorage.getItem(SMART_ORDER_PREFILL_KEY);
@@ -526,33 +528,78 @@ export default function Purchases() {
     }
   };
 
+  const view: "cards" | "new" | "history" = !showHistory || smartOrderPrefill || section === "new"
+    ? "new"
+    : section === "history" ? "history" : "cards";
+  // Smart Order sends the user here with a prefilled item: pin the entry
+  // screen in the URL so it stays open after the prefill is used up.
+  useEffect(() => {
+    if (smartOrderPrefill && section !== "new") navigate("/purchases?s=new", { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const fromCards = useRef(false);
+  const openView = (key: "new" | "history") => {
+    fromCards.current = true;
+    navigate(`/purchases?s=${key}`);
+    window.scrollTo({ top: 0 });
+  };
+  const backToCards = () => {
+    if (fromCards.current) { fromCards.current = false; window.history.back(); }
+    else navigate("/purchases", { replace: true });
+  };
+
+  const cards = [
+    { key: "new" as const, icon: Plus, title: "New Purchase", description: "Enter a supplier's bill — items, GST and payment" },
+    { key: "history" as const, icon: History, title: "Purchase History", description: "All purchase bills with dues — view, edit, print, export" },
+  ];
+  const current = cards.find((c) => c.key === view);
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Purchases</h1>
       </div>
 
-      <Tabs value={tab} onValueChange={setTab} className="w-full">
-        {showHistory && (
-          <TabsList className="grid w-full max-w-sm grid-cols-2">
-            <TabsTrigger value="new" data-testid="tab-new-purchase">New Purchase</TabsTrigger>
-            <TabsTrigger value="history" data-testid="tab-purchase-history">Purchase History</TabsTrigger>
-          </TabsList>
-        )}
+      {view === "cards" && (
+        <div className="grid gap-3 sm:grid-cols-2 max-w-3xl">
+          {cards.map((c) => (
+            <button
+              key={c.key}
+              type="button"
+              onClick={() => openView(c.key)}
+              className="text-left rounded-lg border bg-card hover:bg-accent hover:border-primary/50 transition-colors p-4 flex items-center gap-3"
+              data-testid={`card-purchase-${c.key}`}
+            >
+              <span className="rounded-md bg-primary/10 text-primary p-2.5 shrink-0"><c.icon className="w-5 h-5" /></span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-semibold leading-tight">{c.title}</span>
+                <span className="block text-xs text-muted-foreground mt-1 leading-snug">{c.description}</span>
+              </span>
+              <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+            </button>
+          ))}
+        </div>
+      )}
 
-        <TabsContent value="new" className="mt-6">
-          <NewPurchaseTab
-            prefill={smartOrderPrefill}
-            onConsumePrefill={consumePrefill}
-          />
-        </TabsContent>
+      {view !== "cards" && showHistory && current && (
+        <div className="flex items-center gap-2 print:hidden">
+          <Button variant="outline" size="sm" onClick={backToCards} data-testid="button-purchases-back">
+            <ArrowLeft className="w-4 h-4 mr-1" />Purchases
+          </Button>
+          <h2 className="text-lg sm:text-xl font-semibold flex items-center gap-2 min-w-0">
+            <current.icon className="w-5 h-5 text-primary shrink-0" /><span className="leading-tight">{current.title}</span>
+          </h2>
+        </div>
+      )}
 
-        {showHistory && (
-          <TabsContent value="history" className="mt-6">
-            <HistoryTab />
-          </TabsContent>
-        )}
-      </Tabs>
+      {view === "new" && (
+        <NewPurchaseTab
+          prefill={smartOrderPrefill}
+          onConsumePrefill={consumePrefill}
+        />
+      )}
+
+      {view === "history" && <HistoryTab />}
     </div>
   );
 }
