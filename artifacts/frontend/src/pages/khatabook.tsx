@@ -8,7 +8,6 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -18,7 +17,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Search, BookOpen, Printer, MessageCircle, Loader2, Phone, Receipt,
-  ArrowDownCircle, ArrowUpCircle, ArrowLeft, ChevronRight, PlusCircle, MinusCircle, SlidersHorizontal,
+  ArrowDownCircle, ArrowUpCircle, ArrowLeft, ChevronRight, PlusCircle, MinusCircle, SlidersHorizontal, Users, Truck,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { CashEntryDialog } from "@/components/cash-entry-dialog";
@@ -38,6 +37,8 @@ const listStateStore = new Map<PartyType, { search: string; status: StatusFilter
 // Set when a row is opened from the list, so the party page's Back can simply
 // step back in history (restoring scroll) instead of stacking a new entry.
 let openedFromList = false;
+// Set when a list is opened from the Khatabook cards, so its Back steps back.
+let openedFromCards = false;
 
 export const khatabookListUrl = (type: PartyType) => `/khatabook?tab=${type}`;
 export const khatabookPartyUrl = (type: PartyType, id: number) => `/khatabook?tab=${type}&party=${id}`;
@@ -50,7 +51,8 @@ export default function Khatabook() {
   const { hasRole } = useAuth();
   const [, setLocation] = useLocation();
   const params = new URLSearchParams(useSearch());
-  const tab: PartyType = params.get("tab") === "vendor" ? "vendor" : "customer";
+  const tabParam = params.get("tab");
+  const tab: PartyType = tabParam === "vendor" ? "vendor" : "customer";
   const partyId = Number(params.get("party")) || null;
 
   if (!hasRole(["admin", "accountant"])) return <Redirect to="/" />;
@@ -69,25 +71,94 @@ export default function Khatabook() {
     );
   }
 
+  // No tab picked: the two cards (Customer / Supplier). A card opens that
+  // list; its Back returns here.
+  if (tabParam !== "customer" && tabParam !== "vendor") {
+    return (
+      <div className="p-4 sm:p-6 space-y-4 print:hidden">
+        <div className="flex items-center gap-2">
+          <BookOpen className="w-6 h-6 text-primary" />
+          <h1 className="text-2xl font-bold tracking-tight">Khatabook</h1>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <KhatabookCard type="customer" onOpen={() => { openedFromCards = true; setLocation(khatabookListUrl("customer")); }} />
+          <KhatabookCard type="vendor" onOpen={() => { openedFromCards = true; setLocation(khatabookListUrl("vendor")); }} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-4 sm:p-6 space-y-4 print:hidden">
+      <button
+        type="button"
+        onClick={() => {
+          if (openedFromCards) { openedFromCards = false; window.history.back(); }
+          else setLocation("/khatabook", { replace: true });
+        }}
+        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        data-testid="button-khatabook-back-to-cards"
+      >
+        <ArrowLeft className="w-4 h-4" /> Back to Khatabook
+      </button>
       <div className="flex items-center gap-2">
-        <BookOpen className="w-6 h-6 text-primary" />
-        <h1 className="text-2xl font-bold tracking-tight">Khatabook</h1>
+        {tab === "customer" ? <Users className="w-6 h-6 text-primary" /> : <Truck className="w-6 h-6 text-primary" />}
+        <h1 className="text-2xl font-bold tracking-tight">{tab === "customer" ? "Customer Khata" : "Supplier Khata"}</h1>
       </div>
-      <Tabs value={tab} onValueChange={(v) => setLocation(khatabookListUrl(v as PartyType), { replace: true })}>
-        <TabsList>
-          <TabsTrigger value="customer" data-testid="tab-khatabook-customer">Customer</TabsTrigger>
-          <TabsTrigger value="vendor" data-testid="tab-khatabook-vendor">Supplier</TabsTrigger>
-        </TabsList>
-        <TabsContent value="customer">
-          <KhatabookTab type="customer" />
-        </TabsContent>
-        <TabsContent value="vendor">
-          <KhatabookTab type="vendor" />
-        </TabsContent>
-      </Tabs>
+      <KhatabookTab key={tab} type={tab} />
     </div>
+  );
+}
+
+// Vendors and customers store outstandingBalance with opposite meaning:
+// a positive customer balance means they owe the business (You Will Get),
+// a positive vendor balance means the business owes them (You Will Give).
+function khataTotals(rows: { outstandingBalance: number }[] | undefined, type: PartyType) {
+  const sign = type === "vendor" ? -1 : 1;
+  let get = 0, give = 0, open = 0;
+  for (const e of rows ?? []) {
+    const bal = e.outstandingBalance * sign;
+    if (bal > 0) { get += bal; open++; }
+    else if (bal < 0) { give += Math.abs(bal); open++; }
+  }
+  return { youWillGet: get, youWillGive: give, open };
+}
+
+function KhatabookCard({ type, onOpen }: { type: PartyType; onOpen: () => void }) {
+  const { data, isLoading } = useListKhatabook({ type });
+  const t = khataTotals(data, type);
+  const isCustomer = type === "customer";
+  const Icon = isCustomer ? Users : Truck;
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="text-left rounded-xl border bg-card p-4 sm:p-5 shadow-sm hover:shadow-md hover:border-primary/40 transition-all"
+      data-testid={`card-khatabook-${type}`}
+    >
+      <div className="flex items-center gap-3">
+        <div className={`w-11 h-11 rounded-lg flex items-center justify-center ${isCustomer ? "bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300" : "bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300"}`}>
+          <Icon className="w-5 h-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="font-semibold text-lg">{isCustomer ? "Customer" : "Supplier"}</div>
+          <div className="text-xs text-muted-foreground">
+            {isLoading ? "Loading…" : `${data?.length ?? 0} ${isCustomer ? "customers" : "suppliers"} · ${t.open} with balance`}
+          </div>
+        </div>
+        <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0" />
+      </div>
+      <div className="grid grid-cols-2 gap-2 mt-4">
+        <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/20 px-3 py-2 min-w-0">
+          <div className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400">You Will Get</div>
+          <div className="font-mono font-bold text-emerald-700 dark:text-emerald-400 break-all">{isLoading ? "…" : formatRs(t.youWillGet)}</div>
+        </div>
+        <div className="rounded-lg bg-red-50 dark:bg-red-950/20 px-3 py-2 min-w-0">
+          <div className="text-[11px] font-medium text-red-700 dark:text-red-400">You Will Give</div>
+          <div className="font-mono font-bold text-red-700 dark:text-red-400 break-all">{isLoading ? "…" : formatRs(t.youWillGive)}</div>
+        </div>
+      </div>
+    </button>
   );
 }
 

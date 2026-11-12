@@ -200,7 +200,7 @@ function ReceivablePayableCards() {
   );
   return (
     <>
-      {card("You Will Get", data?.receivable, data?.receivableParties, "text-emerald-600", ArrowDownRight, "/khatabook", "card-you-will-get")}
+      {card("You Will Get", data?.receivable, data?.receivableParties, "text-emerald-600", ArrowDownRight, "/khatabook?tab=customer", "card-you-will-get")}
       {card("You Will Give", data?.payable, data?.payableParties, "text-red-600", ArrowUpRight, "/khatabook?tab=vendor", "card-you-will-give")}
     </>
   );
