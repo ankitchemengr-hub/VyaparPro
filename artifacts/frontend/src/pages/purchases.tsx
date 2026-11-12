@@ -23,7 +23,7 @@ import {
 import { RecalculatePricesDialog } from "@/components/recalculate-prices-dialog";
 import { UpdateSalePriceDialog } from "@/components/update-sale-price-dialog";
 import { useAuth } from "@/contexts/use-auth";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { ProductDialog } from "@/pages/inventory";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,7 +47,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Truck, Plus, Trash2, Loader2, FileText, Save, UserPlus, Pencil, ChevronsUpDown, Check,
-  Paperclip, BarChart2, Download, Eye, File as FileIcon, X, FileImage, ArrowLeft, History, ChevronRight,
+  Paperclip, BarChart2, Download, Eye, File as FileIcon, X, FileImage, ArrowLeft, History, ChevronRight, Search,
 } from "lucide-react";
 import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
@@ -1456,11 +1456,21 @@ function PurchaseReportDialog({
   const [productId, setProductId] = useState<string>("");
   const [billType, setBillType] = useState<string>("");
   const [vendorId, setVendorId] = useState<string>("");
-  const [rows, setRows] = useState<ReportRow[]>([]);
+  const [allRows, setRows] = useState<ReportRow[]>([]);
+  const [reportSearch, setReportSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [fetched, setFetched] = useState(false);
   const { toast } = useToast();
   const { data: vendors } = useListEntities({ type: "vendor" });
+  // The search box narrows the loaded rows; table, total, print, PDF and
+  // Excel all follow what is shown.
+  const rows = useMemo(() => {
+    const q = reportSearch.trim().toLowerCase();
+    if (!q) return allRows;
+    return allRows.filter((r) =>
+      [r.productName, r.vendorName, r.billNo, r.vendorBillNo].some((v) => String(v ?? "").toLowerCase().includes(q)),
+    );
+  }, [allRows, reportSearch]);
 
   const fetchReport = async () => {
     setLoading(true);
@@ -1635,6 +1645,18 @@ function PurchaseReportDialog({
             {loading ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <BarChart2 className="w-4 h-4 mr-1.5" />}
             Generate
           </Button>
+          {fetched && allRows.length > 0 && (
+            <div className="relative w-full sm:w-64">
+              <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={reportSearch}
+                onChange={(e) => setReportSearch(e.target.value)}
+                placeholder="Search item, supplier, bill no…"
+                className="h-8 text-sm pl-8"
+                data-testid="input-report-search"
+              />
+            </div>
+          )}
           {fetched && rows.length > 0 && (
             <div className="flex flex-wrap gap-2 sm:ml-auto">
               <Button size="sm" variant="outline" onClick={handlePrint}>
@@ -1658,7 +1680,7 @@ function PurchaseReportDialog({
           )}
           {fetched && rows.length === 0 && (
             <div className="text-center py-16 text-muted-foreground text-sm">
-              No purchases found for the selected filters.
+              {allRows.length > 0 ? `Nothing matches "${reportSearch}".` : "No purchases found for the selected filters."}
             </div>
           )}
           {rows.length > 0 && (
@@ -1837,6 +1859,30 @@ function HistoryTab() {
   const deletePurchase = useDeletePurchase();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const [search, setSearch] = useState("");
+  // Item names per bill, so a search finds bills by item too.
+  const { data: itemNames } = useQuery({
+    queryKey: ["/api/purchases/item-names", purchases?.length ?? 0],
+    queryFn: async () => {
+      const res = await fetch("/api/purchases/item-names");
+      if (!res.ok) throw new Error("Could not load item names");
+      return (await res.json()) as { purchaseId: number; items: string }[];
+    },
+    enabled: !!purchases?.length,
+  });
+  const itemsById = useMemo(() => new Map((itemNames ?? []).map((r) => [r.purchaseId, r.items])), [itemNames]);
+  const query = search.trim().toLowerCase();
+  const shown = useMemo(() => {
+    if (!purchases || !query) return purchases ?? [];
+    return purchases.filter((p: any) =>
+      [p.vendorName, p.billNo, p.vendorBillNo, itemsById.get(p.id)].some((v) => String(v ?? "").toLowerCase().includes(query)),
+    );
+  }, [purchases, query, itemsById]);
+  // While searching, show which of the bill's items matched.
+  const matchedItems = (id: number) => {
+    if (!query) return "";
+    return (itemsById.get(id) ?? "").split(", ").filter((n) => n.toLowerCase().includes(query)).join(", ");
+  };
 
   const confirmDelete = () => {
     if (!deleteTarget) return;
@@ -1873,7 +1919,7 @@ function HistoryTab() {
         <Truck className="mx-auto h-12 w-12 text-muted-foreground opacity-20 mb-4" />
         <h3 className="text-lg font-medium">No purchases yet</h3>
         <p className="text-sm text-muted-foreground mt-1">
-          Record your first goods-receipt from a vendor under the New Purchase tab.
+          Record your first goods-receipt from a vendor with the New Purchase card.
         </p>
       </div>
     );
@@ -1881,8 +1927,33 @@ function HistoryTab() {
 
   return (
     <>
-      <div className="flex justify-end mb-3">
-        <Button variant="outline" size="sm" onClick={() => setReportOpen(true)}>
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <div className="relative flex-1 min-w-[200px] max-w-md">
+          <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search item, supplier or bill no…"
+            className="pl-8 pr-8"
+            data-testid="input-purchase-search"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              aria-label="Clear search"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+        {query && (
+          <span className="text-xs text-muted-foreground" data-testid="text-purchase-search-count">
+            {shown.length} of {purchases.length} bills
+          </span>
+        )}
+        <Button variant="outline" size="sm" className="ml-auto" onClick={() => setReportOpen(true)}>
           <BarChart2 className="w-4 h-4 mr-1.5" />
           Purchase Report
         </Button>
@@ -1907,7 +1978,14 @@ function HistoryTab() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {purchases.map((p: any) => (
+                {shown.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={10} className="text-center py-10 text-muted-foreground text-sm">
+                      No bill matches "{search.trim()}".
+                    </TableCell>
+                  </TableRow>
+                )}
+                {shown.map((p: any) => (
                   <TableRow key={p.id} data-testid={`row-purchase-${p.id}`}>
                     <TableCell className="font-medium">
                       <span className="inline-flex items-center gap-1">
@@ -1918,7 +1996,14 @@ function HistoryTab() {
                     <TableCell className="text-muted-foreground">
                       {new Date(p.billDate).toLocaleDateString("en-IN")}
                     </TableCell>
-                    <TableCell>{p.vendorName ?? <span className="text-muted-foreground">—</span>}</TableCell>
+                    <TableCell>
+                      {p.vendorName ?? <span className="text-muted-foreground">—</span>}
+                      {matchedItems(p.id) && (
+                        <div className="text-xs text-primary mt-0.5" data-testid={`text-purchase-matched-${p.id}`}>
+                          Item: {matchedItems(p.id)}
+                        </div>
+                      )}
+                    </TableCell>
                     <TableCell className="hidden md:table-cell text-muted-foreground">{p.vendorBillNo ?? "—"}</TableCell>
                     <TableCell className="hidden sm:table-cell">
                       <Badge variant={p.billType === "gst" ? "default" : "secondary"}>

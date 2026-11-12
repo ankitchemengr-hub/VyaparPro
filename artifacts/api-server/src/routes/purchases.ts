@@ -385,6 +385,27 @@ router.get("/purchases/report", async (req, res): Promise<void> => {
 });
 
 // GET /purchases/:id
+// GET /purchases/item-names — every bill's item names in one string, so the
+// Purchase History search can find bills by item as well as by supplier.
+router.get("/purchases/item-names", async (req, res): Promise<void> => {
+  if (!requireSession(req, res, PURCHASE_HISTORY_ROLES)) return;
+  const companyId = getCompanyId(req);
+  try {
+    const { rows } = await pool.query(
+      `SELECT p.id, string_agg(DISTINCT pi.product_name, ', ') AS names
+         FROM purchases p
+         JOIN purchase_items pi ON pi.purchase_id = p.id AND pi.company_id = p.company_id
+        WHERE p.company_id = $1 AND p.deleted_at IS NULL${isGstAccountant(req) ? " AND p.bill_type = 'gst'" : ""}
+        GROUP BY p.id`,
+      [companyId],
+    );
+    res.json(rows.map((r: any) => ({ purchaseId: r.id, items: r.names ?? "" })));
+  } catch (err) {
+    logger.error({ err }, "GET /purchases/item-names failed");
+    res.status(500).json({ error: "Could not load item names" });
+  }
+});
+
 router.get("/purchases/:id", async (req, res): Promise<void> => {
   if (!requireSession(req, res, PURCHASE_HISTORY_ROLES)) return;
   const parsed = GetPurchaseParams.safeParse(req.params);
