@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useLocation } from "wouter";
+import { useRef, useState } from "react";
+import { useLocation, useSearch } from "wouter";
 import { useListProducts, getListProductsQueryKey } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/use-auth";
 import { homePathForRole } from "@/lib/nav-items";
@@ -41,6 +41,9 @@ import {
   ClipboardCheck,
   Loader2,
   Printer,
+  ArrowLeft,
+  ChevronRight,
+  BarChart3,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
@@ -112,7 +115,25 @@ export default function StockAdjustment() {
   const [preview, setPreview] = useState<AdjustmentPreview | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const [mainTab, setMainTab] = useState<"adjust" | "report">("adjust");
+  // Two cards first; a card opens its screen (?s=adjust / ?s=report) and
+  // Back returns to the cards (phone back works too).
+  const section = new URLSearchParams(useSearch()).get("s");
+  const mainTab: "adjust" | "report" | "" = section === "adjust" || section === "report" ? section : "";
+  const fromCards = useRef(false);
+  const openSection = (key: "adjust" | "report") => {
+    fromCards.current = true;
+    setLocation(`/stock-adjustment?s=${key}`);
+    window.scrollTo({ top: 0 });
+  };
+  const backToCards = () => {
+    if (fromCards.current) { fromCards.current = false; window.history.back(); }
+    else setLocation("/stock-adjustment", { replace: true });
+  };
+  const sectionCards = [
+    { key: "adjust" as const, icon: ClipboardCheck, title: "Adjust Stock", description: "Enter the physical count — the difference is applied" },
+    { key: "report" as const, icon: BarChart3, title: "Report", description: "Past adjustments, date-wise and product-wise" },
+  ];
+  const currentCard = sectionCards.find((c) => c.key === mainTab);
   const [reportView, setReportView] = useState<"date" | "product">("date");
   const [reportFrom, setReportFrom] = useState("");
   const [reportTo, setReportTo] = useState("");
@@ -249,11 +270,39 @@ export default function StockAdjustment() {
         </div>
       </div>
 
-      <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as "adjust" | "report")}>
-        <TabsList className="print:hidden">
-          <TabsTrigger value="adjust">Adjust Stock</TabsTrigger>
-          <TabsTrigger value="report">Report</TabsTrigger>
-        </TabsList>
+      {!currentCard && (
+        <div className="grid gap-3 sm:grid-cols-2 print:hidden">
+          {sectionCards.map((c) => (
+            <button
+              key={c.key}
+              type="button"
+              onClick={() => openSection(c.key)}
+              className="text-left rounded-lg border bg-card hover:bg-accent hover:border-primary/50 transition-colors p-4 flex items-center gap-3"
+              data-testid={`card-stock-${c.key}`}
+            >
+              <span className="rounded-md bg-primary/10 text-primary p-2.5 shrink-0"><c.icon className="w-5 h-5" /></span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-semibold leading-tight">{c.title}</span>
+                <span className="block text-xs text-muted-foreground mt-1 leading-snug">{c.description}</span>
+              </span>
+              <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+            </button>
+          ))}
+        </div>
+      )}
+
+      {currentCard && (
+        <div className="flex items-center gap-2 print:hidden">
+          <Button variant="outline" size="sm" onClick={backToCards} data-testid="button-stock-back">
+            <ArrowLeft className="w-4 h-4 mr-1" />Stock Adjustment
+          </Button>
+          <h2 className="text-lg sm:text-xl font-semibold flex items-center gap-2 min-w-0">
+            <currentCard.icon className="w-5 h-5 text-primary shrink-0" /><span className="leading-tight">{currentCard.title}</span>
+          </h2>
+        </div>
+      )}
+
+      <Tabs value={mainTab}>
 
         <TabsContent value="adjust" className="mt-4 space-y-3">
           {/* Product Picker */}
