@@ -1878,11 +1878,6 @@ function HistoryTab() {
       [p.vendorName, p.billNo, p.vendorBillNo, itemsById.get(p.id)].some((v) => String(v ?? "").toLowerCase().includes(query)),
     );
   }, [purchases, query, itemsById]);
-  // While searching, show which of the bill's items matched.
-  const matchedItems = (id: number) => {
-    if (!query) return "";
-    return (itemsById.get(id) ?? "").split(", ").filter((n) => n.toLowerCase().includes(query)).join(", ");
-  };
 
   const confirmDelete = () => {
     if (!deleteTarget) return;
@@ -1988,11 +1983,6 @@ function HistoryTab() {
                     </TableCell>
                     <TableCell>
                       {p.vendorName ?? <span className="text-muted-foreground">—</span>}
-                      {matchedItems(p.id) && (
-                        <div className="text-xs text-primary mt-0.5" data-testid={`text-purchase-matched-${p.id}`}>
-                          Item: {matchedItems(p.id)}
-                        </div>
-                      )}
                     </TableCell>
                     <TableCell className="text-right tabular-nums font-medium whitespace-nowrap">
                       ₹{Number(p.grandTotal).toFixed(2)}
