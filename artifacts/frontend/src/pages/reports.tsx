@@ -1,4 +1,5 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
+import { useLocation, useSearch } from "wouter";
 import { useAuth } from "@/contexts/use-auth";
 import {
   useGetAuditLog,
@@ -22,7 +23,7 @@ import {
   getGetBillWiseProfitReportQueryKey,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -34,7 +35,10 @@ import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { format } from "date-fns";
-import { Download, Search, FileSpreadsheet, FileText, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import {
+  Download, Search, FileSpreadsheet, FileText, ArrowUp, ArrowDown, ArrowUpDown, ArrowLeft,
+  Receipt, Package, Users, Factory, Percent, TrendingUp, BadgePercent, BookOpen, History, type LucideIcon,
+} from "lucide-react";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -278,56 +282,125 @@ function TypeBadge({ type }: { type: string }) {
   );
 }
 
+type ReportSection = {
+  key: string;
+  title: string;
+  description: string;
+  keywords: string;
+  icon: LucideIcon;
+  /** Hidden from the read-only CA login (the server refuses it anyway). */
+  nonGst?: boolean;
+};
+
+const REPORT_SECTIONS: ReportSection[] = [
+  { key: "sales", title: "Sales (GST)", description: "GST and non-GST sales by date, with tax.", keywords: "sales invoice bill gst turnover", icon: Receipt },
+  { key: "item-wise", title: "Item-wise", description: "Quantity and value sold for each product.", keywords: "item product stock qty quantity", icon: Package, nonGst: true },
+  { key: "customer-wise", title: "Customer-wise", description: "Sales totals for each customer.", keywords: "customer party buyer", icon: Users, nonGst: true },
+  { key: "production", title: "Production", description: "What was manufactured and when.", keywords: "production manufacturing batch", icon: Factory, nonGst: true },
+  { key: "tax", title: "Input / Output Tax", description: "GST collected on sales and paid on purchases.", keywords: "tax gst input output itc cgst sgst igst", icon: Percent },
+  { key: "pnl", title: "Profit & Loss", description: "Sales, cost, expenses and net profit.", keywords: "profit loss pnl p&l income expense", icon: TrendingUp, nonGst: true },
+  { key: "bill-wise-profit", title: "Bill-wise Profit Margin", description: "Profit and margin on every bill.", keywords: "bill profit margin invoice", icon: BadgePercent, nonGst: true },
+  { key: "ledger", title: "Ledger", description: "Every entry of a customer or supplier with running balance.", keywords: "ledger party account statement customer supplier vendor", icon: BookOpen, nonGst: true },
+  { key: "audit", title: "Audit Log", description: "Who created, changed or deleted what.", keywords: "audit log history trail changes", icon: History, nonGst: true },
+];
+
 export default function Reports() {
   const { user } = useAuth();
   // Read-only CA login: only the GST reports (the server refuses the rest anyway).
   const gstOnly = user?.role === "gst_accountant";
-  const tabs = [
-    { value: "sales", label: "Sales (GST)", show: true },
-    { value: "item-wise", label: "Item-wise", show: !gstOnly },
-    { value: "customer-wise", label: "Customer-wise", show: !gstOnly },
-    { value: "production", label: "Production", show: !gstOnly },
-    { value: "tax", label: "Input / Output Tax", show: true },
-    { value: "pnl", label: "Profit & Loss", show: !gstOnly },
-    { value: "bill-wise-profit", label: "Bill-wise Profit Margin", show: !gstOnly },
-    { value: "ledger", label: "Ledger", show: !gstOnly },
-    { value: "audit", label: "Audit Log", show: !gstOnly },
-  ].filter(t => t.show);
-  const [tab, setTab] = useState("sales");
+  const sections = REPORT_SECTIONS.filter(s => !(gstOnly && s.nonGst));
+  const [search, setSearch] = useState("");
+  const q = search.trim().toLowerCase();
+  const visible = q
+    ? sections.filter(s => `${s.title} ${s.description} ${s.keywords}`.toLowerCase().includes(q))
+    : sections;
+
+  // The open card lives in the URL (?s=…): a card opens its report on its own
+  // screen, and the phone's Back button returns to the cards.
+  const [, navigate] = useLocation();
+  const key = new URLSearchParams(useSearch()).get("s");
+  const openSection = sections.find(s => s.key === key);
+  const fromCards = useRef(false);
+  const openReport = useCallback((k: string) => {
+    fromCards.current = true;
+    navigate(`/reports?s=${encodeURIComponent(k)}`);
+    window.scrollTo({ top: 0 });
+  }, [navigate]);
+  const backToCards = () => {
+    if (fromCards.current) { fromCards.current = false; window.history.back(); }
+    else navigate("/reports", { replace: true });
+  };
+
+  if (openSection) {
+    const Icon = openSection.icon;
+    return (
+      <div className="space-y-4 sm:space-y-6">
+        <div className="flex items-center gap-2 print:hidden">
+          <Button variant="outline" size="sm" onClick={backToCards} data-testid="button-reports-back">
+            <ArrowLeft className="w-4 h-4 mr-1" />Reports
+          </Button>
+          <h1 className="text-lg sm:text-2xl font-bold tracking-tight flex items-center gap-2 min-w-0">
+            <Icon className="w-5 h-5 text-primary shrink-0" /><span className="leading-tight">{openSection.title}</span>
+          </h1>
+        </div>
+        <Tabs value={openSection.key} className="w-full">
+          <TabsContent value="sales" className="mt-0"><SalesTab /></TabsContent>
+          {!gstOnly && <TabsContent value="item-wise" className="mt-0"><ItemWiseTab /></TabsContent>}
+          {!gstOnly && <TabsContent value="customer-wise" className="mt-0"><CustomerWiseTab /></TabsContent>}
+          {!gstOnly && <TabsContent value="production" className="mt-0"><ProductionTab /></TabsContent>}
+          <TabsContent value="tax" className="mt-0"><TaxTab /></TabsContent>
+          {!gstOnly && <TabsContent value="pnl" className="mt-0"><PnLTab /></TabsContent>}
+          {!gstOnly && <TabsContent value="bill-wise-profit" className="mt-0"><BillWiseProfitTab /></TabsContent>}
+          {!gstOnly && <TabsContent value="ledger" className="mt-0"><LedgerTab /></TabsContent>}
+          {!gstOnly && <TabsContent value="audit" className="mt-0"><AuditTab /></TabsContent>}
+        </Tabs>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 sm:space-y-6">
       <div>
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Reports & Ledgers</h1>
-        <p className="text-sm text-muted-foreground mt-1">Sales, taxes, production, profitability and audit trail.</p>
+        <p className="text-sm text-muted-foreground mt-1">Sales, taxes, production, profitability, ledgers and audit trail.</p>
       </div>
 
-      <Tabs value={tab} onValueChange={setTab} className="w-full">
-        {/* Nine tabs wrap into a ragged block on a phone — a single picker reads better there. */}
-        <div className="md:hidden">
-          <Select value={tab} onValueChange={setTab}>
-            <SelectTrigger className="w-full h-11 font-medium" data-testid="select-report-tab">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {tabs.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-            </SelectContent>
-          </Select>
+      <div className="space-y-2">
+        <div className="relative max-w-sm">
+          <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search reports…"
+            className="pl-8"
+            data-testid="input-reports-search"
+          />
         </div>
-        <TabsList className="hidden md:flex flex-wrap h-auto justify-start gap-1">
-          {tabs.map(t => <TabsTrigger key={t.value} value={t.value}>{t.label}</TabsTrigger>)}
-        </TabsList>
-
-        <TabsContent value="sales" className="mt-4 md:mt-6"><SalesTab /></TabsContent>
-        {!gstOnly && <TabsContent value="item-wise" className="mt-4 md:mt-6"><ItemWiseTab /></TabsContent>}
-        {!gstOnly && <TabsContent value="customer-wise" className="mt-4 md:mt-6"><CustomerWiseTab /></TabsContent>}
-        {!gstOnly && <TabsContent value="production" className="mt-4 md:mt-6"><ProductionTab /></TabsContent>}
-        <TabsContent value="tax" className="mt-4 md:mt-6"><TaxTab /></TabsContent>
-        {!gstOnly && <TabsContent value="pnl" className="mt-4 md:mt-6"><PnLTab /></TabsContent>}
-        {!gstOnly && <TabsContent value="bill-wise-profit" className="mt-4 md:mt-6"><BillWiseProfitTab /></TabsContent>}
-        {!gstOnly && <TabsContent value="ledger" className="mt-4 md:mt-6"><LedgerTab /></TabsContent>}
-        {!gstOnly && <TabsContent value="audit" className="mt-4 md:mt-6"><AuditTab /></TabsContent>}
-      </Tabs>
+        {visible.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-2">Nothing matches "{search}".</p>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
+            {visible.map((s) => {
+              const Icon = s.icon;
+              return (
+                <button
+                  key={s.key}
+                  type="button"
+                  onClick={() => openReport(s.key)}
+                  className="text-left rounded-lg border p-2.5 sm:p-3 transition-colors bg-card hover:bg-accent"
+                  data-testid={`card-report-${s.key}`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Icon className="w-4 h-4 shrink-0 text-muted-foreground" />
+                    <span className="text-sm font-medium leading-tight">{s.title}</span>
+                  </div>
+                  <p className="hidden sm:block text-xs text-muted-foreground mt-1 leading-snug">{s.description}</p>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
