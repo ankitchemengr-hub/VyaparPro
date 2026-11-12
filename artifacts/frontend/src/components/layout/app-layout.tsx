@@ -123,7 +123,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         </header>
         <MaintenanceBanner />
 
-        <main id="main-content" tabIndex={-1} className="flex-1 p-6 overflow-x-hidden outline-none">
+        <main id="main-content" tabIndex={-1} className="flex-1 p-6 overflow-x-clip outline-none">
           {children}
         </main>
       </div>
