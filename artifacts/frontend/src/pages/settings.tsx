@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { useLocation, useSearch } from "wouter";
 import { useGetRolePermissions, useUpdateRolePermissions } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -8,9 +9,9 @@ import { Input } from "@/components/ui/input";
 import { NumberInput } from "@/components/ui/number-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { ShieldCheck, Save, Printer, Hash, RefreshCw, Loader2, Building2, PieChart, Database, Upload } from "lucide-react";
+import { ShieldCheck, Save, Printer, Hash, RefreshCw, Loader2, Building2, PieChart, Database, Upload, ArrowLeft, ChevronRight } from "lucide-react";
 import { PrintSettingsPanel } from "@/components/settings/PrintSettingsPanel";
 import { CompanyProfilePanel } from "@/components/settings/CompanyProfilePanel";
 import { DashboardChartsPanel } from "@/components/settings/DashboardChartsPanel";
@@ -238,7 +239,32 @@ function SequencesTab() {
   );
 }
 
+// Settings opens on these cards; a card opens its own screen (?s=<key>) and
+// Back (or the phone's back button) returns to the cards.
+const SETTING_SECTIONS = [
+  { key: "sequences", icon: Hash, title: "Document Sequences", description: "Bill and document numbering — prefix and next number" },
+  { key: "permissions", icon: ShieldCheck, title: "Permissions", description: "What each role is allowed to do" },
+  { key: "printing", icon: Printer, title: "Printing", description: "Bill layout, paper size and the shop details printed on bills" },
+  { key: "company", icon: Building2, title: "Company", description: "Company logo on the login screen and bills" },
+  { key: "dashboard", icon: PieChart, title: "Dashboard", description: "Which charts show on the dashboard" },
+  { key: "data-management", icon: Database, title: "Data Management", description: "Non-GST data cleanup" },
+  { key: "data-import", icon: Upload, title: "Data Import", description: "Bring parties and items from Excel (Vyapar, Busy, Marg…)" },
+] as const;
+
 export default function Settings() {
+  const [, navigate] = useLocation();
+  const sectionKey = new URLSearchParams(useSearch()).get("s");
+  const openSection = SETTING_SECTIONS.find((x) => x.key === sectionKey);
+  const fromCards = React.useRef(false);
+  const showSection = (key: string) => {
+    fromCards.current = true;
+    navigate(`/settings?s=${key}`);
+    window.scrollTo({ top: 0 });
+  };
+  const backToCards = () => {
+    if (fromCards.current) { fromCards.current = false; window.history.back(); }
+    else navigate("/settings", { replace: true });
+  };
   const { data: permissions, isLoading } = useGetRolePermissions();
   const updatePermissions = useUpdateRolePermissions();
   const queryClient = useQueryClient();
@@ -304,31 +330,39 @@ export default function Settings() {
         <p className="text-muted-foreground mt-2">Manage role permissions, print configuration, and document sequences.</p>
       </div>
 
-      <Tabs defaultValue="sequences">
-        <TabsList className="flex flex-wrap h-auto w-full justify-start gap-1">
-          <TabsTrigger value="sequences" data-testid="tab-sequences">
-            <Hash className="mr-2 h-4 w-4" /> Document Sequences
-          </TabsTrigger>
-          <TabsTrigger value="permissions" data-testid="tab-permissions">
-            <ShieldCheck className="mr-2 h-4 w-4" /> Permissions
-          </TabsTrigger>
-          <TabsTrigger value="printing" data-testid="tab-printing">
-            <Printer className="mr-2 h-4 w-4" /> Printing
-          </TabsTrigger>
-          <TabsTrigger value="company" data-testid="tab-company">
-            <Building2 className="mr-2 h-4 w-4" /> Company
-          </TabsTrigger>
-          <TabsTrigger value="dashboard" data-testid="tab-dashboard">
-            <PieChart className="mr-2 h-4 w-4" /> Dashboard
-          </TabsTrigger>
-          <TabsTrigger value="data-management" data-testid="tab-data-management">
-            <Database className="mr-2 h-4 w-4" /> Data Management
-          </TabsTrigger>
-          <TabsTrigger value="data-import" data-testid="tab-data-import">
-            <Upload className="mr-2 h-4 w-4" /> Data Import
-          </TabsTrigger>
-        </TabsList>
+      {!openSection && (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {SETTING_SECTIONS.map((c) => (
+            <button
+              key={c.key}
+              type="button"
+              onClick={() => showSection(c.key)}
+              className="text-left rounded-lg border bg-card hover:bg-accent hover:border-primary/50 transition-colors p-4 flex items-center gap-3"
+              data-testid={`card-settings-${c.key}`}
+            >
+              <span className="rounded-md bg-primary/10 text-primary p-2.5 shrink-0"><c.icon className="w-5 h-5" /></span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-semibold leading-tight">{c.title}</span>
+                <span className="block text-xs text-muted-foreground mt-1 leading-snug">{c.description}</span>
+              </span>
+              <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+            </button>
+          ))}
+        </div>
+      )}
 
+      {openSection && (
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={backToCards} data-testid="button-settings-back">
+            <ArrowLeft className="w-4 h-4 mr-1" />Settings
+          </Button>
+          <h2 className="text-lg sm:text-xl font-semibold flex items-center gap-2 min-w-0">
+            <openSection.icon className="w-5 h-5 text-primary shrink-0" /><span className="leading-tight">{openSection.title}</span>
+          </h2>
+        </div>
+      )}
+
+      <Tabs value={openSection?.key ?? ""}>
         <TabsContent value="sequences" className="space-y-4 mt-4">
           <SequencesTab />
         </TabsContent>
