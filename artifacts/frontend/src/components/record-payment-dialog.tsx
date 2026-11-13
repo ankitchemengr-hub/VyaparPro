@@ -64,6 +64,8 @@ const accountTypeForMode: Record<string, string> = {
   other: "",
 };
 
+const ACCOUNT_TYPE_LABEL: Record<string, string> = { cash: "Cash", upi: "UPI", bank: "Bank" };
+
 const MONTH_ABBR = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
 function computeReceiptPreview(formatString: string, nextNumber: number): string {
   const d = new Date();
@@ -126,9 +128,13 @@ export function RecordPaymentDialog({
   } | null>(null);
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
 
-  const matchingAccounts = (accounts ?? []).filter(
-    (a) => a.isActive && accountTypeForMode[mode] && a.type === accountTypeForMode[mode],
-  );
+  // Every mode can go into any active account (a UPI payment may land in the
+  // cash account, a cheque in any bank…). Accounts of the mode's own type
+  // are listed first and picked by default.
+  const wantType = accountTypeForMode[mode];
+  const matchingAccounts = (accounts ?? [])
+    .filter((a) => a.isActive)
+    .sort((a, b) => Number(b.type === wantType) - Number(a.type === wantType));
 
   useEffect(() => {
     if (!open) return;
@@ -144,6 +150,8 @@ export function RecordPaymentDialog({
 
   useEffect(() => {
     if (!matchingAccounts.length) { setAccountId(null); return; }
+    const sameType = matchingAccounts.find((a) => a.type === wantType);
+    if (sameType) { setAccountId(sameType.id); return; }
     if (!accountId || !matchingAccounts.some((a) => a.id === accountId)) {
       setAccountId(matchingAccounts[0].id);
     }
@@ -492,6 +500,7 @@ export function RecordPaymentDialog({
                         <span className="flex items-center gap-2">
                           <span className="font-medium">{a.name}</span>
                           {a.identifier && <span className="text-xs text-muted-foreground">({a.identifier})</span>}
+                          <span className="text-xs text-muted-foreground">· {ACCOUNT_TYPE_LABEL[a.type] ?? a.type}</span>
                         </span>
                       </SelectItem>
                     ))}
