@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Trash2, Search, CalendarClock, ShieldAlert, Lock } from "lucide-react";
+import { Loader2, Trash2, Search, CalendarClock, ShieldAlert, Lock, History, CheckCircle2, ChevronDown, ChevronRight } from "lucide-react";
 
 type Category = "sales" | "purchase";
 type Preset = "daily" | "weekly" | "monthly" | "yearly" | "custom";
@@ -53,6 +53,7 @@ interface Job {
   eligibleCount: number; processedCount: number; excludedCount: number; totalValue: number;
   operatorName: string | null; error: string | null; startedAt: string; finishedAt: string | null;
 }
+interface JobItem { recordId: number; recordNo: string; recordDate: string | null; partyName: string | null; amount: number; outcome: string; reason: string | null }
 interface Settings {
   enabled: boolean; frequency: "daily" | "weekly" | "monthly" | "yearly"; minAgeDays: number;
   nextRunAt: string | null; lastRunAt: string | null; lastJob: Job | null; retentionYears: number;
@@ -116,6 +117,7 @@ function CategoryCleanup({ category }: { category: Category }) {
   return (
     <div className="space-y-4">
       <DeleteCard category={category} onDone={refresh} />
+      <HistoryCard category={category} refreshTick={refreshTick} />
       <ScheduleCard category={category} refreshTick={refreshTick} />
     </div>
   );
@@ -136,6 +138,8 @@ function DeleteCard({ category, onDone }: { category: Category; onDone: () => vo
   const [deleting, setDeleting] = useState(false);
   // One key per confirmation, so a double-click or retry can't run twice.
   const [idempotencyKey, setIdempotencyKey] = useState(newKey);
+  // The last delete's result stays on screen (a toast vanishes in seconds).
+  const [lastResult, setLastResult] = useState<Job | null>(null);
 
   const choosePreset = (p: Preset) => {
     setPreset(p);
@@ -178,6 +182,7 @@ function DeleteCard({ category, onDone }: { category: Category; onDone: () => vo
         title: `${job.processedCount} bill(s) permanently deleted`,
         description: `${inr(job.totalValue)} removed from every report. ${job.excludedCount} left alone. Stock, Cash Book and party balances unchanged.`,
       });
+      setLastResult(job);
       setConfirmOpen(false);
       setPreview(null);
       setIdempotencyKey(newKey());
@@ -198,6 +203,20 @@ function DeleteCard({ category, onDone }: { category: Category; onDone: () => vo
         <CardDescription>Pick a period, check what will be deleted, then confirm.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {lastResult && (
+          <div className="rounded-md border border-emerald-300 bg-emerald-50 dark:bg-emerald-950/20 dark:border-emerald-900 p-3 text-sm flex gap-2" data-testid={`result-delete-${category}`}>
+            <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0 text-emerald-600" />
+            <div>
+              <div className="font-semibold text-emerald-800 dark:text-emerald-300">
+                {lastResult.processedCount} bill(s) deleted · {inr(lastResult.totalValue)}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Period {fmtDate(lastResult.dateFrom)} – {fmtDate(lastResult.dateTo)}. {lastResult.excludedCount} bill(s) left alone.
+                See "Delete history" below for the list.
+              </div>
+            </div>
+          </div>
+        )}
         <div className="flex flex-wrap gap-2">
           {(["daily", "weekly", "monthly", "yearly", "custom"] as Preset[]).map((p) => (
             <Button key={p} size="sm" variant={preset === p ? "default" : "outline"} onClick={() => choosePreset(p)} data-testid={`preset-${category}-${p}`}>
@@ -372,6 +391,125 @@ function BillTable({ title, rows, party, total, showReason, action }: {
       </div>
       {total > rows.length && <div className="text-xs text-muted-foreground mt-1">Showing first {rows.length} of {total}.</div>}
     </div>
+  );
+}
+
+// ── Delete history ──────────────────────────────────────────────────────
+
+const STATUS_BADGE: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
+  succeeded: "default", failed: "destructive", running: "secondary",
+};
+
+function HistoryCard({ category, refreshTick }: { category: Category; refreshTick: number }) {
+  const { toast } = useToast();
+  const L = LABEL[category];
+  const [jobs, setJobs] = useState<Job[] | null>(null);
+  const [openId, setOpenId] = useState<number | null>(null);
+  const [items, setItems] = useState<Record<number, JobItem[]>>({});
+
+  useEffect(() => {
+    api<Job[]>(`/api/non-gst-cleanup/${category}/jobs`)
+      .then(setJobs)
+      .catch((e) => { setJobs([]); toast({ title: "Could not load delete history", description: e.message, variant: "destructive" }); });
+  }, [category, refreshTick, toast]);
+
+  const toggle = async (id: number) => {
+    if (openId === id) { setOpenId(null); return; }
+    setOpenId(id);
+    if (!items[id]) {
+      try {
+        const job = await api<Job & { items: JobItem[] }>(`/api/non-gst-cleanup/${category}/jobs/${id}`);
+        setItems((m) => ({ ...m, [id]: job.items }));
+      } catch (e: any) {
+        toast({ title: "Could not load the bills", description: e.message, variant: "destructive" });
+      }
+    }
+  };
+
+  const totalDeleted = (jobs ?? []).filter((j) => j.status === "succeeded").reduce((s, j) => s + j.processedCount, 0);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2"><History className="w-5 h-5" /> Delete history</CardTitle>
+        <CardDescription>
+          Every delete of {L.title} bills — by you or the automatic schedule. Tap a row to see which bills were deleted.
+          {jobs && jobs.length > 0 && <> Total deleted so far: <span className="font-semibold text-foreground">{totalDeleted}</span>.</>}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {!jobs ? (
+          <div className="py-4 text-center"><Loader2 className="w-4 h-4 animate-spin inline" /></div>
+        ) : jobs.length === 0 ? (
+          <div className="py-4 text-center text-sm text-muted-foreground">No {L.title} bills have been deleted yet.</div>
+        ) : (
+          <div className="divide-y rounded-md border">
+            {jobs.map((j) => {
+              const open = openId === j.id;
+              const rows = items[j.id];
+              return (
+                <div key={j.id}>
+                  <button type="button" onClick={() => toggle(j.id)} className="w-full text-left px-3 py-2.5 hover:bg-muted/50 flex items-start gap-2" data-testid={`row-cleanup-job-${j.id}`}>
+                    {open ? <ChevronDown className="w-4 h-4 mt-0.5 shrink-0" /> : <ChevronRight className="w-4 h-4 mt-0.5 shrink-0" />}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="font-semibold">{j.processedCount} deleted</span>
+                        <span className="tabular-nums text-sm">{inr(j.totalValue)}</span>
+                        <Badge variant={STATUS_BADGE[j.status] ?? "outline"} className="text-[10px] px-1.5 py-0">{j.status}</Badge>
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">{j.trigger === "manual" ? "Manual" : "Automatic"}</Badge>
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {fmtDateTime(j.startedAt)} · bills dated {fmtDate(j.dateFrom)} – {fmtDate(j.dateTo)} · {j.excludedCount} left alone
+                        {j.operatorName ? ` · by ${j.operatorName}` : ""}
+                      </div>
+                      {j.error && <div className="text-xs text-destructive">{j.error}</div>}
+                    </div>
+                  </button>
+                  {open && (
+                    <div className="px-3 pb-3">
+                      {!rows ? (
+                        <div className="py-2 text-center"><Loader2 className="w-4 h-4 animate-spin inline" /></div>
+                      ) : (
+                        <div className="max-h-72 overflow-auto rounded-md border">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>No.</TableHead>
+                                <TableHead>Date</TableHead>
+                                <TableHead>{L.party}</TableHead>
+                                <TableHead className="text-right">Amount</TableHead>
+                                <TableHead>Result</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {rows.length === 0 ? (
+                                <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-4">No bills in this period</TableCell></TableRow>
+                              ) : rows.map((r) => (
+                                <TableRow key={`${r.outcome}-${r.recordId}`}>
+                                  <TableCell className="font-mono text-xs">{r.recordNo}</TableCell>
+                                  <TableCell className="whitespace-nowrap">{fmtDate(r.recordDate)}</TableCell>
+                                  <TableCell>{r.partyName ?? "—"}</TableCell>
+                                  <TableCell className="text-right tabular-nums">{inr(r.amount)}</TableCell>
+                                  <TableCell className="text-xs">
+                                    {r.outcome === "deleted"
+                                      ? <span className="text-destructive font-medium">Deleted</span>
+                                      : <span className="text-amber-700 dark:text-amber-400">Left alone{r.reason ? ` — ${r.reason}` : ""}</span>}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
