@@ -2,7 +2,6 @@
 // The legacy A5 Compact template stays self-contained to guarantee zero visual
 // regression; everything else composes these so column logic lives in one place.
 
-import type { ReactNode } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { inr, num, lineLiters, rupeesInWords, buildUpiUri } from "./helpers";
 import type { Computed, ProductMaps, PrintSettings, TemplateTheme } from "./types";
@@ -327,29 +326,20 @@ export function TemplateBody({ invoice, maps, settings, computed, theme }: Templ
   );
 }
 
-// Company logo chip shared by every template: renders the uploaded logo
-// (Settings → Company Profile) inside the caller's badge shape/sizing when
-// one is set, otherwise falls back to initials (or a custom fallback node).
+// Company logo shared by every template: the uploaded logo as it is — no
+// circle, border or crop — at the caller's height. Nothing when no logo is set
+// (Print Settings bill logo, else Settings → Company Profile).
 export function CompanyLogo({
   logo,
   name,
   className,
-  fallback,
 }: {
   logo?: string | null;
   name: string;
   className: string;
-  fallback?: ReactNode;
 }) {
-  return (
-    <div className={`${className} overflow-hidden`}>
-      {logo ? (
-        <img src={logo} alt={`${name} logo`} className="h-full w-full object-contain" />
-      ) : (
-        fallback ?? brandInitials(name)
-      )}
-    </div>
-  );
+  if (!logo) return null;
+  return <img src={logo} alt={`${name} logo`} className={`${className} w-auto shrink-0 object-contain`} />;
 }
 
 // Two-letter brand initials derived from the company name for the logo chip.

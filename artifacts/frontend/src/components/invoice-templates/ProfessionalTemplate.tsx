@@ -23,7 +23,7 @@ export function ProfessionalTemplate({ invoice, maps, settings, computed }: Temp
             <CompanyLogo
               logo={settings.logo}
               name={companyName}
-              className="flex h-12 w-12 items-center justify-center rounded bg-slate-800 text-base font-bold text-white"
+              className="h-14 max-w-[160px]"
             />
           )}
           <div>

@@ -22,11 +22,6 @@ export function A5CompactTemplate({ invoice, maps, settings, computed }: Templat
   const showMrp = items.some((item: any) => printedMrp(item, maps) != null);
 
   const companyName = (isGst && settings.gstLegalName) || settings.companyName || "SHRADHA ENTERPRISES";
-  // Legacy badge rendering: first word on line 1, abbreviated second word on
-  // line 2 (e.g. "SHRADHA" / "ENT.") to stay faithful to the original sheet.
-  const logoWords = companyName.split(/\s+/).filter(Boolean);
-  const logoLine1 = logoWords[0] ?? "";
-  const logoLine2 = logoWords[1] ? `${logoWords[1].slice(0, 3).toUpperCase()}.` : "";
   const addressLine = settings.addressLine || "SOLAPUR";
   const contact = settings.contact || "9921338726";
   const gstin = settings.gstin || "27BFTPC0657J1Z5";
@@ -53,18 +48,7 @@ export function A5CompactTemplate({ invoice, maps, settings, computed }: Templat
             <CompanyLogo
               logo={settings.logo}
               name={companyName}
-              className="w-16 h-16 rounded-full border border-black flex items-center justify-center text-[10px] text-center shrink-0"
-              fallback={
-                <>
-                  {logoLine1}
-                  {logoLine2 && (
-                    <>
-                      <br />
-                      {logoLine2}
-                    </>
-                  )}
-                </>
-              }
+              className="h-16 max-w-[140px]"
             />
           )}
           <div className="flex-1">

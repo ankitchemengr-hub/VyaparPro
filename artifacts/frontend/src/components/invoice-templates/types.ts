@@ -5,7 +5,24 @@ import type { PrintSettings as ApiPrintSettings } from "@workspace/api-client-re
 // `logo` isn't part of the print-settings API schema — it's the company
 // profile's logo (a separate, per-tenant concept), merged in client-side by
 // whoever renders a template so templates have one settings object to read.
-export type PrintSettings = ApiPrintSettings & { logo?: string | null };
+// `billLogo` (the logo uploaded in Print Settings) and `nonGst` (Non-GST
+// bills' own settings) are stored with the print settings but aren't in the
+// generated schema either; printSettingsFor() resolves them per bill.
+export type NonGstPrintSettings = Partial<ApiPrintSettings> & { enabled?: boolean; billLogo?: string | null };
+export type PrintSettings = ApiPrintSettings & {
+  logo?: string | null;
+  billLogo?: string | null;
+  nonGst?: NonGstPrintSettings | null;
+};
+
+// The settings one bill prints with: a Non-GST bill uses the Non-GST settings
+// when they are turned on, and the logo is the one uploaded for that kind of
+// bill in Print Settings, else the Company Profile logo.
+export function printSettingsFor(settings: PrintSettings, invoiceType: string | null | undefined): PrintSettings {
+  const own = invoiceType !== "gst" && settings.nonGst?.enabled ? settings.nonGst : null;
+  const merged: PrintSettings = own ? { ...settings, ...own, nonGst: settings.nonGst } : settings;
+  return { ...merged, logo: merged.billLogo || settings.logo || null };
+}
 
 export interface ProductMaps {
   lpbByProduct: Map<number, number>;

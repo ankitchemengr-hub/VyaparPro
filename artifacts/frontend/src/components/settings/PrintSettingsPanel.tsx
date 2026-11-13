@@ -1,12 +1,17 @@
 // Per-company print settings editor. Five tabs: General, Document, Header & Terms,
 // Payment, Default Printers. Admin-only (the API enforces this on PUT).
+//
+// GST and Non-GST bills each have their own settings: the main settings are the
+// GST bills'; Non-GST bills use their own copy (`nonGst`) once it is turned on,
+// else the GST ones. Each kind of bill can also have its own logo (`billLogo`,
+// blank = the Company Profile logo). The printers are shared.
 
 import { useEffect, useRef, useState } from "react";
 import {
   useGetPrintSettings,
   useUpdatePrintSettings,
   getGetPrintSettingsQueryKey,
-  type PrintSettings,
+  type PrintSettings as ApiPrintSettings,
   type PrintSettingsUpdate,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -32,9 +37,16 @@ import { InvoiceTemplateSelector } from "@/components/invoice-templates/InvoiceT
 import { SAMPLE_INVOICE, SAMPLE_MAPS } from "@/components/invoice-templates/sample";
 import { PaymentQr } from "@/components/invoice-templates/parts";
 import { useCompanyLogo } from "@/hooks/use-company-logo";
+import type { NonGstPrintSettings } from "@/components/invoice-templates/types";
 import { GstinFetchButton } from "@/components/gstin-fetch";
 
+type PrintSettings = ApiPrintSettings & { billLogo?: string | null; nonGst?: NonGstPrintSettings | null };
+type Scope = "gst" | "nonGst";
+// Same for both kinds of bill — never copied into the Non-GST settings.
+const SHARED_KEYS = new Set<string>(["printerA4", "printerA5", "thermalWidth", "nonGst"]);
+
 const MAX_QR_IMAGE_BYTES = 500 * 1024;
+const MAX_LOGO_IMAGE_BYTES = 500 * 1024;
 const MAX_WATERMARK_IMAGE_BYTES = 500 * 1024;
 
 function ToggleRow({
@@ -71,20 +83,60 @@ export function PrintSettingsPanel() {
   const [dirty, setDirty] = useState(false);
   const [selectorOpen, setSelectorOpen] = useState(false);
   const logo = useCompanyLogo();
+  const [scope, setScope] = useState<Scope>("gst");
   const qrFileRef = useRef<HTMLInputElement>(null);
+  const logoFileRef = useRef<HTMLInputElement>(null);
   const watermarkFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (data && !dirty) setForm(data);
+    if (data && !dirty) setForm(data as PrintSettings);
   }, [data, dirty]);
 
   if (isLoading || !form) {
     return <div className="py-8 text-center text-muted-foreground">Loading print settings...</div>;
   }
 
+  const nonGstOn = !!form.nonGst?.enabled;
+  // What the tabs show and edit: the GST settings, or the Non-GST ones.
+  const view: PrintSettings = scope === "gst" ? form : { ...form, ...(form.nonGst ?? {}) };
+
   const set = <K extends keyof PrintSettings>(key: K, value: PrintSettings[K]) => {
-    setForm((prev) => (prev ? { ...prev, [key]: value } : prev));
+    setForm((prev) => {
+      if (!prev) return prev;
+      if (scope === "nonGst" && !SHARED_KEYS.has(key as string)) {
+        return { ...prev, nonGst: { ...(prev.nonGst ?? {}), [key]: value } };
+      }
+      return { ...prev, [key]: value };
+    });
     setDirty(true);
+  };
+
+  // Turning Non-GST settings on starts them as a copy of the GST ones.
+  const setNonGstOn = (on: boolean) => {
+    setForm((prev) => {
+      if (!prev) return prev;
+      if (!on) return { ...prev, nonGst: { ...(prev.nonGst ?? {}), enabled: false } };
+      if (prev.nonGst) return { ...prev, nonGst: { ...prev.nonGst, enabled: true } };
+      const copy: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(prev)) if (!SHARED_KEYS.has(k)) copy[k] = v;
+      return { ...prev, nonGst: { ...(copy as NonGstPrintSettings), enabled: true } };
+    });
+    setDirty(true);
+  };
+
+  const handleLogoFile = (file: File | undefined) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Invalid file", description: "Please choose an image file.", variant: "destructive" });
+      return;
+    }
+    if (file.size > MAX_LOGO_IMAGE_BYTES) {
+      toast({ title: "File too large", description: "Logo must be under 500 KB.", variant: "destructive" });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => set("billLogo", reader.result as string);
+    reader.readAsDataURL(file);
   };
 
   const handleQrFile = (file: File | undefined) => {
@@ -119,7 +171,7 @@ export function PrintSettingsPanel() {
 
   const handleSave = () => {
     if (!form) return;
-    const payload: PrintSettingsUpdate = { ...form };
+    const payload = { ...form } as PrintSettingsUpdate;
     update.mutate(
       { data: payload },
       {
@@ -133,7 +185,7 @@ export function PrintSettingsPanel() {
     );
   };
 
-  const defaultMeta = TEMPLATES.find((t) => t.id === form.defaultTemplate);
+  const defaultMeta = TEMPLATES.find((t) => t.id === view.defaultTemplate);
 
   return (
     <div className="space-y-4">
@@ -150,6 +202,33 @@ export function PrintSettingsPanel() {
         </Button>
       </div>
 
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant={scope === "gst" ? "default" : "outline"} size="sm" onClick={() => setScope("gst")} data-testid="button-scope-gst">
+          GST bills
+        </Button>
+        <Button variant={scope === "nonGst" ? "default" : "outline"} size="sm" onClick={() => setScope("nonGst")} data-testid="button-scope-non-gst">
+          Non-GST bills
+        </Button>
+        <span className="text-xs text-muted-foreground">
+          {scope === "gst" ? "What prints on GST bills." : nonGstOn ? "What prints on Non-GST bills." : "Non-GST bills print with the GST settings."}
+        </span>
+      </div>
+
+      {scope === "nonGst" && (
+        <Card>
+          <CardContent className="pt-6">
+            <ToggleRow
+              label="Separate settings for Non-GST bills"
+              description="Their own logo, name, address, terms, QR, template and what to show. Off = same as GST bills."
+              checked={nonGstOn}
+              onChange={setNonGstOn}
+              testId="switch-non-gst-own"
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {(scope === "gst" || nonGstOn) && (
       <Tabs defaultValue="general">
         <TabsList className="flex flex-wrap h-auto w-full justify-start gap-1">
           <TabsTrigger value="general" data-testid="tab-print-general">General</TabsTrigger>
@@ -168,7 +247,7 @@ export function PrintSettingsPanel() {
                   <Label>Default Template</Label>
                   <div className="flex items-center gap-2">
                     <div className="flex-1 rounded-md border px-3 py-2 text-sm">
-                      {defaultMeta ? `${defaultMeta.name} (${defaultMeta.paper})` : form.defaultTemplate}
+                      {defaultMeta ? `${defaultMeta.name} (${defaultMeta.paper})` : view.defaultTemplate}
                     </div>
                     <Button variant="outline" size="sm" onClick={() => setSelectorOpen(true)}>
                       Change
@@ -182,14 +261,14 @@ export function PrintSettingsPanel() {
                     min={1}
                     max={5}
                     emptyValue={1}
-                    value={form.copies}
+                    value={view.copies}
                     onChange={(v) => set("copies", Math.max(1, v || 1))}
                     data-testid="input-copies"
                   />
                 </div>
                 <div className="space-y-1">
                   <Label>Color Mode</Label>
-                  <Select value={form.colorMode} onValueChange={(v) => set("colorMode", v as PrintSettings["colorMode"])}>
+                  <Select value={view.colorMode} onValueChange={(v) => set("colorMode", v as PrintSettings["colorMode"])}>
                     <SelectTrigger data-testid="select-color-mode">
                       <SelectValue />
                     </SelectTrigger>
@@ -201,7 +280,7 @@ export function PrintSettingsPanel() {
                 </div>
                 <div className="space-y-1">
                   <Label>Paper Size</Label>
-                  <Select value={form.paperSize} onValueChange={(v) => set("paperSize", v as PrintSettings["paperSize"])}>
+                  <Select value={view.paperSize} onValueChange={(v) => set("paperSize", v as PrintSettings["paperSize"])}>
                     <SelectTrigger data-testid="select-paper-size">
                       <SelectValue />
                     </SelectTrigger>
@@ -214,7 +293,7 @@ export function PrintSettingsPanel() {
                 </div>
                 <div className="space-y-1">
                   <Label>Orientation</Label>
-                  <Select value={form.orientation} onValueChange={(v) => set("orientation", v as PrintSettings["orientation"])}>
+                  <Select value={view.orientation} onValueChange={(v) => set("orientation", v as PrintSettings["orientation"])}>
                     <SelectTrigger data-testid="select-orientation">
                       <SelectValue />
                     </SelectTrigger>
@@ -232,7 +311,7 @@ export function PrintSettingsPanel() {
               <ToggleRow
                 label="Copy labels"
                 description="Print 'Original / Duplicate' copy labels."
-                checked={form.copyLabels}
+                checked={view.copyLabels}
                 onChange={(v) => set("copyLabels", v)}
                 testId="switch-copy-labels"
               />
@@ -244,32 +323,72 @@ export function PrintSettingsPanel() {
         <TabsContent value="document">
           <Card>
             <CardContent className="pt-6">
-              <ToggleRow label="Show logo" checked={form.showLogo} onChange={(v) => set("showLogo", v)} testId="switch-show-logo" />
+              <ToggleRow label="Show logo" checked={view.showLogo} onChange={(v) => set("showLogo", v)} testId="switch-show-logo" />
+              <div className="border-b py-3">
+                <div className="mb-2 text-sm font-medium">{scope === "gst" ? "Logo on GST bills" : "Logo on Non-GST bills"}</div>
+                <div className="flex items-center gap-4">
+                  {view.billLogo || logo ? (
+                    <img src={(view.billLogo || logo)!} alt="Bill logo" className="h-16 max-w-[160px] w-auto object-contain" />
+                  ) : (
+                    <div className="h-16 w-16 rounded border border-dashed flex items-center justify-center text-[10px] text-muted-foreground text-center px-1">
+                      No logo
+                    </div>
+                  )}
+                  <div className="flex flex-col gap-2">
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant="outline" size="sm" onClick={() => logoFileRef.current?.click()} data-testid="button-upload-bill-logo">
+                        <Upload className="h-3.5 w-3.5 mr-1.5" /> {view.billLogo ? "Replace logo" : "Upload logo"}
+                      </Button>
+                      {view.billLogo && (
+                        <Button variant="ghost" size="sm" onClick={() => set("billLogo", null)} data-testid="button-remove-bill-logo">
+                          <X className="h-3.5 w-3.5 mr-1.5" /> Remove
+                        </Button>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground max-w-sm">
+                      {view.billLogo
+                        ? "Printed at the top of the bill, beside the name, as it is (no circle)."
+                        : logo
+                          ? "Using the Company Profile logo. Upload one here to print a different logo on these bills."
+                          : "No logo yet. Upload one to print it at the top of these bills."}
+                    </p>
+                  </div>
+                  <input
+                    ref={logoFileRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg,image/webp"
+                    className="hidden"
+                    onChange={(e) => { handleLogoFile(e.target.files?.[0]); e.target.value = ""; }}
+                  />
+                </div>
+              </div>
               <ToggleRow
                 label="Show QR / UPI"
                 description="Configure the QR code and bank details on the Payment tab."
-                checked={form.showQr}
+                checked={view.showQr}
                 onChange={(v) => set("showQr", v)}
                 testId="switch-show-qr"
               />
               <ToggleRow
                 label="Show bank details"
                 description="Configure bank details on the Payment tab."
-                checked={form.showBankDetails}
+                checked={view.showBankDetails}
                 onChange={(v) => set("showBankDetails", v)}
                 testId="switch-show-bank"
               />
-              <ToggleRow label="Show signature" checked={form.showSignature} onChange={(v) => set("showSignature", v)} testId="switch-show-signature" />
-              <ToggleRow label="Show amount in words" checked={form.showAmountInWords} onChange={(v) => set("showAmountInWords", v)} testId="switch-show-words" />
-              <ToggleRow label="Show HSN column (GST)" checked={form.showHsn} onChange={(v) => set("showHsn", v)} testId="switch-show-hsn" />
-              <ToggleRow label="Show LTR/KGS column" checked={form.showLtrColumn} onChange={(v) => set("showLtrColumn", v)} testId="switch-show-ltr" />
-              <ToggleRow label="Show BOX column" checked={form.showBoxColumn} onChange={(v) => set("showBoxColumn", v)} testId="switch-show-box" />
-              <ToggleRow label="Show terms & conditions" checked={form.showTerms} onChange={(v) => set("showTerms", v)} testId="switch-show-terms" />
-              <ToggleRow label="Filler rows" description="Pad short bills with empty rows." checked={form.fillerRows} onChange={(v) => set("fillerRows", v)} testId="switch-filler-rows" />
+              <ToggleRow label="Show signature" checked={view.showSignature} onChange={(v) => set("showSignature", v)} testId="switch-show-signature" />
+              <ToggleRow label="Show amount in words" checked={view.showAmountInWords} onChange={(v) => set("showAmountInWords", v)} testId="switch-show-words" />
+              {scope === "gst" && (
+                <ToggleRow label="Show HSN column (GST)" checked={view.showHsn} onChange={(v) => set("showHsn", v)} testId="switch-show-hsn" />
+              )}
+              <ToggleRow label="Show LTR/KGS column" checked={view.showLtrColumn} onChange={(v) => set("showLtrColumn", v)} testId="switch-show-ltr" />
+              <ToggleRow label="Show BOX column" checked={view.showBoxColumn} onChange={(v) => set("showBoxColumn", v)} testId="switch-show-box" />
+              <ToggleRow label="Show terms & conditions" checked={view.showTerms} onChange={(v) => set("showTerms", v)} testId="switch-show-terms" />
+              <ToggleRow label="Filler rows" description="Pad short bills with empty rows." checked={view.fillerRows} onChange={(v) => set("fillerRows", v)} testId="switch-filler-rows" />
               <ToggleRow
                 label="Show watermark"
                 description="Faint background image/logo behind the invoice content."
-                checked={form.showWatermark}
+                checked={view.showWatermark}
                 onChange={(v) => set("showWatermark", v)}
                 testId="switch-show-watermark"
               />
@@ -277,9 +396,9 @@ export function PrintSettingsPanel() {
               <div className="border-t pt-4 mt-1">
                 <div className="mb-2 text-sm font-medium">Watermark Image</div>
                 <div className="flex items-center gap-4">
-                  {form.watermarkImage ? (
+                  {view.watermarkImage ? (
                     <img
-                      src={form.watermarkImage}
+                      src={view.watermarkImage}
                       alt="Watermark preview"
                       className="h-16 w-16 rounded border object-contain bg-muted/30"
                     />
@@ -291,9 +410,9 @@ export function PrintSettingsPanel() {
                   <div className="flex flex-col gap-2">
                     <div className="flex flex-wrap gap-2">
                       <Button variant="outline" size="sm" onClick={() => watermarkFileRef.current?.click()} data-testid="button-upload-watermark">
-                        <Upload className="h-3.5 w-3.5 mr-1.5" /> {form.watermarkImage ? "Replace watermark" : "Upload watermark"}
+                        <Upload className="h-3.5 w-3.5 mr-1.5" /> {view.watermarkImage ? "Replace watermark" : "Upload watermark"}
                       </Button>
-                      {form.watermarkImage && (
+                      {view.watermarkImage && (
                         <Button variant="ghost" size="sm" onClick={() => set("watermarkImage", null)} data-testid="button-remove-watermark">
                           <X className="h-3.5 w-3.5 mr-1.5" /> Remove
                         </Button>
@@ -323,14 +442,15 @@ export function PrintSettingsPanel() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <Label htmlFor="companyName">Company / Shop Name</Label>
-                  <Input id="companyName" value={form.companyName} onChange={(e) => set("companyName", e.target.value)} data-testid="input-company-name" />
+                  <Input id="companyName" value={view.companyName} onChange={(e) => set("companyName", e.target.value)} data-testid="input-company-name" />
                   <p className="text-xs text-muted-foreground">Shown on Non-GST bills, and on GST bills if no GST legal name is set below.</p>
                 </div>
+                {scope === "gst" && (<>
                 <div className="space-y-1">
                   <Label htmlFor="gstLegalName">GST Legal Name <span className="text-muted-foreground font-normal">(optional)</span></Label>
                   <Input
                     id="gstLegalName"
-                    value={form.gstLegalName ?? ""}
+                    value={view.gstLegalName ?? ""}
                     onChange={(e) => set("gstLegalName", e.target.value)}
                     placeholder="Leave blank to use Company / Shop Name above"
                     data-testid="input-gst-legal-name"
@@ -340,31 +460,32 @@ export function PrintSettingsPanel() {
                 <div className="space-y-1">
                   <Label htmlFor="gstin">GSTIN</Label>
                   <div className="flex gap-1">
-                    <Input id="gstin" value={form.gstin} onChange={(e) => set("gstin", e.target.value.toUpperCase())} data-testid="input-gstin" />
+                    <Input id="gstin" value={view.gstin} onChange={(e) => set("gstin", e.target.value.toUpperCase())} data-testid="input-gstin" />
                     <GstinFetchButton
-                      gstin={form.gstin}
+                      gstin={view.gstin}
                       onFetched={(d) => {
                         if (!d.found) return;
                         // The shop name stays as typed; the registered names fill blanks.
-                        if (!form.companyName.trim() && (d.tradeName || d.legalName)) set("companyName", (d.tradeName || d.legalName)!);
-                        if (d.legalName && d.legalName !== (form.companyName.trim() || d.tradeName)) set("gstLegalName", d.legalName);
+                        if (!view.companyName.trim() && (d.tradeName || d.legalName)) set("companyName", (d.tradeName || d.legalName)!);
+                        if (d.legalName && d.legalName !== (view.companyName.trim() || d.tradeName)) set("gstLegalName", d.legalName);
                         if (d.address) set("addressLine", d.address);
                       }}
                     />
                   </div>
                   <p className="text-xs text-muted-foreground">Fetch fills the GST legal name and address from the GST registry.</p>
                 </div>
+                </>)}
                 <div className="space-y-1">
                   <Label htmlFor="addressLine">Address</Label>
-                  <Input id="addressLine" value={form.addressLine} onChange={(e) => set("addressLine", e.target.value)} data-testid="input-address" />
+                  <Input id="addressLine" value={view.addressLine} onChange={(e) => set("addressLine", e.target.value)} data-testid="input-address" />
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="contact">Contact</Label>
-                  <Input id="contact" value={form.contact} onChange={(e) => set("contact", e.target.value)} data-testid="input-contact" />
+                  <Input id="contact" value={view.contact} onChange={(e) => set("contact", e.target.value)} data-testid="input-contact" />
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="email">Email</Label>
-                  <Input id="email" value={form.email} onChange={(e) => set("email", e.target.value)} data-testid="input-email" />
+                  <Input id="email" value={view.email} onChange={(e) => set("email", e.target.value)} data-testid="input-email" />
                 </div>
               </div>
               <div className="space-y-1">
@@ -372,7 +493,7 @@ export function PrintSettingsPanel() {
                 <Textarea
                   id="terms"
                   rows={4}
-                  value={(form.terms ?? []).join("\n")}
+                  value={(view.terms ?? []).join("\n")}
                   onChange={(e) => set("terms", e.target.value.split("\n"))}
                   placeholder={"Goods once sold will not be taken back.\nSubject to <your city> jurisdiction."}
                   data-testid="input-terms"
@@ -381,7 +502,7 @@ export function PrintSettingsPanel() {
               </div>
               <div className="space-y-1">
                 <Label htmlFor="footerNote">Footer Note</Label>
-                <Input id="footerNote" value={form.footerNote} onChange={(e) => set("footerNote", e.target.value)} data-testid="input-footer-note" />
+                <Input id="footerNote" value={view.footerNote} onChange={(e) => set("footerNote", e.target.value)} data-testid="input-footer-note" />
               </div>
             </CardContent>
           </Card>
@@ -396,23 +517,23 @@ export function PrintSettingsPanel() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <Label htmlFor="bankName">Bank Name</Label>
-                    <Input id="bankName" value={form.bankName} onChange={(e) => set("bankName", e.target.value)} data-testid="input-bank-name" />
+                    <Input id="bankName" value={view.bankName} onChange={(e) => set("bankName", e.target.value)} data-testid="input-bank-name" />
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="bankAccount">Account No.</Label>
-                    <Input id="bankAccount" value={form.bankAccount} onChange={(e) => set("bankAccount", e.target.value)} data-testid="input-bank-account" />
+                    <Input id="bankAccount" value={view.bankAccount} onChange={(e) => set("bankAccount", e.target.value)} data-testid="input-bank-account" />
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="bankIfsc">IFSC</Label>
-                    <Input id="bankIfsc" value={form.bankIfsc} onChange={(e) => set("bankIfsc", e.target.value)} data-testid="input-bank-ifsc" />
+                    <Input id="bankIfsc" value={view.bankIfsc} onChange={(e) => set("bankIfsc", e.target.value)} data-testid="input-bank-ifsc" />
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="bankBranch">Branch</Label>
-                    <Input id="bankBranch" value={form.bankBranch} onChange={(e) => set("bankBranch", e.target.value)} data-testid="input-bank-branch" />
+                    <Input id="bankBranch" value={view.bankBranch} onChange={(e) => set("bankBranch", e.target.value)} data-testid="input-bank-branch" />
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="upiId">UPI ID</Label>
-                    <Input id="upiId" value={form.upiId} onChange={(e) => set("upiId", e.target.value)} data-testid="input-upi-id" />
+                    <Input id="upiId" value={view.upiId} onChange={(e) => set("upiId", e.target.value)} data-testid="input-upi-id" />
                   </div>
                 </div>
               </div>
@@ -420,20 +541,20 @@ export function PrintSettingsPanel() {
               <div className="border-t pt-4">
                 <div className="mb-2 text-sm font-medium">QR Code</div>
                 <div className="flex items-center gap-4">
-                  <PaymentQr invoice={SAMPLE_INVOICE} settings={form} size={72} />
+                  <PaymentQr invoice={SAMPLE_INVOICE} settings={view} size={72} />
                   <div className="flex flex-col gap-2">
                     <div className="flex flex-wrap gap-2">
                       <Button variant="outline" size="sm" onClick={() => qrFileRef.current?.click()} data-testid="button-upload-qr">
-                        <Upload className="h-3.5 w-3.5 mr-1.5" /> {form.qrImage ? "Replace QR image" : "Upload custom QR"}
+                        <Upload className="h-3.5 w-3.5 mr-1.5" /> {view.qrImage ? "Replace QR image" : "Upload custom QR"}
                       </Button>
-                      {form.qrImage && (
+                      {view.qrImage && (
                         <Button variant="ghost" size="sm" onClick={() => set("qrImage", null)} data-testid="button-remove-qr">
                           <X className="h-3.5 w-3.5 mr-1.5" /> Remove
                         </Button>
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground max-w-sm">
-                      {form.qrImage
+                      {view.qrImage
                         ? "Using your uploaded image. Remove it to switch back to an auto-generated QR."
                         : "Auto-generated from the UPI ID above and each invoice's total. Or upload your own QR (from your bank, Paytm, PhonePe, etc.) to use that instead."}
                     </p>
@@ -462,15 +583,15 @@ export function PrintSettingsPanel() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <Label htmlFor="printerA4">A4 Printer</Label>
-                  <Input id="printerA4" value={form.printerA4} onChange={(e) => set("printerA4", e.target.value)} data-testid="input-printer-a4" />
+                  <Input id="printerA4" value={view.printerA4} onChange={(e) => set("printerA4", e.target.value)} data-testid="input-printer-a4" />
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="printerA5">A5 Printer</Label>
-                  <Input id="printerA5" value={form.printerA5} onChange={(e) => set("printerA5", e.target.value)} data-testid="input-printer-a5" />
+                  <Input id="printerA5" value={view.printerA5} onChange={(e) => set("printerA5", e.target.value)} data-testid="input-printer-a5" />
                 </div>
                 <div className="space-y-1">
                   <Label>Thermal Width</Label>
-                  <Select value={form.thermalWidth} onValueChange={(v) => set("thermalWidth", v as PrintSettings["thermalWidth"])}>
+                  <Select value={view.thermalWidth} onValueChange={(v) => set("thermalWidth", v as PrintSettings["thermalWidth"])}>
                     <SelectTrigger data-testid="select-thermal-width">
                       <SelectValue />
                     </SelectTrigger>
@@ -485,14 +606,15 @@ export function PrintSettingsPanel() {
           </Card>
         </TabsContent>
       </Tabs>
+      )}
 
       <InvoiceTemplateSelector
         open={selectorOpen}
         onOpenChange={setSelectorOpen}
         invoice={SAMPLE_INVOICE}
         maps={SAMPLE_MAPS}
-        settings={{ ...form, logo }}
-        value={form.defaultTemplate}
+        settings={{ ...view, logo: view.billLogo || logo }}
+        value={view.defaultTemplate}
         onSelect={(id) => set("defaultTemplate", id)}
       />
     </div>

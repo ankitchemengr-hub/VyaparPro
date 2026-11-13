@@ -20,7 +20,7 @@ export function MinimalTemplate({ invoice, maps, settings, computed }: TemplateP
       <div className="flex items-end justify-between">
         <div className="flex items-center gap-3">
           {settings.showLogo && settings.logo && (
-            <img src={settings.logo} alt={`${companyName} logo`} className="h-10 w-10 shrink-0 object-contain" />
+            <img src={settings.logo} alt={`${companyName} logo`} className="h-14 w-auto max-w-[160px] shrink-0 object-contain" />
           )}
           <div>
             <div className="text-2xl font-semibold tracking-tight">{companyName}</div>

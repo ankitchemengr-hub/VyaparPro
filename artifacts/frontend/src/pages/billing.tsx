@@ -19,6 +19,7 @@ import {
 } from "@workspace/api-client-react";
 import { InvoiceTemplateRenderer } from "@/components/invoice-templates/InvoiceTemplateRenderer";
 import { useCompanyLogo } from "@/hooks/use-company-logo";
+import { printSettingsFor } from "@/components/invoice-templates/types";
 import { FALLBACK_PRINT_SETTINGS } from "@/components/invoice-templates/defaults";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -1048,9 +1049,8 @@ export default function Billing() {
       <div ref={savedSheetRef}>
         <InvoiceTemplateRenderer
           invoice={savedInvoice}
-          settings={printSettings}
+          settings={printSettingsFor(printSettings, savedInvoice.invoiceType)}
           maps={printMaps}
-          templateId={printSettings.defaultTemplate}
         />
       </div>
       </>
@@ -1728,9 +1728,8 @@ export default function Billing() {
       <div className="hidden">
         <InvoiceTemplateRenderer
           invoice={existingInvoice}
-          settings={printSettings}
+          settings={printSettingsFor(printSettings, existingInvoice.invoiceType)}
           maps={printMaps}
-          templateId={printSettings.defaultTemplate}
         />
       </div>
     )}

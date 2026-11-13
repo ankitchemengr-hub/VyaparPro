@@ -26,7 +26,7 @@ export function ClassicTemplate({ invoice, maps, settings, computed }: TemplateP
             <CompanyLogo
               logo={settings.logo}
               name={companyName}
-              className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-2 border-gray-800 text-sm font-bold"
+              className="h-16 max-w-[160px]"
             />
           )}
           <div>

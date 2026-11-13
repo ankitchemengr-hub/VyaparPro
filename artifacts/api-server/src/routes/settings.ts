@@ -66,6 +66,17 @@ const DEFAULT_PRINT_SETTINGS = {
   thermalWidth: "72mm",
 } as const;
 
+// Beyond the generated schema: `billLogo` is the logo printed on bills (blank =
+// the Company Profile logo), and `nonGst` holds Non-GST bills' own settings —
+// every print field plus its own logo, used when `enabled` (else Non-GST bills
+// print with the main, GST, settings).
+const ImageField = UpdatePrintSettingsBody.shape.qrImage;
+const NonGstPrintBody = UpdatePrintSettingsBody.extend({ billLogo: ImageField, enabled: UpdatePrintSettingsBody.shape.showLogo });
+const PrintSettingsBody = UpdatePrintSettingsBody.extend({ billLogo: ImageField, nonGst: NonGstPrintBody.nullish() });
+const MAX_IMAGE_CHARS = 2_000_000;
+const imageTooBig = (o: { qrImage?: string | null; watermarkImage?: string | null; billLogo?: string | null } | null | undefined) =>
+  !!o && [o.qrImage, o.watermarkImage, o.billLogo].some((v) => v != null && v.length > MAX_IMAGE_CHARS);
+
 async function resolvePrintSettings(companyId: number): Promise<Record<string, unknown>> {
   const r = await pool.query(`SELECT config FROM print_settings WHERE company_id = $1`, [companyId]);
   const stored = (r.rows[0]?.config ?? {}) as Record<string, unknown>;
@@ -212,13 +223,13 @@ router.get("/print-settings", async (req, res): Promise<void> => {
 
 // PUT /print-settings
 router.put("/print-settings", requireAdmin, async (req, res): Promise<void> => {
-  const parsed = UpdatePrintSettingsBody.safeParse(req.body);
+  const parsed = PrintSettingsBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid input", details: parsed.error.issues });
     return;
   }
-  if (parsed.data.qrImage != null && parsed.data.qrImage.length > 2_000_000) {
-    res.status(400).json({ error: "QR image must be a data URL under ~1.5MB" });
+  if (imageTooBig(parsed.data) || imageTooBig(parsed.data.nonGst)) {
+    res.status(400).json({ error: "Each image (logo, QR, watermark) must be under ~1.5MB" });
     return;
   }
   const session = (req as any).session;

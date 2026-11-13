@@ -35,6 +35,7 @@ import { useAuth } from "@/contexts/use-auth";
 import { useGetPrintSettings } from "@workspace/api-client-react";
 import { FALLBACK_PRINT_SETTINGS } from "@/components/invoice-templates/defaults";
 import { useCompanyLogo } from "@/hooks/use-company-logo";
+import { printSettingsFor } from "@/components/invoice-templates/types";
 import { rupeesInWords } from "@/components/invoice-templates/helpers";
 
 type PayMode = "cash" | "upi" | "cheque" | "bank_transfer" | "other";
@@ -101,7 +102,7 @@ export function RecordPaymentDialog({
   const { data: accounts } = useListAccounts();
   const { data: settingsData } = useGetPrintSettings();
   const logo = useCompanyLogo();
-  const settings = { ...(FALLBACK_PRINT_SETTINGS), ...(settingsData ?? {}), logo };
+  const settings = printSettingsFor({ ...(FALLBACK_PRINT_SETTINGS), ...(settingsData ?? {}), logo }, "gst");
 
   const { data: entity } = useGetEntity(entityId ?? 0, {
     query: { enabled: !!entityId && open, queryKey: getGetEntityQueryKey(entityId ?? 0) },

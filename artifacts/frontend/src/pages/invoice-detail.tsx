@@ -29,6 +29,7 @@ import { InvoiceTemplateSelector } from "@/components/invoice-templates/InvoiceT
 import { getTemplate } from "@/components/invoice-templates/registry";
 import { FALLBACK_PRINT_SETTINGS } from "@/components/invoice-templates/defaults";
 import { useCompanyLogo } from "@/hooks/use-company-logo";
+import { printSettingsFor } from "@/components/invoice-templates/types";
 import { RecordPaymentDialog } from "@/components/record-payment-dialog";
 import { BillAge } from "@/components/bill-age";
 
@@ -49,7 +50,8 @@ export default function InvoiceDetail() {
   const { data: products } = useListProducts({});
   const { data: settingsData, isLoading: settingsLoading } = useGetPrintSettings();
   const logo = useCompanyLogo();
-  const settings = { ...(settingsData ?? FALLBACK_PRINT_SETTINGS), logo };
+  // GST and Non-GST bills can each have their own print settings and logo.
+  const settings = printSettingsFor({ ...(settingsData ?? FALLBACK_PRINT_SETTINGS), logo }, invoice?.invoiceType);
 
   const [templateOverride, setTemplateOverride] = useState<string | null>(null);
   const [selectorOpen, setSelectorOpen] = useState(false);

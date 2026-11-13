@@ -24,7 +24,7 @@ export function ModernTemplate({ invoice, maps, settings, computed }: TemplatePr
               <CompanyLogo
                 logo={settings.logo}
                 name={companyName}
-                className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/20 text-lg font-bold backdrop-blur"
+                className="h-14 max-w-[160px] rounded bg-white p-1"
               />
             )}
             <div>

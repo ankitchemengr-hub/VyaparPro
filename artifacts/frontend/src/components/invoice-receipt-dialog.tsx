@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, Printer, Hash, ChevronLeft } from "lucide-react";
 import { FALLBACK_PRINT_SETTINGS } from "@/components/invoice-templates/defaults";
 import { useCompanyLogo } from "@/hooks/use-company-logo";
+import { printSettingsFor } from "@/components/invoice-templates/types";
 import { rupeesInWords } from "@/components/invoice-templates/helpers";
 import { printWithTitle } from "@/lib/print-with-title";
 
@@ -39,7 +40,7 @@ export function InvoiceReceiptDialog({ invoiceId, onOpenChange }: InvoiceReceipt
   const open = invoiceId != null;
   const { data: settingsData } = useGetPrintSettings();
   const logo = useCompanyLogo();
-  const settings = { ...(FALLBACK_PRINT_SETTINGS), ...(settingsData ?? {}), logo };
+  const settings = printSettingsFor({ ...(FALLBACK_PRINT_SETTINGS), ...(settingsData ?? {}), logo }, "gst");
 
   const { data: receipts, isLoading: listLoading } = useListInvoicePaymentReceipts(invoiceId ?? 0, {
     query: { enabled: open, queryKey: getListInvoicePaymentReceiptsQueryKey(invoiceId ?? 0) },
