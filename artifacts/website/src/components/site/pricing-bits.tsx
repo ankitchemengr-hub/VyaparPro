@@ -26,13 +26,14 @@ export interface Quote {
   planName: string; billingCycle: BillingCycle; months: number;
   monthlyPrice: number; effectiveMonthly: number; offer: { label: string | null; endsAt: string | null } | null;
   listAmount: number; offerDiscount: number; cycleDiscountPct: number; cycleDiscount: number;
+  referral?: { pct: number; discount: number } | null;
   coupon: { code: string; discount: number } | null; totalDiscount: number; taxable: number; gst: number; total: number;
 }
 
 const rs = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })}`;
 const shortDate = (iso: string) => new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 
-export async function fetchQuote(body: { planSlug: string; billingCycle: BillingCycle; couponCode?: string }): Promise<Quote> {
+export async function fetchQuote(body: { planSlug: string; billingCycle: BillingCycle; couponCode?: string; referralCode?: string }): Promise<Quote> {
   const res = await fetch("/api/portal/quote", {
     method: "POST",
     credentials: "include",
@@ -76,8 +77,11 @@ export function cycleSavingsText(plans: PlanWithOffer[]): string | null {
 
 // Billing cycle, coupon code and the exact amount to pay. `onChange` gives
 // the parent the cycle and the applied coupon (or "") whenever they change.
-export function CheckoutBox({ planSlug, cycleDiscounts, cycle, onCycle, coupon, onCoupon }: {
+export function CheckoutBox({ planSlug, cycleDiscounts, cycle, onCycle, coupon, onCoupon, referralCode }: {
   planSlug: string;
+  // Signup form: a referral code typed in (a logged-in customer's own
+  // referral discount is found by the server from the session).
+  referralCode?: string;
   cycleDiscounts?: CycleDiscounts;
   cycle: BillingCycle;
   onCycle: (c: BillingCycle) => void;
@@ -93,7 +97,7 @@ export function CheckoutBox({ planSlug, cycleDiscounts, cycle, onCycle, coupon, 
     if (!planSlug) return;
     let live = true;
     setLoading(true);
-    fetchQuote({ planSlug, billingCycle: cycle, couponCode: coupon || undefined })
+    fetchQuote({ planSlug, billingCycle: cycle, couponCode: coupon || undefined, referralCode: referralCode || undefined })
       .then((q) => { if (live) { setQuote(q); setCodeError(null); } })
       .catch((e: Error) => {
         if (!live) return;
@@ -107,14 +111,14 @@ export function CheckoutBox({ planSlug, cycleDiscounts, cycle, onCycle, coupon, 
       })
       .finally(() => live && setLoading(false));
     return () => { live = false; };
-  }, [planSlug, cycle, coupon]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [planSlug, cycle, coupon, referralCode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const apply = async () => {
     const c = code.trim().toUpperCase();
     if (!c) return;
     setLoading(true);
     try {
-      await fetchQuote({ planSlug, billingCycle: cycle, couponCode: c });
+      await fetchQuote({ planSlug, billingCycle: cycle, couponCode: c, referralCode: referralCode || undefined });
       setCodeError(null);
       onCoupon(c);
     } catch (e: any) {
@@ -181,6 +185,7 @@ export function CheckoutBox({ planSlug, cycleDiscounts, cycle, onCycle, coupon, 
             <Row label={`${quote.planName} · ${quote.months} month${quote.months > 1 ? "s" : ""} × ${rs(quote.monthlyPrice)}`} value={rs(quote.listAmount)} />
             {quote.offerDiscount > 0 && <Row label={quote.offer?.label || "Offer"} value={`− ${rs(quote.offerDiscount)}`} green />}
             {quote.cycleDiscount > 0 && <Row label={`${quote.months}-month discount (${+quote.cycleDiscountPct.toFixed(2)}%)`} value={`− ${rs(quote.cycleDiscount)}`} green />}
+            {quote.referral && <Row label={`Referral discount (${+quote.referral.pct.toFixed(2)}%)`} value={`− ${rs(quote.referral.discount)}`} green />}
             {quote.coupon && <Row label={`Coupon ${quote.coupon.code}`} value={`− ${rs(quote.coupon.discount)}`} green />}
             <Row label="GST 18%" value={rs(quote.gst)} />
             <div className="flex justify-between border-t border-slate-200 pt-2 text-base font-bold text-slate-900">

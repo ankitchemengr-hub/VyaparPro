@@ -48,6 +48,8 @@ export default function PortalRegister() {
   const razorpayReady = useRazorpayScript();
 
   const preselectedPlan = new URLSearchParams(search).get("plan") ?? "";
+  // Shared Refer & Earn link: /register?ref=SHRXXXXX
+  const sharedRef = (new URLSearchParams(search).get("ref") ?? "").trim().toUpperCase();
   const { data: plans = [] } = useListPortalPlans();
   const register = useRegisterPortalCustomer();
   const createOrder = useCreatePortalPaymentOrder();
@@ -69,7 +71,7 @@ export default function PortalRegister() {
   };
   const [form, setForm] = useState({
     businessName: "", ownerName: "", mobile: "", email: "", password: "", confirmPassword: "",
-    businessType: "", city: "", state: "", gstin: "", referralCode: "", planSlug: preselectedPlan, agree: false,
+    businessType: "", city: "", state: "", gstin: "", referralCode: sharedRef, planSlug: preselectedPlan, agree: false,
   });
 
   useEffect(() => {
@@ -83,6 +85,22 @@ export default function PortalRegister() {
   const paysNow = !!selectedPlan && selectedPlan.trialDays === 0 && selectedPlan.priceMonthly > 0;
   const [cycle, setCycle] = useState<BillingCycle>("monthly");
   const [coupon, setCoupon] = useState("");
+
+  // Check the referral code as it's typed: a valid one shows its discount.
+  const [refCheck, setRefCheck] = useState<{ code: string; valid: boolean; newCustomerPct: number } | null>(null);
+  useEffect(() => {
+    const c = form.referralCode.trim().toUpperCase();
+    if (c.length < 4) { setRefCheck(null); return; }
+    let live = true;
+    const t = setTimeout(() => {
+      fetch(`/api/portal/referral-code/${encodeURIComponent(c)}`)
+        .then((r) => r.json())
+        .then((d) => { if (live) setRefCheck({ code: c, valid: !!d.valid, newCustomerPct: Number(d.newCustomerPct) || 0 }); })
+        .catch(() => {});
+    }, 400);
+    return () => { live = false; clearTimeout(t); };
+  }, [form.referralCode]);
+  const validRef = refCheck?.valid && refCheck.code === form.referralCode.trim().toUpperCase() ? refCheck.code : "";
 
   const runPayment = (subscriptionId: number, planSlug: string) => {
     if (!razorpayReady) {
@@ -302,7 +320,12 @@ export default function PortalRegister() {
                 </div>
                 <div className="space-y-1.5 col-span-2 sm:col-span-1">
                   <Label>Referral Code (Optional)</Label>
-                  <Input value={form.referralCode} onChange={(e) => setForm({ ...form, referralCode: e.target.value })} />
+                  <Input value={form.referralCode} onChange={(e) => setForm({ ...form, referralCode: e.target.value.toUpperCase() })} />
+                  {refCheck && refCheck.code === form.referralCode.trim().toUpperCase() && (
+                    refCheck.valid
+                      ? <p className="text-xs text-emerald-700">✓ Code applied{refCheck.newCustomerPct > 0 ? ` — ${+refCheck.newCustomerPct.toFixed(2)}% off your first payment` : ""}</p>
+                      : <p className="text-xs text-amber-700">This referral code was not found. You can still sign up.</p>
+                  )}
                 </div>
                 <div className="space-y-1.5 col-span-2">
                   <Label>Plan *</Label>
@@ -329,6 +352,7 @@ export default function PortalRegister() {
                       onCycle={setCycle}
                       coupon={coupon}
                       onCoupon={setCoupon}
+                      referralCode={validRef}
                     />
                   </div>
                 )}

@@ -2,6 +2,7 @@ import { Router, type IRouter, type Response } from "express";
 import { pool } from "@workspace/db";
 import { requireSuperAdmin } from "./subscriptions";
 import { ensurePricingSchema, getCycleDiscounts, normalizeCoupon } from "../lib/plan-pricing";
+import { ensureReferralSchema, getReferralSettings, formatReferralStatus } from "../lib/referrals";
 
 // Platform Console → Plans & Offers (super_admin only): edit each plan's
 // price, features and trial, run an offer price until a date, set discounts
@@ -204,6 +205,95 @@ router.delete("/platform-pricing/coupons/:id", requireSuperAdmin, async (req, re
     if (r.used_count > 0) throw new InputError("This coupon has been used — switch it off instead of deleting it");
     await pool.query(`DELETE FROM subscription_coupons WHERE id = $1`, [Number(req.params.id)]);
     return { deleted: true };
+  });
+});
+
+// ── Refer & Earn (lib/referrals.ts) ──────────────────────────────────────
+
+// GET /platform-pricing/referrals — the reward rules and every referral, with
+// the referrer's UPI ID so the owner can pay the cash reward.
+router.get("/platform-pricing/referrals", requireSuperAdmin, async (_req, res): Promise<void> => {
+  await ensureReferralSchema();
+  const settings = await getReferralSettings();
+  const { rows } = await pool.query(
+    `SELECT r.*,
+            rc.name AS referrer_name, rc.mobile AS referrer_mobile, ra.upi_id AS referrer_upi,
+            nc.name AS referred_name, nc.mobile AS referred_mobile
+     FROM referrals r
+     JOIN companies rc ON rc.id = r.referrer_company_id
+     JOIN companies nc ON nc.id = r.referred_company_id
+     LEFT JOIN referral_accounts ra ON ra.company_id = r.referrer_company_id
+     ORDER BY r.created_at DESC
+     LIMIT 1000`,
+  );
+  const referrals = rows.map((r) => ({
+    ...formatReferralStatus(r),
+    code: r.code,
+    note: r.note ?? null,
+    referrer: { companyId: r.referrer_company_id, name: r.referrer_name, mobile: r.referrer_mobile ?? null, upiId: r.referrer_upi ?? null },
+    referred: { companyId: r.referred_company_id, name: r.referred_name, mobile: r.referred_mobile ?? null },
+  }));
+  const sum = (st: string) => referrals.filter((r) => r.status === st).reduce((a, r) => a + (r.rewardAmount ?? 0), 0);
+  res.json({
+    settings,
+    referrals,
+    totals: { joined: referrals.length, paidCustomers: referrals.filter((r) => r.status === "earned" || r.status === "paid").length, due: sum("earned"), paid: sum("paid") },
+  });
+});
+
+// PUT /platform-pricing/referral-settings — reward and new-customer discount.
+router.put("/platform-pricing/referral-settings", requireSuperAdmin, async (req, res): Promise<void> => {
+  await handle(res, async () => {
+    await ensureReferralSchema();
+    const b = req.body ?? {};
+    const rewardKind = b.rewardKind === "percent" ? "percent" : "flat";
+    const rewardValue = num(b.rewardValue, "Reward", { max: rewardKind === "percent" ? 100 : 100_000 })!;
+    await pool.query(
+      `UPDATE referral_settings SET is_enabled = $1, reward_kind = $2, reward_value = $3, new_customer_pct = $4, hold_days = $5, updated_at = NOW()
+       WHERE id = 1`,
+      [
+        b.isEnabled !== false, rewardKind, rewardValue,
+        num(b.newCustomerPct, "New customer discount", { max: 90 }),
+        num(b.holdDays, "Waiting days", { max: 90, int: true }),
+      ],
+    );
+    return getReferralSettings();
+  });
+});
+
+async function referralRow(id: number) {
+  const { rows: [r] } = await pool.query(`SELECT * FROM referrals WHERE id = $1`, [id]);
+  if (!r) throw new InputError("Referral not found");
+  return r;
+}
+
+// POST /platform-pricing/referrals/:id/paid { payoutRef, note? } — the cash
+// reward was sent (UPI / bank reference).
+router.post("/platform-pricing/referrals/:id/paid", requireSuperAdmin, async (req, res): Promise<void> => {
+  await handle(res, async () => {
+    await ensureReferralSchema();
+    const r = await referralRow(Number(req.params.id));
+    if (r.status !== "earned") throw new InputError("Only an earned reward can be marked paid");
+    const { rows: [u] } = await pool.query(
+      `UPDATE referrals SET status = 'paid', paid_at = NOW(), payout_ref = $1, note = COALESCE($2, note) WHERE id = $3 RETURNING *`,
+      [text(req.body?.payoutRef, "Payment reference (UPI ref / UTR)", { max: 100 }), text(req.body?.note, "Note", { optional: true }), r.id],
+    );
+    return formatReferralStatus(u);
+  });
+});
+
+// POST /platform-pricing/referrals/:id/reject { note } — no reward (refund,
+// fake signup, …).
+router.post("/platform-pricing/referrals/:id/reject", requireSuperAdmin, async (req, res): Promise<void> => {
+  await handle(res, async () => {
+    await ensureReferralSchema();
+    const r = await referralRow(Number(req.params.id));
+    if (r.status === "paid") throw new InputError("This reward is already paid");
+    const { rows: [u] } = await pool.query(
+      `UPDATE referrals SET status = 'rejected', note = $1 WHERE id = $2 RETURNING *`,
+      [text(req.body?.note, "Reason", { max: 200 }), r.id],
+    );
+    return formatReferralStatus(u);
   });
 });
 

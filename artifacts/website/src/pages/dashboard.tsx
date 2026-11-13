@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, ExternalLink, RefreshCw, PlayCircle, Receipt, MessageCircle, LogOut, Globe } from "lucide-react";
 import { BrandLogo } from "@/components/site/brand-logo";
+import { ReferEarnCard } from "@/components/site/refer-earn-card";
 
 const STATUS_TONE: Record<string, string> = {
   active: "bg-teal-100 text-teal-700 hover:bg-teal-100",
@@ -157,6 +158,8 @@ export default function PortalDashboard() {
                 </Card>
               </Link>
             </div>
+
+            <ReferEarnCard />
           </>
         )}
       </main>

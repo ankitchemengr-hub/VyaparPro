@@ -6,6 +6,7 @@ import { withGst } from "./subscription-invoice";
 //   monthly price — or the plan's offer price while its offer runs
 //   × months in the billing cycle
 //   − the cycle discount (e.g. yearly 15% off)
+//   − the referral discount on a referred customer's first payment
 //   − a coupon code, if one was entered
 //   + 18% GST
 // Every amount is worked out here on the server; the browser only shows it.
@@ -105,6 +106,7 @@ export interface PriceQuote {
   offerDiscount: number;
   cycleDiscountPct: number;
   cycleDiscount: number;
+  referral: { pct: number; discount: number } | null;
   coupon: { code: string; discount: number } | null;
   totalDiscount: number;
   taxable: number;
@@ -117,7 +119,11 @@ export interface PriceQuote {
 // message fit to show the customer.
 export async function quotePlan(
   client: Queryable,
-  { planSlug, billingCycle, couponCode }: { planSlug: string; billingCycle: string; couponCode?: string | null },
+  { planSlug, billingCycle, couponCode, referralPct = 0 }: {
+    planSlug: string; billingCycle: string; couponCode?: string | null;
+    // First-payment discount for a referred customer (lib/referrals.ts).
+    referralPct?: number;
+  },
 ): Promise<PriceQuote> {
   await ensurePricingSchema();
   const months = CYCLE_MONTHS[billingCycle];
@@ -139,6 +145,16 @@ export async function quotePlan(
   const cycleDiscountPct = billingCycle === "monthly" ? 0 : Math.min(90, Math.max(0, discounts[billingCycle as keyof CycleDiscounts] ?? 0));
   const cycleDiscount = round2(afterOffer * cycleDiscountPct / 100);
   let net = round2(afterOffer - cycleDiscount);
+
+  let referral: PriceQuote["referral"] = null;
+  const refPct = Math.min(90, Math.max(0, Number(referralPct) || 0));
+  if (refPct > 0) {
+    const discount = round2(Math.min(net * refPct / 100, net - 1));
+    if (discount > 0) {
+      net = round2(net - discount);
+      referral = { pct: refPct, discount };
+    }
+  }
 
   let coupon: PriceQuote["coupon"] = null;
   const code = normalizeCoupon(couponCode);
@@ -168,6 +184,7 @@ export async function quotePlan(
     offerDiscount: round2(listAmount - afterOffer),
     cycleDiscountPct,
     cycleDiscount,
+    referral,
     coupon,
     totalDiscount: round2(listAmount - taxable),
     taxable,

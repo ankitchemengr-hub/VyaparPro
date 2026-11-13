@@ -496,8 +496,6 @@ export default function Dashboard() {
         id: a.id,
         productName: a.name,
         unit: a.unit ?? "",
-        available,
-        minStock: Number(a.minStockThreshold),
         required,
         status: card?.status === "processing" ? "processing" : "pending",
       };
@@ -834,14 +832,8 @@ export default function Dashboard() {
                   // Full product name first, then the quantity and status.
                   <div key={c.id} className="px-3 py-2 text-sm" data-testid={`workload-item-${c.id}`}>
                     <div className="font-medium leading-snug break-words">{c.productName}</div>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
-                      <span className="text-muted-foreground">
-                        Make <span className="font-mono font-semibold text-foreground">{c.required.toLocaleString()} {c.unit}</span>
-                      </span>
-                      <span className="text-muted-foreground">
-                        · Stock <span className={`font-mono font-semibold ${c.available <= 0 ? "text-destructive" : "text-amber-600"}`}>{c.available.toLocaleString()} {c.unit}</span>
-                        {c.minStock > 0 && <> / Min <span className="font-mono">{c.minStock.toLocaleString()}</span></>}
-                      </span>
+                    <div className="mt-0.5 flex items-center gap-2 text-xs">
+                      <span className="font-mono font-semibold">{c.required.toLocaleString()} {c.unit}</span>
                       <span className="text-[11px] uppercase text-muted-foreground">{c.status}</span>
                     </div>
                   </div>

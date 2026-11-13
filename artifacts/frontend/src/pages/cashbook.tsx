@@ -49,6 +49,7 @@ import {
   ArrowDownCircle, ArrowUpCircle, Printer, BookOpen, Pencil, Search,
   Clock, CheckCircle2, XCircle,
 } from "lucide-react";
+import { CashEntryDialog } from "@/components/cash-entry-dialog";
 import { CashReceiptDialog } from "@/components/cash-receipt-dialog";
 import { useAuth } from "@/contexts/use-auth";
 
@@ -64,6 +65,7 @@ export default function CashBookPage() {
   const isAdmin = user?.role === "admin";
   const { data, isLoading } = useGetCashbook();
   const [collectFrom, setCollectFrom] = useState<SalesmanCashSummary | null>(null);
+  const [entryDirection, setEntryDirection] = useState<"in" | "out" | null>(null);
   const [receiptTxn, setReceiptTxn] = useState<AccountTransaction | null>(null);
   const [editTxn, setEditTxn] = useState<AccountTransaction | null>(null);
   const [search, setSearch] = useState("");
@@ -88,8 +90,24 @@ export default function CashBookPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Cash Book</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Collect cash from salesmen and see every cash, UPI and bank movement.
+            Record Payment In / Out, collect cash from salesmen, and reconcile your accounts.
           </p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            onClick={() => setEntryDirection("in")}
+            className="bg-green-600 hover:bg-green-700"
+            data-testid="button-payment-in"
+          >
+            <ArrowDownCircle className="w-4 h-4 mr-1" /> Payment In
+          </Button>
+          <Button
+            onClick={() => setEntryDirection("out")}
+            className="bg-rose-600 hover:bg-rose-700"
+            data-testid="button-payment-out"
+          >
+            <ArrowUpCircle className="w-4 h-4 mr-1" /> Payment Out
+          </Button>
         </div>
       </div>
 
@@ -354,6 +372,14 @@ export default function CashBookPage() {
         salesman={collectFrom}
         accounts={activeAccounts}
         onClose={() => setCollectFrom(null)}
+      />
+
+      <CashEntryDialog
+        open={entryDirection !== null}
+        direction={entryDirection ?? "in"}
+        accounts={activeAccounts}
+        onClose={() => setEntryDirection(null)}
+        onCreated={(txn) => setReceiptTxn(txn)}
       />
 
       <CashReceiptDialog

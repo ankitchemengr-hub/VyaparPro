@@ -19,6 +19,7 @@ import {
 import { DemoLeadsPanel } from "@/components/demo-leads-panel";
 import { NoticesPanel } from "@/components/notices-panel";
 import { PlansOffersPanel } from "@/components/plans-offers-panel";
+import { ReferralsPanel } from "@/components/referrals-panel";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -508,6 +509,7 @@ export default function Subscriptions() {
           </TabsTrigger>
           <TabsTrigger value="notices" data-testid="tab-notices">Notices</TabsTrigger>
           <TabsTrigger value="plans-offers" data-testid="tab-plans-offers">Plans &amp; Offers</TabsTrigger>
+          <TabsTrigger value="referrals" data-testid="tab-referrals">Refer &amp; Earn</TabsTrigger>
         </TabsList>
 
         <TabsContent value="leads">
@@ -520,6 +522,10 @@ export default function Subscriptions() {
 
         <TabsContent value="plans-offers">
           <PlansOffersPanel />
+        </TabsContent>
+
+        <TabsContent value="referrals">
+          <ReferralsPanel />
         </TabsContent>
 
         {/* SUBSCRIPTIONS TABLE */}

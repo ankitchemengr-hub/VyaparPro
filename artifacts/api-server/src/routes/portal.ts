@@ -11,7 +11,7 @@ import {
 } from "@workspace/api-zod";
 import { hashPassword } from "../lib/password";
 import { isUsernameTaken } from "../lib/username";
-import { getCompanyId } from "../lib/tenant";
+import { getCompanyId, getSession } from "../lib/tenant";
 import { logger } from "../lib/logger";
 import { sendMail, passwordResetEmail, adminNotifyEmail } from "../lib/mailer";
 import { PLAN_MONTHS, addMonths, daysBetween } from "./subscriptions";
@@ -22,6 +22,10 @@ import {
 import { DomainError, getDomainState, requestDomain, verifyDomain, removeDomain } from "../lib/custom-domains";
 import { sendWelcomeEmail } from "../lib/customer-emails";
 import { PricingError, activeOffer, ensurePricingSchema, getCycleDiscounts, normalizeCoupon, quotePlan, recordCouponUse } from "../lib/plan-pricing";
+import {
+  ensureReferralSchema, getReferralSettings, getOrCreateReferralAccount, checkReferralCode, linkReferral,
+  referralDiscountPct, recordReferralPayment, formatReferralStatus,
+} from "../lib/referrals";
 import { CodeError, createChallenge, verifyChallenge, resendChallenge, trustDevice, forgetTrustedDevices } from "../lib/auth-codes";
 
 const router: IRouter = Router();
@@ -64,8 +68,13 @@ router.get("/portal/plans", async (_req, res): Promise<void> => {
 router.post("/portal/quote", async (req, res): Promise<void> => {
   const planSlug = typeof req.body?.planSlug === "string" ? req.body.planSlug : "";
   const billingCycle = typeof req.body?.billingCycle === "string" ? req.body.billingCycle : "monthly";
+  // Referral discount: a logged-in customer who joined with a code and hasn't
+  // paid yet, or (signup form) the code typed in.
+  const session = getSession(req);
+  const companyId = session?.role !== "super_admin" ? session?.companyId ?? null : null;
   try {
-    res.json(await quotePlan(pool, { planSlug, billingCycle, couponCode: req.body?.couponCode }));
+    const referralPct = await referralDiscountPct(pool, companyId ? { companyId } : { code: req.body?.referralCode });
+    res.json(await quotePlan(pool, { planSlug, billingCycle, couponCode: req.body?.couponCode, referralPct }));
   } catch (err) {
     if (err instanceof PricingError) {
       res.status(err.status).json({ error: err.message });
@@ -179,6 +188,7 @@ router.post("/portal/register", async (req, res): Promise<void> => {
     return;
   }
 
+  await ensureReferralSchema();
   const client = await pool.connect();
   try {
     await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
@@ -231,6 +241,8 @@ router.post("/portal/register", async (req, res): Promise<void> => {
     const companyId = companyRes.rows[0].id;
     // GSTIN / city / state go on the customer's GST invoices.
     await saveCompanyBillingDetails(client, companyId, d);
+    // Joined with someone's referral code → link them (Refer & Earn).
+    await linkReferral(client, companyId, d.referralCode, { mobile: d.mobile, email: d.email, gstin: d.gstin });
 
     const username = (d.email ?? d.mobile).trim().toLowerCase();
     const userRes = await client.query(
@@ -351,7 +363,8 @@ router.post("/portal/payments/create-order", async (req, res): Promise<void> => 
   let quote;
   try {
     // Pricing-page prices are before GST — 18% GST is added on top here.
-    quote = await quotePlan(pool, { planSlug, billingCycle, couponCode });
+    const referralPct = await referralDiscountPct(pool, { companyId: sub.company_id });
+    quote = await quotePlan(pool, { planSlug, billingCycle, couponCode, referralPct });
   } catch (err) {
     if (err instanceof PricingError) {
       res.status(err.status).json({ error: err.message });
@@ -447,6 +460,8 @@ async function activateAndInvoicePayment(
   );
 
   await recordCouponUse(client, payment.coupon_code);
+  // A referred customer's first payment earns the referrer's reward.
+  await recordReferralPayment(client, payment);
 
   const inv = await issueInvoiceForPayment(client, payment.id, { start: base, end: newEnd });
   return { invoiceId: inv.id, created: inv.created };
@@ -580,6 +595,52 @@ router.post("/portal/payments/webhook", async (req, res): Promise<void> => {
   }
 
   res.status(200).end();
+});
+
+// GET /portal/referral-code/:code — public: is this referral code real, and
+// what discount does it give? (The signup form checks it as you type.)
+router.get("/portal/referral-code/:code", async (req, res): Promise<void> => {
+  res.json(await checkReferralCode(req.params.code));
+});
+
+// GET /portal/referrals — authenticated: the customer's Refer & Earn card —
+// their code, the rules, the businesses they brought and what they earned.
+router.get("/portal/referrals", async (req, res): Promise<void> => {
+  const companyId = getCompanyId(req);
+  const settings = await getReferralSettings();
+  const account = await getOrCreateReferralAccount(companyId);
+  const { rows } = await pool.query(
+    `SELECT r.*, co.name AS business_name
+     FROM referrals r JOIN companies co ON co.id = r.referred_company_id
+     WHERE r.referrer_company_id = $1 ORDER BY r.created_at DESC`,
+    [companyId],
+  );
+  const list = rows.map((r) => ({ ...formatReferralStatus(r), businessName: r.business_name }));
+  const sum = (st: string[]) => list.filter((r) => st.includes(r.status)).reduce((a, r) => a + (r.rewardAmount ?? 0), 0);
+  res.json({
+    enabled: settings.isEnabled,
+    code: account.code,
+    upiId: account.upiId,
+    rewardKind: settings.rewardKind,
+    rewardValue: settings.rewardValue,
+    newCustomerPct: settings.newCustomerPct,
+    holdDays: settings.holdDays,
+    referrals: list,
+    totals: { joined: list.length, earned: sum(["earned", "paid"]), paid: sum(["paid"]), due: sum(["earned"]) },
+  });
+});
+
+// PUT /portal/referrals/upi { upiId } — where the cash reward is sent.
+router.put("/portal/referrals/upi", async (req, res): Promise<void> => {
+  const companyId = getCompanyId(req);
+  const upiId = typeof req.body?.upiId === "string" ? req.body.upiId.trim() : "";
+  if (upiId && !/^[a-zA-Z0-9._-]{2,64}@[a-zA-Z][a-zA-Z0-9.]{1,32}$/.test(upiId)) {
+    res.status(400).json({ error: "Enter a valid UPI ID, like name@okhdfcbank or 9876543210@ybl" });
+    return;
+  }
+  await getOrCreateReferralAccount(companyId);
+  await pool.query(`UPDATE referral_accounts SET upi_id = $1 WHERE company_id = $2`, [upiId || null, companyId]);
+  res.json({ upiId: upiId || null });
 });
 
 // GET /portal/my-subscription — authenticated (getCompanyId throws 401 if not).
