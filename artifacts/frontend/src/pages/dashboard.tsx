@@ -508,11 +508,13 @@ export default function Dashboard() {
     ) : (
       <div className="divide-y rounded-lg border overflow-hidden max-h-72 overflow-y-auto">
         {items.map((a: any) => (
-          <div key={a.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm" data-testid={`low-stock-item-${a.id}`}>
-            <span className="font-medium min-w-0 break-words">{a.name}</span>
-            <span className="text-xs font-mono shrink-0 whitespace-nowrap text-destructive">
-              {a.currentStock} / {a.minStockThreshold} {a.unit}
-            </span>
+          // Name on its own full-width line, the quantities under it.
+          <div key={a.id} className="px-3 py-2 text-sm" data-testid={`low-stock-item-${a.id}`}>
+            <div className="font-medium leading-snug break-words">{a.name}</div>
+            <div className="mt-0.5 text-xs text-muted-foreground">
+              Stock <span className="font-mono font-semibold text-destructive">{a.currentStock} {a.unit}</span>
+              {" · "}Min <span className="font-mono">{a.minStockThreshold} {a.unit}</span>
+            </div>
           </div>
         ))}
       </div>
@@ -803,7 +805,7 @@ export default function Dashboard() {
           a tap expands the list inline (no navigating away). */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
         <Card
-          className="cursor-pointer select-none transition-colors hover:bg-muted/40"
+          className="min-w-0 cursor-pointer select-none transition-colors hover:bg-muted/40"
           {...clickableProps(() => setShowWorkload((v) => !v))}
           aria-expanded={showWorkload}
           data-testid="card-manufacturing-workload"
@@ -827,12 +829,13 @@ export default function Dashboard() {
                 onClick={(e) => e.stopPropagation()}
               >
                 {assembledItems.map((c) => (
-                  <div key={c.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm" data-testid={`workload-item-${c.id}`}>
-                    <span className="font-medium truncate">{c.productName}</span>
-                    <span className="flex items-center gap-2 shrink-0">
+                  // Full product name first, then the quantity and status.
+                  <div key={c.id} className="px-3 py-2 text-sm" data-testid={`workload-item-${c.id}`}>
+                    <div className="font-medium leading-snug break-words">{c.productName}</div>
+                    <div className="mt-0.5 flex items-center gap-2 text-xs">
+                      <span className="font-mono font-semibold">{c.required.toLocaleString()} {c.unit}</span>
                       <span className="text-[11px] uppercase text-muted-foreground">{c.status}</span>
-                      <span className="text-xs font-mono">{c.required.toLocaleString()} {c.unit}</span>
-                    </span>
+                    </div>
                   </div>
                 ))}
               </div>
