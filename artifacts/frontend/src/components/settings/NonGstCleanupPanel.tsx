@@ -520,6 +520,9 @@ function ScheduleCard({ category, refreshTick }: { category: Category; refreshTi
   const [settings, setSettings] = useState<Settings | null>(null);
   const [draft, setDraft] = useState<Pick<Settings, "enabled" | "frequency" | "minAgeDays"> | null>(null);
   const [saving, setSaving] = useState(false);
+  // "If it ran today": the bills the schedule would delete, before it runs.
+  const [check, setCheck] = useState<Preview | null>(null);
+  const [checking, setChecking] = useState(false);
 
   useEffect(() => {
     api<Settings>(`/api/non-gst-cleanup/${category}/settings`)
@@ -531,6 +534,21 @@ function ScheduleCard({ category, refreshTick }: { category: Category; refreshTi
     return <Card><CardContent className="py-6 text-center"><Loader2 className="w-4 h-4 animate-spin inline" /></CardContent></Card>;
   }
   const dirty = draft.enabled !== settings.enabled || draft.frequency !== settings.frequency || draft.minAgeDays !== settings.minAgeDays;
+  const daysBefore = (d: Date, days: number) => { const x = new Date(d); x.setDate(x.getDate() - days); return x; };
+  // Each run deletes eligible bills dated on or before (run day − age).
+  const nextCutoff = settings.enabled && settings.nextRunAt ? daysBefore(new Date(settings.nextRunAt), settings.minAgeDays) : null;
+
+  const runCheck = async () => {
+    setChecking(true);
+    try {
+      const q = new URLSearchParams({ from: "", to: ymd(daysBefore(new Date(), draft.minAgeDays)) });
+      setCheck(await api<Preview>(`/api/non-gst-cleanup/${category}/preview?${q}`));
+    } catch (e: any) {
+      toast({ title: "Check failed", description: e.message, variant: "destructive" });
+    } finally {
+      setChecking(false);
+    }
+  };
 
   const save = async () => {
     setSaving(true);
@@ -586,6 +604,48 @@ function ScheduleCard({ category, refreshTick }: { category: Category; refreshTi
           <Stat label="Last run" value={fmtDateTime(settings.lastRunAt)} />
           <Stat label="Last status" value={settings.lastJob ? settings.lastJob.status : "—"} />
           <Stat label="Last result" value={settings.lastJob ? `${settings.lastJob.processedCount} deleted · ${settings.lastJob.excludedCount} left` : "—"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3 text-sm space-y-1" data-testid={`schedule-explain-${category}`}>
+          {!settings.enabled ? (
+            <div>Automatic cleanup is <span className="font-semibold">off</span> — nothing is deleted on its own. Turn it on and press Save.</div>
+          ) : (
+            <div>
+              Saving does not delete anything right away. The next run is on{" "}
+              <span className="font-semibold">{fmtDateTime(settings.nextRunAt)}</span>; it deletes eligible bills dated on or before{" "}
+              <span className="font-semibold">{nextCutoff ? format(nextCutoff, "dd-MM-yyyy") : "—"}</span> (older than {settings.minAgeDays} days).
+            </div>
+          )}
+          <div className="text-xs text-muted-foreground">
+            Bills that are unpaid, have an E-Way Bill, a GST amount, a return, a payment awaiting approval or a hold are always left alone.
+            Every run is listed under "Delete history" as Automatic.
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <Button variant="outline" onClick={runCheck} disabled={checking} data-testid={`button-schedule-check-${category}`}>
+            {checking ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Search className="w-4 h-4 mr-2" />}
+            Check what it will delete (bills older than {draft.minAgeDays} days)
+          </Button>
+          {check && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <Stat label="Would be deleted" value={`${check.eligibleCount} · ${inr(check.eligibleValue)}`} strong />
+                <Stat label="Left alone" value={`${check.excludedCount} · ${inr(check.excludedValue)}`} />
+              </div>
+              {check.eligibleCount === 0 && check.excludedCount === 0 && (
+                <div className="text-sm text-muted-foreground">
+                  No {LABEL[category].title} bills dated on or before {fmtDate(check.dateTo)} — nothing to delete yet. Lower the days to include newer bills.
+                </div>
+              )}
+              {check.eligibleCount > 0 && (
+                <BillTable title={`Would be deleted (${check.eligibleCount})`} rows={check.eligible} party={LABEL[category].party} total={check.eligibleCount} />
+              )}
+              {check.excludedCount > 0 && (
+                <BillTable title={`Left alone (${check.excludedCount})`} rows={check.excluded} party={LABEL[category].party} total={check.excludedCount} showReason />
+              )}
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>
