@@ -16,7 +16,6 @@ import { companyIdForHost, requestHost } from "../lib/custom-domains";
 import { getCurrentCompany } from "../lib/company";
 import { verifyPassword } from "../lib/password";
 import { loginRateLimitKey, checkLoginRateLimit, recordLoginFailure, clearLoginAttempts } from "../lib/login-rate-limit";
-import { passwordVersion } from "../lib/session-guard";
 import { hashPassword } from "../lib/password";
 import { isUsernameTaken } from "../lib/username";
 import {
@@ -298,10 +297,6 @@ router.post("/auth/login", async (req, res): Promise<void> => {
 
   const session = {
     userId: user.id,
-    // Sign-in time and password fingerprint, checked on every request
-    // (lib/session-guard.ts).
-    iat: Date.now(),
-    pv: passwordVersion(user.passwordHash),
     username: user.username,
     role: user.role,
     name: user.name,
@@ -440,12 +435,8 @@ router.post("/auth/change-password", async (req, res): Promise<void> => {
     res.status(400).json({ error: "New password must be different from the current one" });
     return;
   }
-  const newHash = hashPassword(newPassword);
-  await pool.query(`UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`, [newHash, userId]);
+  await pool.query(`UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`, [hashPassword(newPassword), userId]);
   await forgetTrustedDevices(userId, req);
-  // Every other device is signed out (its password fingerprint no longer
-  // matches); this one stays signed in with the new fingerprint.
-  (req as any).session = { ...(req as any).session, pv: passwordVersion(newHash) };
   res.json({ message: "Password changed" });
 });
 
@@ -573,29 +564,20 @@ router.get("/auth/me", async (req, res): Promise<void> => {
   // data route. Refreshing here lets a stale session self-heal on page load.
   (req as any).session = {
     userId: user.id,
-    // Keep the original sign-in time so the 7-day limit still applies.
-    iat: typeof session.iat === "number" ? session.iat : Date.now(),
-    pv: passwordVersion(user.passwordHash),
     username: user.username,
     role: user.role,
     name: user.name,
     entityId: user.entityId ?? null,
     pricingTier: user.pricingTier ?? null,
     companyId: user.companyId ?? null,
-    // Preserve session-only fields that have NO DB column. Re-stamping would
-    // otherwise drop them and the res.json patch would rewrite the cookie
-    // without them — wiping the super_admin's switched-into company
-    // (activeCompanyId) and a regular user's validated dedicated-mode unlock
-    // (companySwitch). Since the company switcher refetches /auth/me right
-    // after switching, omitting these makes every later data route 409.
-    activeCompanyId: (session.activeCompanyId as number | null | undefined) ?? null,
+    // Preserve a regular user's validated dedicated-mode unlock, which has NO
+    // DB column; re-stamping would otherwise drop it. A super_admin's old
+    // switched-into company (activeCompanyId) is deliberately dropped: the
+    // platform owner can no longer open a customer's company.
     companySwitch: (session.companySwitch as boolean | undefined) ?? false,
   };
 
-  // Effective company for branding: the user's own company, or (for a
-  // super_admin) whichever company they've switched into.
-  const activeCompanyId = (session.activeCompanyId as number | null | undefined) ?? null;
-  const meCompany = await getCurrentCompany(user.companyId ?? activeCompanyId);
+  const meCompany = await getCurrentCompany(user.companyId ?? null);
 
   res.json({
     id: user.id,
@@ -609,10 +591,9 @@ router.get("/auth/me", async (req, res): Promise<void> => {
     canEditRate: user.canEditRate ?? false,
     canReceiveProduction: user.canReceiveProduction ?? false,
     companyId: user.companyId ?? null,
-    // Surface the super_admin's currently switched-into company so the SPA can
-    // show the right company context and unlock ERP navigation. Null for normal
-    // users and for a super_admin that hasn't picked a company yet.
-    activeCompanyId,
+    // Always null: the super_admin can no longer switch into a company. Kept in
+    // the response so the API shape (and older app builds) stay unchanged.
+    activeCompanyId: null,
     company: meCompany ? { name: meCompany.name, logo: meCompany.logo ?? null } : null,
   });
 });

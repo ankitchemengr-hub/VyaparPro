@@ -12,14 +12,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const hasRole = (roles: NonNullable<typeof user>["role"][]) => {
     if (!user) return false;
-    if (roles.includes(user.role)) return true;
-    // A platform super_admin that has switched into a company acts as that
-    // company's admin, so it unlocks every admin-scoped page and nav item while
-    // a company is selected. Without an active company it only sees the console.
-    if (user.role === "super_admin" && user.activeCompanyId != null && roles.includes("admin")) {
-      return true;
-    }
-    return false;
+    // A platform super_admin only sees the console, never a customer's ERP.
+    return roles.includes(user.role);
   };
 
   if (isLoading) {

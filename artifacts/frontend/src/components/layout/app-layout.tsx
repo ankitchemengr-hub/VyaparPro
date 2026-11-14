@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Sidebar } from "./sidebar";
 import { CustomerShell } from "./customer-shell";
-import { CompanySwitcher } from "./company-switcher";
 import { useAuth } from "@/contexts/use-auth";
 import { Redirect, useLocation } from "wouter";
 import { Menu, X, Search, Keyboard } from "lucide-react";
@@ -115,7 +114,6 @@ export function AppLayout({ children }: AppLayoutProps) {
             >
               <Keyboard className="w-4 h-4" />
             </button>
-            <CompanySwitcher />
             <div className="text-xs text-muted-foreground hidden sm:block">
               {user?.name} · <span className="capitalize">{user?.role}</span>
             </div>

@@ -12,10 +12,9 @@ export interface AppSession {
   // Tenant company this user belongs to. NULL only for platform `super_admin`,
   // which operates across all companies and is never scoped to one.
   companyId: number | null;
-  // The company the platform `super_admin` has "switched into". Only ever set
-  // for super_admin; regular users are scoped by `companyId` instead. When set,
-  // every company-scoped route treats the super_admin as a member of this
-  // company so it can view/manage that tenant's data.
+  // Legacy: the company a super_admin had "switched into". Switching is now
+  // refused (the platform owner never sees a customer's business data), so this
+  // is ignored everywhere and only kept so old cookies still parse.
   activeCompanyId?: number | null;
   // True when this regular user signed in via the login-screen "Switch Company"
   // feature into their OWN company. Login already validated companyId ===
@@ -52,14 +51,11 @@ export function getCompanyId(req: Request): number {
   if (!session || !session.userId) {
     throw new TenantContextError("Not authenticated", 401);
   }
-  // Platform super_admin has no home company. It scopes to whichever company it
-  // has switched into (session.activeCompanyId). Until one is selected it has no
-  // tenant context, so company-scoped routes must not silently leak data.
+  // Platform super_admin has no home company and may not open a customer's
+  // company: it sees only the Platform Console (plans, payments, contacts),
+  // never a tenant's bills, ledgers or stock.
   if (session.role === "super_admin") {
-    if (session.activeCompanyId == null) {
-      throw new TenantContextError("Select a company to continue", 409);
-    }
-    return session.activeCompanyId;
+    throw new TenantContextError("The platform owner cannot open a customer's company data.", 403);
   }
   if (session.companyId == null) {
     throw new TenantContextError("No tenant context for this account", 403);
@@ -112,12 +108,9 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       return;
     }
   }
-  // For a normal user this is their home company; for the platform super_admin
-  // it is whichever company they have switched into (null until they pick one).
-  (req as any).companyId =
-    session.role === "super_admin"
-      ? session.activeCompanyId ?? null
-      : session.companyId ?? null;
+  // For a normal user this is their home company; the platform super_admin
+  // never has one (see getCompanyId).
+  (req as any).companyId = session.role === "super_admin" ? null : session.companyId ?? null;
   (req as any).isSuperAdmin = session.role === "super_admin";
   next();
 }

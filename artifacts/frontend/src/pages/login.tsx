@@ -7,7 +7,6 @@ import {
   getGetSystemConfigQueryKey,
   useGetPublicCompanies,
   getGetPublicCompaniesQueryKey,
-  useSetActiveCompany,
 } from "@workspace/api-client-react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -36,9 +35,8 @@ import { CodeEntry } from "@/components/code-entry";
 import { Factory, Check, Eye, EyeOff } from "lucide-react";
 import { MaintenanceBanner } from "@/components/maintenance-banner";
 
-// Persisted login-screen company override, set via the hidden switcher. After a
-// super_admin signs in, the app jumps straight into this company instead of the
-// platform console.
+// Persisted login-screen company override, set via the hidden switcher. It
+// picks which company a regular user signs in to.
 const LOGIN_COMPANY_KEY = "login_company_override";
 
 type LoginCompany = { id: number; name: string; logo: string | null };
@@ -82,7 +80,6 @@ export default function Login() {
   const override = switcherEnabled ? storedOverride : null;
   const logoClicksRef = React.useRef(0);
   const logoTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  const setActiveCompany = useSetActiveCompany();
   const {
     data: companies, isLoading: companiesLoading, isError: companiesErrored, refetch: refetchCompanies,
   } = useGetPublicCompanies({
@@ -208,31 +205,6 @@ export default function Login() {
 
   // Where each role lands after signing in (also used after the email code).
   const goAfterLogin = (data: { role: string }) => {
-          // If a company was picked via the hidden switcher and this account can
-          // switch (super_admin), jump straight into that company's ERP.
-          if (data.role === "super_admin" && override) {
-            const target = override;
-            setActiveCompany.mutate(
-              { data: { companyId: target.id } },
-              {
-                onSuccess: () => {
-                  window.location.href = "/";
-                },
-                onError: () => {
-                  // The picked company is no longer valid — drop the stale
-                  // override and fall back to the platform console.
-                  clearCompany();
-                  toast({
-                    title: "Could not switch company",
-                    description: "Opening the platform console instead.",
-                    variant: "destructive",
-                  });
-                  window.location.href = "/subscriptions";
-                },
-              },
-            );
-            return;
-          }
           if (data.role === "super_admin") {
             window.location.href = "/subscriptions";
           } else if (data.role === "admin") {

@@ -75,10 +75,10 @@ router.get(
   },
 );
 
-// POST /system/active-company — super_admin only. Records which company the
-// super_admin has switched into on the session cookie. Passing `companyId: null`
-// clears the selection (back to the platform console). Every company-scoped
-// route reads this via getCompanyId(), so the switch instantly re-scopes data.
+// POST /system/active-company — super_admin only. Switching into a customer's
+// company is refused: the platform owner must not see tenants' business data.
+// Only `companyId: null` (back to the platform console) is accepted, so older
+// app builds and stale sessions still land somewhere sensible.
 router.post(
   "/system/active-company",
   requireAuth,
@@ -99,17 +99,7 @@ router.post(
       return;
     }
 
-    const c = await getCurrentCompany(companyId);
-    if (!c) {
-      res.status(404).json({ error: "Company not found" });
-      return;
-    }
-    session.activeCompanyId = companyId;
-    (req as any).session = session;
-    res.json({
-      activeCompanyId: companyId,
-      company: { id: c.id, name: c.name, logo: c.logo ?? null },
-    });
+    res.status(403).json({ error: "The platform owner cannot open a customer's company data." });
   },
 );
 
