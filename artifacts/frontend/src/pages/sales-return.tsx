@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Redirect } from "wouter";
+import { useEffect, useRef, useState } from "react";
+import { Redirect, useLocation, useSearch } from "wouter";
 import { useAuth } from "@/contexts/use-auth";
 import {
   useListInvoices,
@@ -14,7 +14,6 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,7 +23,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Search, Undo2, Loader2, CheckCircle2, Hash, Printer, PackageX,
+  Search, Undo2, Loader2, CheckCircle2, Hash, Printer, PackageX, ArrowLeft, ChevronRight, History,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -51,33 +50,72 @@ const TYPE_LABELS: Record<string, string> = {
 
 export default function SalesReturn() {
   const { hasRole } = useAuth();
-  const [tab, setTab] = useState("new");
+  const [, setLocation] = useLocation();
+
+  // Two cards first; a card opens its screen (?s=new / ?s=history) and Back
+  // returns to the cards (phone back works too).
+  const section = new URLSearchParams(useSearch()).get("s");
+  const fromCards = useRef(false);
+  const openSection = (key: string) => {
+    fromCards.current = true;
+    setLocation(`/sales-return?s=${key}`);
+    window.scrollTo({ top: 0 });
+  };
+  const backToCards = () => {
+    if (fromCards.current) { fromCards.current = false; window.history.back(); }
+    else setLocation("/sales-return", { replace: true });
+  };
 
   if (!hasRole(["admin", "salesman", "accountant", "store"])) return <Redirect to="/" />;
 
+  const sectionCards = [
+    { key: "new", icon: Undo2, title: "New Return", description: "Search a bill, pick what's coming back, credit the customer" },
+    { key: "history", icon: History, title: "Return History", description: "Past returns — open, view and print a credit note" },
+  ];
+  const currentCard = sectionCards.find((c) => c.key === section);
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Sales Return</h1>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Search a bill, pick what's coming back, and credit the customer.
-        </p>
-      </div>
-
-      <Tabs value={tab} onValueChange={setTab} className="w-full">
-        <TabsList className="grid w-full max-w-md grid-cols-2">
-          <TabsTrigger value="new" data-testid="tab-new-return">New Return</TabsTrigger>
-          <TabsTrigger value="history" data-testid="tab-return-history">Return History</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="new" className="mt-4">
-          <NewReturnTab />
-        </TabsContent>
-
-        <TabsContent value="history" className="mt-4">
-          <ReturnHistoryTab />
-        </TabsContent>
-      </Tabs>
+      {!currentCard ? (
+        <>
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Sales Return</h1>
+            <p className="text-muted-foreground mt-1 text-sm">
+              Search a bill, pick what's coming back, and credit the customer.
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {sectionCards.map((c) => (
+              <button
+                key={c.key}
+                type="button"
+                onClick={() => openSection(c.key)}
+                className="text-left rounded-lg border bg-card hover:bg-accent hover:border-primary/50 transition-colors p-4 flex items-center gap-3"
+                data-testid={`card-sales-return-${c.key}`}
+              >
+                <span className="rounded-md bg-primary/10 text-primary p-2.5 shrink-0"><c.icon className="w-5 h-5" /></span>
+                <span className="min-w-0 flex-1">
+                  <span className="block font-semibold leading-tight">{c.title}</span>
+                  <span className="block text-xs text-muted-foreground mt-1 leading-snug">{c.description}</span>
+                </span>
+                <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+              </button>
+            ))}
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={backToCards} data-testid="button-sales-return-back">
+              <ArrowLeft className="w-4 h-4 mr-1" />Sales Return
+            </Button>
+            <h2 className="text-lg sm:text-xl font-semibold flex items-center gap-2 min-w-0">
+              <currentCard.icon className="w-5 h-5 text-primary shrink-0" /><span className="leading-tight">{currentCard.title}</span>
+            </h2>
+          </div>
+          {currentCard.key === "new" ? <NewReturnTab /> : <ReturnHistoryTab />}
+        </>
+      )}
     </div>
   );
 }
