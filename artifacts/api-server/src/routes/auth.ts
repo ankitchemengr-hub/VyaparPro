@@ -21,7 +21,7 @@ import { hashPassword } from "../lib/password";
 import { isUsernameTaken } from "../lib/username";
 import {
   CodeError, otpDisabled, createChallenge, verifyChallenge, resendChallenge,
-  isDeviceTrusted, trustDevice, forgetTrustedDevices,
+  isDeviceTrusted, trustDevice, forgetTrustedDevices, maskEmail,
 } from "../lib/auth-codes";
 
 const router: IRouter = Router();
@@ -345,7 +345,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     const reason = !user.emailVerifiedAt ? "verify_email" : (await isDeviceTrusted(req, user.id)) ? null : "new_device";
     if (reason) {
       const ch = await createChallenge({
-        userId: user.id, purpose: "login", email: user.username,
+        userId: user.id, purpose: "login", email: user.otpEmail ?? user.username,
         payload: { session, body, username, ip },
       });
       if (!ch.sent) {
@@ -459,6 +459,128 @@ router.post("/auth/change-password", async (req, res): Promise<void> => {
   // matches); this one stays signed in with the new fingerprint.
   (req as any).session = { ...(req as any).session, pv: passwordVersion(newHash) };
   res.json({ message: "Password changed" });
+});
+
+// ── Login code (email OTP) for any account ─────────────────────────────────
+// Website signups already log in with an email and get codes there. Any other
+// account (e.g. an admin whose login is a plain username) can add an email
+// here: once it is confirmed, signing in from a device it hasn't trusted yet
+// needs the code sent to that email. AUTH_OTP_DISABLED=true still switches
+// every login code off in an emergency (lib/auth-codes.ts).
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i;
+
+// GET /auth/login-code — is it on, where do codes go, can it be turned off.
+router.get("/auth/login-code", async (req, res): Promise<void> => {
+  const userId = sessionUserId(req);
+  if (!userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+  if (!user) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  const email = user.otpEmail ?? (user.username.includes("@") ? user.username : null);
+  res.json({
+    enabled: user.loginOtpRequired,
+    email: user.loginOtpRequired && email ? maskEmail(email) : null,
+    // Website-signup accounts always keep codes on; only a code email added
+    // here can be switched off again.
+    canTurnOff: user.loginOtpRequired && user.otpEmail != null,
+  });
+});
+
+// POST /auth/login-code { email, password } — sends a code to confirm the email.
+router.post("/auth/login-code", async (req, res): Promise<void> => {
+  const userId = sessionUserId(req);
+  if (!userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  const email = String(req.body?.email ?? "").trim().toLowerCase();
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+  if (!user || typeof req.body?.password !== "string" || !verifyPassword(req.body.password, user.passwordHash)) {
+    res.status(400).json({ error: "Password is wrong" });
+    return;
+  }
+  if (user.loginOtpRequired && user.otpEmail == null) {
+    res.status(400).json({ error: "Login codes are already on for this account" });
+    return;
+  }
+  if (!EMAIL_RE.test(email) || email.length > 200) {
+    res.status(400).json({ error: "Enter a valid email address" });
+    return;
+  }
+  const ch = await createChallenge({ userId, purpose: "otp_setup", email, payload: { email } });
+  if (!ch.sent) {
+    res.status(503).json({ error: "We couldn't send the code right now. Please try again in a few minutes." });
+    return;
+  }
+  res.json({ challengeId: ch.challengeId, email: ch.email });
+});
+
+// POST /auth/login-code/resend { challengeId }
+router.post("/auth/login-code/resend", async (req, res): Promise<void> => {
+  if (!sessionUserId(req)) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  try {
+    res.json(await resendChallenge(req.body?.challengeId, "otp_setup"));
+  } catch (err) {
+    if (!codeErrorResponse(err, res)) throw err;
+  }
+});
+
+// POST /auth/login-code/verify { challengeId, code } — turns login codes on.
+// This device is trusted, so it isn't asked for a code next time.
+router.post("/auth/login-code/verify", async (req, res): Promise<void> => {
+  const userId = sessionUserId(req);
+  if (!userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  try {
+    const ch = await verifyChallenge(req.body?.challengeId, "otp_setup", req.body?.code);
+    const email = String(ch.payload?.email ?? "");
+    if (ch.user_id !== userId || !email) {
+      res.status(403).json({ error: "This code belongs to another session" });
+      return;
+    }
+    await pool.query(
+      `UPDATE users SET otp_email = $1, login_otp_required = true, email_verified_at = NOW(), updated_at = NOW() WHERE id = $2`,
+      [email, userId],
+    );
+    await trustDevice(req, res, userId);
+    res.json({ enabled: true, email: maskEmail(email) });
+  } catch (err) {
+    if (!codeErrorResponse(err, res)) throw err;
+  }
+});
+
+// POST /auth/login-code/disable { password }
+router.post("/auth/login-code/disable", async (req, res): Promise<void> => {
+  const userId = sessionUserId(req);
+  if (!userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+  if (!user || typeof req.body?.password !== "string" || !verifyPassword(req.body.password, user.passwordHash)) {
+    res.status(400).json({ error: "Password is wrong" });
+    return;
+  }
+  if (user.otpEmail == null) {
+    res.status(400).json({ error: "Login codes can't be turned off for this account" });
+    return;
+  }
+  await pool.query(
+    `UPDATE users SET otp_email = NULL, login_otp_required = false, updated_at = NOW() WHERE id = $1`,
+    [userId],
+  );
+  res.json({ enabled: false });
 });
 
 // POST /auth/change-email { newEmail, password } — a company admin whose login

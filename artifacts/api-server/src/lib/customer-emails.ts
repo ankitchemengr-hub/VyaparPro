@@ -47,13 +47,14 @@ function layout(title: string, body: string): string {
 // ── One-time code (signup verification / new-device login / email change) ──
 
 export function codeEmail(
-  purpose: "signup_verify" | "login" | "change_email",
+  purpose: "signup_verify" | "login" | "change_email" | "otp_setup",
   code: string,
 ): { subject: string; html: string } {
   const what = {
     signup_verify: { subject: `Your ${BRAND} verification code: ${code}`, title: "Verify your email", lead: "Use this code to verify your email and finish creating your account:" },
     login: { subject: `Your ${BRAND} login code: ${code}`, title: "Your login code", lead: "Someone (hopefully you) is signing in to your account from a new device. Enter this code to continue:" },
     change_email: { subject: `Confirm your new ${BRAND} login email: ${code}`, title: "Confirm your new email", lead: "Enter this code to make this address your new login email:" },
+    otp_setup: { subject: `Turn on ${BRAND} login codes: ${code}`, title: "Confirm your email", lead: "Enter this code to send your login codes to this address. After that, signing in from a new device needs a code from this inbox:" },
   }[purpose];
   const body = `
     <p>${what.lead}</p>

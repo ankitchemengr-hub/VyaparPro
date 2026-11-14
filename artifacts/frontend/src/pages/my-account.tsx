@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getGetMeQueryKey } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/use-auth";
@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CodeEntry, apiErrorText, postJson } from "@/components/code-entry";
-import { KeyRound, Mail, Loader2, LogOut } from "lucide-react";
+import { KeyRound, Mail, Loader2, LogOut, ShieldCheck } from "lucide-react";
 
 const MIN_PASSWORD = 8;
 
@@ -142,6 +142,136 @@ function ChangeEmailCard({ currentEmail }: { currentEmail: string }) {
   );
 }
 
+// Email login code (2-step sign-in) for accounts whose login isn't an email:
+// add an email, confirm it with a code, and from then on a new device needs
+// the code sent there. Website signups already have it on (can't turn off).
+interface LoginCodeStatus { enabled: boolean; email: string | null; canTurnOff: boolean }
+
+function LoginCodeCard() {
+  const { toast } = useToast();
+  const [status, setStatus] = useState<LoginCodeStatus | null>(null);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [challenge, setChallenge] = useState<{ challengeId: string; email: string } | null>(null);
+  const [turningOff, setTurningOff] = useState(false);
+
+  const load = () =>
+    fetch("/api/auth/login-code", { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((s) => s && setStatus(s))
+      .catch(() => {});
+  useEffect(() => { load(); }, []);
+
+  const start = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      const r = await postJson<{ challengeId: string; email: string }>("/api/auth/login-code", { email, password });
+      setChallenge(r);
+      setPassword("");
+    } catch (err) {
+      setError(apiErrorText(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const turnOff = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      await postJson("/api/auth/login-code/disable", { password });
+      setPassword("");
+      setTurningOff(false);
+      toast({ title: "Login codes turned off" });
+      load();
+    } catch (err) {
+      setError(apiErrorText(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!status) return null;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <ShieldCheck className="w-4 h-4" /> Login code on new devices
+          <span className={`ml-1 text-xs font-semibold rounded px-1.5 py-0.5 ${status.enabled ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" : "bg-muted text-muted-foreground"}`}>
+            {status.enabled ? "ON" : "OFF"}
+          </span>
+        </CardTitle>
+        <CardDescription>
+          {status.enabled
+            ? <>Signing in from a new phone or computer needs a 6-digit code sent to <span className="font-medium text-foreground">{status.email}</span>, so a stolen password alone isn't enough.</>
+            : "Add an email: signing in from a new phone or computer will then need a 6-digit code sent there, so a stolen password alone isn't enough. Your username stays the same."}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {challenge ? (
+          <div className="max-w-sm">
+            <CodeEntry
+              title="Confirm your email"
+              description="We sent a 6-digit code to"
+              email={challenge.email}
+              challengeId={challenge.challengeId}
+              verifyUrl="/api/auth/login-code/verify"
+              resendUrl="/api/auth/login-code/resend"
+              onVerified={() => {
+                setChallenge(null);
+                setEmail("");
+                toast({ title: "Login codes are on", description: "This device is remembered; new devices will need a code." });
+                load();
+              }}
+              onCancel={() => setChallenge(null)}
+            />
+          </div>
+        ) : status.enabled ? (
+          status.canTurnOff && (
+            turningOff ? (
+              <form onSubmit={turnOff} className="space-y-3 max-w-sm">
+                <div className="space-y-1.5">
+                  <Label htmlFor="otp-off-pw">Your password</Label>
+                  <Input id="otp-off-pw" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+                </div>
+                {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
+                <div className="flex gap-2">
+                  <Button type="submit" variant="destructive" disabled={busy}>
+                    {busy && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Turn off
+                  </Button>
+                  <Button type="button" variant="outline" onClick={() => { setTurningOff(false); setError(null); }}>Cancel</Button>
+                </div>
+              </form>
+            ) : (
+              <Button variant="outline" onClick={() => setTurningOff(true)} data-testid="button-otp-off">Turn off login codes</Button>
+            )
+          )
+        ) : (
+          <form onSubmit={start} className="space-y-3 max-w-sm">
+            <div className="space-y-1.5">
+              <Label htmlFor="otp-email">Email for login codes</Label>
+              <Input id="otp-email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="otp-pw">Your password</Label>
+              <Input id="otp-pw" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+            </div>
+            {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
+            <Button type="submit" disabled={busy} data-testid="button-otp-on">
+              {busy && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Send code and turn on
+            </Button>
+          </form>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // Lost phone, shared computer: end every other sign-in of this account.
 function SignOutEverywhereCard() {
   const { toast } = useToast();
@@ -188,6 +318,7 @@ export default function MyAccount() {
         </p>
       </div>
       <ChangePasswordCard />
+      <LoginCodeCard />
       <SignOutEverywhereCard />
       {canChangeEmail && <ChangeEmailCard currentEmail={user.username} />}
     </div>

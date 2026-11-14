@@ -30,6 +30,9 @@ export const usersTable = pgTable("users", {
   // must be verified with a code, and a new device needs an emailed code.
   emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
   loginOtpRequired: boolean("login_otp_required").notNull().default(false),
+  // Where login codes go when the login itself isn't an email (set from My
+  // Account → Login code). NULL = codes go to the username (website signups).
+  otpEmail: text("otp_email"),
   // "Sign out everywhere": sessions that signed in before this time are
   // refused (api-server lib/session-guard.ts).
   sessionsValidAfter: timestamp("sessions_valid_after", { withTimezone: true }),

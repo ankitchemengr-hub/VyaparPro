@@ -22,7 +22,7 @@ import { sendMail } from "./mailer";
 import { codeEmail } from "./customer-emails";
 import { logger } from "./logger";
 
-export type ChallengePurpose = "signup_verify" | "login" | "change_email";
+export type ChallengePurpose = "signup_verify" | "login" | "change_email" | "otp_setup";
 
 const CODE_TTL_MS = 10 * 60 * 1000;
 const MAX_ATTEMPTS = 5;
