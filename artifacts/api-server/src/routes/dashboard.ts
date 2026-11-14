@@ -543,6 +543,72 @@ router.get("/dashboard/receivable-payable", async (req, res): Promise<void> => {
   });
 });
 
+// GET /dashboard/overdue-customers?days=15
+// Customers whose money has been pending longer than `days`. A customer's
+// Khatabook balance is matched against their sale bills newest-first (the
+// usual "payments clear the oldest bill" rule), so payments taken on account
+// in Khatabook count too. Whatever part of the balance isn't covered by bills
+// from the last `days` days is overdue; a balance bigger than all bills is
+// opening balance, which is old by definition.
+router.get("/dashboard/overdue-customers", async (req, res): Promise<void> => {
+  const role = (req as any).session?.role;
+  if (role !== "admin" && role !== "accountant") {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  const companyId = getCompanyId(req);
+  const days = Math.min(365, Math.max(1, Math.floor(Number(req.query.days) || 15)));
+  const rows = await queryMany(
+    `WITH c AS (
+       SELECT id, name, mobile, outstanding_balance AS bal
+       FROM entities
+       WHERE company_id = $1 AND type = 'customer' AND outstanding_balance > 0
+     ),
+     bills AS (
+       SELECT i.customer_id, ${IST_DATE} AS bill_date, i.grand_total AS amt,
+              SUM(i.grand_total) OVER (PARTITION BY i.customer_id ORDER BY i.invoice_date DESC, i.id DESC) AS newer_incl
+       FROM invoices i JOIN c ON c.id = i.customer_id
+       WHERE i.company_id = $1 AND i.deleted_at IS NULL AND i.status NOT IN ('cancelled', 'draft')
+         AND ${SALE_TYPES_FILTER} AND i.grand_total > 0
+     ),
+     -- The unpaid part of each bill: the balance left after newer bills took their share.
+     unpaid AS (
+       SELECT b.customer_id, b.bill_date, LEAST(b.amt, c.bal - (b.newer_incl - b.amt)) AS due
+       FROM bills b JOIN c ON c.id = b.customer_id
+       WHERE b.newer_incl - b.amt < c.bal
+     )
+     SELECT c.id, c.name, c.mobile, c.bal,
+            COALESCE(SUM(u.due) FILTER (WHERE u.bill_date >= ${IST_TODAY} - $2::int), 0) AS recent,
+            COALESCE(SUM(u.due), 0) AS billed_due,
+            to_char(MIN(u.bill_date), 'YYYY-MM-DD') AS oldest_bill,
+            ${IST_TODAY} - MIN(u.bill_date) AS oldest_days
+     FROM c LEFT JOIN unpaid u ON u.customer_id = c.id
+     GROUP BY c.id, c.name, c.mobile, c.bal`,
+    [companyId, days],
+  );
+  const customers = rows
+    .map((r) => {
+      const balance = Number(r.bal);
+      return {
+        id: r.id as number,
+        name: r.name as string,
+        mobile: (r.mobile as string | null) ?? null,
+        balance,
+        overdue: Math.round((balance - Number(r.recent)) * 100) / 100,
+        oldestBillDate: (r.oldest_bill as string | null) ?? null,
+        oldestDays: r.oldest_days == null ? null : Number(r.oldest_days),
+        hasOpeningBalance: balance - Number(r.billed_due) > 0.005,
+      };
+    })
+    .filter((c) => c.overdue >= 1)
+    .sort((a, b) => b.overdue - a.overdue);
+  res.json({
+    days,
+    totalOverdue: Math.round(customers.reduce((s, c) => s + c.overdue, 0) * 100) / 100,
+    customers,
+  });
+});
+
 // GET /reports/ledger
 router.get("/reports/ledger", async (req, res): Promise<void> => {
   const role = (req as any).session?.role;

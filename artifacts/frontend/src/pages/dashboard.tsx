@@ -45,6 +45,7 @@ import {
   PieChartIcon,
   Eye,
   EyeOff,
+  Clock,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
@@ -203,6 +204,113 @@ function ReceivablePayableCards() {
       {card("You Will Get", data?.receivable, data?.receivableParties, "text-emerald-600", ArrowDownRight, "/khatabook?tab=customer", "card-you-will-get")}
       {card("You Will Give", data?.payable, data?.payableParties, "text-red-600", ArrowUpRight, "/khatabook?tab=vendor", "card-you-will-give")}
     </>
+  );
+}
+
+interface OverdueCustomer {
+  id: number;
+  name: string;
+  mobile: string | null;
+  balance: number;
+  overdue: number;
+  oldestDays: number | null;
+  hasOpeningBalance: boolean;
+}
+interface OverdueCustomers { days: number; totalOverdue: number; customers: OverdueCustomer[] }
+
+const OVERDUE_DAY_CHOICES = [10, 15, 30];
+
+// Customers whose payment has been pending longer than N days (server matches
+// the Khatabook balance against bills, newest first). Collapsed to a count;
+// a tap expands the list inline, and a customer opens their Khatabook.
+function OverdueCustomersCard() {
+  const [, setLocation] = useLocation();
+  const [days, setDays] = React.useState(15);
+  const [open, setOpen] = React.useState(false);
+  const [data, setData] = React.useState<OverdueCustomers | null>(null);
+  const [hidden, setHidden] = React.useState(false);
+
+  React.useEffect(() => {
+    let live = true;
+    setData(null);
+    fetch(`/api/dashboard/overdue-customers?days=${days}`, { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((d) => live && setData(d))
+      .catch(() => live && setHidden(true));
+    return () => { live = false; };
+  }, [days]);
+
+  if (hidden) return null;
+  const list = data?.customers ?? [];
+  return (
+    <Card
+      className="min-w-0 cursor-pointer select-none transition-colors hover:bg-muted/40"
+      {...clickableProps(() => setOpen((v) => !v))}
+      aria-expanded={open}
+      data-testid="card-overdue-customers"
+    >
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium flex items-center gap-2">
+          <Clock className="h-4 w-4 text-red-600" /> Overdue Customers
+        </CardTitle>
+        <ChevronDown className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
+      </CardHeader>
+      <CardContent>
+        <div className="flex gap-1 mb-2" onClick={(e) => e.stopPropagation()}>
+          {OVERDUE_DAY_CHOICES.map((d) => (
+            <button
+              key={d}
+              type="button"
+              onClick={() => setDays(d)}
+              className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${d === days ? "bg-primary text-primary-foreground border-primary" : "text-muted-foreground hover:bg-muted"}`}
+              data-testid={`button-overdue-days-${d}`}
+            >
+              {d}+ days
+            </button>
+          ))}
+        </div>
+        {data === null ? (
+          <div className="h-8 w-28 bg-muted rounded animate-pulse" />
+        ) : (
+          <div className="text-2xl font-bold text-red-600" data-testid="text-overdue-total">{fmtRupee(data.totalOverdue)}</div>
+        )}
+        <p className="text-xs text-muted-foreground">
+          {data === null
+            ? " "
+            : list.length === 0
+              ? `No payment pending over ${days} days`
+              : `${list.length} customer${list.length === 1 ? "" : "s"} — tap to ${open ? "hide" : "view"}`}
+        </p>
+        {open && list.length > 0 && (
+          <div className="mt-3 divide-y rounded-lg border overflow-hidden max-h-72 overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            {list.map((c) => (
+              <div
+                key={c.id}
+                className="px-3 py-2 text-sm cursor-pointer hover:bg-muted/40"
+                {...clickableProps(() => setLocation(`/khatabook?tab=customer&party=${c.id}`))}
+                data-testid={`overdue-customer-${c.id}`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="font-medium leading-snug break-words min-w-0">{c.name}</div>
+                  <div className="font-mono font-semibold text-red-600 shrink-0">{fmtRupee(c.overdue)}</div>
+                </div>
+                <div className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-muted-foreground">
+                  <span>
+                    {c.hasOpeningBalance ? "Since opening balance" : c.oldestDays != null ? `Oldest bill ${c.oldestDays} days` : ""}
+                  </span>
+                  {c.overdue < c.balance && <span>· Total due {fmtRupee(c.balance)}</span>}
+                  {c.mobile && (
+                    <a href={`tel:${c.mobile}`} className="text-primary hover:underline" onClick={(e) => e.stopPropagation()}>
+                      · {c.mobile}
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -805,7 +913,8 @@ export default function Dashboard() {
 
       {/* Workload + low-stock stay on the dashboard — collapsed to a count,
           a tap expands the list inline (no navigating away). */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+        {hasRole(["admin", "accountant"]) && <OverdueCustomersCard />}
         <Card
           className="min-w-0 cursor-pointer select-none transition-colors hover:bg-muted/40"
           {...clickableProps(() => setShowWorkload((v) => !v))}
