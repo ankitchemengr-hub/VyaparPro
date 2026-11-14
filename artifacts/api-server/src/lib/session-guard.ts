@@ -20,6 +20,7 @@ export interface SessionUserRow {
   is_active: boolean;
   company_id: number | null;
   password_hash: string;
+  sessions_valid_after?: Date | string | null;
 }
 
 // Pure decision, so it can be tested without a database. Returns the session
@@ -30,7 +31,12 @@ export function checkSession(session: any, user: SessionUserRow | undefined, now
   if (user.role !== "super_admin" && (user.company_id ?? null) !== (session.companyId ?? null)) return null;
   const pv = passwordVersion(user.password_hash);
   if (session.pv != null && session.pv !== pv) return null;
+  const validAfter = user.sessions_valid_after ? new Date(user.sessions_valid_after).getTime() : null;
+  // After "sign out everywhere", a cookie that can't prove when it signed in
+  // is refused rather than stamped as new.
+  if (validAfter != null && typeof session.iat !== "number") return null;
   const iat = typeof session.iat === "number" ? session.iat : now;
+  if (validAfter != null && iat < validAfter) return null;
   if (now - iat > SESSION_MAX_AGE_MS) return null;
   if (session.pv === pv && session.iat === iat) return session;
   // Cookie minted before these checks existed: stamp it once.
@@ -41,7 +47,7 @@ export async function validateSession(session: any): Promise<any | null> {
   const userId = Number(session?.userId);
   if (!Number.isInteger(userId) || userId <= 0) return null;
   const { rows } = await pool.query<SessionUserRow>(
-    `SELECT role, is_active, company_id, password_hash FROM users WHERE id = $1`,
+    `SELECT role, is_active, company_id, password_hash, sessions_valid_after FROM users WHERE id = $1`,
     [userId],
   );
   return checkSession(session, rows[0]);

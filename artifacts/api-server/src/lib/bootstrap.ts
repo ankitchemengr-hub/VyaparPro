@@ -485,6 +485,8 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
     // logs in exactly as before.
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMP WITH TIME ZONE`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS login_otp_required BOOLEAN NOT NULL DEFAULT false`,
+    // "Sign out everywhere" (lib/session-guard.ts): NULL = never used.
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS sessions_valid_after TIMESTAMP WITH TIME ZONE`,
     `CREATE TABLE IF NOT EXISTS auth_challenges (
       id            SERIAL PRIMARY KEY,
       user_id       INTEGER NOT NULL,

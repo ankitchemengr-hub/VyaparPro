@@ -51,8 +51,9 @@ async function call(cookie: string | undefined, method: string, p: string, body?
   return { status: res.status, body: json, headers: res.headers };
 }
 
+let userSeq = 0;
 async function makeUser(role: string, extra: Record<string, unknown> = {}) {
-  const name = `${role}-sec-${RUN}-${Object.keys(users).length}`;
+  const name = `${role}-sec-${RUN}-${++userSeq}`;
   const u = await pool.query(
     `INSERT INTO users (username, password_hash, name, role, company_id, is_active, entity_id) VALUES ($1, $2, $3, $4, $5, true, $6) RETURNING id`,
     [name, hashPassword("old-password-1"), role, role, A, extra.entityId ?? null],
@@ -72,6 +73,11 @@ before(async () => {
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 
   await pool.query(`INSERT INTO companies (id, name) VALUES ($1, $2)`, [A, `Security Test ${RUN}`]);
+  await pool.query(
+    `INSERT INTO subscriptions (company_id, plan_name, subscription_start_date, subscription_end_date, subscription_amount, payment_status, subscription_status)
+     VALUES ($1, 'Test', NOW() - interval '1 day', NOW() + interval '30 days', 0, 'paid', 'active')`,
+    [A],
+  );
   ids.custA = (await pool.query(`INSERT INTO entities (company_id, type, name, mobile) VALUES ($1, 'customer', 'Cust A', '91') RETURNING id`, [A])).rows[0].id;
   ids.custB = (await pool.query(`INSERT INTO entities (company_id, type, name, mobile) VALUES ($1, 'customer', 'Cust B', '92') RETURNING id`, [A])).rows[0].id;
   for (const role of ["admin", "store", "salesman", "customer"]) {
@@ -241,4 +247,64 @@ test("product images: SVG never served, raster served sandboxed", async () => {
   assert.equal(r.headers.get("content-type"), "image/png");
   assert.equal(r.headers.get("x-content-type-options"), "nosniff");
   assert.match(r.headers.get("content-security-policy") ?? "", /sandbox/);
+});
+
+test("sign out everywhere: self keeps this device, admin ends every device", async () => {
+  const u = await makeUser("salesman");
+  const hash = (await pool.query(`SELECT password_hash FROM users WHERE id = $1`, [u.id])).rows[0].password_hash;
+  const s = { userId: u.id, username: u.username, role: "salesman", name: "x", entityId: null, companyId: A, pv: passwordVersion(hash) };
+  const here = sign({ ...s, iat: Date.now() - 1000 });
+  const there = sign({ ...s, iat: Date.now() - 1000 });
+  const legacy = sign({ userId: u.id, username: u.username, role: "salesman", name: "x", entityId: null, companyId: A });
+
+  const r = await call(here, "POST", "/auth/logout-all", {});
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const fresh = decodeURIComponent((r.headers.get("set-cookie") ?? "").split(";")[0]);
+  assert.equal((await call(fresh, "GET", "/brands")).status, 200, "this device stays in");
+  assert.equal((await call(there, "GET", "/brands")).status, 401, "other device signed out");
+  assert.equal((await call(legacy, "GET", "/brands")).status, 401, "an old cookie with no sign-in time is refused too");
+
+  // Admin signs the user out everywhere, this device included.
+  const a = await call(cookies.admin, "POST", `/users/${u.id}/logout-all`, {});
+  assert.equal(a.status, 200, JSON.stringify(a.body));
+  assert.equal((await call(fresh, "GET", "/brands")).status, 401);
+  // Not for another company's user.
+  const other = (await pool.query(
+    `INSERT INTO users (username, password_hash, name, role, company_id, is_active) VALUES ($1, 'x', 'o', 'admin', NULL, true) RETURNING id`,
+    [`outsider-${RUN}`],
+  )).rows[0].id;
+  assert.equal((await call(cookies.admin, "POST", `/users/${other}/logout-all`, {})).status, 404);
+  assert.equal((await call(cookies.salesman, "POST", `/users/${u.id}/logout-all`, {})).status, 403);
+});
+
+test("login activity: a wrong password lands in that company's log", async () => {
+  const u = await makeUser("store");
+  const bad = await fetch(`${base}/api/auth/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-forwarded-for": "203.0.113.7" },
+    body: JSON.stringify({ username: u.username, password: "not-it" }),
+  });
+  assert.equal(bad.status, 401);
+  const good = await fetch(`${base}/api/auth/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-forwarded-for": "203.0.113.8" },
+    body: JSON.stringify({ username: u.username, password: "old-password-1" }),
+  });
+  assert.equal(good.status, 200, await good.text());
+  const minted = decodeURIComponent((good.headers.get("set-cookie") ?? "").split(";")[0]);
+  assert.match(minted, /"iat":\d+/);
+  assert.match(minted, /"pv":"[0-9a-f]{16}"/);
+
+  const act = await call(cookies.admin, "GET", "/users/login-activity");
+  assert.equal(act.status, 200);
+  assert.ok(act.body.failed24h >= 1);
+  const mine = act.body.entries.filter((e: any) => e.username === u.username);
+  assert.ok(mine.some((e: any) => !e.success && e.reason === "wrong_password" && e.ipAddress === "203.0.113.7"), JSON.stringify(mine));
+  assert.ok(mine.some((e: any) => e.success && e.ipAddress === "203.0.113.8"));
+  assert.equal((await call(cookies.store, "GET", "/users/login-activity")).status, 403);
+});
+
+test("WhatsApp log list: a junk limit no longer breaks it", async () => {
+  const r = await call(cookies.admin, "GET", "/whatsapp/logs?limit=abc");
+  assert.notEqual(r.status, 500, JSON.stringify(r.body));
 });

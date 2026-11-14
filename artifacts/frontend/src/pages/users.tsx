@@ -22,7 +22,7 @@ import {
 import {
   Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
 } from "@/components/ui/form";
-import { UserPlus, KeyRound, Loader2, ShieldAlert, Pencil, Search } from "lucide-react";
+import { UserPlus, KeyRound, Loader2, ShieldAlert, Pencil, Search, LogOut, History } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/use-auth";
@@ -58,6 +58,20 @@ export default function Users() {
   const [search, setSearch] = useState("");
 
   const { data: users, isLoading } = useListUsers();
+
+  // Ends every sign-in of that user (lost phone, staff leaving). They can
+  // sign in again with their password; disable the account to stop that too.
+  const signOutEverywhere = async (u: UserAccount) => {
+    if (!window.confirm(`Sign "${u.name}" out of every device?`)) return;
+    const res = await fetch(`/api/users/${u.id}/logout-all`, { method: "POST", credentials: "include" });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast({ title: "Could not sign out", description: body?.error ?? `Error ${res.status}`, variant: "destructive" });
+      return;
+    }
+    toast({ title: `${u.name} signed out of every device` });
+    if (u.id === me?.id) window.location.href = "/login";
+  };
   const createUser = useCreateUser();
   const updateUser = useUpdateUser();
 
@@ -128,6 +142,7 @@ export default function Users() {
                     user={u}
                     isSelf={me?.id === u.id}
                     onEdit={() => setEditTarget(u)}
+                    onSignOut={() => signOutEverywhere(u)}
                     onResetPassword={() => setResetTarget(u)}
                     onToggleActive={(next) =>
                       updateUser.mutate(
@@ -165,6 +180,8 @@ export default function Users() {
           )}
         </CardContent>
       </Card>
+
+      <LoginActivityCard />
 
       <AddUserDialog
         open={showAdd}
@@ -205,12 +222,14 @@ function UserRow({
   onEdit,
   onResetPassword,
   onToggleActive,
+  onSignOut,
 }: {
   user: UserAccount;
   isSelf: boolean;
   onEdit: () => void;
   onResetPassword: () => void;
   onToggleActive: (next: boolean) => void;
+  onSignOut: () => void;
 }) {
   return (
     <TableRow data-testid={`row-user-${user.id}`}>
@@ -264,6 +283,17 @@ function UserRow({
           >
             <KeyRound className="h-3.5 w-3.5 sm:mr-1.5" />
             <span className="hidden sm:inline">Reset Password</span>
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="px-2 sm:px-3"
+            onClick={onSignOut}
+            title="Sign out of every device"
+            data-testid={`button-signout-${user.id}`}
+          >
+            <LogOut className="h-3.5 w-3.5 sm:mr-1.5" />
+            <span className="hidden lg:inline">Sign out</span>
           </Button>
         </div>
       </TableCell>
@@ -735,6 +765,95 @@ function AddUserDialog({
     </Dialog>
   );
 }
+
+interface LoginEntry { id: number; at: string; success: boolean; username: string | null; name: string | null; ipAddress: string | null; reason: string | null }
+interface LoginActivity { failed24h: number; failed7d: number; entries: LoginEntry[] }
+
+const FAIL_REASON: Record<string, string> = {
+  wrong_password: "Wrong password",
+  unknown_user: "No such username",
+  rate_limited: "Blocked — too many wrong tries",
+  inactive_account: "Account disabled",
+  domain_lock: "Wrong company link",
+  company_mismatch: "Wrong company",
+  deployment_lock: "Not allowed on this system",
+  subscription_expired: "Subscription expired",
+  ambiguous_username: "Same username in two companies",
+  no_company_binding: "No company",
+};
+
+// Recent sign-ins and failed tries for this company (last 30 days). Many
+// failed tries on one username = someone guessing its password.
+function LoginActivityCard() {
+  const [open, setOpen] = useState(false);
+  const [onlyFailed, setOnlyFailed] = useState(false);
+  const [data, setData] = useState<LoginActivity | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    fetch("/api/users/login-activity", { credentials: "include" })
+      .then(async (r) => {
+        const body = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(body?.error ?? `Error ${r.status}`);
+        setData(body);
+      })
+      .catch((e) => setError(e.message));
+  }, []);
+
+  const rows = (data?.entries ?? []).filter((e) => !onlyFailed || !e.success);
+  const alert = (data?.failed24h ?? 0) > 0;
+
+  return (
+    <Card data-testid="card-login-activity">
+      <CardContent className="p-4 space-y-3">
+        <button type="button" className="w-full flex items-center justify-between gap-3 text-left" onClick={() => setOpen((v) => !v)}>
+          <div className="flex items-center gap-2 min-w-0">
+            <History className="h-4 w-4 text-primary shrink-0" />
+            <div className="min-w-0">
+              <div className="font-semibold">Login activity</div>
+              <div className="text-xs text-muted-foreground">
+                {error ? error : !data ? "Loading…" : (
+                  <>
+                    <span className={alert ? "text-destructive font-semibold" : ""}>{data.failed24h} failed in 24 hours</span>
+                    {" · "}{data.failed7d} in 7 days — tap to {open ? "hide" : "view"}
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+          {alert && <Badge variant="destructive" className="shrink-0">Check</Badge>}
+        </button>
+        {open && data && (
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 text-sm">
+              <Switch checked={onlyFailed} onCheckedChange={setOnlyFailed} /> Only failed
+            </label>
+            {rows.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">No logins in the last 30 days.</p>
+            ) : (
+              <div className="max-h-96 overflow-y-auto divide-y rounded-md border">
+                {rows.map((e) => (
+                  <div key={e.id} className="px-3 py-2 text-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium break-words min-w-0">{e.name && e.name !== e.username ? `${e.name} (${e.username})` : e.username}</span>
+                      <Badge variant={e.success ? "secondary" : "destructive"} className="shrink-0 text-[10px]">{e.success ? "Signed in" : "Failed"}</Badge>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {new Date(e.at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
+                      {e.ipAddress ? ` · IP ${e.ipAddress}` : ""}
+                      {!e.success && e.reason ? ` · ${FAIL_REASON[e.reason] ?? e.reason}` : ""}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 
 function ResetPasswordDialog({
   target, onClose, onDone,

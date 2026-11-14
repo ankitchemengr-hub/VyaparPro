@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CodeEntry, apiErrorText, postJson } from "@/components/code-entry";
-import { KeyRound, Mail, Loader2 } from "lucide-react";
+import { KeyRound, Mail, Loader2, LogOut } from "lucide-react";
 
 const MIN_PASSWORD = 8;
 
@@ -142,6 +142,39 @@ function ChangeEmailCard({ currentEmail }: { currentEmail: string }) {
   );
 }
 
+// Lost phone, shared computer: end every other sign-in of this account.
+function SignOutEverywhereCard() {
+  const { toast } = useToast();
+  const [busy, setBusy] = useState(false);
+  const run = async () => {
+    if (!window.confirm("Sign out of all other devices? This one stays signed in.")) return;
+    setBusy(true);
+    try {
+      await postJson("/api/auth/logout-all", {});
+      toast({ title: "Signed out of all other devices" });
+    } catch (err) {
+      toast({ title: "Could not sign out other devices", description: apiErrorText(err), variant: "destructive" });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base"><LogOut className="w-4 h-4" /> Other devices</CardTitle>
+        <CardDescription>
+          Signed in on a phone or computer you no longer use? Sign out everywhere else. Changing your password does this too.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Button variant="outline" onClick={run} disabled={busy} data-testid="button-logout-all">
+          {busy && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Sign out of all other devices
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function MyAccount() {
   const { user } = useAuth();
   if (!user) return null;
@@ -155,6 +188,7 @@ export default function MyAccount() {
         </p>
       </div>
       <ChangePasswordCard />
+      <SignOutEverywhereCard />
       {canChangeEmail && <ChangeEmailCard currentEmail={user.username} />}
     </div>
   );

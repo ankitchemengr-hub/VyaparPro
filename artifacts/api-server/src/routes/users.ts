@@ -367,4 +367,76 @@ router.put("/users/:id/production-permission", requireAdmin, async (req, res): P
   res.json(toPublic(updated));
 });
 
+// POST /users/:id/logout-all — admin signs a user out on every device (e.g. a
+// lost phone). The user can sign in again with the password.
+router.post("/users/:id/logout-all", requireAdmin, async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ error: "Invalid user id" });
+    return;
+  }
+  const companyId = getCompanyId(req);
+  const { rows } = await pool.query(
+    `UPDATE users SET sessions_valid_after = NOW() WHERE id = $1 AND company_id = $2 RETURNING username`,
+    [id, companyId],
+  );
+  if (rows.length === 0) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  const session = (req as any).session;
+  await writeAuditLog({
+    companyId,
+    action: "user_signed_out_everywhere",
+    description: `Signed "${rows[0].username}" out of every device`,
+    actorId: session.userId,
+    actorName: session.name ?? session.username ?? "Admin",
+    targetUsername: rows[0].username,
+    targetUserId: id,
+    ipAddress: getClientIp(req),
+  });
+  // Signing yourself out everywhere includes this device.
+  if (id === session.userId) (req as any).session = null;
+  res.json({ message: "Signed out everywhere" });
+});
+
+// GET /users/login-activity — this company's recent sign-ins and failed
+// tries (last 30 days, newest first), for spotting password guessing.
+router.get("/users/login-activity", requireAdmin, async (req, res): Promise<void> => {
+  const companyId = getCompanyId(req);
+  const { rows } = await pool.query(
+    `SELECT id, created_at, action, user_name, metadata
+       FROM audit_log
+      WHERE company_id = $1 AND action IN ('login_success', 'login_failure')
+        AND created_at > NOW() - INTERVAL '30 days'
+      ORDER BY created_at DESC, id DESC
+      LIMIT 200`,
+    [companyId],
+  );
+  const { rows: [counts] } = await pool.query(
+    `SELECT COUNT(*) FILTER (WHERE action = 'login_failure' AND created_at > NOW() - INTERVAL '24 hours') AS failed_24h,
+            COUNT(*) FILTER (WHERE action = 'login_failure' AND created_at > NOW() - INTERVAL '7 days') AS failed_7d
+       FROM audit_log
+      WHERE company_id = $1 AND action = 'login_failure'`,
+    [companyId],
+  );
+  const parse = (m: string | null) => { try { return m ? JSON.parse(m) : {}; } catch { return {}; } };
+  res.json({
+    failed24h: Number(counts?.failed_24h ?? 0),
+    failed7d: Number(counts?.failed_7d ?? 0),
+    entries: rows.map((r: any) => {
+      const m = parse(r.metadata);
+      return {
+        id: r.id,
+        at: new Date(r.created_at).toISOString(),
+        success: r.action === "login_success",
+        username: m.username ?? null,
+        name: r.user_name ?? null,
+        ipAddress: m.ipAddress ?? null,
+        reason: m.reason ?? null,
+      };
+    }),
+  });
+});
+
 export default router;

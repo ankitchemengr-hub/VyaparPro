@@ -218,7 +218,19 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     } else {
       res.status(401).json({ error: "Invalid credentials" });
     }
-    await writeLoginAudit({ username, companyId: auditCompanyId, ipAddress: ip, success: false, reason: failReason });
+    let auditCompanies = [auditCompanyId];
+    if (auditCompanyId === 0) {
+      try {
+        const { rows } = await pool.query(
+          `SELECT DISTINCT company_id FROM users WHERE lower(trim(username)) = $1 AND company_id IS NOT NULL LIMIT 5`,
+          [username.trim().toLowerCase()],
+        );
+        if (rows.length > 0) auditCompanies = rows.map((r: any) => Number(r.company_id));
+      } catch { /* audit is best-effort */ }
+    }
+    for (const companyId of auditCompanies) {
+      await writeLoginAudit({ username, companyId, ipAddress: ip, success: false, reason: failReason });
+    }
     return;
   }
   clearLoginAttempts(rateLimitKey);
@@ -543,6 +555,23 @@ router.post("/auth/change-email/verify", async (req, res): Promise<void> => {
 });
 
 // POST /auth/logout
+// POST /auth/logout-all — sign this account out on every other device. This
+// device stays signed in (its sign-in time moves past the cut-off).
+router.post("/auth/logout-all", async (req, res): Promise<void> => {
+  const userId = sessionUserId(req);
+  if (!userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  const { rows } = await pool.query(
+    `UPDATE users SET sessions_valid_after = NOW() WHERE id = $1 RETURNING sessions_valid_after`,
+    [userId],
+  );
+  const cutoff = new Date(rows[0]?.sessions_valid_after ?? Date.now()).getTime();
+  (req as any).session = { ...(req as any).session, iat: Math.max(Date.now(), cutoff + 1) };
+  res.json({ message: "Signed out of all other devices" });
+});
+
 router.post("/auth/logout", async (_req, res): Promise<void> => {
   // Must clearCookie explicitly — sendStatus(204) bypasses the res.json patch
   // that normally handles cookie clearing.

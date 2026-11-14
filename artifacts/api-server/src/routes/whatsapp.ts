@@ -85,7 +85,9 @@ router.get("/whatsapp/logs", async (req, res): Promise<void> => {
   if (messageType) { params.push(messageType); where += ` AND message_type = $${params.length}`; }
   if (from) { params.push(new Date(from + "T00:00:00")); where += ` AND sent_at >= $${params.length}`; }
   if (to)   { params.push(new Date(to + "T23:59:59")); where += ` AND sent_at <= $${params.length}`; }
-  const rowLimit = Math.min(parseInt(limitQ ?? "200", 10), 500);
+  // A missing or junk ?limit= falls back to 200 (it used to become "LIMIT NaN").
+  const parsedLimit = parseInt(String(limitQ ?? "200"), 10);
+  const rowLimit = Number.isInteger(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 500) : 200;
   try {
     const result = await pool.query(
       `SELECT * FROM whatsapp_logs ${where} ORDER BY sent_at DESC LIMIT ${rowLimit}`,
