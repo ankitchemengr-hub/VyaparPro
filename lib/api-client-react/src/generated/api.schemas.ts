@@ -823,6 +823,17 @@ export const ProductPricingMode = {
   mrp_based: 'mrp_based',
 } as const;
 
+/**
+ * "service" = labour/repair/installation etc. — billed with a SAC code (hsnCode), never holds stock.
+ */
+export type ProductItemType = typeof ProductItemType[keyof typeof ProductItemType];
+
+
+export const ProductItemType = {
+  product: 'product',
+  service: 'service',
+} as const;
+
 export interface Product {
   id: number;
   name: string;
@@ -900,6 +911,8 @@ export interface Product {
   addForManufacturing: boolean;
   /** Print the MRP of this product in its own column on invoices. */
   showMrpOnInvoice?: boolean;
+  /** "service" = labour/repair/installation etc. — billed with a SAC code (hsnCode), never holds stock. */
+  itemType?: ProductItemType;
   /** @nullable */
   minStockThreshold?: number | null;
   /** @nullable */
@@ -921,6 +934,17 @@ export type ProductInputPricingMode = typeof ProductInputPricingMode[keyof typeo
 export const ProductInputPricingMode = {
   direct: 'direct',
   mrp_based: 'mrp_based',
+} as const;
+
+/**
+ * "service" = labour/repair/installation etc. — billed with a SAC code (hsnCode), never holds stock.
+ */
+export type ProductInputItemType = typeof ProductInputItemType[keyof typeof ProductInputItemType];
+
+
+export const ProductInputItemType = {
+  product: 'product',
+  service: 'service',
 } as const;
 
 export interface ProductInput {
@@ -956,6 +980,8 @@ export interface ProductInput {
   addForManufacturing?: boolean;
   /** Print the MRP of this product in its own column on invoices. */
   showMrpOnInvoice?: boolean;
+  /** "service" = labour/repair/installation etc. — billed with a SAC code (hsnCode), never holds stock. */
+  itemType?: ProductInputItemType;
   minStockThreshold?: number;
   imageUrl?: string;
 }
@@ -966,6 +992,17 @@ export type ProductUpdatePricingMode = typeof ProductUpdatePricingMode[keyof typ
 export const ProductUpdatePricingMode = {
   direct: 'direct',
   mrp_based: 'mrp_based',
+} as const;
+
+/**
+ * "service" = labour/repair/installation etc. — billed with a SAC code (hsnCode), never holds stock.
+ */
+export type ProductUpdateItemType = typeof ProductUpdateItemType[keyof typeof ProductUpdateItemType];
+
+
+export const ProductUpdateItemType = {
+  product: 'product',
+  service: 'service',
 } as const;
 
 export interface ProductUpdate {
@@ -997,6 +1034,8 @@ export interface ProductUpdate {
   addForManufacturing?: boolean;
   /** Print the MRP of this product in its own column on invoices. */
   showMrpOnInvoice?: boolean;
+  /** "service" = labour/repair/installation etc. — billed with a SAC code (hsnCode), never holds stock. */
+  itemType?: ProductUpdateItemType;
   minStockThreshold?: number;
   imageUrl?: string;
   commissionPerLiter?: number;
@@ -1938,9 +1977,9 @@ export interface AccountTransactionInput {
   /** Admin-only override to let a "Payment Out" push the account balance negative instead of being blocked. */
   allowNegative?: boolean;
   /**
-   * Payment Out to a supplier only — discount the supplier gave on top of amount. Clears what we owe like the payment does, but no money leaves the account; counted as other income (profit).
-   * @minimum 0
-   */
+     * Payment Out to a supplier only — discount the supplier gave on top of amount. Clears what we owe like the payment does, but no money leaves the account; counted as other income (profit).
+     * @minimum 0
+     */
   discount?: number;
 }
 

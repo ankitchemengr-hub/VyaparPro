@@ -139,7 +139,9 @@ export default function StockAdjustment() {
   const [reportTo, setReportTo] = useState("");
   const [reportSearch, setReportSearch] = useState("");
 
-  const { data: products, isLoading } = useListProducts({});
+  const { data: listedProducts, isLoading } = useListProducts({});
+  // A service has no stock to count.
+  const products = listedProducts?.filter((p) => p.itemType !== "service");
 
   const { data: adjustments = [], isLoading: isReportLoading } = useQuery({
     queryKey: ["stock-adjustments", reportFrom, reportTo],

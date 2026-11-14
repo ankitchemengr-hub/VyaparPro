@@ -5,6 +5,7 @@
  * Shradha Oil Center ERP API
  * OpenAPI spec version: 0.1.0
  */
+import type { ProductInputItemType } from './productInputItemType';
 import type { ProductInputPricingBasis } from './productInputPricingBasis';
 import type { ProductInputPricingMode } from './productInputPricingMode';
 
@@ -41,6 +42,8 @@ export interface ProductInput {
   addForManufacturing?: boolean;
   /** Print the MRP of this product in its own column on invoices. */
   showMrpOnInvoice?: boolean;
+  /** "service" = labour/repair/installation etc. — billed with a SAC code (hsnCode), never holds stock. */
+  itemType?: ProductInputItemType;
   minStockThreshold?: number;
   imageUrl?: string;
 }

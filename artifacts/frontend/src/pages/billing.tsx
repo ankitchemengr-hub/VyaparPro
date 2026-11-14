@@ -276,7 +276,19 @@ function CostWarningHint({ w, testId }: { w: CostWarning | null; testId: string 
 // biller sees how many are left before adding the line. Just the number (the
 // label ate width the product name needs on a phone): red when out of stock
 // or at/below the product's low-stock threshold, green otherwise.
-function StockPill({ product, active }: { product: { currentStock: number; unit: string; minStockThreshold?: number | null }; active: boolean }) {
+function StockPill({ product, active }: { product: { currentStock: number; unit: string; minStockThreshold?: number | null; itemType?: string }; active: boolean }) {
+  // A service has no stock — say "Service" instead of a red 0.
+  if (product.itemType === "service") {
+    return (
+      <span
+        className={`text-center text-xs px-1.5 py-0.5 rounded font-semibold whitespace-nowrap ${active ? "bg-primary-foreground/20 text-primary-foreground" : "bg-sky-100 text-sky-800 dark:bg-sky-950/50 dark:text-sky-300"}`}
+        title={`Service · per ${product.unit}`}
+        data-testid={`stock-pill-${(product as any).id}`}
+      >
+        Service
+      </span>
+    );
+  }
   const stock = Number(product.currentStock) || 0;
   const min = product.minStockThreshold != null ? Number(product.minStockThreshold) : null;
   const low = stock <= 0 || (min != null && stock <= min);

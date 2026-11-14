@@ -961,6 +961,7 @@ function formatProduct(p: any) {
   return {
     id: p.id,
     name: p.name,
+    itemType: p.itemType === "service" ? "service" : "product",
     printName: p.printName ?? null,
     group: p.group,
     brand: p.brand,

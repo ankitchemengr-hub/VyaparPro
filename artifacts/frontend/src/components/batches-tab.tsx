@@ -261,7 +261,8 @@ function OpeningDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
   const [qty, setQty] = useState("");
   const [saving, setSaving] = useState(false);
   const params = { search: search.trim() };
-  const { data: products = [] } = useListProducts(params, { query: { queryKey: getListProductsQueryKey(params), enabled: !product && search.trim().length >= 1 } });
+  const { data: listedProducts = [] } = useListProducts(params, { query: { queryKey: getListProductsQueryKey(params), enabled: !product && search.trim().length >= 1 } });
+  const products = listedProducts.filter((p) => p.itemType !== "service");
 
   const save = async () => {
     if (!product) return;

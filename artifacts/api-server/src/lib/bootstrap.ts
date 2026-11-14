@@ -595,6 +595,35 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
     `ALTER TABLE account_transactions ADD COLUMN IF NOT EXISTS discount NUMERIC(14, 2) NOT NULL DEFAULT 0`,
     // Product → "Show MRP on invoice" (an MRP column in the printed bill).
     `ALTER TABLE products ADD COLUMN IF NOT EXISTS show_mrp_on_invoice BOOLEAN NOT NULL DEFAULT false`,
+    // ── Services (Inventory → Add Service) ──
+    // A service is a products row with item_type 'service'. It never holds
+    // stock: whatever path moves stock (sale, edit, cancel, return, purchase,
+    // adjustment, import…), these triggers keep a service's stock at 0 and
+    // drop its stock_movements rows, so no route has to special-case it.
+    `ALTER TABLE products ADD COLUMN IF NOT EXISTS item_type TEXT NOT NULL DEFAULT 'product'`,
+    `CREATE OR REPLACE FUNCTION service_keeps_no_stock() RETURNS trigger AS $$
+     BEGIN
+       IF NEW.item_type = 'service' THEN
+         NEW.current_stock := 0;
+         NEW.opening_stock := NULL;
+         NEW.opening_stock_value := NULL;
+         NEW.min_stock_threshold := NULL;
+       END IF;
+       RETURN NEW;
+     END $$ LANGUAGE plpgsql`,
+    `DROP TRIGGER IF EXISTS products_service_no_stock ON products`,
+    `CREATE TRIGGER products_service_no_stock BEFORE INSERT OR UPDATE ON products
+     FOR EACH ROW EXECUTE FUNCTION service_keeps_no_stock()`,
+    `CREATE OR REPLACE FUNCTION service_skips_stock_movement() RETURNS trigger AS $$
+     BEGIN
+       IF EXISTS (SELECT 1 FROM products WHERE id = NEW.product_id AND item_type = 'service') THEN
+         RETURN NULL;
+       END IF;
+       RETURN NEW;
+     END $$ LANGUAGE plpgsql`,
+    `DROP TRIGGER IF EXISTS stock_movements_skip_service ON stock_movements`,
+    `CREATE TRIGGER stock_movements_skip_service BEFORE INSERT ON stock_movements
+     FOR EACH ROW EXECUTE FUNCTION service_skips_stock_movement()`,
     // ── Platform maintenance notices (lib/platform-notices.ts) ──
     `CREATE TABLE IF NOT EXISTS platform_notices (
       id                  SERIAL PRIMARY KEY,

@@ -106,7 +106,7 @@ router.get("/godowns/stock", async (req, res): Promise<void> => {
   try {
     const [products, held] = await Promise.all([
       pool.query(
-        `SELECT id, name, unit, current_stock::float AS stock FROM products WHERE company_id = $1 ORDER BY name`,
+        `SELECT id, name, unit, current_stock::float AS stock FROM products WHERE company_id = $1 AND item_type <> 'service' ORDER BY name`,
         [companyId],
       ),
       pool.query(`SELECT godown_id, product_id, qty::float AS qty FROM godown_stock WHERE company_id = $1 AND qty <> 0`, [companyId]),

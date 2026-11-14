@@ -32,8 +32,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { getListProductsQueryKey } from "@workspace/api-client-react";
 import {
   PackageSearch, PackagePlus, Upload, X, ImageIcon, Loader2, ChevronRight,
-  Pencil, Trash2, Save, Eye, EyeOff, Check, ChevronsUpDown, Plus, Wand2, Receipt,
+  Pencil, Trash2, Save, Eye, EyeOff, Check, ChevronsUpDown, Plus, Wand2, Receipt, Wrench,
 } from "lucide-react";
+import { ServiceDialog } from "@/components/service-dialog";
 
 // Brand field for the product form — picks from the Brand Master list, or
 // creates a new master entry inline if the typed name doesn't exist yet.
@@ -215,10 +216,16 @@ export default function Inventory() {
   const [brandFilter, setBrandFilter] = useState<string>("");
   const [addOpen, setAddOpen] = useState(false);
   const [editProduct, setEditProduct] = useState<any | null>(null);
+  const [serviceOpen, setServiceOpen] = useState(false);
+  const [editService, setEditService] = useState<any | null>(null);
+  // Products (goods, with stock) and services (labour, repair… no stock).
+  const [typeFilter, setTypeFilter] = useState<"all" | "product" | "service">("all");
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
   const [billsProduct, setBillsProduct] = useState<any | null>(null);
   const [showValue, setShowValue] = useState(false);
-  const { data: products, isLoading } = useListProducts({ search: search || undefined, brand: brandFilter || undefined });
+  const { data: listed, isLoading } = useListProducts({ search: search || undefined, brand: brandFilter || undefined });
+  const isService = (p: any) => p?.itemType === "service";
+  const products = typeFilter === "all" ? listed : listed?.filter((p) => (typeFilter === "service") === isService(p));
   const { data: brandOptions } = useListBrandMaster();
   // Unfiltered product list, used only to total the whole inventory's value —
   // independent of whatever search text is narrowing the table below.
@@ -268,10 +275,16 @@ export default function Inventory() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <h1 className="text-3xl font-bold tracking-tight">Inventory Management</h1>
-        <Button onClick={() => setAddOpen(true)} data-testid="button-add-product">
-          <PackagePlus className="h-4 w-4 mr-2" />
-          Add Product
-        </Button>
+        <div className="flex flex-col gap-2 sm:items-stretch">
+          <Button onClick={() => setAddOpen(true)} data-testid="button-add-product">
+            <PackagePlus className="h-4 w-4 mr-2" />
+            Add Product
+          </Button>
+          <Button variant="outline" onClick={() => setServiceOpen(true)} data-testid="button-add-service">
+            <Wrench className="h-4 w-4 mr-2" />
+            Add Service
+          </Button>
+        </div>
       </div>
 
       {isAdmin && (
@@ -299,17 +312,27 @@ export default function Inventory() {
         </Card>
       )}
 
-      <div className="flex gap-4">
+      <div className="flex flex-wrap gap-4">
         <div className="relative w-full max-w-sm">
           <PackageSearch className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search products by name or code..."
+            placeholder="Search products / services by name or code..."
             className="pl-8"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             data-testid="input-search-inventory"
           />
         </div>
+        <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as typeof typeFilter)}>
+          <SelectTrigger className="w-[200px]" data-testid="select-filter-type">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Products &amp; Services</SelectItem>
+            <SelectItem value="product">Products only</SelectItem>
+            <SelectItem value="service">Services only</SelectItem>
+          </SelectContent>
+        </Select>
         <Select value={brandFilter || "all"} onValueChange={(v) => setBrandFilter(v === "all" ? "" : v)}>
           <SelectTrigger className="w-[180px]" data-testid="select-filter-brand">
             <SelectValue placeholder="All Brands" />
@@ -330,7 +353,7 @@ export default function Inventory() {
               <TableRow>
                 <TableHead className="w-16">Image</TableHead>
                 <TableHead>Code</TableHead>
-                <TableHead>Product Name</TableHead>
+                <TableHead>Name</TableHead>
                 <TableHead>Brand</TableHead>
                 <TableHead>Stock</TableHead>
                 <TableHead>Pricing (W / R)</TableHead>
@@ -347,13 +370,17 @@ export default function Inventory() {
                 </TableRow>
               ) : products?.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No products found.</TableCell>
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">{typeFilter === "service" ? "No services yet — use Add Service." : "No products found."}</TableCell>
                 </TableRow>
               ) : (
                 products?.map((product) => (
                   <TableRow key={product.id} data-testid={`row-product-${product.id}`}>
                     <TableCell>
-                      {product.imageUrl ? (
+                      {isService(product) ? (
+                        <div className="w-10 h-10 rounded border bg-primary/10 flex items-center justify-center" title="Service">
+                          <Wrench className="w-4 h-4 text-primary" />
+                        </div>
+                      ) : product.imageUrl ? (
                         <img
                           src={product.imageUrl}
                           alt={product.name}
@@ -366,14 +393,25 @@ export default function Inventory() {
                       )}
                     </TableCell>
                     <TableCell className="font-mono text-xs">{product.itemCode}</TableCell>
-                    <TableCell className="font-medium">{product.name}</TableCell>
+                    <TableCell className="font-medium">
+                      {product.name}
+                      {isService(product) && (
+                        <div className="text-xs text-muted-foreground font-normal" data-testid={`text-service-sac-${product.id}`}>
+                          Service{product.hsnCode ? ` · SAC ${product.hsnCode}` : ""}
+                        </div>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Badge variant="outline">{product.brand}</Badge>
                     </TableCell>
                     <TableCell>
-                      <span className={product.currentStock <= (product.minStockThreshold || 0) ? "text-destructive font-bold" : ""}>
-                        {product.currentStock} {product.unit}
-                      </span>
+                      {isService(product) ? (
+                        <span className="text-muted-foreground text-sm" title="A service has no stock">— per {product.unit}</span>
+                      ) : (
+                        <span className={product.currentStock <= (product.minStockThreshold || 0) ? "text-destructive font-bold" : ""}>
+                          {product.currentStock} {product.unit}
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell className="text-sm">
                       ₹{product.wholesalePrice} / ₹{product.retailPrice}
@@ -402,9 +440,9 @@ export default function Inventory() {
                         </Button>
                         <Button
                           size="icon" variant="ghost" className="h-8 w-8"
-                          onClick={() => setEditProduct(product)}
+                          onClick={() => (isService(product) ? setEditService(product) : setEditProduct(product))}
                           data-testid={`button-edit-${product.id}`}
-                          title="Edit product"
+                          title={isService(product) ? "Edit service" : "Edit product"}
                         >
                           <Pencil className="w-4 h-4" />
                         </Button>
@@ -428,6 +466,12 @@ export default function Inventory() {
       </Card>
 
       <ProductDialog open={addOpen} onOpenChange={setAddOpen} isAdmin={isAdmin} />
+      <ServiceDialog open={serviceOpen} onOpenChange={setServiceOpen} />
+      <ServiceDialog
+        open={!!editService}
+        onOpenChange={(v) => { if (!v) setEditService(null); }}
+        service={editService}
+      />
       <ProductDialog
         open={!!editProduct}
         onOpenChange={(v) => { if (!v) setEditProduct(null); }}

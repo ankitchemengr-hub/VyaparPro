@@ -4628,6 +4628,10 @@ components:
         showMrpOnInvoice:
           type: boolean
           description: Print the MRP of this product in its own column on invoices.
+        itemType:
+          type: string
+          enum: [product, service]
+          description: "\"service\" = labour/repair/installation etc. — billed with a SAC code (hsnCode), never holds stock."
         minStockThreshold:
           type: ["number", "null"]
         imageUrl:
@@ -4704,6 +4708,10 @@ components:
         showMrpOnInvoice:
           type: boolean
           description: Print the MRP of this product in its own column on invoices.
+        itemType:
+          type: string
+          enum: [product, service]
+          description: "\"service\" = labour/repair/installation etc. — billed with a SAC code (hsnCode), never holds stock."
         minStockThreshold:
           type: number
         imageUrl:
@@ -4768,6 +4776,10 @@ components:
         showMrpOnInvoice:
           type: boolean
           description: Print the MRP of this product in its own column on invoices.
+        itemType:
+          type: string
+          enum: [product, service]
+          description: "\"service\" = labour/repair/installation etc. — billed with a SAC code (hsnCode), never holds stock."
         minStockThreshold:
           type: number
         imageUrl:

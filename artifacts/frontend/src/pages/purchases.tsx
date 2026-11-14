@@ -635,7 +635,9 @@ function NewPurchaseTab({
   onConsumePrefill?: () => void;
 } = {}) {
   const { data: vendors } = useListEntities({ type: "vendor" });
-  const { data: products } = useListProducts({});
+  // Services have no stock, so they are never bought in on a purchase bill.
+  const { data: listedProducts } = useListProducts({});
+  const products = useMemo(() => listedProducts?.filter((p) => p.itemType !== "service"), [listedProducts]);
   const create = useCreatePurchase();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -2121,7 +2123,9 @@ function EditPurchaseDialog({
     query: { enabled: open, queryKey: getGetPurchaseQueryKey(purchaseId) },
   });
   const { data: vendors } = useListEntities({ type: "vendor" });
-  const { data: products } = useListProducts({});
+  // Services have no stock, so they are never bought in on a purchase bill.
+  const { data: listedProducts } = useListProducts({});
+  const products = useMemo(() => listedProducts?.filter((p) => p.itemType !== "service"), [listedProducts]);
   const update = useUpdatePurchase();
   const queryClient = useQueryClient();
   const { toast } = useToast();

@@ -165,10 +165,11 @@ export async function autoManufactureForSale(
   if (!(qtyOut > 0)) return null;
   if (!(await isAutoManufactureEnabled(client, companyId))) return null;
   const r = await client.query(
-    `SELECT current_stock FROM products WHERE id = $1 AND company_id = $2 FOR UPDATE`,
+    `SELECT current_stock, item_type FROM products WHERE id = $1 AND company_id = $2 FOR UPDATE`,
     [productId, companyId],
   );
-  if (!r.rows[0]) return null;
+  // A service has no stock and nothing to manufacture.
+  if (!r.rows[0] || r.rows[0].item_type === "service") return null;
   const stock = Number(r.rows[0].current_stock);
   // Stock after this sale would be (stock - qtyOut); make up everything below 0.
   const shortfall = qtyOut - stock;

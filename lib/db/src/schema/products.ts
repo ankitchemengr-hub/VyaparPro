@@ -6,6 +6,9 @@ export const productsTable = pgTable("products", {
   id: serial("id").primaryKey(),
   companyId: integer("company_id").notNull(),
   name: text("name").notNull(),
+  // "product" (goods, has stock) or "service" (labour, repair, installation…
+  // — billed with a SAC code, never has stock; bootstrap.ts keeps its stock 0).
+  itemType: text("item_type").notNull().default("product"),
   printName: text("print_name"),
   group: text("group").notNull(),
   brand: text("brand").notNull(),
