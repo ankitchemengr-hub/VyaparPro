@@ -16,6 +16,7 @@ import { companyIdForHost, requestHost } from "../lib/custom-domains";
 import { getCurrentCompany } from "../lib/company";
 import { verifyPassword } from "../lib/password";
 import { loginRateLimitKey, checkLoginRateLimit, recordLoginFailure, clearLoginAttempts } from "../lib/login-rate-limit";
+import { passwordVersion } from "../lib/session-guard";
 import { hashPassword } from "../lib/password";
 import { isUsernameTaken } from "../lib/username";
 import {
@@ -297,6 +298,10 @@ router.post("/auth/login", async (req, res): Promise<void> => {
 
   const session = {
     userId: user.id,
+    // Sign-in time and password fingerprint, checked on every request
+    // (lib/session-guard.ts).
+    iat: Date.now(),
+    pv: passwordVersion(user.passwordHash),
     username: user.username,
     role: user.role,
     name: user.name,
@@ -435,8 +440,12 @@ router.post("/auth/change-password", async (req, res): Promise<void> => {
     res.status(400).json({ error: "New password must be different from the current one" });
     return;
   }
-  await pool.query(`UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`, [hashPassword(newPassword), userId]);
+  const newHash = hashPassword(newPassword);
+  await pool.query(`UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`, [newHash, userId]);
   await forgetTrustedDevices(userId, req);
+  // Every other device is signed out (its password fingerprint no longer
+  // matches); this one stays signed in with the new fingerprint.
+  (req as any).session = { ...(req as any).session, pv: passwordVersion(newHash) };
   res.json({ message: "Password changed" });
 });
 
@@ -564,6 +573,9 @@ router.get("/auth/me", async (req, res): Promise<void> => {
   // data route. Refreshing here lets a stale session self-heal on page load.
   (req as any).session = {
     userId: user.id,
+    // Keep the original sign-in time so the 7-day limit still applies.
+    iat: typeof session.iat === "number" ? session.iat : Date.now(),
+    pv: passwordVersion(user.passwordHash),
     username: user.username,
     role: user.role,
     name: user.name,

@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { requireRoles, roleAllowed } from "../lib/role-guard";
 import { eq, and } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
@@ -41,7 +42,7 @@ router.get("/reward-schemes", async (req, res): Promise<void> => {
 });
 
 // POST /reward-schemes
-router.post("/reward-schemes", async (req, res): Promise<void> => {
+router.post("/reward-schemes", requireRoles("admin"), async (req, res): Promise<void> => {
   const parsed = CreateRewardSchemeBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -62,7 +63,7 @@ router.post("/reward-schemes", async (req, res): Promise<void> => {
 });
 
 // PATCH /reward-schemes/:id
-router.patch("/reward-schemes/:id", async (req, res): Promise<void> => {
+router.patch("/reward-schemes/:id", requireRoles("admin"), async (req, res): Promise<void> => {
   const params = UpdateRewardSchemeParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -96,7 +97,7 @@ router.patch("/reward-schemes/:id", async (req, res): Promise<void> => {
 });
 
 // DELETE /reward-schemes/:id
-router.delete("/reward-schemes/:id", async (req, res): Promise<void> => {
+router.delete("/reward-schemes/:id", requireRoles("admin"), async (req, res): Promise<void> => {
   const params = DeleteRewardSchemeParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -122,6 +123,19 @@ router.get("/reward-progress", async (req, res): Promise<void> => {
 
   const companyId = getCompanyId(req);
   const conditions: any[] = [eq(rewardProgressTable.companyId, companyId)];
+  // Staff see every customer's progress; a customer login sees only its own.
+  const session = (req as any).session;
+  if (session?.role === "customer") {
+    const own = Number(session.entityId);
+    if (!Number.isInteger(own) || own <= 0) {
+      res.json([]);
+      return;
+    }
+    conditions.push(eq(rewardProgressTable.customerId, own));
+  } else if (!roleAllowed(session?.role, ["admin", "accountant", "salesman"])) {
+    res.status(403).json({ error: "You don't have access to this." });
+    return;
+  }
   if (params.data.customerId) conditions.push(eq(rewardProgressTable.customerId, params.data.customerId));
 
   const rows = await db
@@ -161,7 +175,7 @@ router.get("/reward-progress", async (req, res): Promise<void> => {
 });
 
 // POST /reward-progress/:id/disburse
-router.post("/reward-progress/:id/disburse", async (req, res): Promise<void> => {
+router.post("/reward-progress/:id/disburse", requireRoles("admin"), async (req, res): Promise<void> => {
   const params = DisburseRewardParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });

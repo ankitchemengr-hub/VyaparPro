@@ -14,11 +14,13 @@ export function buildProductImageUrl(id: number, updatedAt: Date | string | null
   return `/api/products/${id}/image?v=${v}`;
 }
 
-const DATA_URL_RE = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/;
+// Raster formats only: an SVG can carry script, and this image is served
+// from the app's own origin.
+const DATA_URL_RE = /^data:(image\/(?:png|jpeg|jpg|webp|gif));base64,(.+)$/i;
 
 export function decodeProductImageDataUrl(dataUrl: string): { mimeType: string; bytes: Buffer } | null {
   const match = DATA_URL_RE.exec(dataUrl);
   if (!match) return null;
   const [, mimeType, base64] = match;
-  return { mimeType, bytes: Buffer.from(base64, "base64") };
+  return { mimeType: mimeType.toLowerCase(), bytes: Buffer.from(base64, "base64") };
 }

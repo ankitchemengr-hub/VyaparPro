@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { requireRoles } from "../lib/role-guard";
 import { pool } from "@workspace/db";
 import { getCompanyId, getSession } from "../lib/tenant";
 import { logger } from "../lib/logger";
@@ -18,7 +19,7 @@ async function loadThreshold(companyId: number): Promise<number> {
 }
 
 // GET /customer-follow-ups/settings
-router.get("/customer-follow-ups/settings", async (req, res): Promise<void> => {
+router.get("/customer-follow-ups/settings", requireRoles("admin", "accountant", "salesman"), async (req, res): Promise<void> => {
   const companyId = getCompanyId(req);
   res.json({ days: await loadThreshold(companyId) });
 });
@@ -47,7 +48,7 @@ router.put("/customer-follow-ups/settings", async (req, res): Promise<void> => {
 // GET /customers/inactive — customers with no (non-cancelled) invoice within
 // the configured threshold, including customers with no invoice at all.
 // Most-inactive first (never-ordered, then oldest last order).
-router.get("/customers/inactive", async (req, res): Promise<void> => {
+router.get("/customers/inactive", requireRoles("admin", "accountant", "salesman"), async (req, res): Promise<void> => {
   const companyId = getCompanyId(req);
   try {
     // ?days= lets the page preview a different threshold (the Search button)
@@ -123,9 +124,9 @@ router.get("/customers/inactive", async (req, res): Promise<void> => {
 });
 
 // GET /customers/:id/follow-ups — remark history, most recent first
-router.get("/customers/:id/follow-ups", async (req, res): Promise<void> => {
+router.get("/customers/:id/follow-ups", requireRoles("admin", "accountant", "salesman"), async (req, res): Promise<void> => {
   const companyId = getCompanyId(req);
-  const customerId = parseInt(req.params.id, 10);
+  const customerId = parseInt(String(req.params.id), 10);
   try {
     const { rows } = await pool.query(
       `SELECT id, remark, created_by_name, created_at
@@ -147,9 +148,9 @@ router.get("/customers/:id/follow-ups", async (req, res): Promise<void> => {
 });
 
 // POST /customers/:id/follow-ups
-router.post("/customers/:id/follow-ups", async (req, res): Promise<void> => {
+router.post("/customers/:id/follow-ups", requireRoles("admin", "accountant", "salesman"), async (req, res): Promise<void> => {
   const companyId = getCompanyId(req);
-  const customerId = parseInt(req.params.id, 10);
+  const customerId = parseInt(String(req.params.id), 10);
   const remark = String((req.body ?? {}).remark ?? "").trim();
   if (!remark) {
     res.status(400).json({ error: "remark is required" });
@@ -179,9 +180,9 @@ router.post("/customers/:id/follow-ups", async (req, res): Promise<void> => {
 // POST /customers/:id/remind — "I'll order in N days": snooze this customer
 // off the Inactive Customers list until then. They reappear automatically
 // once that date passes if they still haven't invoiced.
-router.post("/customers/:id/remind", async (req, res): Promise<void> => {
+router.post("/customers/:id/remind", requireRoles("admin", "accountant", "salesman"), async (req, res): Promise<void> => {
   const companyId = getCompanyId(req);
-  const customerId = parseInt(req.params.id, 10);
+  const customerId = parseInt(String(req.params.id), 10);
   const days = Number((req.body ?? {}).days);
   if (!Number.isFinite(days) || days < 1) {
     res.status(400).json({ error: "days must be a positive number" });

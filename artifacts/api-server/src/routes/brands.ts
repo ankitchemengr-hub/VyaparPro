@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { requireRoles } from "../lib/role-guard";
 import { eq, and, ilike } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { brandsTable } from "@workspace/db";
@@ -27,7 +28,7 @@ router.get("/brands", async (req, res): Promise<void> => {
 });
 
 // POST /brands
-router.post("/brands", async (req, res): Promise<void> => {
+router.post("/brands", requireRoles("admin", "store"), async (req, res): Promise<void> => {
   const parsed = CreateBrandBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -54,7 +55,7 @@ router.post("/brands", async (req, res): Promise<void> => {
 });
 
 // PATCH /brands/:id
-router.patch("/brands/:id", async (req, res): Promise<void> => {
+router.patch("/brands/:id", requireRoles("admin", "store"), async (req, res): Promise<void> => {
   const params = UpdateBrandParams.safeParse(req.params);
   const parsed = UpdateBrandBody.safeParse(req.body);
   if (!params.success || !parsed.success) {
@@ -90,7 +91,7 @@ router.patch("/brands/:id", async (req, res): Promise<void> => {
 });
 
 // DELETE /brands/:id
-router.delete("/brands/:id", async (req, res): Promise<void> => {
+router.delete("/brands/:id", requireRoles("admin", "store"), async (req, res): Promise<void> => {
   const params = DeleteBrandParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });

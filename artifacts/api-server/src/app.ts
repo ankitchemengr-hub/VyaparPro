@@ -7,6 +7,8 @@ import fs from "node:fs";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { handleTenantError } from "./lib/tenant";
+import { validateSession } from "./lib/session-guard";
+import { corsOrigin, blockForeignWrites, securityHeaders } from "./lib/http-security";
 
 // No fallback: a hardcoded default would be visible in this source file, so
 // anyone reading it could forge a validly-signed session cookie for any user
@@ -39,7 +41,12 @@ app.use(
     },
   }),
 );
-app.use(cors({ origin: true, credentials: true }));
+app.disable("x-powered-by");
+app.use(securityHeaders);
+// Only our own sites (and a company's own domain) may call the API with the
+// session cookie — see lib/http-security.ts.
+app.use(cors(corsOrigin));
+app.use("/api", blockForeignWrites);
 // Razorpay's webhook signature is computed over the exact raw request bytes
 // — re-stringifying the parsed JSON body could differ in key order/whitespace
 // and fail verification. Capture the raw body for just this one path, before
@@ -61,6 +68,22 @@ app.use((req, _res, next) => {
     }
   } else {
     (req as any).session = null;
+  }
+  next();
+});
+
+// Every API request with a session is checked against the users row: a
+// disabled user, a changed role/company or a changed password ends the
+// session at once, and no session lives past 7 days (lib/session-guard.ts).
+app.use("/api", async (req, res, next) => {
+  const session = (req as any).session;
+  if (!session) return next();
+  try {
+    (req as any).session = await validateSession(session);
+  } catch (err) {
+    logger.error({ err }, "Session check failed");
+    res.status(503).json({ error: "Please try again in a moment." });
+    return;
   }
   next();
 });

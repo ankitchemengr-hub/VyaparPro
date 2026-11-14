@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { setUploadedFileHeaders } from "../lib/http-security";
 import { eq, and, sql, isNull } from "drizzle-orm";
 import { db, pool } from "@workspace/db";
 import {
@@ -1083,6 +1084,7 @@ router.get("/purchases/attachments/:attachmentId/file", async (req, res): Promis
       return;
     }
     res.setHeader("Content-Type", att.mime_type);
+    setUploadedFileHeaders(res, att.mime_type);
     res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(att.original_name)}"`);
     res.send(att.file_data);
   } catch (err) {

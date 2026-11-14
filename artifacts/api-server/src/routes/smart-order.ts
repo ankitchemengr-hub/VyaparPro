@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { requireRoles } from "../lib/role-guard";
 import { pool } from "@workspace/db";
 import { getCompanyId } from "../lib/tenant";
 import { buildProductImageUrl } from "../lib/product-image";
@@ -26,7 +27,7 @@ async function loadSettings(companyId: number) {
 }
 
 // GET /smart-order/settings
-router.get("/smart-order/settings", async (req, res): Promise<void> => {
+router.get("/smart-order/settings", requireRoles("admin", "store", "accountant"), async (req, res): Promise<void> => {
   const companyId = getCompanyId(req);
   res.json(await loadSettings(companyId));
 });
@@ -66,7 +67,7 @@ router.put("/smart-order/settings", async (req, res): Promise<void> => {
 // on real invoices; raw materials (not_for_sale = true) rank by qty consumed
 // in Manufacturing. Only the sales side can carry a reinvestment boost —
 // margin only exists where there's a sale price.
-router.get("/smart-order/suggestions", async (req, res): Promise<void> => {
+router.get("/smart-order/suggestions", requireRoles("admin", "store", "accountant"), async (req, res): Promise<void> => {
   const companyId = getCompanyId(req);
   const settings = await loadSettings(companyId);
   const lookbackStart = new Date(Date.now() - settings.lookbackDays * 24 * 60 * 60 * 1000);

@@ -5,6 +5,10 @@
 // in-memory map is sufficient — no Redis/DB round-trip needed for this.
 
 const MAX_ATTEMPTS = 5;
+// The client IP comes from X-Forwarded-For, which a caller can fake to look
+// like a new IP on every try. So one username also has its own cap across
+// all IPs: past it, that login is paused for the rest of the window.
+const MAX_ATTEMPTS_PER_USERNAME = 20;
 const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 const CLEANUP_INTERVAL_MS = 30 * 60 * 1000;
 
@@ -25,11 +29,17 @@ setInterval(() => {
   }
 }, CLEANUP_INTERVAL_MS).unref();
 
+// "<ip>\n<username>" — a newline can't appear in either part, so the
+// username is recoverable for the per-username counter below.
 export function loginRateLimitKey(ip: string, username: string): string {
-  return `${ip}:${username.trim().toLowerCase()}`;
+  return `${ip}\n${username.trim().toLowerCase()}`;
 }
 
-export function checkLoginRateLimit(key: string): { blocked: boolean; retryAfterMs: number } {
+function usernameKey(key: string): string {
+  return `user\n${key.slice(key.lastIndexOf("\n") + 1)}`;
+}
+
+function checkOne(key: string, max: number): { blocked: boolean; retryAfterMs: number } {
   const a = attempts.get(key);
   if (!a) return { blocked: false, retryAfterMs: 0 };
   const elapsed = Date.now() - a.firstAttemptAt;
@@ -37,13 +47,19 @@ export function checkLoginRateLimit(key: string): { blocked: boolean; retryAfter
     attempts.delete(key);
     return { blocked: false, retryAfterMs: 0 };
   }
-  if (a.count >= MAX_ATTEMPTS) {
+  if (a.count >= max) {
     return { blocked: true, retryAfterMs: WINDOW_MS - elapsed };
   }
   return { blocked: false, retryAfterMs: 0 };
 }
 
-export function recordLoginFailure(key: string): void {
+export function checkLoginRateLimit(key: string): { blocked: boolean; retryAfterMs: number } {
+  const pair = checkOne(key, MAX_ATTEMPTS);
+  if (pair.blocked) return pair;
+  return checkOne(usernameKey(key), MAX_ATTEMPTS_PER_USERNAME);
+}
+
+function bump(key: string): void {
   const now = Date.now();
   const a = attempts.get(key);
   if (!a || now - a.firstAttemptAt > WINDOW_MS) {
@@ -53,6 +69,12 @@ export function recordLoginFailure(key: string): void {
   a.count++;
 }
 
+export function recordLoginFailure(key: string): void {
+  bump(key);
+  bump(usernameKey(key));
+}
+
 export function clearLoginAttempts(key: string): void {
   attempts.delete(key);
+  attempts.delete(usernameKey(key));
 }

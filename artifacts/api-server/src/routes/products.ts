@@ -22,6 +22,7 @@ import { loadManufacturingCosts, loadCostGstPct } from "../lib/bom-cost";
 import { computeRecalculation, applyRecalculation } from "../lib/recalculate-prices";
 import { computeMarginedPrices } from "../lib/margin-pricing";
 import { buildProductImageUrl, decodeProductImageDataUrl } from "../lib/product-image";
+import { setUploadedFileHeaders } from "../lib/http-security";
 
 const router: IRouter = Router();
 
@@ -399,6 +400,7 @@ router.get("/products/:id/image", async (req, res): Promise<void> => {
     return;
   }
   res.setHeader("Content-Type", decoded.mimeType);
+  setUploadedFileHeaders(res, decoded.mimeType);
   // Safe to cache indefinitely — the `v=` query param changes whenever the
   // image itself does (see buildProductImageUrl), so this exact URL never
   // points at stale content.
