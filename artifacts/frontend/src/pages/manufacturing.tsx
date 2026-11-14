@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
+import { useLocation, useSearch } from "wouter";
 import {
   useListBoms,
   useListWorkloadCards,
@@ -29,7 +30,6 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/use-auth";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -76,18 +76,46 @@ import {
   Wrench,
   User,
   Eye,
+  ArrowLeft,
+  ChevronRight,
+  BarChart3,
 } from "lucide-react";
 import { BomDialog } from "@/components/bom-dialog";
 
-export default function Manufacturing() {
-  // Lifted state so the Workload tab can deep-link into Assemble Item with a
-  // specific BOM pre-selected.
-  const [tab, setTab] = useState("workload");
-  const [pendingAssembleBomId, setPendingAssembleBomId] = useState<string>("");
+// Five cards first; a card opens its screen (?s=workload, ?s=assemble, …) and
+// Back returns to the cards (phone back works too).
+const SECTIONS = [
+  { key: "workload", icon: ListChecks, title: "Workload", description: "Low-stock items to produce — Pending, Processing, Done" },
+  { key: "assemble", icon: Wrench, title: "Assemble Item", description: "Make a finished product from its BOM's raw materials" },
+  { key: "ready", icon: PackageCheck, title: "Ready Material", description: "Assembled batches waiting — dispatch them to stock or adjust the qty" },
+  { key: "transfer", icon: ArrowLeftRight, title: "Material Transfer", description: "Material sent to or from the Store, slip-wise" },
+  { key: "report", icon: BarChart3, title: "Report", description: "Completed assembly runs in a date range" },
+] as const;
+type SectionKey = (typeof SECTIONS)[number]["key"];
 
+export default function Manufacturing() {
+  const [, setLocation] = useLocation();
+  const section = new URLSearchParams(useSearch()).get("s");
+  const current = SECTIONS.find((c) => c.key === section);
+  // Lifted state so Workload can deep-link into Assemble Item with a
+  // specific BOM pre-selected.
+  const [pendingAssembleBomId, setPendingAssembleBomId] = useState<string>("");
+  const fromCards = React.useRef(false);
+
+  const openSection = (key: SectionKey) => {
+    fromCards.current = true;
+    setLocation(`/manufacturing?s=${key}`);
+    window.scrollTo({ top: 0 });
+  };
+  const backToCards = () => {
+    if (fromCards.current) { fromCards.current = false; window.history.back(); }
+    else setLocation("/manufacturing", { replace: true });
+  };
+  // Workload → Assemble swaps the open screen, so Back still returns to the cards.
   const startAssemble = (bomId: number) => {
     setPendingAssembleBomId(String(bomId));
-    setTab("assemble");
+    setLocation("/manufacturing?s=assemble", { replace: true });
+    window.scrollTo({ top: 0 });
   };
 
   return (
@@ -100,48 +128,50 @@ export default function Manufacturing() {
         </p>
       </div>
 
-      <Tabs value={tab} onValueChange={setTab} className="w-full">
-        <TabsList className="flex flex-wrap h-auto justify-start gap-1">
-          <TabsTrigger value="workload" data-testid="tab-workload">
-            Workload
-          </TabsTrigger>
-          <TabsTrigger value="assemble" data-testid="tab-assemble">
-            Assemble Item
-          </TabsTrigger>
-          <TabsTrigger value="ready" data-testid="tab-ready">
-            Ready Material
-          </TabsTrigger>
-          <TabsTrigger value="transfer" data-testid="tab-transfer">
-            Material Transfer
-          </TabsTrigger>
-          <TabsTrigger value="report" data-testid="tab-report">
-            Report
-          </TabsTrigger>
-        </TabsList>
+      {!current && (
+        <div className="grid gap-3 sm:grid-cols-2 print:hidden">
+          {SECTIONS.map((c) => (
+            <button
+              key={c.key}
+              type="button"
+              onClick={() => openSection(c.key)}
+              className="text-left rounded-lg border bg-card hover:bg-accent hover:border-primary/50 transition-colors p-4 flex items-center gap-3"
+              data-testid={`card-manufacturing-${c.key}`}
+            >
+              <span className="rounded-md bg-primary/10 text-primary p-2.5 shrink-0"><c.icon className="w-5 h-5" /></span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-semibold leading-tight">{c.title}</span>
+                <span className="block text-xs text-muted-foreground mt-1 leading-snug">{c.description}</span>
+              </span>
+              <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+            </button>
+          ))}
+        </div>
+      )}
 
-        <TabsContent value="workload" className="mt-6">
-          <WorkloadTab onStartAssemble={startAssemble} />
-        </TabsContent>
+      {current && (
+        <>
+          <div className="flex items-center gap-2 print:hidden">
+            <Button variant="outline" size="sm" onClick={backToCards} data-testid="button-manufacturing-back">
+              <ArrowLeft className="w-4 h-4 mr-1" />Manufacturing
+            </Button>
+            <h2 className="text-lg sm:text-xl font-semibold flex items-center gap-2 min-w-0">
+              <current.icon className="w-5 h-5 text-primary shrink-0" /><span className="leading-tight">{current.title}</span>
+            </h2>
+          </div>
 
-        <TabsContent value="assemble" className="mt-6">
-          <AssembleTab
-            initialBomId={pendingAssembleBomId}
-            onConsumeInitialBomId={() => setPendingAssembleBomId("")}
-          />
-        </TabsContent>
-
-        <TabsContent value="ready" className="mt-6">
-          <ReadyMaterialTab />
-        </TabsContent>
-
-        <TabsContent value="transfer" className="mt-6">
-          <MaterialTransferTab />
-        </TabsContent>
-
-        <TabsContent value="report" className="mt-6">
-          <ReportTab />
-        </TabsContent>
-      </Tabs>
+          {current.key === "workload" && <WorkloadTab onStartAssemble={startAssemble} />}
+          {current.key === "assemble" && (
+            <AssembleTab
+              initialBomId={pendingAssembleBomId}
+              onConsumeInitialBomId={() => setPendingAssembleBomId("")}
+            />
+          )}
+          {current.key === "ready" && <ReadyMaterialTab />}
+          {current.key === "transfer" && <MaterialTransferTab />}
+          {current.key === "report" && <ReportTab />}
+        </>
+      )}
     </div>
   );
 }
