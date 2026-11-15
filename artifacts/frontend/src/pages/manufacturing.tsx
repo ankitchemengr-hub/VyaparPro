@@ -54,6 +54,7 @@ import {
   Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
+import { AssemblyHistory, AssemblyHistoryCard } from "@/components/assembly-history";
 import {
   Factory,
   Loader2,
@@ -1198,6 +1199,8 @@ function AssembleTab({
 
   const [bomId, setBomId] = useState<string>("");
   const [batches, setBatches] = useState<string>("1");
+  // Assembly History opens inside Assemble Item (its own card at the top).
+  const [showHistory, setShowHistory] = useState(false);
   const [workerId, setWorkerId] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const [search, setSearch] = useState("");
@@ -1325,6 +1328,10 @@ function AssembleTab({
     }
   };
 
+  if (showHistory) {
+    return <AssemblyHistory onBack={() => setShowHistory(false)} />;
+  }
+
   if (bomsLoading) {
     return (
       <div className="text-center py-12 text-muted-foreground">
@@ -1348,6 +1355,7 @@ function AssembleTab({
 
   return (
     <div className="space-y-6">
+      <AssemblyHistoryCard onOpen={() => setShowHistory(true)} />
       {/* BOM picker — visual catalog of recipes, now full width */}
       <div>
         <div className="flex items-baseline justify-between mb-3">

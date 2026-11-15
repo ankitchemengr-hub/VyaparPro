@@ -532,10 +532,10 @@ router.post("/manufacturing/assemble", async (req, res): Promise<void> => {
     const now = new Date();
     const cardRes = await client.query(
       `INSERT INTO workload_cards
-         (company_id, product_id, target_qty, status, order_type, started_at, completed_at)
-       VALUES ($1, $2, $3, 'done', 'production', $4, $4)
+         (company_id, product_id, target_qty, status, order_type, started_at, completed_at, worker_id, worker_name, bom_id, batches)
+       VALUES ($1, $2, $3, 'done', 'production', $4, $4, $5, $6, $7, $8)
        RETURNING id`,
-      [companyId, bom.finishedProductId, String(outputUnits), now],
+      [companyId, bom.finishedProductId, String(outputUnits), now, worker.id, worker.name, bom.id, String(batches)],
     );
     cardId = cardRes.rows[0].id;
 

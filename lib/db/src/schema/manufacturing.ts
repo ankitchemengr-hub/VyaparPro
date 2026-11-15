@@ -37,6 +37,10 @@ export const workloadCardsTable = pgTable("workload_cards", {
   workerName: text("worker_name"),
   orderType: text("order_type").notNull().default("manual_order"), // low_stock_alert, manual_order, customer_backorder
   referenceOrderId: integer("reference_order_id"),
+  // Assemble Item runs only: the recipe used and how many batches were made
+  // (Manufacturing → Assemble Item → Assembly History edits by batches).
+  bomId: integer("bom_id"),
+  batches: numeric("batches", { precision: 12, scale: 3 }),
   startedAt: timestamp("started_at", { withTimezone: true }),
   completedAt: timestamp("completed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

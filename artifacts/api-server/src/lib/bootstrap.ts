@@ -485,6 +485,9 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
     // logs in exactly as before.
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMP WITH TIME ZONE`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS login_otp_required BOOLEAN NOT NULL DEFAULT false`,
+    // Assembly History (routes/assemblies.ts): recipe + batch count per run.
+    `ALTER TABLE workload_cards ADD COLUMN IF NOT EXISTS bom_id INTEGER`,
+    `ALTER TABLE workload_cards ADD COLUMN IF NOT EXISTS batches NUMERIC(12, 3)`,
     // Login code email for accounts whose username isn't an email (My Account).
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS otp_email TEXT`,
     // "Sign out everywhere" (lib/session-guard.ts): NULL = never used.
