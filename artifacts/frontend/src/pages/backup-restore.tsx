@@ -14,7 +14,8 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { useSectionNav, SectionCardGrid, SectionBackBar, type SectionCard } from "@/components/section-cards";
 import {
   Table,
   TableBody,
@@ -82,6 +83,14 @@ export default function BackupRestore() {
   const updateSettings = useUpdateBackupSettings();
   const restore = useRestoreBackup();
   const resetData = useResetCompanyData();
+
+  // Sections as cards (?s=backup / restore / reset), Back returns to the cards.
+  const sectionCards: SectionCard<"backup" | "restore" | "reset">[] = [
+    { key: "backup", icon: HardDriveDownload, title: "Backup", description: "Download your data now, and the automatic backup schedule" },
+    { key: "restore", icon: UploadCloud, title: "Restore", description: "Bring data back from a backup file" },
+    { key: "reset", icon: RotateCcw, title: "Reset", description: "Clear the company's data to start fresh" },
+  ];
+  const nav = useSectionNav("/backup-restore", sectionCards);
   const [downloading, setDownloading] = useState<"zip" | "json" | null>(null);
 
   // Restore state
@@ -243,18 +252,11 @@ export default function BackupRestore() {
         </p>
       </div>
 
-      <Tabs defaultValue="backup">
-        <TabsList>
-          <TabsTrigger value="backup" data-testid="tab-backup">
-            <HardDriveDownload className="mr-2 h-4 w-4" /> Backup
-          </TabsTrigger>
-          <TabsTrigger value="restore" data-testid="tab-restore">
-            <UploadCloud className="mr-2 h-4 w-4" /> Restore
-          </TabsTrigger>
-          <TabsTrigger value="reset" data-testid="tab-reset">
-            <RotateCcw className="mr-2 h-4 w-4" /> Reset
-          </TabsTrigger>
-        </TabsList>
+      {nav.current
+        ? <SectionBackBar pageName="Backup & Restore" card={nav.current} onBack={nav.back} testPrefix="backup" />
+        : <SectionCardGrid cards={sectionCards} onOpen={nav.open} testPrefix="backup" />}
+
+      <Tabs value={nav.current?.key ?? ""}>
 
         <TabsContent value="backup" className="space-y-6">
           {/* Manual backup */}

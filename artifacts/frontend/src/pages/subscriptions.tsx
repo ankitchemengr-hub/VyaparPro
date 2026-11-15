@@ -30,7 +30,8 @@ import { Badge } from "@/components/ui/badge";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { useSectionNav, SectionCardGrid, SectionBackBar, type SectionCard } from "@/components/section-cards";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -50,7 +51,7 @@ import {
 import {
   Users, CheckCircle2, XCircle, Clock, TrendingUp, DollarSign, Bell, Plus,
   RefreshCw, ArrowUpDown, Ban, Play, Download, FileSpreadsheet, FileText, Search,
-  Pencil, Trash2, AlertTriangle, Globe,
+  Pencil, Trash2, AlertTriangle, Globe, BarChart3, Inbox, Megaphone, Tags, Gift, List,
 } from "lucide-react";
 
 const PLANS = [
@@ -202,6 +203,22 @@ export default function Subscriptions() {
   // Same query the Demo Leads tab uses — here only for the "(n new)" count.
   const demoLeads = useListDemoLeads();
   const newLeadCount = (demoLeads.data ?? []).filter((l) => l.status === "new").length;
+
+  // Platform Console sections as cards (?s=<key>), Back returns to the cards.
+  const alertCount = alerts.data?.length ?? 0;
+  const pendingDomains = domainRequests.data?.filter((r) => r.status === "pending").length ?? 0;
+  type ConsoleSection = "subscriptions" | "charts" | "alerts" | "domains" | "leads" | "notices" | "plans-offers" | "referrals";
+  const sectionCards: SectionCard<ConsoleSection>[] = [
+    { key: "subscriptions", icon: List, title: "Subscriptions", description: "Every company's plan, expiry and payment — renew, edit, suspend" },
+    { key: "charts", icon: BarChart3, title: "Analytics", description: "Revenue and signups over time" },
+    { key: "alerts", icon: Bell, title: alertCount ? `Alerts (${alertCount})` : "Alerts", description: "Subscriptions expiring soon or overdue" },
+    { key: "domains", icon: Globe, title: pendingDomains ? `Domain Requests (${pendingDomains})` : "Domain Requests", description: "Customers' own web addresses waiting for setup" },
+    { key: "leads", icon: Inbox, title: newLeadCount ? `Demo Leads (${newLeadCount} new)` : "Demo Leads", description: "Demo requests from the website" },
+    { key: "notices", icon: Megaphone, title: "Notices", description: "Messages shown to all customers in the ERP" },
+    { key: "plans-offers", icon: Tags, title: "Plans & Offers", description: "Plan prices, offers, long-period discounts and coupon codes" },
+    { key: "referrals", icon: Gift, title: "Refer & Earn", description: "Referral rules, rewards to pay and paid" },
+  ];
+  const nav = useSectionNav("/subscriptions", sectionCards);
   const list = useListSubscriptions({
     search: search || undefined,
     status: statusFilter === "all" ? undefined : statusFilter,
@@ -491,26 +508,11 @@ export default function Subscriptions() {
         <Widget icon={TrendingUp} label="ARR" value={fmt(d?.arr)} accent="bg-primary/10 text-primary" />
       </div>
 
-      <Tabs defaultValue="subscriptions">
-        <TabsList className="h-auto flex-wrap justify-start">
-          <TabsTrigger value="subscriptions">Subscriptions</TabsTrigger>
-          <TabsTrigger value="charts">Analytics</TabsTrigger>
-          <TabsTrigger value="alerts">
-            Alerts {alerts.data && alerts.data.length > 0 ? `(${alerts.data.length})` : ""}
-          </TabsTrigger>
-          <TabsTrigger value="domains">
-            Domain Requests {domainRequests.data?.filter((r) => r.status === "pending").length ? `(${domainRequests.data.filter((r) => r.status === "pending").length})` : ""}
-          </TabsTrigger>
-          <TabsTrigger value="leads" data-testid="tab-demo-leads">
-            Demo Leads
-            {newLeadCount > 0 && (
-              <span className="ml-1.5 rounded-full bg-blue-600 px-1.5 text-[10px] font-semibold text-white">{newLeadCount} new</span>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="notices" data-testid="tab-notices">Notices</TabsTrigger>
-          <TabsTrigger value="plans-offers" data-testid="tab-plans-offers">Plans &amp; Offers</TabsTrigger>
-          <TabsTrigger value="referrals" data-testid="tab-referrals">Refer &amp; Earn</TabsTrigger>
-        </TabsList>
+      {nav.current
+        ? <SectionBackBar pageName="Platform Console" card={nav.current} onBack={nav.back} testPrefix="console" />
+        : <SectionCardGrid cards={sectionCards} onOpen={nav.open} testPrefix="console" />}
+
+      <Tabs value={nav.current?.key ?? ""}>
 
         <TabsContent value="leads">
           <DemoLeadsPanel />

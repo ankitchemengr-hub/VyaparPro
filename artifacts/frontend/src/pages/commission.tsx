@@ -26,9 +26,10 @@ import {
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { useSectionNav, SectionCardGrid, SectionBackBar, type SectionCard } from "@/components/section-cards";
 import {
-  IndianRupee, Droplets, Loader2, ChevronRight, ChevronDown, CheckCircle2, CreditCard, History,
+  IndianRupee, Droplets, Loader2, ChevronRight, ChevronDown, CheckCircle2, CreditCard, History, Users, BarChart3, ListChecks,
 } from "lucide-react";
 
 const fmt = (n: number | null | undefined) =>
@@ -49,6 +50,16 @@ export default function Commission() {
   const queryClient = useQueryClient();
   const isAdmin = user?.role === "admin" || user?.role === "accountant";
   const isSalesman = user?.role === "salesman";
+
+  // Sections as cards; Summary and Payment History are for admin / accountant.
+  type CommissionSection = "summary" | "report" | "transactions" | "payments";
+  const sectionCards: SectionCard<CommissionSection>[] = [
+    ...(isAdmin ? [{ key: "summary" as const, icon: Users, title: "Summary", description: "Each salesman's earned, paid and pending commission — pay all at once" }] : []),
+    { key: "report", icon: BarChart3, title: "Report", description: "Commission by salesman and item for a date range" },
+    { key: "transactions", icon: ListChecks, title: "Transactions", description: isSalesman ? "Your commission from each bill — paid or pending" : "Commission from each bill — mark paid" },
+    ...(isAdmin ? [{ key: "payments" as const, icon: History, title: "Payment History", description: "Commission payments made, with reference" }] : []),
+  ];
+  const nav = useSectionNav("/commission", sectionCards);
 
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -148,15 +159,11 @@ export default function Commission() {
         </div>
       </div>
 
-      <Tabs defaultValue={isAdmin ? "summary" : "transactions"}>
-        <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-          <TabsList className="w-max">
-            {isAdmin && <TabsTrigger value="summary">Summary</TabsTrigger>}
-            <TabsTrigger value="report">Report</TabsTrigger>
-            <TabsTrigger value="transactions">Transactions</TabsTrigger>
-            {isAdmin && <TabsTrigger value="payments">Payment History</TabsTrigger>}
-          </TabsList>
-        </div>
+      {nav.current
+        ? <SectionBackBar pageName="Commission" card={nav.current} onBack={nav.back} testPrefix="commission" />
+        : <SectionCardGrid cards={sectionCards} onOpen={nav.open} testPrefix="commission" />}
+
+      <Tabs value={nav.current?.key ?? ""}>
 
         {/* ── SUMMARY TAB (admin only) ──────────────────────────────────────── */}
         {isAdmin && (

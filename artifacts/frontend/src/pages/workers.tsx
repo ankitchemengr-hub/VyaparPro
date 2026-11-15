@@ -24,10 +24,11 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { useSectionNav, SectionCardGrid, SectionBackBar, type SectionCard } from "@/components/section-cards";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Pencil, Loader2, HardHat, IndianRupee, BookOpen, Phone, CalendarDays, Wallet } from "lucide-react";
+import { Plus, Pencil, Loader2, HardHat, IndianRupee, BookOpen, Phone, CalendarDays, Wallet, Users, CalendarCheck } from "lucide-react";
 
 const formatRs = (n: number) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(n);
@@ -43,7 +44,12 @@ const STATUS_TONE: Record<Status, string> = {
 };
 
 export default function WorkersPage() {
-  const [tab, setTab] = useState<"workers" | "attendance">("workers");
+  // Sections as cards (?s=workers / ?s=attendance), Back returns to the cards.
+  const sectionCards: SectionCard<"workers" | "attendance">[] = [
+    { key: "workers", icon: Users, title: "All Workers", description: "Worker list, daily wage, ledger and payments" },
+    { key: "attendance", icon: CalendarCheck, title: "Mark Attendance", description: "Mark today's present / absent — wages add up automatically" },
+  ];
+  const nav = useSectionNav("/workers", sectionCards);
   const [editing, setEditing] = useState<Worker | null>(null);
   const [open, setOpen] = useState(false);
   const [ledgerWorker, setLedgerWorker] = useState<Worker | null>(null);
@@ -100,11 +106,11 @@ export default function WorkersPage() {
         </Card>
       </div>
 
-      <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
-        <TabsList>
-          <TabsTrigger value="workers">All Workers</TabsTrigger>
-          <TabsTrigger value="attendance">Mark Attendance</TabsTrigger>
-        </TabsList>
+      {nav.current
+        ? <SectionBackBar pageName="Workers" card={nav.current} onBack={nav.back} testPrefix="workers" />
+        : <SectionCardGrid cards={sectionCards} onOpen={nav.open} testPrefix="workers" />}
+
+      <Tabs value={nav.current?.key ?? ""}>
 
         <TabsContent value="workers" className="mt-4">
           <Card>
