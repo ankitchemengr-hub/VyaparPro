@@ -18,6 +18,7 @@ import { getCompanyId } from "../lib/tenant";
 import { isGstAccountant } from "../lib/gst-access";
 import { generateSeriesNumber } from "../lib/number-series";
 import { applyEntityPayment, settleExcessInvoiceDues, NO_PAY_INVOICE_TYPES } from "../lib/entity-payment";
+import { editPayment, deletePayment, paymentDetails, PaymentEditError } from "../lib/payment-edit";
 
 // Thrown for a bad request caught mid-transaction (needs the ROLLBACK the
 // surrounding try/catch already does) — kept distinct from a genuine
@@ -788,6 +789,73 @@ router.post("/payments/:id/reject", async (req, res): Promise<void> => {
   }
 
   res.json(formatPayment(updated));
+});
+
+// GET /payments/:id/details — the View dialog: amount, discount, mode, the
+// account it went to, who took / approved it and which bills it settled.
+router.get("/payments/:id/details", async (req, res): Promise<void> => {
+  const companyId = getCompanyId(req);
+  const role = (req as any).session?.role;
+  if (role === "customer" || isGstAccountant(req)) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  try {
+    res.json(await paymentDetails(pool, companyId, Number(req.params.id)));
+  } catch (err) {
+    if (err instanceof PaymentEditError) { res.status(err.status).json({ error: err.message }); return; }
+    throw err;
+  }
+});
+
+async function inPaymentTxn(res: any, label: string, fn: (client: any) => Promise<unknown>): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
+    const out = await fn(client);
+    await client.query("COMMIT");
+    res.json(out);
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    if (err instanceof PaymentEditError) { res.status(err.status).json({ error: err.message }); return; }
+    logger.error({ err }, label);
+    res.status(500).json({ error: label });
+  } finally {
+    client.release();
+  }
+}
+
+// PUT /payments/:id { amount, discount?, mode, accountId?, notes? } — admin:
+// correct a received payment. Bills, customer balance and ledger, Cash Book /
+// account and the discount expense all move to the new figures.
+router.put("/payments/:id", async (req, res): Promise<void> => {
+  if (!requirePaymentApprover(req, res)) return;
+  const companyId = getCompanyId(req);
+  const session = (req as any).session;
+  const b = req.body ?? {};
+  const accountId = b.accountId == null || b.accountId === "" ? null : Number(b.accountId);
+  if (accountId != null && !Number.isInteger(accountId)) { res.status(400).json({ error: "Invalid account" }); return; }
+  await inPaymentTxn(res, "Failed to edit payment", async (client) => {
+    const { payment, allocations } = await editPayment(client, companyId, session, Number(req.params.id), {
+      amount: Number(b.amount),
+      discount: Number(b.discount ?? 0),
+      mode: String(b.mode ?? ""),
+      accountId,
+      notes: typeof b.notes === "string" && b.notes.trim() ? b.notes.trim().slice(0, 500) : null,
+    });
+    return { ...formatPayment(mapPaymentRow(payment)), allocations };
+  });
+});
+
+// DELETE /payments/:id — admin: remove a payment and everything it booked.
+router.delete("/payments/:id", async (req, res): Promise<void> => {
+  if (!requirePaymentApprover(req, res)) return;
+  const companyId = getCompanyId(req);
+  const session = (req as any).session;
+  await inPaymentTxn(res, "Failed to delete payment", async (client) => {
+    await deletePayment(client, companyId, session, Number(req.params.id));
+    return { deleted: true };
+  });
 });
 
 function formatPayment(p: any) {

@@ -15,9 +15,10 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import { format } from "date-fns";
-import { CheckCircle2, XCircle, X, Filter, Clock, Search, Loader2 } from "lucide-react";
+import { CheckCircle2, XCircle, X, Filter, Clock, Search, Loader2, Eye, Pencil, Trash2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { RecordPaymentDialog } from "@/components/record-payment-dialog";
+import { PaymentViewDialog, PaymentEditDialog, PaymentDeleteDialog } from "@/components/payment-manage-dialogs";
 
 function useDebounced<T>(value: T, ms = 250): T {
   const [v, setV] = useState(value);
@@ -117,6 +118,12 @@ function periodRange(period: Exclude<Period, "custom">): { from: string; to: str
 export default function Payments() {
   const { hasRole } = useAuth();
   const isAdmin = hasRole(["admin"]);
+  // View (how it was paid) for staff who take payments; Edit / Delete admin only.
+  const canView = hasRole(["admin", "salesman", "accountant"]);
+  const showActions = isAdmin || canView;
+  const [viewId, setViewId] = useState<number | null>(null);
+  const [editId, setEditId] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState<{ id: number; receiptId: string; customerName: string | null; amount: number; status: string } | null>(null);
   const [status, setStatus] = useState<PaymentStatus | "all">("all");
   const [period, setPeriod] = useState<Period>("month");
   const [from, setFrom] = useState<string>(() => periodRange("month").from);
@@ -273,17 +280,17 @@ export default function Payments() {
                   <TableHead className="hidden sm:table-cell">Mode</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
                   <TableHead>Status</TableHead>
-                  {isAdmin && <TableHead className="text-right">Actions</TableHead>}
+                  {showActions && <TableHead className="text-right">Actions</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={isAdmin ? 8 : 7} className="text-center py-8">Loading...</TableCell>
+                    <TableCell colSpan={showActions ? 8 : 7} className="text-center py-8">Loading...</TableCell>
                   </TableRow>
                 ) : filteredPayments.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={isAdmin ? 8 : 7} className="text-center py-8 text-muted-foreground">No payments found in selected range.</TableCell>
+                    <TableCell colSpan={showActions ? 8 : 7} className="text-center py-8 text-muted-foreground">No payments found in selected range.</TableCell>
                   </TableRow>
                 ) : (
                   filteredPayments.map(payment => (
@@ -308,9 +315,10 @@ export default function Payments() {
                           )}
                         </span>
                       </TableCell>
-                      {isAdmin && (
+                      {showActions && (
                         <TableCell className="text-right">
-                          {payment.status === "pending" && (
+                          <div className="flex justify-end gap-1 flex-wrap">
+                          {isAdmin && payment.status === "pending" && (
                             <div className="flex justify-end gap-2">
                               <Button
                                 size="sm"
@@ -330,6 +338,26 @@ export default function Payments() {
                               </Button>
                             </div>
                           )}
+                          {canView && (
+                            <Button size="icon" variant="ghost" className="h-8 w-8" title="View" aria-label="View payment"
+                              onClick={() => setViewId(payment.id)} data-testid={`button-view-payment-${payment.id}`}>
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {isAdmin && (
+                            <>
+                              <Button size="icon" variant="ghost" className="h-8 w-8" title="Edit" aria-label="Edit payment"
+                                onClick={() => setEditId(payment.id)} data-testid={`button-edit-payment-${payment.id}`}>
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" title="Delete" aria-label="Delete payment"
+                                onClick={() => setDeleting({ id: payment.id, receiptId: payment.receiptId || `REC-${payment.id}`, customerName: payment.customerName ?? null, amount: Number(payment.amount), status: payment.status })}
+                                data-testid={`button-delete-payment-${payment.id}`}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </>
+                          )}
+                          </div>
                         </TableCell>
                       )}
                     </TableRow>
@@ -349,6 +377,9 @@ export default function Payments() {
           setPickCustomerOpen(false);
         }}
       />
+      <PaymentViewDialog id={viewId} onClose={() => setViewId(null)} />
+      <PaymentEditDialog id={editId} onClose={() => setEditId(null)} />
+      <PaymentDeleteDialog payment={deleting} onClose={() => setDeleting(null)} />
       <RecordPaymentDialog
         open={!!payingCustomer}
         onOpenChange={(o) => !o && setPayingCustomer(null)}
