@@ -22,6 +22,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { CashEntryDialog } from "@/components/cash-entry-dialog";
 import { CashReceiptDialog } from "@/components/cash-receipt-dialog";
+import { InfoTip } from "@/components/info-tip";
 
 const formatRs = (n: number) =>
   `₹${Math.abs(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -133,9 +134,12 @@ function KhatabookCard({ type, onOpen }: { type: PartyType; onOpen: () => void }
     <button
       type="button"
       onClick={onOpen}
-      className="text-left rounded-xl border bg-card p-4 sm:p-5 shadow-sm hover:shadow-md hover:border-primary/40 transition-all"
+      className="relative text-left rounded-xl border bg-card p-4 sm:p-5 shadow-sm hover:shadow-md hover:border-primary/40 transition-all"
       data-testid={`card-khatabook-${type}`}
     >
+      <InfoTip text={isCustomer
+        ? "Every customer's balance — who owes you (You Will Get) and whom you owe (advance / You Will Give). Open a customer for their ledger, payment entry and WhatsApp reminder."
+        : "Every supplier's balance — what you have to pay them (You Will Give) and any advance with them. Open a supplier for their ledger and payment entry."} />
       <div className="flex items-center gap-3">
         <div className={`w-11 h-11 rounded-lg flex items-center justify-center ${isCustomer ? "bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300" : "bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300"}`}>
           <Icon className="w-5 h-5" />

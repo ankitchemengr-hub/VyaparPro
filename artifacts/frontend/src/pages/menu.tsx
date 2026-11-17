@@ -10,6 +10,7 @@ import {
 } from "@workspace/api-client-react";
 import { moduleNavItems } from "@/lib/nav-items";
 import { useRoleFeature } from "@/lib/permissions";
+import { InfoTip } from "@/components/info-tip";
 
 // Cycled per tile so the module grid reads as colorful/scannable at a glance
 // instead of every icon box sharing one flat brand-orange tint. Each entry is
@@ -92,9 +93,10 @@ export default function Menu() {
             return (
               <Link key={item.href} href={item.href}>
                 <Card
-                  className={`${color.ring} hover:shadow-md transition-all cursor-pointer h-full border-transparent bg-white dark:bg-card shadow-sm`}
+                  className={`relative ${color.ring} hover:shadow-md transition-all cursor-pointer h-full border-transparent bg-white dark:bg-card shadow-sm`}
                   data-testid={`menu-tile-${item.href.replace(/\//g, "")}`}
                 >
+                  {item.description && <InfoTip text={item.description} />}
                   <CardContent className="p-4 flex flex-col gap-2">
                     <div className={`relative w-10 h-10 rounded-md ${color.bg} flex items-center justify-center ${color.icon}`}>
                       <item.icon className="h-5 w-5" />

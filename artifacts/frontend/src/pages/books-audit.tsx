@@ -30,6 +30,7 @@ import { BankReconTab } from "@/components/bank-recon-tab";
 import { ChequeRegisterTab } from "@/components/cheque-register";
 import { GodownsTab } from "@/components/godowns-tab";
 import { BatchesTab } from "@/components/batches-tab";
+import { InfoTip } from "@/components/info-tip";
 
 // The page's sections, shown as searchable cards. writeOnly ones are hidden
 // from the read-only (GST Accountant / CA) login. keywords only feed search.
@@ -1055,16 +1056,16 @@ export default function BooksAudit() {
                     type="button"
                     onClick={() => setTab(s.key)}
                     aria-pressed={active}
-                    className={`text-left rounded-lg border p-2.5 sm:p-3 transition-colors ${
+                    className={`relative text-left rounded-lg border p-2.5 sm:p-3 transition-colors ${
                       active ? "border-primary bg-primary/10 ring-1 ring-primary" : "bg-card hover:bg-accent"
                     }`}
                     data-testid={`card-books-${s.key}`}
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 pr-4">
                       <Icon className={`w-4 h-4 shrink-0 ${active ? "text-primary" : "text-muted-foreground"}`} />
                       <span className="text-sm font-medium leading-tight">{s.title}</span>
                     </div>
-                    <p className="hidden sm:block text-xs text-muted-foreground mt-1 leading-snug">{s.description}</p>
+                    <InfoTip text={s.description} />
                   </button>
                 );
               })}

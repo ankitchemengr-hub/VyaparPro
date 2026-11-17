@@ -5,6 +5,7 @@ import { useRef, type ComponentType } from "react";
 import { useLocation, useSearch } from "wouter";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, ChevronRight } from "lucide-react";
+import { InfoTip } from "@/components/info-tip";
 
 export interface SectionCard<K extends string = string> {
   key: K;
@@ -44,15 +45,15 @@ export function SectionCardGrid<K extends string>({ cards, onOpen, testPrefix }:
           key={c.key}
           type="button"
           onClick={() => onOpen(c.key)}
-          className="text-left rounded-lg border bg-card hover:bg-accent hover:border-primary/50 transition-colors p-4 flex items-center gap-3"
+          className="relative text-left rounded-lg border bg-card hover:bg-accent hover:border-primary/50 transition-colors p-4 flex items-center gap-3"
           data-testid={`card-${testPrefix}-${c.key}`}
         >
           <span className="rounded-md bg-primary/10 text-primary p-2.5 shrink-0"><c.icon className="w-5 h-5" /></span>
           <span className="min-w-0 flex-1">
             <span className="block font-semibold leading-tight">{c.title}</span>
-            <span className="block text-xs text-muted-foreground mt-1 leading-snug">{c.description}</span>
           </span>
           <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+          <InfoTip text={c.description} />
         </button>
       ))}
     </div>

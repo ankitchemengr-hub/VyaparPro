@@ -42,6 +42,7 @@ import {
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { InfoTip } from "@/components/info-tip";
 
 const fmt = (n: number | null | undefined) =>
   `₹${(Number(n ?? 0)).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -387,14 +388,14 @@ export default function Reports() {
                   key={s.key}
                   type="button"
                   onClick={() => openReport(s.key)}
-                  className="text-left rounded-lg border p-2.5 sm:p-3 transition-colors bg-card hover:bg-accent"
+                  className="relative text-left rounded-lg border p-2.5 sm:p-3 transition-colors bg-card hover:bg-accent"
                   data-testid={`card-report-${s.key}`}
                 >
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 pr-4">
                     <Icon className="w-4 h-4 shrink-0 text-muted-foreground" />
                     <span className="text-sm font-medium leading-tight">{s.title}</span>
                   </div>
-                  <p className="hidden sm:block text-xs text-muted-foreground mt-1 leading-snug">{s.description}</p>
+                  <InfoTip text={s.description} />
                 </button>
               );
             })}
