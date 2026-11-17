@@ -6,7 +6,9 @@ import { Info } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
-export function InfoTip({ text, className }: { text: string; className?: string }) {
+export function InfoTip({ text, title, className, iconClassName, side = "top" }: {
+  text: string; title?: string; className?: string; iconClassName?: string; side?: "top" | "bottom";
+}) {
   const [open, setOpen] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const keep = () => { if (closeTimer.current) clearTimeout(closeTimer.current); };
@@ -34,11 +36,11 @@ export function InfoTip({ text, className }: { text: string; className?: string 
           onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { stop(e); setOpen((o) => !o); } }}
           data-testid="info-tip"
         >
-          <Info className="h-3.5 w-3.5" />
+          <Info className={cn("h-3.5 w-3.5", iconClassName)} />
         </span>
       </PopoverTrigger>
       <PopoverContent
-        side="top"
+        side={side}
         align="end"
         className="w-64 p-3 text-xs leading-snug"
         onMouseEnter={keep}
@@ -46,6 +48,7 @@ export function InfoTip({ text, className }: { text: string; className?: string 
         onOpenAutoFocus={(e) => e.preventDefault()}
         onClick={(e) => e.stopPropagation()}
       >
+        {title && <div className="mb-1 text-sm font-semibold text-foreground">{title}</div>}
         {text}
       </PopoverContent>
     </Popover>

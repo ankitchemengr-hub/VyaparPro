@@ -94,7 +94,7 @@ export default function CashBookPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="border-amber-200 bg-amber-50/40">
+        <Card info={"Cash salesmen have collected from customers but not yet handed over to you."} className="border-amber-200 bg-amber-50/40">
           <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
             <CardTitle className="text-xs font-medium text-amber-800 uppercase">Pending with Salesmen</CardTitle>
             <HandCoins className="w-4 h-4 text-amber-600" />
@@ -104,7 +104,7 @@ export default function CashBookPage() {
             <p className="text-xs text-amber-700 mt-1">{salesmen.length} salesman{salesmen.length === 1 ? "" : "men"} holding cash</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card info={"Total of all your cash, UPI and bank account balances."}>
           <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
             <CardTitle className="text-xs font-medium text-muted-foreground uppercase">Total in Accounts</CardTitle>
             <Wallet className="w-4 h-4 text-muted-foreground" />
@@ -114,7 +114,7 @@ export default function CashBookPage() {
             <p className="text-xs text-muted-foreground mt-1">{accounts.filter(a => a.isActive).length} active accounts</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card info={"Total in Accounts + cash still pending with salesmen."}>
           <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
             <CardTitle className="text-xs font-medium text-muted-foreground uppercase">Grand Total</CardTitle>
             <ArrowRight className="w-4 h-4 text-muted-foreground" />
@@ -129,7 +129,7 @@ export default function CashBookPage() {
       <PendingStorePayments />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
+        <Card info={"Each salesman's cash in hand. Collect it here to move it into an account."}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Users className="w-4 h-4" /> Cash Pending Collection
@@ -172,7 +172,7 @@ export default function CashBookPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card info={"Current balance of each cash, UPI and bank account."}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Wallet className="w-4 h-4" /> Account Balances
@@ -236,7 +236,7 @@ export default function CashBookPage() {
           .cashbook-print-area .no-print { display: none !important; }
         }
       `}</style>
-      <Card className="cashbook-print-area">
+      <Card info={"Latest money in / out across all accounts, with receipt number. Open one to print its receipt."} className="cashbook-print-area">
         <CardHeader className="space-y-3">
           <CardTitle className="flex items-center justify-between gap-2 text-base">
             <span className="flex items-center gap-2"><BookOpen className="w-4 h-4" /> Recent Cash Book Entries</span>
@@ -438,7 +438,7 @@ function PendingStorePayments() {
 
   return (
     <>
-      <Card className="border-amber-200">
+      <Card info={"Payments taken by the store counter waiting for you to accept them into an account."} className="border-amber-200">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <Clock className="w-4 h-4 text-amber-600" /> Store Payments to Accept

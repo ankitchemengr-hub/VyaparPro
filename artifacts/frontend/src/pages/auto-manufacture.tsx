@@ -102,7 +102,7 @@ export default function AutoManufacture() {
         </p>
       </div>
 
-      <Card>
+      <Card info={"When a made product is sold with too little stock, the shortfall is assembled from its BOM so stock never goes negative."}>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2"><Factory className="h-4 w-4" /> Auto-manufacture on sale</CardTitle>
           <CardDescription>
@@ -124,7 +124,7 @@ export default function AutoManufacture() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card info={"Brings made products that are already below zero back to 0 by assembling them from the BOM. Preview first."}>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2"><Wrench className="h-4 w-4" /> Fix products already in negative</CardTitle>
           <CardDescription>

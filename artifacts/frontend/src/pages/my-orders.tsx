@@ -64,7 +64,7 @@ export default function MyOrders() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card>
+        <Card info={"How many bills / orders."}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">{isCustomer ? "Bills" : "Total Orders"}</CardTitle>
           </CardHeader>
@@ -74,7 +74,7 @@ export default function MyOrders() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card info={"Total amount of these bills / orders."}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">{isCustomer ? "Total billed" : "Total Sales"}</CardTitle>
           </CardHeader>
@@ -84,7 +84,7 @@ export default function MyOrders() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card info={"Amount not paid yet."}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">{isCustomer ? "Still to pay" : "Pending Amount"}</CardTitle>
           </CardHeader>

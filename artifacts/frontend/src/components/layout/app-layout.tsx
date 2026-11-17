@@ -8,6 +8,8 @@ import { NewActivityWatcher } from "../new-activity-watcher";
 import { MaintenanceBanner } from "../maintenance-banner";
 import { CommandPalette } from "../command-palette";
 import { ShortcutsHelpDialog } from "../shortcuts-help-dialog";
+import { InfoTip } from "../info-tip";
+import { pageInfoFor } from "@/lib/page-info";
 import { useGlobalShortcuts } from "@/lib/keyboard/use-global-shortcuts";
 
 interface AppLayoutProps {
@@ -114,6 +116,16 @@ export function AppLayout({ children }: AppLayoutProps) {
             >
               <Keyboard className="w-4 h-4" />
             </button>
+            {/* ⓘ What this page does — follows the page you're on (lib/page-info.ts). */}
+            {pageInfoFor(location) && (
+              <InfoTip
+                title={pageInfoFor(location)!.title}
+                text={pageInfoFor(location)!.text}
+                className="static h-8 w-8 rounded-md text-muted-foreground hover:bg-muted"
+                iconClassName="h-4 w-4"
+                side="bottom"
+              />
+            )}
             <div className="text-xs text-muted-foreground hidden sm:block">
               {user?.name} · <span className="capitalize">{user?.role}</span>
             </div>

@@ -833,7 +833,7 @@ function NewPurchaseTab({
   return (
     <div className="space-y-4 max-w-5xl">
       {/* ── Bill Details ── */}
-      <Card>
+      <Card info={"Supplier, bill number and date of the purchase bill."}>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Bill Details</CardTitle>
         </CardHeader>
@@ -884,7 +884,7 @@ function NewPurchaseTab({
       </Card>
 
       {/* ── Line Items ── */}
-      <Card>
+      <Card info={"Items bought — qty, rate and GST; stock goes up when you save."}>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="text-base">Line Items</CardTitle>
@@ -992,7 +992,7 @@ function NewPurchaseTab({
       />
 
       {savedPurchaseId && (
-        <Card>
+        <Card info={"Attach a copy of the supplier's bill to this purchase."}>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Paperclip className="w-4 h-4" />

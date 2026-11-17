@@ -91,7 +91,7 @@ export default function PaymentSync() {
         </p>
       </div>
 
-      <Card>
+      <Card info={"What this sync changes — read before you apply."}>
         <CardHeader>
           <CardTitle className="text-base">How it works</CardTitle>
           <CardDescription>

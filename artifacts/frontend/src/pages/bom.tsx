@@ -106,7 +106,7 @@ export default function BomPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
-        <Card>
+        <Card info={"Products that have a recipe (BOM)."}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
               <FileText className="w-4 h-4" /> Recipes Defined
@@ -116,7 +116,7 @@ export default function BomPage() {
             <div className="text-2xl font-bold">{withBomCount}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card info={"Products that don't have a recipe yet — they can't be assembled."}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
               <AlertTriangle className="w-4 h-4" /> Products Without BOM
@@ -126,7 +126,7 @@ export default function BomPage() {
             <div className="text-2xl font-bold">{withoutBomCount}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card info={"All products in Inventory."}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
               <Package className="w-4 h-4" /> Total Products
@@ -138,7 +138,7 @@ export default function BomPage() {
         </Card>
       </div>
 
-      <Card>
+      <Card info={"Each product's recipe: which raw materials and how much make one batch."}>
         <CardHeader>
           <div className="flex items-center justify-between gap-3">
             <CardTitle className="text-base">All Recipes</CardTitle>

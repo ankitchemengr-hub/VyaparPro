@@ -122,7 +122,7 @@ export default function Rewards() {
         )}
       </div>
 
-      <Card>
+      <Card info={"Each scheme: the product, the target and the reward."}>
         <CardHeader>
           <CardTitle>Reward Schemes</CardTitle>
           <CardDescription>Active volume-based reward schemes.</CardDescription>
@@ -174,7 +174,7 @@ export default function Rewards() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card info={"How far each customer is towards the reward target."}>
         <CardHeader>
           <CardTitle>Customer Reward Progress</CardTitle>
           <CardDescription>Track volume targets and disburse rewards.</CardDescription>

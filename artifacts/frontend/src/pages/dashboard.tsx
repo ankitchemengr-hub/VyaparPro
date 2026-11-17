@@ -330,7 +330,7 @@ function SalesThisMonthCard({ total, invoiceCount, canCompare }: { total: number
 
   const up = data?.changePct != null && data.changePct >= 0;
   return (
-    <Card
+    <Card info={"Total of this month's bills. Tap the box to compare with last month."}
       className={canCompare ? "cursor-pointer select-none transition-colors hover:bg-muted/40" : undefined}
       {...(canCompare ? { ...clickableProps(() => setOpen((v) => !v)), "aria-expanded": open } : {})}
       data-testid="card-sales-this-month"
@@ -641,7 +641,7 @@ export default function Dashboard() {
 
       {isAdmin && (
         <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
-          <Card
+          <Card info={"What the business is worth today: stock value + money customers owe + cash in accounts − what you owe suppliers − expenses. Tap to see each part."}
             className="border-amber-200 bg-gradient-to-br from-amber-50 to-white dark:from-amber-950/30 dark:to-transparent cursor-pointer select-none"
             {...clickableProps(() => setShowCapitalDetails((v) => !v))}
             aria-expanded={showCapitalDetails}
@@ -689,7 +689,7 @@ export default function Dashboard() {
               )}
             </CardContent>
           </Card>
-          <Card
+          <Card info={"How much Capital went up or down since the last snapshot. Tap to see why it moved."}
             className={capital?.growthBreakdown ? "cursor-pointer select-none" : ""}
             {...(capital?.growthBreakdown
               ? { ...clickableProps(() => setShowGrowthDetails((v) => !v)), "aria-expanded": showGrowthDetails }
@@ -746,7 +746,7 @@ export default function Dashboard() {
               )}
             </CardContent>
           </Card>
-          <Card>
+          <Card info={"Litres sold — of products sold by volume."}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Ltr Sale</CardTitle>
               <Droplets className="h-4 w-4 text-sky-600" />
@@ -790,7 +790,7 @@ export default function Dashboard() {
               )}
             </CardContent>
           </Card>
-          <Card>
+          <Card info={"Net profit (sales − cost of goods − expenses). Use the eye button to show or hide it; Month shows the change vs last month."}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Profit</CardTitle>
               <button
@@ -860,7 +860,7 @@ export default function Dashboard() {
       )}
 
       {isAdmin && (
-        <Card>
+        <Card info={"Litres bought from suppliers compared with litres sold."}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Liters Purchased vs Sold</CardTitle>
             <Droplets className="h-4 w-4 text-blue-500" />
@@ -915,7 +915,7 @@ export default function Dashboard() {
           a tap expands the list inline (no navigating away). */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
         {hasRole(["admin", "accountant"]) && <OverdueCustomersCard />}
-        <Card
+        <Card info={"Items running low that should be made — tap to open the list."}
           className="min-w-0 cursor-pointer select-none transition-colors hover:bg-muted/40"
           {...clickableProps(() => setShowWorkload((v) => !v))}
           aria-expanded={showWorkload}
@@ -960,7 +960,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card
+        <Card info={"Items whose stock is at or below their minimum level."}
           className="min-w-0 cursor-pointer select-none transition-colors hover:bg-muted/40"
           {...clickableProps(() => setShowLowStock((v) => !v))}
           aria-expanded={showLowStock}

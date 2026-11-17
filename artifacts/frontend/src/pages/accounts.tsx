@@ -87,7 +87,7 @@ export default function AccountsPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
+        <Card info={"Total of all your accounts' current balances."}>
           <CardHeader className="pb-2"><CardTitle className="text-xs font-medium text-muted-foreground uppercase">Total Balance</CardTitle></CardHeader>
           <CardContent><div className="text-2xl font-bold">{formatRs(totals.total)}</div></CardContent>
         </Card>

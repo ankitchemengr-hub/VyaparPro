@@ -374,7 +374,7 @@ export default function Settings() {
               <Save className="mr-2 h-4 w-4" /> Save Changes
             </Button>
           </div>
-          <Card>
+          <Card info={"Tick what each role (accountant, salesman, store…) may see and do."}>
             <CardHeader>
               <div className="flex items-center gap-2">
                 <ShieldCheck className="h-5 w-5 text-primary" />

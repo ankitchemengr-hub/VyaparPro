@@ -362,7 +362,7 @@ function ExpenseReportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
         </div>
 
         <div className="grid gap-4 lg:grid-cols-3">
-          <Card className="lg:col-span-2 print:border-0 print:shadow-none">
+          <Card info={"Every expense with its category, amount and the account it was paid from."} className="lg:col-span-2 print:border-0 print:shadow-none">
             <CardHeader className="print:hidden">
               <CardTitle className="text-base flex items-center gap-2"><Receipt className="w-4 h-4" /> Expense Entries</CardTitle>
             </CardHeader>
@@ -438,7 +438,7 @@ function ExpenseReportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
             </CardContent>
           </Card>
 
-          <Card className="print:border-0 print:shadow-none print:break-inside-avoid">
+          <Card info={"Expenses added up by category or by date."} className="print:border-0 print:shadow-none print:break-inside-avoid">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
               <CardTitle className="text-base flex items-center gap-2">
                 {groupBy === "category" ? <Tag className="w-4 h-4" /> : <CalendarDays className="w-4 h-4" />}

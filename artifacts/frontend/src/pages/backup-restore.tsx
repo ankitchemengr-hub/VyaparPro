@@ -260,7 +260,7 @@ export default function BackupRestore() {
 
         <TabsContent value="backup" className="space-y-6">
           {/* Manual backup */}
-          <Card>
+          <Card info={"Download all your data now as a ZIP or JSON file."}>
             <CardHeader>
               <div className="flex items-center gap-2">
                 <Download className="h-5 w-5 text-primary" />
@@ -293,7 +293,7 @@ export default function BackupRestore() {
           </Card>
 
           {/* Automatic backup preferences */}
-          <Card>
+          <Card info={"Turn on a backup that runs by itself on a schedule."}>
             <CardHeader>
               <div className="flex items-center gap-2">
                 <CalendarClock className="h-5 w-5 text-primary" />
@@ -332,7 +332,7 @@ export default function BackupRestore() {
           </Card>
 
           {/* Backup history */}
-          <Card>
+          <Card info={"Backups made so far; download any of them again."}>
             <CardHeader>
               <CardTitle>Backup History</CardTitle>
               <CardDescription>Recent backups, with date, size and who created them.</CardDescription>
@@ -372,7 +372,7 @@ export default function BackupRestore() {
 
         {/* RESTORE */}
         <TabsContent value="restore" className="space-y-6">
-          <Card>
+          <Card info={"Bring data back from a backup file. Check what's in it before you confirm."}>
             <CardHeader>
               <div className="flex items-center gap-2">
                 <UploadCloud className="h-5 w-5 text-primary" />
@@ -420,7 +420,7 @@ export default function BackupRestore() {
 
         {/* RESET */}
         <TabsContent value="reset" className="space-y-6">
-          <Card className="border-destructive/40">
+          <Card info={"Clears this company's business data to start fresh. Take a backup first — this can't be undone."} className="border-destructive/40">
             <CardHeader>
               <div className="flex items-center gap-2">
                 <RotateCcw className="h-5 w-5 text-destructive" />

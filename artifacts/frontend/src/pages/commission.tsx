@@ -168,7 +168,7 @@ export default function Commission() {
         {/* ── SUMMARY TAB (admin only) ──────────────────────────────────────── */}
         {isAdmin && (
           <TabsContent value="summary" className="space-y-4">
-            <Card>
+            <Card info={"Each salesman's earned, paid and pending commission. Pay All settles a salesman's pending commission at once."}>
               <CardHeader>
                 <CardTitle>Salesman-wise Commission</CardTitle>
                 <CardDescription>Pending and paid commission per salesman.</CardDescription>
@@ -218,14 +218,14 @@ export default function Commission() {
         {/* ── REPORT TAB ────────────────────────────────────────────────────── */}
         <TabsContent value="report" className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Card>
+            <Card info={"Commission earned in the chosen dates."}>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Total Commission</CardTitle>
                 <IndianRupee className="w-4 h-4 text-amber-600" />
               </CardHeader>
               <CardContent><div className="text-2xl font-bold text-primary">{fmt(data?.totalCommission)}</div></CardContent>
             </Card>
-            <Card>
+            <Card info={"Litres sold in the chosen dates that earned commission."}>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Total Liters</CardTitle>
                 <Droplets className="w-4 h-4 text-amber-600" />
@@ -233,7 +233,7 @@ export default function Commission() {
               <CardContent><div className="text-2xl font-bold">{fmtQty(data?.totalLiters)}</div></CardContent>
             </Card>
           </div>
-          <Card>
+          <Card info={"Commission and litres per salesman, item by item, for the chosen dates."}>
             <CardHeader>
               <CardTitle>Commission by Salesman</CardTitle>
               <CardDescription>Product-wise breakdown per salesman.</CardDescription>
@@ -344,17 +344,17 @@ export default function Commission() {
         <TabsContent value="transactions" className="space-y-4">
           {isSalesman && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Card>
+              <Card info={"Commission earned but not paid yet."}>
                 <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Pending Commission</CardTitle></CardHeader>
                 <CardContent><div className="text-2xl font-bold text-amber-600">{fmt(txData?.totals.pending)}</div></CardContent>
               </Card>
-              <Card>
+              <Card info={"Commission already paid."}>
                 <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Paid Commission</CardTitle></CardHeader>
                 <CardContent><div className="text-2xl font-bold text-emerald-600">{fmt(txData?.totals.paid)}</div></CardContent>
               </Card>
             </div>
           )}
-          <Card>
+          <Card info={"Commission from each bill — mark it paid with a reference."}>
             <CardHeader>
               <CardTitle>Commission Transactions</CardTitle>
               <CardDescription>Invoice-level commission records.</CardDescription>
@@ -474,7 +474,7 @@ export default function Commission() {
         {/* ── PAYMENT HISTORY TAB (admin only) ─────────────────────────────── */}
         {isAdmin && (
           <TabsContent value="payments" className="space-y-4">
-            <Card>
+            <Card info={"Bulk commission payments made to salesmen, with reference."}>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <History className="w-5 h-5" /> Payment History

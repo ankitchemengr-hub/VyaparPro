@@ -53,7 +53,7 @@ export default function SalesmanDashboard() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card>
+        <Card info={"Your commission earned but not paid yet."}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Pending Commission</CardTitle>
             <IndianRupee className="w-4 h-4 text-amber-600" />
@@ -68,7 +68,7 @@ export default function SalesmanDashboard() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card info={"Your commission already paid."}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Paid Commission</CardTitle>
             <IndianRupee className="w-4 h-4 text-emerald-600" />
@@ -83,7 +83,7 @@ export default function SalesmanDashboard() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card info={"All commission you have earned."}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Earned</CardTitle>
             <Droplets className="w-4 h-4 text-primary" />
@@ -100,7 +100,7 @@ export default function SalesmanDashboard() {
       </div>
 
       {/* Recent Transactions */}
-      <Card>
+      <Card info={"Your latest commission entries."}>
         <CardHeader>
           <CardTitle>Recent Commission Transactions</CardTitle>
           <CardDescription>Latest invoices contributing to your commission.</CardDescription>

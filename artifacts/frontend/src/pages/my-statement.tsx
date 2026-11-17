@@ -101,7 +101,7 @@ export default function MyStatement() {
         ))}
       </div>
 
-      <Card>
+      <Card info={"Every bill and payment on your account with the running balance."}>
         <CardHeader>
           <CardTitle>Transaction History</CardTitle>
           <CardDescription>All invoices and payments on your account</CardDescription>

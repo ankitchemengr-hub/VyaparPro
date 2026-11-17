@@ -154,7 +154,7 @@ export default function ItemRegister() {
       {report && (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card>
+            <Card info={"Quantity bought from suppliers in the chosen dates."}>
               <CardHeader className="pb-2 flex-row items-center justify-between space-y-0">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Purchased</CardTitle>
                 <ArrowDownToLine className="w-4 h-4 text-emerald-600" />
@@ -166,7 +166,7 @@ export default function ItemRegister() {
                 <p className="text-xs text-muted-foreground mt-1">{report.unit}</p>
               </CardContent>
             </Card>
-            <Card>
+            <Card info={"Quantity sold on bills in the chosen dates."}>
               <CardHeader className="pb-2 flex-row items-center justify-between space-y-0">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Sold</CardTitle>
                 <ArrowUpFromLine className="w-4 h-4 text-amber-600" />
@@ -178,7 +178,7 @@ export default function ItemRegister() {
                 <p className="text-xs text-muted-foreground mt-1">{report.unit}</p>
               </CardContent>
             </Card>
-            <Card>
+            <Card info={"Stock adjustments (physical count corrections) in the chosen dates."}>
               <CardHeader className="pb-2 flex-row items-center justify-between space-y-0">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Adjusted</CardTitle>
                 <SlidersHorizontal className="w-4 h-4 text-primary" />
@@ -190,7 +190,7 @@ export default function ItemRegister() {
                 <p className="text-xs text-muted-foreground mt-1">{report.unit}</p>
               </CardContent>
             </Card>
-            <Card className="border-primary/30 bg-primary/5">
+            <Card info={"Stock of this item available now."} className="border-primary/30 bg-primary/5">
               <CardHeader className="pb-2 flex-row items-center justify-between space-y-0">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Total Available</CardTitle>
                 <Package className="w-4 h-4 text-primary" />

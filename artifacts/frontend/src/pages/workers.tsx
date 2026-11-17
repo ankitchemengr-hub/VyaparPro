@@ -72,7 +72,7 @@ export default function WorkersPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
-        <Card>
+        <Card info={"Workers currently active (not turned off)."}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
               <HardHat className="w-4 h-4" /> Active Workers
@@ -82,7 +82,7 @@ export default function WorkersPage() {
             <div className="text-2xl font-bold">{activeWorkers.length}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card info={"What one day's wages come to if every active worker is present."}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
               <IndianRupee className="w-4 h-4" /> Daily Wage Outflow (if all present)
@@ -94,7 +94,7 @@ export default function WorkersPage() {
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card info={"Today's date — attendance is marked for this day by default."}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
               <CalendarDays className="w-4 h-4" /> Today
@@ -335,7 +335,7 @@ function AttendanceTab({ workers }: { workers: Worker[] }) {
   const totalWage = (existing ?? []).reduce((s, a) => s + Number(a.wageAmount), 0);
 
   return (
-    <Card>
+    <Card info={"Mark each worker's attendance for this date; the day's wage adds to their ledger."}>
       <CardHeader>
         <div className="flex items-center justify-between gap-4">
           <CardTitle className="text-base">Attendance for</CardTitle>

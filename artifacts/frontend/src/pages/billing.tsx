@@ -1186,7 +1186,7 @@ export default function Billing() {
             </Card>
           )}
 
-          <Card className={stepCls(1)}>
+          <Card info={"Pick or add the customer; their GSTIN and state decide the GST on this bill."} className={stepCls(1)}>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2"><User className="w-4 h-4 text-primary" /> Customer Details</CardTitle>
             </CardHeader>
@@ -1263,7 +1263,7 @@ export default function Billing() {
             </CardContent>
           </Card>
 
-          <Card className={stepCls(2)}>
+          <Card info={"Items on the bill — qty, rate, discount and GST per line."} className={stepCls(2)}>
             <CardHeader className="pb-2 flex-row items-center justify-between">
               <CardTitle className="text-base">Line Items</CardTitle>
               <span className="text-xs text-muted-foreground">{items.length} item{items.length !== 1 ? "s" : ""}</span>
@@ -1600,7 +1600,7 @@ export default function Billing() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card info={"Bill total with discount, GST and round-off."}>
             <CardHeader className="pb-3"><CardTitle className="text-base">Invoice Summary</CardTitle></CardHeader>
             <CardContent className="space-y-3 text-sm">
               {(() => {

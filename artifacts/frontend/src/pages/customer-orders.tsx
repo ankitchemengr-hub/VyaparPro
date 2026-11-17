@@ -266,7 +266,7 @@ export default function CustomerOrdersAdmin() {
         </Select>
       </div>
 
-      <Card>
+      <Card info={"Orders customers placed from the catalog, newest first."}>
         <CardHeader>
           <CardTitle>All Customer Orders</CardTitle>
         </CardHeader>
