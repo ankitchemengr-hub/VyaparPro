@@ -31,8 +31,9 @@ export function CashReceiptDialog({
   // right now. Called unconditionally (before the early return below) since
   // hooks can't be called only when txn happens to be set.
   const receiptNo = txn?.receiptNo ?? "";
-  const { data: receipt } = useGetPaymentReceipt(receiptNo, {
-    query: { queryKey: getGetPaymentReceiptQueryKey(receiptNo), enabled: !!receiptNo },
+  // Receipt numbers contain "/" (REC/11/4) — encode them for the URL.
+  const { data: receipt } = useGetPaymentReceipt(encodeURIComponent(receiptNo), {
+    query: { queryKey: getGetPaymentReceiptQueryKey(encodeURIComponent(receiptNo)), enabled: !!receiptNo },
   });
 
   if (!open || !txn) {

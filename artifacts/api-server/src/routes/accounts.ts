@@ -338,6 +338,42 @@ router.get("/account-transactions", async (req, res): Promise<void> => {
   );
 });
 
+// GET /account-transactions/:id — one entry (the list stops at the latest
+// 500; Khatabook's Edit on an older payment needs that payment itself).
+router.get("/account-transactions/:id", async (req, res): Promise<void> => {
+  if (!requireFinancialRead(req, res)) return;
+  const companyId = getCompanyId(req);
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const r = (await pool.query(
+    `SELECT t.*, a.name AS account_name, i.invoice_no
+       FROM account_transactions t
+       LEFT JOIN accounts a ON a.id = t.account_id
+       LEFT JOIN invoices i ON i.id = t.invoice_id
+      WHERE t.id = $1 AND t.company_id = $2`,
+    [id, companyId],
+  )).rows[0];
+  if (!r) { res.status(404).json({ error: "Entry not found" }); return; }
+  res.json({
+    id: r.id,
+    receiptNo: r.receipt_no ?? null,
+    accountId: r.account_id,
+    accountName: r.account_name ?? null,
+    direction: r.direction,
+    amount: Number(r.amount),
+    discount: Number(r.discount ?? 0),
+    mode: r.mode,
+    partyName: r.party_name ?? null,
+    partyMobile: r.party_mobile ?? null,
+    partyEntityId: r.party_entity_id ?? null,
+    invoiceId: r.invoice_id ?? null,
+    invoiceNo: r.invoice_no ?? null,
+    notes: r.notes ?? null,
+    createdByName: r.created_by_name ?? null,
+    createdAt: r.created_at?.toISOString ? r.created_at.toISOString() : r.created_at,
+  });
+});
+
 // POST /account-transactions — record Payment In / Out
 router.post("/account-transactions", async (req, res): Promise<void> => {
   if (!requireFinancialWrite(req, res)) return;
@@ -553,7 +589,7 @@ router.patch("/account-transactions/:id", async (req, res): Promise<void> => {
     return;
   }
   const session = (req as any).session;
-  const { amount: newAmount, mode, partyName, partyMobile, notes, allowNegative } = parsed.data;
+  const { amount: newAmount, mode, partyName, partyMobile, notes, allowNegative, accountId: requestedAccountId } = parsed.data;
 
   const client = await pool.connect();
   try {
@@ -572,42 +608,64 @@ router.patch("/account-transactions/:id", async (req, res): Promise<void> => {
 
     const oldAmount = Number(existing.amount);
     const delta = newAmount - oldAmount;
+    // The entry can also move to another account (paid from the wrong one):
+    // the old account gets the old amount back, the new one takes the new amount.
+    const newAccountId = requestedAccountId && requestedAccountId !== existing.account_id ? requestedAccountId : existing.account_id;
+    const moving = newAccountId !== existing.account_id;
 
     const acctRes = await client.query(
-      `SELECT id, name, current_balance FROM accounts WHERE id = $1 AND company_id = $2 FOR UPDATE`,
-      [existing.account_id, companyId],
+      `SELECT id, name, current_balance, is_active FROM accounts WHERE id = ANY($1::int[]) AND company_id = $2 ORDER BY id FOR UPDATE`,
+      [[existing.account_id, newAccountId], companyId],
     );
-    const acct = acctRes.rows[0];
-    if (!acct) {
+    const oldAcct = acctRes.rows.find((a: any) => a.id === existing.account_id);
+    const acct = acctRes.rows.find((a: any) => a.id === newAccountId);
+    if (!oldAcct || !acct || (moving && !acct.is_active)) {
       await client.query("ROLLBACK");
-      res.status(404).json({ error: "Linked account not found" });
+      res.status(404).json({ error: moving ? "That account was not found or is closed" : "Linked account not found" });
       return;
     }
 
-    const balanceDelta = existing.direction === "in" ? delta : -delta;
+    const sign = existing.direction === "in" ? 1 : -1;
+    // What this edit does to the (new) account's balance.
+    const balanceDelta = moving ? sign * newAmount : sign * delta;
     const newAccountBalance = Number(acct.current_balance) + balanceDelta;
     const canOverride = WRITE_ROLES.has(session?.role) && allowNegative === true;
-    if (newAccountBalance < -0.001 && !canOverride) {
+    if (balanceDelta < 0 && newAccountBalance < -0.001 && !canOverride) {
       await client.query("ROLLBACK");
       res.status(400).json({ error: `This change would leave ${acct.name} at ₹${newAccountBalance.toFixed(2)} — set allowNegative to proceed.` });
       return;
     }
+    if (moving) {
+      const backOnOld = Number(oldAcct.current_balance) - sign * oldAmount;
+      if (backOnOld < -0.001 && !canOverride) {
+        await client.query("ROLLBACK");
+        res.status(400).json({ error: `Moving this entry would leave ${oldAcct.name} at ₹${backOnOld.toFixed(2)} — set allowNegative to proceed.` });
+        return;
+      }
+    }
 
     const updRes = await client.query(
-      `UPDATE account_transactions SET amount = $1, mode = $2, party_name = $3, party_mobile = $4, notes = $5
+      `UPDATE account_transactions SET amount = $1, mode = $2, party_name = $3, party_mobile = $4, notes = $5, account_id = $7
        WHERE id = $6 RETURNING *`,
-      [newAmount, mode, partyName ?? null, partyMobile ?? null, notes ?? null, id],
+      [newAmount, mode, partyName ?? null, partyMobile ?? null, notes ?? null, id, newAccountId],
     );
     const txn = updRes.rows[0];
 
+    if (moving) {
+      await client.query(
+        `UPDATE accounts SET current_balance = current_balance - $1 WHERE id = $2 AND company_id = $3`,
+        [sign * oldAmount, existing.account_id, companyId],
+      );
+    }
     const updAcct = await client.query(
       `UPDATE accounts SET current_balance = current_balance + $1 WHERE id = $2 AND company_id = $3 RETURNING current_balance`,
-      [balanceDelta, existing.account_id, companyId],
+      [balanceDelta, newAccountId, companyId],
     );
 
     // Same settlement scoping as creation — only a vendor "out" or customer
     // "in" ever touched the entity's ledger, so only those need correcting.
-    if (delta !== 0 && existing.party_entity_id) {
+    const modeChanged = mode !== existing.mode;
+    if ((delta !== 0 || modeChanged) && existing.party_entity_id) {
       const partyRes = await client.query(
         `SELECT id, type FROM entities WHERE id = $1 AND company_id = $2`,
         [existing.party_entity_id, companyId],
@@ -626,7 +684,14 @@ router.patch("/account-transactions/:id", async (req, res): Promise<void> => {
           [companyId, party.id, id],
         );
         const ledgerRow = ledgerRes.rows[0];
-        if (ledgerRow) {
+        // "Payment made (cash)" becomes "Payment made (upi)" when the mode changed.
+        if (ledgerRow && modeChanged) {
+          await client.query(
+            `UPDATE ledger_entries SET description = replace(description, $1, $2) WHERE id = $3`,
+            [`(${existing.mode})`, `(${mode})`, ledgerRow.id],
+          );
+        }
+        if (ledgerRow && delta !== 0) {
           const creditDelta = Number(ledgerRow.credit) > 0 ? delta : 0;
           const debitDelta = Number(ledgerRow.debit) > 0 ? delta : 0;
           await client.query(

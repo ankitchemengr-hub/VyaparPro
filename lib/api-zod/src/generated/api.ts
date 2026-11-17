@@ -2249,7 +2249,8 @@ export const UpdateAccountTransactionBody = zod.object({
   "partyName": zod.string().nullish(),
   "partyMobile": zod.string().nullish(),
   "notes": zod.string().nullish(),
-  "allowNegative": zod.boolean().optional().describe('Admin-only override to let this correction push the account balance negative instead of being blocked.')
+  "allowNegative": zod.boolean().optional().describe('Admin-only override to let this correction push the account balance negative instead of being blocked.'),
+  "accountId": zod.number().optional().describe('Move the entry to this account (the old account gets its amount back, this one takes the new amount).')
 })
 
 export const UpdateAccountTransactionResponse = zod.object({

@@ -29,7 +29,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { ArrowDownCircle, ArrowUpCircle, Loader2, UserCheck, X, Hash } from "lucide-react";
+import { ArrowDownCircle, ArrowUpCircle, Loader2, UserCheck, X, Hash, Banknote, Smartphone, CreditCard, Building2, IndianRupee } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 async function fetchReceiptPreview(): Promise<string | null> {
@@ -60,6 +60,19 @@ function useDebounced<T>(value: T, ms = 250): T {
   }, [value, ms]);
   return v;
 }
+
+// Payment mode buttons (same as Receive Payment) and the account type each
+// one usually goes through — that account is picked when the mode is chosen,
+// but any active account can still be selected (a UPI payout from the CC
+// account, a cheque from the current account…).
+export const PAY_MODES = [
+  { value: "cash", label: "Cash", icon: Banknote, accountType: "cash" },
+  { value: "upi", label: "UPI", icon: Smartphone, accountType: "upi" },
+  { value: "cheque", label: "Cheque", icon: CreditCard, accountType: "bank" },
+  { value: "bank_transfer", label: "Bank Transfer", icon: Building2, accountType: "bank" },
+  { value: "other", label: "Other", icon: IndianRupee, accountType: "" },
+] as const;
+export const ACCOUNT_TYPE_LABEL: Record<string, string> = { cash: "Cash", upi: "UPI", bank: "Bank" };
 
 export function CashEntryDialog({
   open,
@@ -98,6 +111,19 @@ export function CashEntryDialog({
   const [negativeConfirmMsg, setNegativeConfirmMsg] = useState<string | null>(null);
   const [noBalanceConfirmMsg, setNoBalanceConfirmMsg] = useState<string | null>(null);
 
+  // Accounts of the chosen mode's usual type first; choosing a mode picks
+  // the first of them (or keeps the current account when none matches).
+  const modeAccountType = PAY_MODES.find((m) => m.value === mode)?.accountType ?? "";
+  const sortedAccounts = [...accounts].sort(
+    (a, b) => Number(b.type === modeAccountType) - Number(a.type === modeAccountType),
+  );
+  const chooseMode = (value: string) => {
+    setMode(value);
+    const want = PAY_MODES.find((m) => m.value === value)?.accountType;
+    const match = want ? accounts.find((a) => a.type === want) : undefined;
+    if (match) setAccountId(String(match.id));
+  };
+
   // dropdown state for name autocomplete
   const [nameOpen, setNameOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -135,7 +161,7 @@ export function CashEntryDialog({
 
   useEffect(() => {
     if (open) {
-      setAccountId(accounts[0] ? String(accounts[0].id) : "");
+      setAccountId(String((accounts.find((a) => a.type === "cash") ?? accounts[0])?.id ?? ""));
       setAmount("");
       setMode("cash");
       setPartyName(presetEntity?.name ?? "");
@@ -312,6 +338,40 @@ export function CashEntryDialog({
 
         <div className="space-y-4 py-2">
           <div className="space-y-1.5">
+            <Label>Amount (₹) *</Label>
+            <Input
+              type="number"
+              step="0.01"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="0.00"
+              data-testid="input-entry-amount"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Payment Mode</Label>
+            <div className="grid grid-cols-3 gap-2">
+              {PAY_MODES.map((m) => (
+                <button
+                  key={m.value}
+                  type="button"
+                  onClick={() => chooseMode(m.value)}
+                  className={cn(
+                    "flex items-center justify-center gap-1.5 rounded-md border px-2 py-2 text-xs font-medium transition-colors",
+                    mode === m.value
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-input bg-background hover:bg-accent hover:text-accent-foreground",
+                  )}
+                  data-testid={`button-entry-mode-${m.value}`}
+                >
+                  <m.icon className="w-4 h-4" />{m.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
             <Label>{isIn ? "Deposit to Account *" : "Pay from Account *"}</Label>
             <Select value={accountId} onValueChange={setAccountId}>
               <SelectTrigger data-testid="select-entry-account"><SelectValue placeholder="Choose account..." /></SelectTrigger>
@@ -319,40 +379,15 @@ export function CashEntryDialog({
                 {accounts.length === 0 && (
                   <div className="px-2 py-3 text-sm text-muted-foreground">No active accounts.</div>
                 )}
-                {accounts.map((a) => (
+                {sortedAccounts.map((a) => (
                   <SelectItem key={a.id} value={String(a.id)}>
-                    {a.name} <span className="text-muted-foreground ml-2 text-xs capitalize">({a.type})</span>
+                    <span className="font-medium">{a.name}</span>
+                    {a.identifier && <span className="text-xs text-muted-foreground ml-1.5">({a.identifier})</span>}
+                    <span className="text-xs text-muted-foreground ml-1.5">· {ACCOUNT_TYPE_LABEL[a.type] ?? a.type}</span>
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>Amount (₹) *</Label>
-              <Input
-                type="number"
-                step="0.01"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="0.00"
-                data-testid="input-entry-amount"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Mode *</Label>
-              <Select value={mode} onValueChange={setMode}>
-                <SelectTrigger data-testid="select-entry-mode"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cash">Cash</SelectItem>
-                  <SelectItem value="upi">UPI</SelectItem>
-                  <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                  <SelectItem value="cheque">Cheque</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
           </div>
 
           {/* Customer / Party section */}

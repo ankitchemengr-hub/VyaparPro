@@ -19,4 +19,6 @@ export interface UpdateAccountTransactionInput {
   notes?: string | null;
   /** Admin-only override to let this correction push the account balance negative instead of being blocked. */
   allowNegative?: boolean;
+  /** Move the entry to this account (the old account gets its amount back, this one takes the new amount). */
+  accountId?: number;
 }

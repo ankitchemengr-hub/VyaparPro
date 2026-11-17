@@ -17,8 +17,10 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Search, BookOpen, Printer, MessageCircle, Loader2, Phone, Receipt,
-  ArrowDownCircle, ArrowUpCircle, ArrowLeft, ChevronRight, PlusCircle, MinusCircle, SlidersHorizontal, Users, Truck,
+  ArrowDownCircle, ArrowUpCircle, ArrowLeft, ChevronRight, PlusCircle, MinusCircle, SlidersHorizontal, Users, Truck, Pencil,
 } from "lucide-react";
+import { AccountEntryEditDialog } from "@/components/account-entry-edit-dialog";
+import { PaymentEditDialog } from "@/components/payment-manage-dialogs";
 import { useToast } from "@/hooks/use-toast";
 import { CashEntryDialog } from "@/components/cash-entry-dialog";
 import { CashReceiptDialog } from "@/components/cash-receipt-dialog";
@@ -338,6 +340,26 @@ function KhatabookPartyPage({
   const [entryDirection, setEntryDirection] = useState<"in" | "out" | null>(null);
   const [receiptTxn, setReceiptTxn] = useState<AccountTransaction | null>(null);
   const [adjustOpen, setAdjustOpen] = useState(false);
+  // Edit a payment line: a Payment In / Out made here (Cash Book entry) or a
+  // payment received on the Payments page — the receipt says which.
+  const { hasRole } = useAuth();
+  const canEditPayments = hasRole(["admin"]);
+  const [editTxnId, setEditTxnId] = useState<number | null>(null);
+  const [editPaymentId, setEditPaymentId] = useState<number | null>(null);
+  const [openingEdit, setOpeningEdit] = useState<number | null>(null);
+  const editPayment = async (entry: { id: number; referenceId?: number | null; referenceNo?: string | null }) => {
+    if (!entry.referenceNo || !entry.referenceId) return;
+    setOpeningEdit(entry.id);
+    try {
+      const r = await fetch(`/api/payment-receipts/${encodeURIComponent(entry.referenceNo)}`, { credentials: "include" });
+      const receipt = r.ok ? await r.json() : null;
+      if (receipt?.source === "cashbook") setEditTxnId(entry.referenceId);
+      else if (receipt?.source === "payment") setEditPaymentId(entry.referenceId);
+      else toast({ title: "This payment can't be edited here", description: "No receipt was found for it.", variant: "destructive" });
+    } finally {
+      setOpeningEdit(null);
+    }
+  };
 
   const { data: ledger, isLoading } = useGetEntityLedger(partyId, {
     query: { queryKey: getGetEntityLedgerQueryKey(partyId) },
@@ -492,7 +514,23 @@ function KhatabookPartyPage({
                       ) : (
                         <div className="truncate">{entry.description}</div>
                       )}
-                      {entry.referenceNo && <div className="text-[10px] text-muted-foreground font-mono truncate">{entry.referenceNo}</div>}
+                      {entry.referenceNo && (
+                        <div className="text-[10px] text-muted-foreground font-mono truncate flex items-center gap-1">
+                          <span className="truncate">{entry.referenceNo}</span>
+                          {canEditPayments && entry.type === "payment" && entry.referenceId && (
+                            <button
+                              type="button"
+                              className="shrink-0 inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-primary hover:bg-accent font-sans print:hidden"
+                              onClick={() => editPayment(entry)}
+                              disabled={openingEdit === entry.id}
+                              title="Edit this payment"
+                              data-testid={`button-edit-ledger-payment-${entry.id}`}
+                            >
+                              {openingEdit === entry.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Pencil className="w-3 h-3" />}Edit
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell className="text-right font-mono text-sm whitespace-nowrap">{entry.debit > 0 ? formatRs(entry.debit) : "—"}</TableCell>
                     <TableCell className="text-right font-mono text-sm whitespace-nowrap">{entry.credit > 0 ? formatRs(entry.credit) : "—"}</TableCell>
@@ -523,6 +561,8 @@ function KhatabookPartyPage({
     </Dialog>
 
     <ReceiptViewDialog receiptNo={viewingReceiptNo} onOpenChange={(o) => !o && setViewingReceiptNo(null)} />
+    <AccountEntryEditDialog txnId={editTxnId} onClose={() => setEditTxnId(null)} />
+    <PaymentEditDialog id={editPaymentId} onClose={() => setEditPaymentId(null)} />
 
     <CashEntryDialog
       open={entryDirection !== null}
@@ -691,8 +731,9 @@ const MODE_LABELS: Record<string, string> = {
 
 function ReceiptViewDialog({ receiptNo, onOpenChange }: { receiptNo: string | null; onOpenChange: (open: boolean) => void }) {
   const open = !!receiptNo;
-  const { data: receipt, isLoading } = useGetPaymentReceipt(receiptNo ?? "", {
-    query: { enabled: open, queryKey: getGetPaymentReceiptQueryKey(receiptNo ?? "") },
+  // Receipt numbers contain "/" (REC/11/4) — encode them for the URL.
+  const { data: receipt, isLoading } = useGetPaymentReceipt(encodeURIComponent(receiptNo ?? ""), {
+    query: { enabled: open, queryKey: getGetPaymentReceiptQueryKey(encodeURIComponent(receiptNo ?? "")) },
   });
 
   return (

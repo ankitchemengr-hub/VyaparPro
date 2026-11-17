@@ -56,8 +56,9 @@ export function InvoiceReceiptDialog({ invoiceId, onOpenChange }: InvoiceReceipt
     if (receipts && receipts.length === 1) setSelected(receipts[0].receiptNo);
   }, [receipts]);
 
-  const { data: receipt, isLoading: receiptLoading } = useGetPaymentReceipt(selected ?? "", {
-    query: { enabled: !!selected, queryKey: getGetPaymentReceiptQueryKey(selected ?? "") },
+  // Receipt numbers contain "/" (REC/11/4) — encode them for the URL.
+  const { data: receipt, isLoading: receiptLoading } = useGetPaymentReceipt(encodeURIComponent(selected ?? ""), {
+    query: { enabled: !!selected, queryKey: getGetPaymentReceiptQueryKey(encodeURIComponent(selected ?? "")) },
   });
 
   return (
