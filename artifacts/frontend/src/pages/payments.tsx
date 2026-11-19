@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from "react";
 import { useAuth } from "@/contexts/use-auth";
 import {
   useListPayments, useApprovePayment, useRejectPayment, PaymentStatus,
-  useListEntities, getListEntitiesQueryKey,
+  useListEntities, getListEntitiesQueryKey, useListAccounts,
 } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -125,6 +125,9 @@ export default function Payments() {
   const [editId, setEditId] = useState<number | null>(null);
   const [deleting, setDeleting] = useState<{ id: number; receiptId: string; customerName: string | null; amount: number; status: string } | null>(null);
   const [status, setStatus] = useState<PaymentStatus | "all">("all");
+  // Which account the money went to: "all", an account id, or "none" (not deposited).
+  const [accountFilter, setAccountFilter] = useState<string>("all");
+  const { data: accounts } = useListAccounts();
   const [period, setPeriod] = useState<Period>("month");
   const [from, setFrom] = useState<string>(() => periodRange("month").from);
   const [to, setTo] = useState<string>(() => periodRange("month").to);
@@ -145,9 +148,15 @@ export default function Payments() {
     const toTs = to ? new Date(to + "T23:59:59.999").getTime() : Infinity;
     return payments.filter((p) => {
       const t = new Date(p.createdAt).getTime();
-      return t >= fromTs && t <= toTs;
+      if (t < fromTs || t > toTs) return false;
+      if (accountFilter === "none") return p.accountId == null;
+      if (accountFilter !== "all") return p.accountId === Number(accountFilter);
+      return true;
     });
-  }, [payments, from, to]);
+  }, [payments, from, to, accountFilter]);
+  const accountName = accountFilter === "all" ? null
+    : accountFilter === "none" ? "Not deposited"
+    : (accounts ?? []).find((a) => a.id === Number(accountFilter))?.name ?? "Account";
 
   const totalInRange = filteredPayments.reduce((s, p) => s + Number(p.amount || 0), 0);
 
@@ -230,7 +239,7 @@ export default function Payments() {
           </Popover>
           <div className="text-right">
             <div className="text-xs text-muted-foreground">
-              {filteredPayments.length} payment{filteredPayments.length === 1 ? "" : "s"} · Total in range
+              {filteredPayments.length} payment{filteredPayments.length === 1 ? "" : "s"} · {accountName ? `Total in ${accountName}` : "Total in range"}
             </div>
             <div className="text-2xl font-bold font-mono text-green-600">₹{totalInRange.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</div>
           </div>
@@ -251,6 +260,21 @@ export default function Payments() {
                 {p.label}
               </Button>
             ))}
+          </div>
+          <div className="flex items-center gap-2 max-w-sm">
+            <Label className="text-xs shrink-0" htmlFor="payment-account">Account</Label>
+            <Select value={accountFilter} onValueChange={setAccountFilter}>
+              <SelectTrigger id="payment-account" className="h-9" data-testid="filter-payment-account">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All accounts</SelectItem>
+                {(accounts ?? []).map((a) => (
+                  <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
+                ))}
+                <SelectItem value="none">Not deposited to an account</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           {period === "custom" && (
             <div className="grid grid-cols-2 gap-2 max-w-sm">
@@ -302,7 +326,10 @@ export default function Payments() {
                       </TableCell>
                       <TableCell className="font-medium">{payment.customerName}</TableCell>
                       <TableCell className="hidden md:table-cell">{payment.salesmanName || "Direct"}</TableCell>
-                      <TableCell className="hidden sm:table-cell capitalize">{payment.mode.replace('_', ' ')}</TableCell>
+                      <TableCell className="hidden sm:table-cell">
+                        <span className="capitalize">{payment.mode.replace('_', ' ')}</span>
+                        {payment.accountId != null && <div className="text-[10px] text-muted-foreground">{(accounts ?? []).find((a) => a.id === payment.accountId)?.name}</div>}
+                      </TableCell>
                       <TableCell className="text-right font-bold text-green-600 whitespace-nowrap">₹{payment.amount.toLocaleString()}</TableCell>
                       <TableCell>
                         <span title={payment.status[0].toUpperCase() + payment.status.slice(1)} className="inline-flex">
