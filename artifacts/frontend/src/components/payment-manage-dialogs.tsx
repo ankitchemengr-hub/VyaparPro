@@ -57,7 +57,15 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-export function PaymentViewDialog({ id, onClose }: { id: number | null; onClose: () => void }) {
+export function PaymentViewDialog({ id, onClose, onEdit, onDelete, onApprove, onReject }: {
+  id: number | null;
+  onClose: () => void;
+  // Admin actions, shown at the bottom (the only way to reach them on a phone).
+  onEdit?: (id: number) => void;
+  onDelete?: (p: { id: number; receiptId: string; customerName: string | null; amount: number; status: string }) => void;
+  onApprove?: (id: number) => void;
+  onReject?: (id: number) => void;
+}) {
   const { data: d, isLoading, error } = useDetails(id);
   return (
     <Dialog open={id != null} onOpenChange={(o) => !o && onClose()}>
@@ -100,6 +108,22 @@ export function PaymentViewDialog({ id, onClose }: { id: number | null; onClose:
               </div>
             )}
           </div>
+        )}
+        {d && (onEdit || onDelete || onApprove) && (
+          <DialogFooter className="flex-row flex-wrap gap-2 sm:justify-end">
+            {d.status === "pending" && onApprove && (
+              <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => onApprove(d.id)}>Approve</Button>
+            )}
+            {d.status === "pending" && onReject && (
+              <Button size="sm" variant="outline" className="text-destructive border-destructive" onClick={() => onReject(d.id)}>Reject</Button>
+            )}
+            {onEdit && <Button size="sm" variant="outline" onClick={() => onEdit(d.id)} data-testid="button-view-edit-payment">Edit</Button>}
+            {onDelete && (
+              <Button size="sm" variant="outline" className="text-destructive" onClick={() => onDelete({ id: d.id, receiptId: d.receiptId, customerName: d.customerName, amount: d.amount, status: d.status })}>
+                Delete
+              </Button>
+            )}
+          </DialogFooter>
         )}
       </DialogContent>
     </Dialog>

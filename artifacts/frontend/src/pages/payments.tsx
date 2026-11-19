@@ -297,14 +297,14 @@ export default function Payments() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Receipt ID</TableHead>
+                  <TableHead className="hidden sm:table-cell">Receipt ID</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Customer</TableHead>
                   <TableHead className="hidden md:table-cell">Collected By</TableHead>
                   <TableHead className="hidden sm:table-cell">Mode</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
-                  <TableHead>Status</TableHead>
-                  {showActions && <TableHead className="text-right">Actions</TableHead>}
+                  <TableHead className="hidden sm:table-cell">Status</TableHead>
+                  {showActions && <TableHead className="hidden sm:table-cell text-right">Actions</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -318,20 +318,35 @@ export default function Payments() {
                   </TableRow>
                 ) : (
                   filteredPayments.map(payment => (
-                    <TableRow key={payment.id}>
-                      <TableCell className="font-mono text-xs whitespace-nowrap">{payment.receiptId || `REC-${payment.id}`}</TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        {format(new Date(payment.createdAt), "MMM dd, yyyy")}
-                        <div className="text-[10px] text-muted-foreground">{format(new Date(payment.createdAt), "hh:mm a")}</div>
+                    // Phone: just Date, Customer, Amount — tap the row for the rest
+                    // (View, with Edit / Delete / Approve inside).
+                    <TableRow
+                      key={payment.id}
+                      className={canView ? "cursor-pointer" : undefined}
+                      onClick={canView ? () => setViewId(payment.id) : undefined}
+                      data-testid={`row-payment-${payment.id}`}
+                    >
+                      <TableCell className="hidden sm:table-cell font-mono text-xs whitespace-nowrap">{payment.receiptId || `REC-${payment.id}`}</TableCell>
+                      <TableCell className="whitespace-nowrap px-2 sm:px-4">
+                        <span className="sm:hidden">{format(new Date(payment.createdAt), "dd MMM")}</span>
+                        <span className="hidden sm:inline">{format(new Date(payment.createdAt), "MMM dd, yyyy")}</span>
+                        <div className="hidden sm:block text-[10px] text-muted-foreground">{format(new Date(payment.createdAt), "hh:mm a")}</div>
                       </TableCell>
-                      <TableCell className="font-medium">{payment.customerName}</TableCell>
+                      <TableCell className="font-medium px-2 sm:px-4 break-words">{payment.customerName}</TableCell>
                       <TableCell className="hidden md:table-cell">{payment.salesmanName || "Direct"}</TableCell>
                       <TableCell className="hidden sm:table-cell">
                         <span className="capitalize">{payment.mode.replace('_', ' ')}</span>
                         {payment.accountId != null && <div className="text-[10px] text-muted-foreground">{(accounts ?? []).find((a) => a.id === payment.accountId)?.name}</div>}
                       </TableCell>
-                      <TableCell className="text-right font-bold text-green-600 whitespace-nowrap">₹{payment.amount.toLocaleString()}</TableCell>
-                      <TableCell>
+                      <TableCell className="text-right font-bold text-green-600 whitespace-nowrap px-2 sm:px-4">
+                        ₹{payment.amount.toLocaleString("en-IN")}
+                        {payment.status !== "approved" && (
+                          <div className={`sm:hidden text-[10px] font-medium ${payment.status === "rejected" ? "text-destructive" : "text-amber-600"}`}>
+                            {payment.status === "rejected" ? "Rejected" : "Pending"}
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell">
                         <span title={payment.status[0].toUpperCase() + payment.status.slice(1)} className="inline-flex">
                           {payment.status === "approved" ? (
                             <CheckCircle2 className="h-5 w-5 text-green-600" />
@@ -343,7 +358,7 @@ export default function Payments() {
                         </span>
                       </TableCell>
                       {showActions && (
-                        <TableCell className="text-right">
+                        <TableCell className="hidden sm:table-cell text-right" onClick={(e) => e.stopPropagation()}>
                           <div className="flex justify-end gap-1 flex-wrap">
                           {isAdmin && payment.status === "pending" && (
                             <div className="flex justify-end gap-2">
@@ -404,7 +419,14 @@ export default function Payments() {
           setPickCustomerOpen(false);
         }}
       />
-      <PaymentViewDialog id={viewId} onClose={() => setViewId(null)} />
+      <PaymentViewDialog
+        id={viewId}
+        onClose={() => setViewId(null)}
+        onEdit={isAdmin ? (id) => { setViewId(null); setEditId(id); } : undefined}
+        onDelete={isAdmin ? (p) => { setViewId(null); setDeleting(p); } : undefined}
+        onApprove={isAdmin ? (id) => { setViewId(null); handleApprove(id); } : undefined}
+        onReject={isAdmin ? (id) => { setViewId(null); handleReject(id); } : undefined}
+      />
       <PaymentEditDialog id={editId} onClose={() => setEditId(null)} />
       <PaymentDeleteDialog payment={deleting} onClose={() => setDeleting(null)} />
       <RecordPaymentDialog
