@@ -295,7 +295,12 @@ test("login activity: a wrong password lands in that company's log", async () =>
   assert.match(minted, /"iat":\d+/);
   assert.match(minted, /"pv":"[0-9a-f]{16}"/);
 
-  const act = await call(cookies.admin, "GET", "/users/login-activity");
+  // The success row is written just after the login reply goes out — wait for it.
+  let act = await call(cookies.admin, "GET", "/users/login-activity");
+  for (let i = 0; i < 30 && !act.body.entries?.some((e: any) => e.username === u.username && e.success); i++) {
+    await new Promise((r) => setTimeout(r, 100));
+    act = await call(cookies.admin, "GET", "/users/login-activity");
+  }
   assert.equal(act.status, 200);
   assert.ok(act.body.failed24h >= 1);
   const mine = act.body.entries.filter((e: any) => e.username === u.username);
