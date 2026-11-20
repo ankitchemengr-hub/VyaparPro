@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Link, Redirect } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -25,6 +26,16 @@ export default function PortalDashboard() {
   const { data: systemConfig } = useGetSystemConfig();
   const logout = useLogout();
   const queryClient = useQueryClient();
+
+  // The platform owner (super admin) has no subscription of its own — its
+  // screen is the Platform Console in the ERP app. Send it there; the app is
+  // a separate site, so it may ask to sign in there once.
+  const isPlatformOwner = user?.role === "super_admin";
+  const appBase = (systemConfig?.erpApplicationUrl || "").replace(/\/$/, "");
+  const consoleUrl = `${appBase}/subscriptions`;
+  useEffect(() => {
+    if (isPlatformOwner && appBase) window.location.replace(consoleUrl);
+  }, [isPlatformOwner, appBase, consoleUrl]);
 
   if (authLoading) return null;
   if (!isAuthenticated) return <Redirect to="/login" />;
@@ -59,7 +70,20 @@ export default function PortalDashboard() {
           <p className="text-slate-500 text-sm mt-1">Here's what's happening with your account.</p>
         </div>
 
-        {isLoading ? (
+        {isPlatformOwner ? (
+          <Card data-testid="card-platform-owner">
+            <CardContent className="p-8 text-center space-y-4">
+              <p className="text-slate-600">
+                You are signed in as the platform owner. Plans, customer subscriptions, payments and leads are in the
+                Platform Console of the ERP app.
+              </p>
+              <Button asChild size="lg">
+                <a href={consoleUrl}><ExternalLink className="w-4 h-4 mr-2" />Open Platform Console</a>
+              </Button>
+              <p className="text-xs text-slate-400">Opening it now… The app may ask you to log in once.</p>
+            </CardContent>
+          </Card>
+        ) : isLoading ? (
           <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-blue-600" /></div>
         ) : !sub ? (
           <Card><CardContent className="p-8 text-center text-slate-500">No subscription found for your account.</CardContent></Card>
