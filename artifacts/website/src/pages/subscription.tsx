@@ -64,11 +64,17 @@ export default function PortalSubscription() {
   const [paying, setPaying] = useState(false);
   const [cycle, setCycle] = useState<BillingCycle | null>(null);
   const [coupon, setCoupon] = useState("");
+  // The package to pay for: the current one, or another (upgrade / change).
+  const [chosenSlug, setChosenSlug] = useState<string | null>(null);
 
   if (authLoading) return null;
   if (!isAuthenticated) return <Redirect to="/login" />;
 
   const currentPlan = plans.find((p) => p.slug === sub?.planTier) as PlanWithOffer | undefined;
+  // An old plan that's no longer sold (starter / business …) → offer Platinum,
+  // which is what those accounts have now.
+  const payPlan = (plans.find((p) => p.slug === (chosenSlug ?? currentPlan?.slug ?? "platinum"))
+    ?? plans[plans.length - 1]) as PlanWithOffer | undefined;
   // Renew for the same period as before unless the customer picks another.
   const subCycle = CYCLES.some((c) => c.value === sub?.billingCycle) ? (sub!.billingCycle as BillingCycle) : "monthly";
   const renewCycle = cycle ?? subCycle;
@@ -82,7 +88,7 @@ export default function PortalSubscription() {
     setPaying(true);
     // couponCode isn't in the generated request type; the server reads it.
     const order: Parameters<typeof createOrder.mutate>[0]["data"] & { couponCode?: string } = {
-      subscriptionId: sub.id, planSlug: sub.planTier ?? "", billingCycle: renewCycle, ...(coupon ? { couponCode: coupon } : {}),
+      subscriptionId: sub.id, planSlug: payPlan?.slug ?? "", billingCycle: renewCycle, ...(coupon ? { couponCode: coupon } : {}),
     };
     createOrder.mutate(
       { data: order },
@@ -94,7 +100,7 @@ export default function PortalSubscription() {
             amount: Math.round(order.amount * 100),
             currency: order.currency,
             name: "SHRADHA ERP",
-            description: `${currentPlan?.name ?? "Subscription"} — Renewal (${CYCLES.find((c) => c.value === renewCycle)?.label ?? "Monthly"})`,
+            description: `${payPlan?.name ?? "Subscription"} — Renewal (${CYCLES.find((c) => c.value === renewCycle)?.label ?? "Monthly"})`,
             theme: { color: "#2563eb" },
             handler: (response: any) => {
               verifyPayment.mutate(
@@ -144,7 +150,7 @@ export default function PortalSubscription() {
           <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-blue-600" /></div>
         ) : (
           <Card>
-            <CardHeader><CardTitle>{currentPlan?.name ?? sub.planTier ?? "Your Plan"}</CardTitle></CardHeader>
+            <CardHeader><CardTitle>{currentPlan?.name ?? (sub.planTier ? "Platinum (all features)" : "Your Plan")}</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="grid sm:grid-cols-2 gap-4 text-sm">
                 <div><span className="text-slate-500">Billing Cycle</span><div className="font-medium capitalize">{sub.billingCycle?.replace("_", "-") ?? "—"}</div></div>
@@ -155,10 +161,36 @@ export default function PortalSubscription() {
                 <div><span className="text-slate-500">Status</span><div><Badge variant="outline" className="capitalize">{sub.subscriptionStatus}</Badge></div></div>
               </div>
               <Separator />
-              {currentPlan && currentPlan.priceMonthly > 0 && (
+              {plans.length > 0 && (
+                <div>
+                  <div className="text-sm font-medium text-slate-700 mb-2">Package</div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {(plans as PlanWithOffer[]).filter((p) => p.priceMonthly > 0).map((p) => {
+                      const on = payPlan?.slug === p.slug;
+                      return (
+                        <button
+                          key={p.slug}
+                          type="button"
+                          onClick={() => { setChosenSlug(p.slug); setCoupon(""); }}
+                          aria-pressed={on}
+                          className={`rounded-lg border px-2 py-2 text-left text-sm transition-colors ${on ? "border-blue-600 bg-blue-50 ring-1 ring-blue-600" : "border-slate-200 bg-white hover:border-blue-300"}`}
+                          data-testid={`renew-plan-${p.slug}`}
+                        >
+                          <span className="block font-semibold">{p.name}{p.slug === sub.planTier ? " · current" : ""}</span>
+                          <span className="block text-xs text-slate-500">₹{p.priceMonthly.toLocaleString("en-IN")}/mo + GST</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <Link href="/pricing" className="mt-1.5 inline-block text-xs text-blue-600 hover:underline">Compare what each package includes →</Link>
+                </div>
+              )}
+              {payPlan && payPlan.priceMonthly > 0 && (
                 <CheckoutBox
-                  planSlug={currentPlan.slug}
-                  cycleDiscounts={currentPlan.cycleDiscounts}
+                  planSlug={payPlan.slug}
+                  cycleDiscounts={payPlan.cycleDiscounts}
+                  monthlyPrice={payPlan.priceMonthly}
+                  yearlyPrice={payPlan.yearlyPrice}
                   cycle={renewCycle}
                   onCycle={setCycle}
                   coupon={coupon}

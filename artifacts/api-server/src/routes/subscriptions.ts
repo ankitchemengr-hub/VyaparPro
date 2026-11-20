@@ -77,6 +77,8 @@ function mapRow(r: any) {
     email: r.email ?? null,
     logo: r.logo ?? null,
     planName: r.plan_name,
+    // The package (silver / gold / diamond / platinum, or an old plan slug).
+    planTier: r.plan_tier ?? null,
     subscriptionStartDate: new Date(r.subscription_start_date).toISOString(),
     subscriptionEndDate: end.toISOString(),
     subscriptionAmount: Number(r.subscription_amount),

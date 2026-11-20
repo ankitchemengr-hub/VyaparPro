@@ -37,6 +37,7 @@ import {
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/use-auth";
+import { usePlan } from "@/lib/plan";
 
 const MAX_ATTACHMENT_BYTES = 3 * 1024 * 1024; // 3MB raw — keeps base64 payload within the 10mb API limit
 
@@ -66,8 +67,10 @@ export default function CustomerProfile() {
     query: { enabled: !!entityId, queryKey: ['ledger', entityId] }
   });
 
+  const { has: planHas } = usePlan();
+  const hasRewards = planHas("rewards");
   const { data: rewards } = useListRewardProgress({ customerId: entityId }, {
-    query: { enabled: !!entityId, queryKey: ['rewards', entityId] }
+    query: { enabled: !!entityId && hasRewards, queryKey: ['rewards', entityId] }
   });
 
   const createAdjustment = useCreateLedgerAdjustment();
@@ -273,7 +276,7 @@ export default function CustomerProfile() {
             </CardContent>
           </Card>
 
-          {entityData.type === 'customer' && (
+          {entityData.type === 'customer' && hasRewards && (
             <Card>
               <CardHeader>
                 <CardTitle>Reward Progress</CardTitle>

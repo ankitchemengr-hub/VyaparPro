@@ -22,6 +22,7 @@ interface Plan {
   id: number; slug: string; name: string; tagline: string; priceMonthly: number; trialDays: number;
   maxUsers: number | null; maxCompanies: number | null; features: string[]; isActive: boolean;
   offerPrice: number | null; offerLabel: string | null; offerEndsAt: string | null;
+  yearlyPrice: number | null;
 }
 interface Coupon {
   id: number; code: string; kind: "percent" | "flat"; value: number; planSlugs: string[];
@@ -60,6 +61,7 @@ function PlanDialog({ plan, onClose }: { plan: Plan; onClose: () => void }) {
     features: plan.features.join("\n"), isActive: plan.isActive,
     offerOn: plan.offerPrice != null, offerPrice: plan.offerPrice == null ? "" : String(plan.offerPrice),
     offerLabel: plan.offerLabel ?? "", offerEndsAt: toDateInput(plan.offerEndsAt),
+    yearlyPrice: plan.yearlyPrice == null ? "" : String(plan.yearlyPrice),
   });
   const price = Number(f.priceMonthly);
   const offer = Number(f.offerPrice);
@@ -77,6 +79,7 @@ function PlanDialog({ plan, onClose }: { plan: Plan; onClose: () => void }) {
           offerPrice: f.offerOn ? f.offerPrice : null,
           offerLabel: f.offerOn ? f.offerLabel : null,
           offerEndsAt: f.offerOn ? endOfDay(f.offerEndsAt) : null,
+          yearlyPrice: f.yearlyPrice || null,
         }),
       });
       toast({ title: `${f.name} saved`, description: "The website and payments use the new price straight away." });
@@ -101,6 +104,15 @@ function PlanDialog({ plan, onClose }: { plan: Plan; onClose: () => void }) {
           <div className="space-y-1">
             <Label htmlFor="pl-price">Price / month (₹, before GST)</Label>
             <Input id="pl-price" inputMode="decimal" value={f.priceMonthly} onChange={(e) => setF({ ...f, priceMonthly: e.target.value })} />
+          </div>
+          <div className="space-y-1 col-span-2">
+            <Label htmlFor="pl-yearly">Price / year (₹, GST included)</Label>
+            <Input id="pl-yearly" inputMode="decimal" placeholder="Leave blank for 12 × monthly" value={f.yearlyPrice} onChange={(e) => setF({ ...f, yearlyPrice: e.target.value.replace(/[^\d.]/g, "") })} />
+            {Number(f.yearlyPrice) > 0 && price > 0 && (
+              <p className="text-xs text-muted-foreground">
+                12 months at {rs(price)} + GST = {rs(Math.round(price * 12 * 1.18))}; yearly saves {rs(Math.max(0, Math.round(price * 12 * 1.18 - Number(f.yearlyPrice))))}.
+              </p>
+            )}
           </div>
           <div className="space-y-1 col-span-2">
             <Label htmlFor="pl-tagline">Tagline</Label>
@@ -394,7 +406,7 @@ export function PlansOffersPanel() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {data.plans.map((p) => {
+            {data.plans.filter((p) => p.isActive).map((p) => {
               const running = offerRunning(p);
               return (
                 <div key={p.id} className={`rounded-xl border p-4 flex flex-col ${p.isActive ? "" : "opacity-60"}`} data-testid={`plan-card-${p.slug}`}>
@@ -418,6 +430,7 @@ export function PlansOffersPanel() {
                       <div><span className="text-xl font-bold">{rs(p.priceMonthly)}</span><span className="text-xs text-muted-foreground">/mo</span></div>
                     )}
                   </div>
+                  {p.yearlyPrice != null && p.priceMonthly > 0 && <div className="text-xs text-muted-foreground mt-0.5">{rs(p.yearlyPrice)}/year incl. GST</div>}
                   {running && (
                     <Badge className="mt-2 w-fit bg-amber-500 hover:bg-amber-500">
                       {p.offerLabel || "Offer"}{p.offerEndsAt ? ` · till ${fmtDate(p.offerEndsAt)}` : ""}

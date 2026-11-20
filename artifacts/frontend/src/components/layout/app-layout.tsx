@@ -11,6 +11,7 @@ import { ShortcutsHelpDialog } from "../shortcuts-help-dialog";
 import { InfoTip } from "../info-tip";
 import { pageInfoFor } from "@/lib/page-info";
 import { useGlobalShortcuts } from "@/lib/keyboard/use-global-shortcuts";
+import { usePlan, planFeatureForPath } from "@/lib/plan";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -27,6 +28,11 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [location] = useLocation();
+  // A page outside the company's package shows a short note instead (the menu
+  // never links there; this covers a typed or old link).
+  const { plan, has: planHas } = usePlan();
+  const planFeature = planFeatureForPath(location);
+  const planBlocked = !!plan && !!planFeature && !planHas(planFeature);
 
   useGlobalShortcuts({
     onTogglePalette: () => setPaletteOpen((v) => !v),
@@ -134,7 +140,14 @@ export function AppLayout({ children }: AppLayoutProps) {
         <MaintenanceBanner />
 
         <main id="main-content" tabIndex={-1} className="flex-1 p-6 overflow-x-clip outline-none">
-          {children}
+          {planBlocked ? (
+            <div className="max-w-md mx-auto mt-16 text-center space-y-2" data-testid="plan-not-included">
+              <h1 className="text-xl font-semibold">Not in your plan</h1>
+              <p className="text-sm text-muted-foreground">
+                This page is not part of your {plan?.planName ?? "current"} plan. Your admin can upgrade the plan from the website (My Account → Manage Subscription).
+              </p>
+            </div>
+          ) : children}
         </main>
       </div>
 

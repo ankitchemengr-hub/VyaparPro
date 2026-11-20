@@ -11,6 +11,7 @@ import {
 import { moduleNavItems } from "@/lib/nav-items";
 import { useRoleFeature } from "@/lib/permissions";
 import { InfoTip } from "@/components/info-tip";
+import { usePlan } from "@/lib/plan";
 
 // Cycled per tile so the module grid reads as colorful/scannable at a glance
 // instead of every icon box sharing one flat brand-orange tint. Each entry is
@@ -37,8 +38,10 @@ export default function Menu() {
   const [query, setQuery] = React.useState("");
   const trimmed = query.trim();
 
+  const { has } = usePlan();
   const modules = moduleNavItems.filter((item) =>
-    hasRole(item.roles as any) && (!item.feature || allows(item.feature)) && !(item.noSuperAdmin && user?.role === "super_admin"));
+    hasRole(item.roles as any) && (!item.feature || allows(item.feature)) && !(item.noSuperAdmin && user?.role === "super_admin")
+    && has(item.plan));
   const filteredModules = trimmed
     ? modules.filter((item) => item.name.toLowerCase().includes(trimmed.toLowerCase()))
     : modules;

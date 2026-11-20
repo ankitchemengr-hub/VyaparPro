@@ -348,6 +348,8 @@ export default function PortalRegister() {
                     <CheckoutBox
                       planSlug={selectedPlan.slug}
                       cycleDiscounts={selectedPlan.cycleDiscounts}
+                      monthlyPrice={selectedPlan.priceMonthly}
+                      yearlyPrice={selectedPlan.yearlyPrice}
                       cycle={cycle}
                       onCycle={setCycle}
                       coupon={coupon}

@@ -3,6 +3,7 @@ import { pool } from "@workspace/db";
 import { requireSuperAdmin } from "./subscriptions";
 import { ensurePricingSchema, getCycleDiscounts, normalizeCoupon } from "../lib/plan-pricing";
 import { ensureReferralSchema, getReferralSettings, formatReferralStatus } from "../lib/referrals";
+import { TIERS, clearPlanCache } from "../lib/plan-features";
 
 // Platform Console → Plans & Offers (super_admin only): edit each plan's
 // price, features and trial, run an offer price until a date, set discounts
@@ -71,6 +72,7 @@ function formatPlan(r: any) {
     offerPrice: r.offer_price == null ? null : Number(r.offer_price),
     offerLabel: r.offer_label ?? null,
     offerEndsAt: iso(r.offer_ends_at),
+    yearlyPrice: r.yearly_price == null ? null : Number(r.yearly_price),
   };
 }
 
@@ -124,7 +126,8 @@ router.put("/platform-pricing/plans/:id", requireSuperAdmin, async (req, res): P
     const { rows: [r] } = await pool.query(
       `UPDATE subscription_plans SET
          name = $1, tagline = $2, price_monthly = $3, trial_days = $4, max_users = $5, max_companies = $6,
-         features = $7::jsonb, is_active = $8, offer_price = $9, offer_label = $10, offer_ends_at = $11, updated_at = NOW()
+         features = $7::jsonb, is_active = $8, offer_price = $9, offer_label = $10, offer_ends_at = $11,
+         yearly_price = $13, updated_at = NOW()
        WHERE id = $12 RETURNING *`,
       [
         text(b.name, "Plan name", { max: 60 }), text(b.tagline, "Tagline", { optional: true }),
@@ -134,6 +137,7 @@ router.put("/platform-pricing/plans/:id", requireSuperAdmin, async (req, res): P
         JSON.stringify(features), b.isActive !== false,
         offerPrice, offerPrice != null ? text(b.offerLabel, "Offer name", { max: 60, optional: true }) : null,
         offerPrice != null ? offerEndsAt : null, id,
+        num(b.yearlyPrice, "Yearly price", { min: 1, optional: true }),
       ],
     );
     if (!r) throw new InputError("Plan not found");
@@ -294,6 +298,22 @@ router.post("/platform-pricing/referrals/:id/reject", requireSuperAdmin, async (
       [text(req.body?.note, "Reason", { max: 200 }), r.id],
     );
     return formatReferralStatus(u);
+  });
+});
+
+// PUT /platform-pricing/subscriptions/:id/package { tier } — move a company to
+// another package by hand (e.g. paid offline). Features change straight away.
+router.put("/platform-pricing/subscriptions/:id/package", requireSuperAdmin, async (req, res): Promise<void> => {
+  await handle(res, async () => {
+    const tier = String(req.body?.tier ?? "");
+    if (!(TIERS as string[]).includes(tier)) throw new InputError("Choose Silver, Gold, Diamond or Platinum");
+    const { rows: [s] } = await pool.query(
+      `UPDATE subscriptions SET plan_tier = $1, updated_at = NOW() WHERE id = $2 RETURNING id, company_id, plan_tier`,
+      [tier, Number(req.params.id)],
+    );
+    if (!s) throw new InputError("Subscription not found");
+    clearPlanCache(s.company_id);
+    return { id: s.id, companyId: s.company_id, planTier: s.plan_tier };
   });
 });
 

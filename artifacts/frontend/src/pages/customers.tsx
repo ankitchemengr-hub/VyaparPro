@@ -31,6 +31,7 @@ import { Search, UserPlus, Pencil, Loader2, RefreshCw, MessageCircle, MapPin, Tr
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { GSTIN_RE } from "@/components/gstin-fetch";
+import { usePlan } from "@/lib/plan";
 
 type FilterType = EntityType | "all";
 
@@ -78,6 +79,9 @@ type EditFormValues = {
 
 export default function Customers() {
   const { hasRole } = useAuth();
+  // Salesman assignment is part of salesman commission (Gold / Platinum).
+  const { has: planHas } = usePlan();
+  const hasCommission = planHas("commission");
   const isAdmin = hasRole(["admin"]);
   const [search, setSearch] = useState("");
   const [type, setType] = useState<FilterType>("customer");
@@ -439,6 +443,7 @@ export default function Customers() {
               <SelectItem value="oldest">First Added</SelectItem>
             </SelectContent>
           </Select>
+          {hasCommission && (
           <Select value={salesmanFilter || "__all__"} onValueChange={(v) => setSalesmanFilter(v === "__all__" ? "" : v)}>
             <SelectTrigger className="flex-1 sm:w-[180px]" data-testid="select-filter-salesman">
               <SelectValue placeholder="Salesman" />
@@ -450,6 +455,7 @@ export default function Customers() {
               ))}
             </SelectContent>
           </Select>
+          )}
         </div>
         <label className="flex items-center gap-2 text-sm text-muted-foreground shrink-0">
           <input
@@ -728,6 +734,7 @@ export default function Customers() {
                       )}
                     />
                   </div>
+                  {hasCommission && (
                   <div>
                     <label className="text-sm font-medium">Assigned Salesman</label>
                     <Select
@@ -750,6 +757,7 @@ export default function Customers() {
                       </p>
                     )}
                   </div>
+                  )}
                 </>
               )}
 
@@ -980,6 +988,7 @@ export default function Customers() {
                     />
                   </div>
 
+                  {hasCommission && (
                   <div>
                     <label className="text-sm font-medium">Assigned Salesman</label>
                     <Select
@@ -1002,6 +1011,7 @@ export default function Customers() {
                       </p>
                     )}
                   </div>
+                  )}
                 </>
               )}
 

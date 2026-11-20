@@ -19,6 +19,7 @@ import { NonGstCleanupPanel } from "@/components/settings/NonGstCleanupPanel";
 import { DataImportPanel } from "@/components/settings/DataImportPanel";
 import { InfoTip } from "@/components/info-tip";
 import { PaymentSyncPanel } from "@/pages/payment-sync";
+import { usePlan } from "@/lib/plan";
 
 const TYPE_LABELS: Record<string, string> = {
   invoice: "Invoice",
@@ -257,7 +258,10 @@ const SETTING_SECTIONS = [
 export default function Settings() {
   const [, navigate] = useLocation();
   const sectionKey = new URLSearchParams(useSearch()).get("s");
-  const openSection = SETTING_SECTIONS.find((x) => x.key === sectionKey);
+  const { has: planHas } = usePlan();
+  // Bill Payment Sync is a Gold+ extra.
+  const sections = SETTING_SECTIONS.filter((x) => x.key !== "payment-sync" || planHas("payment_sync"));
+  const openSection = sections.find((x) => x.key === sectionKey);
   const fromCards = React.useRef(false);
   const showSection = (key: string) => {
     fromCards.current = true;
@@ -335,7 +339,7 @@ export default function Settings() {
 
       {!openSection && (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {SETTING_SECTIONS.map((c) => (
+          {sections.map((c) => (
             <button
               key={c.key}
               type="button"

@@ -6,6 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { topNavItems } from "@/lib/nav-items";
+import { usePlan } from "@/lib/plan";
 
 interface SidebarProps {
   isOpen?: boolean;
@@ -29,7 +30,8 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps = {}) {
     });
   };
 
-  const visibleItems = topNavItems.filter(item => hasRole(item.roles as any));
+  const { has } = usePlan();
+  const visibleItems = topNavItems.filter(item => hasRole(item.roles as any) && has(item.plan));
 
   return (
     <div

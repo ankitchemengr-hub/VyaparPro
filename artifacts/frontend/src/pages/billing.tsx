@@ -51,6 +51,7 @@ import { shareInvoiceImage } from "@/lib/share-invoice";
 import { usePrintTitle } from "@/lib/print-with-title";
 import { useRoleFeature, FEATURE_BILLING_RATE_EDIT } from "@/lib/permissions";
 import { GstinFetchButton, gstinPartyName, type GstinDetails } from "@/components/gstin-fetch";
+import { usePlan } from "@/lib/plan";
 
 type QtyMode = "unit" | "box";
 
@@ -322,6 +323,7 @@ export default function Billing() {
   const [, setLocation] = useLocation();
   const { user, hasRole } = useAuth();
   const allowsFeature = useRoleFeature();
+  const { has: planHas } = usePlan();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -1247,7 +1249,7 @@ export default function Billing() {
                   <Label className="text-xs">Freight (₹)</Label>
                   <NumberInput min={0} value={freight} onChange={(v) => setFreight(v)} data-testid="input-freight" />
                 </div>
-                {isAdminUser && (
+                {isAdminUser && planHas("commission") && (
                   <div className={`space-y-1 ${showMoreDetails || freight > 0 ? "" : "hidden md:block"}`}>
                     <Label className="text-xs">Salesman (Commission)</Label>
                     <Select value={salesmanId ? String(salesmanId) : "__none__"} onValueChange={(v) => setSalesmanId(v === "__none__" ? null : Number(v))}>

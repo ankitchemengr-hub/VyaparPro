@@ -35,6 +35,7 @@ import {
   Pencil, Trash2, Save, Eye, EyeOff, Check, ChevronsUpDown, Plus, Wand2, Receipt, Wrench,
 } from "lucide-react";
 import { ServiceDialog } from "@/components/service-dialog";
+import { usePlan } from "@/lib/plan";
 
 // Brand field for the product form — picks from the Brand Master list, or
 // creates a new master entry inline if the typed name doesn't exist yet.
@@ -238,8 +239,9 @@ export default function Inventory() {
   // raw material they consumed has already left current_stock, so they must
   // be added here too or the total dips by that cost until dispatch.
   const readyBatchesParams = { status: "ready" as const };
+  const { has: planHasMain } = usePlan();
   const { data: readyBatches } = useListReadyMaterialBatches(readyBatchesParams, {
-    query: { enabled: isAdmin, queryKey: getListReadyMaterialBatchesQueryKey(readyBatchesParams) },
+    query: { enabled: isAdmin && planHasMain("manufacturing"), queryKey: getListReadyMaterialBatchesQueryKey(readyBatchesParams) },
   });
   const productPriceById = new Map((allProducts ?? []).map((p) => [p.id, Number(p.purchasePrice ?? 0)]));
   const totalValue =
@@ -642,6 +644,8 @@ export function ProductDialog({ open, onOpenChange, product, isAdmin, initialVal
   onCreated?: (created: any) => void;
 }) {
   const isEdit = !!product;
+  // Commission and manufacturing fields only with a package that has them.
+  const { has: planHas } = usePlan();
   const [tab, setTab] = useState("details");
   const [form, setForm] = useState<ProductForm>(emptyForm);
   // Physical stock count entered by an admin on the Stock & Image tab —
@@ -1276,6 +1280,7 @@ export function ProductDialog({ open, onOpenChange, product, isAdmin, initialVal
                   </SelectContent>
                 </Select>
               </div>
+              {planHas("commission") && (
               <div className="space-y-1.5">
                 <Label>Commission per {form.volumeUnit === "kg" ? "Kg" : "Liter"} (₹)</Label>
                 <Input
@@ -1286,6 +1291,7 @@ export function ProductDialog({ open, onOpenChange, product, isAdmin, initialVal
                   data-testid="input-commission-per-liter"
                 />
               </div>
+              )}
             </div>
             <div className="flex justify-between pt-2">
               <Button type="button" variant="outline" onClick={() => setTab("details")}>Back</Button>
@@ -1359,6 +1365,7 @@ export function ProductDialog({ open, onOpenChange, product, isAdmin, initialVal
                   <p className="text-xs text-muted-foreground mt-0.5">Hide from price catalog &amp; billing</p>
                 </div>
               </div>
+              {planHas("manufacturing") && (
               <div className="flex items-center gap-3 rounded-lg border p-3 bg-muted/20">
                 <Switch
                   id="add-for-mfg"
@@ -1371,6 +1378,7 @@ export function ProductDialog({ open, onOpenChange, product, isAdmin, initialVal
                   <p className="text-xs text-muted-foreground mt-0.5">Show in Manufacturing &amp; allow recipes (BOM)</p>
                 </div>
               </div>
+              )}
             </div>
 
             <ImageAdjustDialog

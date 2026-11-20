@@ -22,6 +22,7 @@ import {
   Package,
   type LucideIcon,
 } from "lucide-react";
+import { usePlan } from "@/lib/plan";
 
 interface QuickAction {
   label: string;
@@ -88,15 +89,17 @@ export function CommandPalette({
     setLocation(path);
   };
 
+  const { has: planHas } = usePlan();
   const navItems = useMemo(() => {
     const seen = new Set<string>();
     return [...topNavItems, ...moduleNavItems].filter((item) => {
       if (seen.has(item.href) || !hasRole(item.roles as any) || (item.feature && !allows(item.feature))) return false;
+      if (!planHas(item.plan)) return false;
       if (item.noSuperAdmin && user?.role === "super_admin") return false;
       seen.add(item.href);
       return true;
     });
-  }, [hasRole, allows, user?.role]);
+  }, [hasRole, allows, user?.role, planHas]);
 
   const actions = QUICK_ACTIONS.filter((a) => hasRole(a.roles as any));
   const customers = (results?.entities ?? []).filter((e) => e.type === "customer");

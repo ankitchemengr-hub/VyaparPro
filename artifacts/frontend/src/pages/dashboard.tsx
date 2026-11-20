@@ -48,6 +48,7 @@ import {
   Clock,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { usePlan } from "@/lib/plan";
 
 // Fixed, colorblind-validated categorical order (see index.css --stock-pie-*)
 // — never cycled arbitrarily, so a given slot always sits next to the same
@@ -494,6 +495,8 @@ function LitersRing({ purchased, sold }: { purchased: number; sold: number }) {
 
 export default function Dashboard() {
   const { user, hasRole } = useAuth();
+  const { has: planHas } = usePlan();
+  const hasMfg = planHas("manufacturing");
 
   const isAdmin = hasRole(["admin"]);
   const [showCapitalDetails, setShowCapitalDetails] = React.useState(false);
@@ -572,7 +575,7 @@ export default function Dashboard() {
   // they aren't on screen when someone else is looking; the eye reveals them.
   const [showProfit, setShowProfit] = React.useState(false);
 
-  const { data: workloadCards } = useListWorkloadCards();
+  const { data: workloadCards } = useListWorkloadCards(undefined, { query: { enabled: hasMfg } as any });
 
   // Mirrors Manufacturing > Workload's own list: every product flagged "Add
   // for Manufacturing" that's currently below its minimum stock threshold —
@@ -915,7 +918,7 @@ export default function Dashboard() {
           a tap expands the list inline (no navigating away). */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
         {hasRole(["admin", "accountant"]) && <OverdueCustomersCard />}
-        <Card info={"Items running low that should be made — tap to open the list."}
+        {hasMfg && <Card info={"Items running low that should be made — tap to open the list."}
           className="min-w-0 cursor-pointer select-none transition-colors hover:bg-muted/40"
           {...clickableProps(() => setShowWorkload((v) => !v))}
           aria-expanded={showWorkload}
@@ -958,7 +961,7 @@ export default function Dashboard() {
               </div>
             )}
           </CardContent>
-        </Card>
+        </Card>}
 
         <Card info={"Items whose stock is at or below their minimum level."}
           className="min-w-0 cursor-pointer select-none transition-colors hover:bg-muted/40"

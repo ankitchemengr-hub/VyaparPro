@@ -53,6 +53,7 @@ import {
   RefreshCw, ArrowUpDown, Ban, Play, Download, FileSpreadsheet, FileText, Search,
   Pencil, Trash2, AlertTriangle, Globe, BarChart3, Inbox, Megaphone, Tags, Gift, List,
 } from "lucide-react";
+import { PackageDialog, PackageBadge } from "@/components/package-dialog";
 
 const PLANS = [
   { value: "monthly", label: "Monthly" },
@@ -244,6 +245,7 @@ export default function Subscriptions() {
 
   const [planOpen, setPlanOpen] = useState(false);
   const [planTarget, setPlanTarget] = useState<{ id: number; planName: string; amount: string } | null>(null);
+  const [packageTarget, setPackageTarget] = useState<{ id: number; companyName: string; planTier: string | null } | null>(null);
 
   const logoEditInputRef = useRef<HTMLInputElement>(null);
   const [editOpen, setEditOpen] = useState(false);
@@ -561,7 +563,7 @@ export default function Subscriptions() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Company</TableHead>
-                    <TableHead>Plan</TableHead>
+                    <TableHead>Package</TableHead>
                     <TableHead>End Date</TableHead>
                     <TableHead className="text-right">Days Left</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
@@ -580,7 +582,10 @@ export default function Subscriptions() {
                         <div className="font-medium">{r.companyName}</div>
                         <div className="text-xs text-muted-foreground">{r.mobile ?? r.email ?? ""}</div>
                       </TableCell>
-                      <TableCell>{planLabel(r.planName)}</TableCell>
+                      <TableCell>
+                        <PackageBadge tier={(r as any).planTier} />
+                        <div className="text-xs text-muted-foreground mt-0.5">{planLabel(r.planName)}</div>
+                      </TableCell>
                       <TableCell>{r.subscriptionEndDate.slice(0, 10)}</TableCell>
                       <TableCell className={`text-right font-semibold ${expiryColor(r.daysRemaining, r.subscriptionStatus)}`}>
                         {r.subscriptionStatus === "suspended" ? "—" : `${r.daysRemaining}d`}
@@ -600,8 +605,11 @@ export default function Subscriptions() {
                             <DropdownMenuItem onClick={() => renewMut.mutate({ id: r.id })}>
                               <RefreshCw className="w-4 h-4 mr-2" /> Renew
                             </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setPackageTarget({ id: r.id, companyName: r.companyName, planTier: (r as any).planTier ?? null })} data-testid={`menu-change-package-${r.id}`}>
+                              <ArrowUpDown className="w-4 h-4 mr-2" /> Change Package
+                            </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => { setPlanTarget({ id: r.id, planName: r.planName, amount: String(r.subscriptionAmount) }); setPlanOpen(true); }}>
-                              <ArrowUpDown className="w-4 h-4 mr-2" /> Change Plan
+                              <ArrowUpDown className="w-4 h-4 mr-2" /> Change Billing Cycle
                             </DropdownMenuItem>
                             {r.subscriptionStatus === "suspended" ? (
                               <DropdownMenuItem onClick={() => activateMut.mutate({ id: r.id })}>
@@ -783,6 +791,8 @@ export default function Subscriptions() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <PackageDialog target={packageTarget} onClose={() => setPackageTarget(null)} />
 
       {/* CHANGE PLAN DIALOG */}
       <Dialog open={planOpen} onOpenChange={setPlanOpen}>

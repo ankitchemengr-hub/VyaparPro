@@ -1,6 +1,6 @@
 import { pool } from "@workspace/db";
 import { logger } from "./logger";
-import { withGst } from "./subscription-invoice";
+import { withGst, GST_RATE } from "./subscription-invoice";
 
 // Plans & Offers (Platform Console). What a customer pays for a plan:
 //   monthly price — or the plan's offer price while its offer runs
@@ -46,7 +46,9 @@ export function ensurePricingSchema(): Promise<void> {
     ALTER TABLE subscription_payments ADD COLUMN IF NOT EXISTS list_amount NUMERIC(12, 2);
     ALTER TABLE subscription_payments ADD COLUMN IF NOT EXISTS discount_amount NUMERIC(12, 2);
     ALTER TABLE subscription_payments ADD COLUMN IF NOT EXISTS coupon_code TEXT;
-  `).then(() => undefined).catch((err) => {
+    ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS yearly_price NUMERIC(12, 2);
+    ALTER TABLE platform_pricing ADD COLUMN IF NOT EXISTS tiers_v2_at TIMESTAMP WITH TIME ZONE;
+  `).then(() => applyTierPackagesOnce()).catch((err) => {
     schemaReady = null; // retry next time rather than caching the failure
     logger.error({ err }, "Could not ensure plan pricing schema");
     throw err;
@@ -54,6 +56,97 @@ export function ensurePricingSchema(): Promise<void> {
   return schemaReady;
 }
 ensurePricingSchema().catch(() => {});
+
+// The Silver / Gold / Diamond / Platinum packages (lib/plan-features.ts says
+// what each unlocks). Runs once: adds the four plans, hides the old ones
+// (starter / business / professional / enterprise — companies still on them
+// keep everything, as Platinum, until they renew), and clears the old offers,
+// long-period discounts and coupons. Later edits in Plans & Offers are kept.
+const TIER_PLANS = [
+  {
+    slug: "silver", name: "Silver", tagline: "For shops and traders", price: 500, yearly: 5000, maxUsers: 3, sort: 1,
+    features: [
+      "GST & Non-GST billing, invoices, quotations, sales return",
+      "Customer orders",
+      "Purchases & purchase report",
+      "Inventory, brands, stock adjustment, price list",
+      "Khatabook, payments, cash book, accounts, expenses",
+      "Reports",
+      "Staff logins by role (up to 3)",
+      "Your own domain",
+      "Backup & restore",
+    ],
+  },
+  {
+    slug: "gold", name: "Gold", tagline: "For distributors with salesmen", price: 700, yearly: 8200, maxUsers: 10, sort: 2,
+    features: [
+      "Everything in Silver",
+      "Salesman logins & commission",
+      "Customer rewards",
+      "Supplier settle & stock investment",
+      "Inactive customer follow-up",
+      "Books & Audit — trial balance, P&L, GSTR-1, Tally",
+      "Workers & attendance",
+      "Stock manager login",
+      "Up to 10 staff logins",
+    ],
+  },
+  {
+    slug: "diamond", name: "Diamond", tagline: "For manufacturers", price: 899, yearly: 10400, maxUsers: 10, sort: 3,
+    features: [
+      "Everything in Silver",
+      "Bill of materials (recipes)",
+      "Manufacturing & assembly",
+      "Auto manufacturing on sale",
+      "Manufacturing login",
+      "Up to 10 staff logins",
+    ],
+  },
+  {
+    slug: "platinum", name: "Platinum", tagline: "Everything — trading and manufacturing", price: 999, yearly: 11300, maxUsers: null, sort: 4,
+    features: [
+      "Everything in Gold",
+      "Bill of materials, manufacturing & auto manufacturing",
+      "All logins — salesman, store, manufacturing",
+      "Unlimited staff logins",
+    ],
+  },
+];
+
+async function applyTierPackagesOnce(): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows: [m] } = await client.query(`SELECT tiers_v2_at FROM platform_pricing WHERE id = 1 FOR UPDATE`);
+    if (m?.tiers_v2_at) { await client.query("ROLLBACK"); return; }
+    for (const p of TIER_PLANS) {
+      await client.query(
+        `INSERT INTO subscription_plans (slug, name, tagline, price_monthly, yearly_price, max_users, max_companies, features, trial_days, sort_order, is_active)
+         VALUES ($1, $2, $3, $4, $5, $6, 1, $7::jsonb, 7, $8, true)
+         ON CONFLICT (slug) DO UPDATE SET
+           name = EXCLUDED.name, tagline = EXCLUDED.tagline, price_monthly = EXCLUDED.price_monthly,
+           yearly_price = EXCLUDED.yearly_price, max_users = EXCLUDED.max_users, features = EXCLUDED.features,
+           trial_days = EXCLUDED.trial_days, sort_order = EXCLUDED.sort_order, is_active = true`,
+        [p.slug, p.name, p.tagline, String(p.price), String(p.yearly), p.maxUsers, JSON.stringify(p.features), p.sort],
+      );
+    }
+    await client.query(
+      `UPDATE subscription_plans SET is_active = false WHERE slug NOT IN ('silver', 'gold', 'diamond', 'platinum')`,
+    );
+    await client.query(`UPDATE subscription_plans SET offer_price = NULL, offer_label = NULL, offer_ends_at = NULL`);
+    await client.query(
+      `UPDATE platform_pricing SET quarterly_pct = 0, half_yearly_pct = 0, yearly_pct = 0, tiers_v2_at = NOW(), updated_at = NOW() WHERE id = 1`,
+    );
+    await client.query(`UPDATE subscription_coupons SET is_active = false`);
+    await client.query("COMMIT");
+    logger.info("Subscription packages set up: Silver, Gold, Diamond, Platinum (old plans, offers and coupons turned off)");
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
 
 export class PricingError extends Error {
   constructor(message: string, public status = 400) { super(message); }
@@ -142,8 +235,16 @@ export async function quotePlan(
   const afterOffer = round2(effectiveMonthly * months);
 
   const discounts = await getCycleDiscounts(client);
-  const cycleDiscountPct = billingCycle === "monthly" ? 0 : Math.min(90, Math.max(0, discounts[billingCycle as keyof CycleDiscounts] ?? 0));
-  const cycleDiscount = round2(afterOffer * cycleDiscountPct / 100);
+  // A plan's own yearly price (GST included) replaces the yearly % discount.
+  const yearlyPrice = billingCycle === "yearly" && plan.yearly_price != null && Number(plan.yearly_price) > 0
+    ? Number(plan.yearly_price) : null;
+  let cycleDiscountPct = billingCycle === "monthly" ? 0 : Math.min(90, Math.max(0, discounts[billingCycle as keyof CycleDiscounts] ?? 0));
+  let cycleDiscount = round2(afterOffer * cycleDiscountPct / 100);
+  if (yearlyPrice != null) {
+    const yearlyTaxable = round2(yearlyPrice / (1 + GST_RATE / 100));
+    cycleDiscount = Math.max(0, round2(afterOffer - yearlyTaxable));
+    cycleDiscountPct = afterOffer > 0 ? round2(cycleDiscount / afterOffer * 100) : 0;
+  }
   let net = round2(afterOffer - cycleDiscount);
 
   let referral: PriceQuote["referral"] = null;
@@ -171,7 +272,13 @@ export async function quotePlan(
     }
   }
 
-  const { taxable, gst, total } = withGst(net);
+  let { taxable, gst, total } = withGst(net);
+  // The yearly price is GST-inclusive: charge exactly that when nothing else came off.
+  if (yearlyPrice != null && !referral && !coupon && Math.abs(total - yearlyPrice) < 1) {
+    taxable = net;
+    total = yearlyPrice;
+    gst = round2(total - taxable);
+  }
   return {
     planSlug: plan.slug,
     planName: plan.name,

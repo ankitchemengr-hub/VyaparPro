@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 export interface PlanOffer { price: number; label: string | null; endsAt: string | null }
 export interface CycleDiscounts { quarterly: number; half_yearly: number; yearly: number }
 // GET /portal/plans also sends these (not in the generated types).
-export type PlanWithOffer = SubscriptionPlan & { offer?: PlanOffer | null; cycleDiscounts?: CycleDiscounts };
+export type PlanWithOffer = SubscriptionPlan & { offer?: PlanOffer | null; cycleDiscounts?: CycleDiscounts; yearlyPrice?: number | null };
 
 export type BillingCycle = "monthly" | "quarterly" | "half_yearly" | "yearly";
 export const CYCLES: { value: BillingCycle; label: string; months: number }[] = [
@@ -61,6 +61,11 @@ export function PlanPrice({ plan, dark = false, className }: { plan: PlanWithOff
         <span className="text-3xl font-bold tracking-tight">{rs(offer ? offer.price : plan.priceMonthly)}</span>
         <span className={cn("text-sm font-normal", dark ? "text-slate-300" : "text-slate-500")}>/mo</span>
       </div>
+      {plan.yearlyPrice != null && plan.priceMonthly > 0 && (
+        <div className={cn("mt-1 text-sm font-medium", dark ? "text-emerald-300" : "text-emerald-700")}>
+          or {rs(plan.yearlyPrice)}/year incl. GST
+        </div>
+      )}
     </div>
   );
 }
@@ -77,8 +82,11 @@ export function cycleSavingsText(plans: PlanWithOffer[]): string | null {
 
 // Billing cycle, coupon code and the exact amount to pay. `onChange` gives
 // the parent the cycle and the applied coupon (or "") whenever they change.
-export function CheckoutBox({ planSlug, cycleDiscounts, cycle, onCycle, coupon, onCoupon, referralCode }: {
+export function CheckoutBox({ planSlug, cycleDiscounts, cycle, onCycle, coupon, onCoupon, referralCode, monthlyPrice, yearlyPrice }: {
   planSlug: string;
+  // The plan's own yearly price (GST included) — shown as the yearly saving.
+  monthlyPrice?: number;
+  yearlyPrice?: number | null;
   // Signup form: a referral code typed in (a logged-in customer's own
   // referral discount is found by the server from the session).
   referralCode?: string;
@@ -132,9 +140,12 @@ export function CheckoutBox({ planSlug, cycleDiscounts, cycle, onCycle, coupon, 
     <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-4">
       <div>
         <div className="text-sm font-medium text-slate-700 mb-2">Billing period</div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {CYCLES.map((c) => {
-            const pct = c.value === "monthly" ? 0 : cycleDiscounts?.[c.value as keyof CycleDiscounts] ?? 0;
+        <div className="grid grid-cols-2 gap-2">
+          {CYCLES.filter((c) => c.value === "monthly" || c.value === "yearly").map((c) => {
+            const pct = c.value === "monthly" ? 0
+              : c.value === "yearly" && yearlyPrice && monthlyPrice
+                ? Math.max(0, Math.round((1 - yearlyPrice / (monthlyPrice * 12 * 1.18)) * 100))
+                : cycleDiscounts?.[c.value as keyof CycleDiscounts] ?? 0;
             const on = cycle === c.value;
             return (
               <button

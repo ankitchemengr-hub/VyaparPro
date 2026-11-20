@@ -34,6 +34,7 @@ import {
   PackagePlus,
   type LucideIcon,
 } from "lucide-react";
+import type { PlanFeature } from "@/lib/plan";
 
 export type Role = "super_admin" | "admin" | "salesman" | "store" | "manufacturing" | "accountant" | "gst_accountant" | "customer" | "counter";
 
@@ -45,6 +46,8 @@ export interface NavItem {
   description?: string;
   /** For non-admin roles: also needs this Settings > Permissions feature on. */
   feature?: string;
+  /** Only in subscription packages that include this extra (lib/plan.ts). */
+  plan?: PlanFeature;
   /** Hidden from a platform super_admin even while switched into a company
    *  (hasRole otherwise lets it see every admin item). */
   noSuperAdmin?: boolean;
@@ -68,7 +71,7 @@ export const moduleNavItems: NavItem[] = [
   { name: "My Orders", href: "/my-orders", icon: ClipboardList, roles: ["customer", "salesman"], description: "Track your placed orders" },
   { name: "My Statement", href: "/my-statement", icon: FileText, roles: ["customer"], description: "View your balance and transaction history" },
   { name: "Customer Orders", href: "/customer-orders", icon: Inbox, roles: ["admin", "store", "manufacturing"], description: "Manage incoming orders" },
-  { name: "My Dashboard", href: "/salesman-dashboard", icon: LayoutDashboard, roles: ["salesman"], description: "My commission and sales overview" },
+  { name: "My Dashboard", href: "/salesman-dashboard", plan: "commission", icon: LayoutDashboard, roles: ["salesman"], description: "My commission and sales overview" },
   { name: "Billing", href: "/billing", icon: FileText, roles: ["admin", "store"], description: "Create GST / non-GST invoices" },
   { name: "Invoices", href: "/invoices", icon: FileText, roles: ["admin", "salesman", "accountant", "gst_accountant", "store"], description: "Browse and print invoices" },
   { name: "Sales Return", href: "/sales-return", icon: Undo2, roles: ["admin", "salesman", "accountant", "store"], description: "Search a bill and process a return" },
@@ -78,24 +81,24 @@ export const moduleNavItems: NavItem[] = [
   { name: "Brands", href: "/brands", icon: Tags, roles: ["admin", "store"], description: "Manage the brand list used when adding products" },
   { name: "Stock Adjustment", href: "/stock-adjustment", icon: ClipboardCheck, roles: ["admin"], description: "Physical stock reconciliation and adjustments" },
   { name: "Customers", href: "/customers", icon: Users, roles: ["admin", "salesman", "accountant"], description: "Customer directory and ledgers" },
-  { name: "Inactive Customers", href: "/customers/inactive", icon: PhoneCall, roles: ["admin", "salesman", "accountant"], description: "Customers with no order in a while — contact them and log a remark" },
+  { name: "Inactive Customers", href: "/customers/inactive", plan: "inactive_customers", icon: PhoneCall, roles: ["admin", "salesman", "accountant"], description: "Customers with no order in a while — contact them and log a remark" },
   { name: "Khatabook", href: "/khatabook", icon: BookOpen, roles: ["admin", "accountant"], description: "Customer and supplier balances at a glance" },
-  { name: "Supplier Settle", href: "/supplier-settle", icon: Scale, roles: ["admin"], noSuperAdmin: true, description: "Each supplier's material sold, money collected for it, and what to pay them now" },
-  { name: "Stock Investment", href: "/stock-investment", icon: PiggyBank, roles: ["admin"], noSuperAdmin: true, description: "Money back from each item sold, plus a % of its profit, turned into how much to order again at the last purchase rate" },
+  { name: "Supplier Settle", href: "/supplier-settle", plan: "supplier_settle", icon: Scale, roles: ["admin"], noSuperAdmin: true, description: "Each supplier's material sold, money collected for it, and what to pay them now" },
+  { name: "Stock Investment", href: "/stock-investment", plan: "stock_investment", icon: PiggyBank, roles: ["admin"], noSuperAdmin: true, description: "Money back from each item sold, plus a % of its profit, turned into how much to order again at the last purchase rate" },
   { name: "Payments", href: "/payments", icon: CreditCard, roles: ["admin", "salesman", "accountant", "gst_accountant"], description: "Collections and approvals" },
-  { name: "Commission", href: "/commission", icon: BadgeIndianRupee, roles: ["admin", "accountant", "salesman"], description: "Salesman commission report" },
+  { name: "Commission", href: "/commission", plan: "commission", icon: BadgeIndianRupee, roles: ["admin", "accountant", "salesman"], description: "Salesman commission report" },
   { name: "Cash Book", href: "/cashbook", icon: HandCoins, roles: ["admin", "accountant"], description: "Daily cash movements" },
   { name: "Accounts", href: "/accounts", icon: Wallet, roles: ["admin", "accountant"], description: "Bank and cash accounts" },
-  { name: "Rewards", href: "/rewards", icon: Award, roles: ["admin", "customer"], description: "Volume reward schemes" },
-  { name: "Production Received", href: "/material-received", icon: PackagePlus, roles: ["store"], feature: "material_receive", description: "Goods received from manufacturing (not a purchase)" },
-  { name: "Manufacturing", href: "/manufacturing", icon: Factory, roles: ["admin", "manufacturing"], description: "Production workload" },
-  { name: "Bill of Materials", href: "/bom", icon: FileText, roles: ["admin"], description: "BOM master" },
-  { name: "Auto Manufacturing", href: "/auto-manufacture", icon: Factory, roles: ["admin"], description: "Made products never go negative on sale; fix existing negative stock" },
+  { name: "Rewards", href: "/rewards", plan: "rewards", icon: Award, roles: ["admin", "customer"], description: "Volume reward schemes" },
+  { name: "Production Received", href: "/material-received", plan: "manufacturing", icon: PackagePlus, roles: ["store"], feature: "material_receive", description: "Goods received from manufacturing (not a purchase)" },
+  { name: "Manufacturing", href: "/manufacturing", plan: "manufacturing", icon: Factory, roles: ["admin", "manufacturing"], description: "Production workload" },
+  { name: "Bill of Materials", href: "/bom", plan: "manufacturing", icon: FileText, roles: ["admin"], description: "BOM master" },
+  { name: "Auto Manufacturing", href: "/auto-manufacture", plan: "manufacturing", icon: Factory, roles: ["admin"], description: "Made products never go negative on sale; fix existing negative stock" },
   { name: "Purchases", href: "/purchases", icon: Truck, roles: ["admin", "accountant", "gst_accountant", "store"], description: "Purchase bills" },
-  { name: "Workers", href: "/workers", icon: HardHat, roles: ["admin", "accountant"], description: "Worker attendance" },
+  { name: "Workers", href: "/workers", plan: "workers", icon: HardHat, roles: ["admin", "accountant"], description: "Worker attendance" },
   { name: "Expenses", href: "/expenses", icon: Receipt, roles: ["admin", "accountant"], description: "Business expenses" },
   { name: "Reports", href: "/reports", icon: BarChart3, roles: ["admin", "accountant", "gst_accountant"], description: "Sales, tax, P&L reports" },
-  { name: "Books & Audit", href: "/books-audit", icon: BookOpenCheck, roles: ["admin", "accountant", "gst_accountant"], description: "GST books: Trial Balance, P&L, Balance Sheet, Day Book, GSTR-1, audit trail and Tally import / export" },
+  { name: "Books & Audit", href: "/books-audit", plan: "books_audit", icon: BookOpenCheck, roles: ["admin", "accountant", "gst_accountant"], description: "GST books: Trial Balance, P&L, Balance Sheet, Day Book, GSTR-1, audit trail and Tally import / export" },
   { name: "Subscriptions", href: "/subscriptions", icon: BadgeIndianRupee, roles: ["super_admin"], description: "Tenant subscriptions" },
   { name: "Price List", href: "/price-list", icon: Tag, roles: ["admin"], description: "Edit product pricing in bulk" },
   { name: "User Accounts", href: "/users", icon: KeyRound, roles: ["admin"], description: "Manage logins" },

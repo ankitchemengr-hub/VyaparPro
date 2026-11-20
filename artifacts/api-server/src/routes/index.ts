@@ -46,6 +46,8 @@ import systemAdminRouter from "./system-admin";
 import portalRouter from "./portal";
 import nonGstCleanupRouter from "./non-gst-cleanup";
 import planOffersRouter from "./plan-offers";
+import myPlanRouter from "./my-plan";
+import { planGate } from "../lib/plan-features";
 import { requireAuth } from "../lib/tenant";
 import { restrictGstAccountant } from "../lib/gst-access";
 
@@ -68,6 +70,9 @@ router.use(portalRouter);
 // point that guarantees no data route can be reached anonymously, and exposes
 // req.companyId / req.isSuperAdmin to downstream handlers.
 router.use(requireAuth);
+// Subscription package: features and logins outside the company's plan → 403.
+router.use(planGate);
+router.use(myPlanRouter);
 
 router.use(usersRouter);
 router.use(productsRouter);

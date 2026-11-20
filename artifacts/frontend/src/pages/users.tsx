@@ -26,6 +26,7 @@ import { UserPlus, KeyRound, Loader2, ShieldAlert, Pencil, Search, LogOut, Histo
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/use-auth";
+import { usePlan } from "@/lib/plan";
 
 const ROLES = ["admin", "salesman", "store", "manufacturing", "accountant", "gst_accountant", "customer", "counter"] as const;
 type Role = typeof ROLES[number];
@@ -311,6 +312,7 @@ function EditUserDialog({
   onDone: () => void;
 }) {
   const { toast } = useToast();
+  const { roleAllowed } = usePlan();
   const updateUser = useUpdateUser();
   const [role, setRole] = useState<Role>("salesman");
   const [name, setName] = useState("");
@@ -430,7 +432,7 @@ function EditUserDialog({
             <Select value={role} onValueChange={(v) => { setRole(v as Role); setEntityId(""); }}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {ROLES.map(r => (
+                {ROLES.filter(r => roleAllowed(r) || r === target?.role).map(r => (
                   <SelectItem key={r} value={r}>{ROLE_LABELS[r]}</SelectItem>
                 ))}
               </SelectContent>
@@ -534,6 +536,7 @@ function AddUserDialog({
   createUser: ReturnType<typeof useCreateUser>;
 }) {
   const { toast } = useToast();
+  const { plan, roleAllowed } = usePlan();
   const form = useForm({
     defaultValues: {
       username: "",
@@ -544,6 +547,10 @@ function AddUserDialog({
       pricingTier: "retail" as "retail" | "wholesale",
     },
   });
+  // Plans without salesman logins start the form on Accountant instead.
+  React.useEffect(() => {
+    if (plan && !roleAllowed(form.getValues("role"))) form.setValue("role", "accountant" as Role);
+  }, [plan]); // eslint-disable-line react-hooks/exhaustive-deps
   const role = form.watch("role");
 
   // Suggest entities matching the chosen role (salesman→salesman, mfg/store→worker, customer→customer)
@@ -631,7 +638,7 @@ function AddUserDialog({
                       <SelectTrigger data-testid="select-role"><SelectValue /></SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {ROLES.map(r => (
+                      {ROLES.filter(r => roleAllowed(r)).map(r => (
                         <SelectItem key={r} value={r}>{ROLE_LABELS[r]}</SelectItem>
                       ))}
                     </SelectContent>

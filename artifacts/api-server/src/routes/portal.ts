@@ -21,6 +21,7 @@ import {
 } from "../lib/subscription-invoice";
 import { DomainError, getDomainState, requestDomain, verifyDomain, removeDomain } from "../lib/custom-domains";
 import { sendWelcomeEmail } from "../lib/customer-emails";
+import { clearPlanCache } from "../lib/plan-features";
 import { PricingError, activeOffer, ensurePricingSchema, getCycleDiscounts, normalizeCoupon, quotePlan, recordCouponUse } from "../lib/plan-pricing";
 import {
   ensureReferralSchema, getReferralSettings, getOrCreateReferralAccount, checkReferralCode, linkReferral,
@@ -42,7 +43,7 @@ router.get("/portal/plans", async (_req, res): Promise<void> => {
   await ensurePricingSchema();
   const { rows } = await pool.query(
     `SELECT id, slug, name, tagline, price_monthly, max_users, max_companies, features, trial_days, is_active,
-            offer_price, offer_label, offer_ends_at
+            offer_price, offer_label, offer_ends_at, yearly_price
      FROM subscription_plans WHERE is_active = true ORDER BY sort_order ASC`,
   );
   const cycleDiscounts = await getCycleDiscounts();
@@ -58,6 +59,8 @@ router.get("/portal/plans", async (_req, res): Promise<void> => {
     trialDays: r.trial_days,
     isActive: r.is_active,
     offer: activeOffer(r),
+    // GST-inclusive price for a year, when the plan has one.
+    yearlyPrice: r.yearly_price == null ? null : Number(r.yearly_price),
     cycleDiscounts,
   })));
 });
@@ -462,6 +465,8 @@ async function activateAndInvoicePayment(
   await recordCouponUse(client, payment.coupon_code);
   // A referred customer's first payment earns the referrer's reward.
   await recordReferralPayment(client, payment);
+  // The paid plan's features apply straight away (lib/plan-features.ts).
+  clearPlanCache(payment.company_id);
 
   const inv = await issueInvoiceForPayment(client, payment.id, { start: base, end: newEnd });
   return { invoiceId: inv.id, created: inv.created };

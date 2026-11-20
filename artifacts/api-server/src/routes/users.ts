@@ -1,4 +1,5 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
+import { checkUserAllowed } from "../lib/plan-features";
 import { eq, and } from "drizzle-orm";
 import { db, pool, usersTable, entitiesTable } from "@workspace/db";
 import {
@@ -115,6 +116,12 @@ router.post("/users", requireAdmin, async (req, res): Promise<void> => {
   const session = (req as any).session;
   const { password, name, role, entityId, pricingTier } = parsed.data;
   const username = parsed.data.username.trim();
+  // The subscription package decides which logins a company can have.
+  const planProblem = await checkUserAllowed(companyId, role, { addingActiveUser: true });
+  if (planProblem) {
+    res.status(403).json({ error: planProblem, code: "PLAN_LIMIT" });
+    return;
+  }
   if (username.length < 3) {
     res.status(400).json({ error: "Username must be at least 3 characters" });
     return;
@@ -216,6 +223,20 @@ router.patch("/users/:id", requireAdmin, async (req, res): Promise<void> => {
   if (existing.id === session.userId && parsed.data.role && parsed.data.role !== "admin") {
     res.status(400).json({ error: "You cannot change your own role" });
     return;
+  }
+
+  // A new role, or turning a login back on, must fit the subscription package.
+  const roleAfter = parsed.data.role ?? existing.role;
+  const turningOn = parsed.data.isActive === true && !existing.isActive;
+  if ((parsed.data.role !== undefined && parsed.data.role !== existing.role) || turningOn) {
+    const planProblem = await checkUserAllowed(companyId, roleAfter, {
+      addingActiveUser: turningOn || (existing.isActive && existing.role === "customer" && roleAfter !== "customer"),
+      excludeUserId: existing.id,
+    });
+    if (planProblem) {
+      res.status(403).json({ error: planProblem, code: "PLAN_LIMIT" });
+      return;
+    }
   }
 
   // Validate entityId exists when set to a non-null value (parity with create path)

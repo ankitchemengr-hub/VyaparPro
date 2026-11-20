@@ -43,6 +43,7 @@ import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { InfoTip } from "@/components/info-tip";
+import { usePlan } from "@/lib/plan";
 
 const fmt = (n: number | null | undefined) =>
   `₹${(Number(n ?? 0)).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -309,7 +310,9 @@ export default function Reports() {
   const { user } = useAuth();
   // Read-only CA login: only the GST reports (the server refuses the rest anyway).
   const gstOnly = user?.role === "gst_accountant";
-  const sections = REPORT_SECTIONS.filter(s => !(gstOnly && s.nonGst));
+  const { has: planHas } = usePlan();
+  // Production report only with a manufacturing package.
+  const sections = REPORT_SECTIONS.filter(s => !(gstOnly && s.nonGst) && (s.key !== "production" || planHas("manufacturing")));
   const [search, setSearch] = useState("");
   const q = search.trim().toLowerCase();
   const visible = q
