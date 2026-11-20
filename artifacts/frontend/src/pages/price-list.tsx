@@ -24,7 +24,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Save, X, CheckSquare, Square, Tag, Percent } from "lucide-react";
+import { Search, Save, X, CheckSquare, Square, Tag, Percent, Printer } from "lucide-react";
+import { PriceListPrintDialog } from "@/components/price-list-print";
 import { format } from "date-fns";
 
 // Default sale-price margins over Purchase ₹, used whenever a product's own
@@ -159,6 +160,8 @@ export default function PriceList() {
   const [edits, setEdits] = useState<Record<number, Partial<EditedRow>>>({});
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // Print / share: which columns a customer (or you) should see.
+  const [printOpen, setPrintOpen] = useState(false);
   // Price cells directly typed into (rather than driven by a Margin % edit)
   // are tracked here as "id:field" keys so they stop being recomputed from
   // margins until their matching % cell is touched again.
@@ -512,6 +515,13 @@ export default function PriceList() {
 
   return (
     <div className="space-y-4">
+      <PriceListPrintDialog
+        open={printOpen}
+        onOpenChange={setPrintOpen}
+        products={(selected.size > 0 ? filtered.filter((p) => selected.has(p.id)) : filtered) as any}
+        scopeLabel={selected.size > 0 ? "Selected products" : (search || groupFilter !== ALL || brandFilter !== ALL) ? "Products shown by your filter" : "All products"}
+        unsaved={dirtyIds.length > 0}
+      />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2 flex-wrap">
           <Tag className="h-5 w-5 text-primary shrink-0" />
@@ -523,6 +533,17 @@ export default function PriceList() {
           )}
         </div>
         <div className="flex items-center gap-2 overflow-x-auto -mx-1 px-1 sm:mx-0 sm:px-0 sm:overflow-visible">
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            onClick={() => setPrintOpen(true)}
+            title="Print or share the list — choose Retail, Wholesale or all rates"
+            data-testid="button-open-print-pricelist"
+          >
+            <Printer className="h-4 w-4 mr-1 shrink-0" />
+            Print / Share{selected.size > 0 ? ` (${selected.size})` : ""}
+          </Button>
           <Button
             variant="outline"
             size="sm"
