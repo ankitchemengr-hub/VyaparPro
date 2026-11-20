@@ -45,7 +45,13 @@ const rupees = (n: number) => `₹${Number(n).toLocaleString("en-IN", { maximumF
 // already settled (payments taken in Khatabook/Cash Book that never reached a
 // bill, advances, old sales returns). Preview first — it is exactly what Apply
 // will do — then Apply after a confirmation.
+// Opened from Settings → Bill Payment Sync (embedded: Settings shows the title)
+// or on its own at /payment-sync.
 export default function PaymentSync() {
+  return <PaymentSyncPanel />;
+}
+
+export function PaymentSyncPanel({ embedded = false }: { embedded?: boolean }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
@@ -84,7 +90,7 @@ export default function PaymentSync() {
 
   return (
     <div className="space-y-6">
-      <div>
+      <div className={embedded ? "hidden" : undefined}>
         <h1 className="text-3xl font-bold tracking-tight">Bill Payment Sync</h1>
         <p className="text-muted-foreground mt-2">
           Marks bills as paid when the party balance shows they are already settled (payment taken in Khatabook / Cash Book, advance, or sales return).

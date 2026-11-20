@@ -18,6 +18,7 @@ import { DashboardChartsPanel } from "@/components/settings/DashboardChartsPanel
 import { NonGstCleanupPanel } from "@/components/settings/NonGstCleanupPanel";
 import { DataImportPanel } from "@/components/settings/DataImportPanel";
 import { InfoTip } from "@/components/info-tip";
+import { PaymentSyncPanel } from "@/pages/payment-sync";
 
 const TYPE_LABELS: Record<string, string> = {
   invoice: "Invoice",
@@ -250,6 +251,7 @@ const SETTING_SECTIONS = [
   { key: "dashboard", icon: PieChart, title: "Dashboard", description: "Which charts show on the dashboard" },
   { key: "data-management", icon: Database, title: "Data Management", description: "Non-GST data cleanup" },
   { key: "data-import", icon: Upload, title: "Data Import", description: "Bring parties and items from Excel (Vyapar, Busy, Marg…)" },
+  { key: "payment-sync", icon: RefreshCw, title: "Bill Payment Sync", description: "Mark bills paid to match party balances (Khatabook / Cash Book payments)" },
 ] as const;
 
 export default function Settings() {
@@ -440,6 +442,10 @@ export default function Settings() {
 
         <TabsContent value="dashboard" className="mt-4">
           <DashboardChartsPanel />
+        </TabsContent>
+
+        <TabsContent value="payment-sync" className="mt-4">
+          <PaymentSyncPanel embedded />
         </TabsContent>
       </Tabs>
     </div>
