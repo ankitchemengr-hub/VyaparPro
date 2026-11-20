@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { commissionForReturn, type CommissionLine } from "../lib/commission";
 import { pool } from "@workspace/db";
 import {
   GetInvoiceReturnableItemsParams,
@@ -221,6 +222,7 @@ router.post("/sales-returns", async (req, res): Promise<void> => {
     let grandTotal = 0;
     let returnedLiters = 0;
     let returnedCommission = 0;
+    const commissionLines: CommissionLine[] = [];
     const lines: { invoiceItemId: number; productId: number; productName: string; unit: string; rate: number; taxPct: number; qty: number; amount: number }[] = [];
 
     for (const reqItem of data.items) {
@@ -264,6 +266,12 @@ router.post("/sales-returns", async (req, res): Promise<void> => {
         returnedLiters += lineReturnedLiters;
         returnedCommission += lineReturnedLiters * Number(row.commission_per_liter);
       }
+      commissionLines.push({
+        productId: row.product_id,
+        liters: row.total_liters != null && originalQty > 0 ? (Number(row.total_liters) / originalQty) * returnQty : 0,
+        withGst: lineAmount,
+        withoutGst: lineTaxable,
+      });
 
       lines.push({
         invoiceItemId: reqItem.invoiceItemId,
@@ -352,6 +360,13 @@ router.post("/sales-returns", async (req, res): Promise<void> => {
     // it shows up as a negative pending balance to recover on the next payout —
     // either way, the original invoice's commission row is left untouched for
     // audit purposes.
+    // Take back by the salesman's rule (Commission → Settings): the same %
+    // of the returned value, or liters × per-liter; a per-bill amount stays.
+    if (inv.salesman_id) {
+      const back = await commissionForReturn(client, companyId, Number(inv.salesman_id), commissionLines);
+      returnedLiters = back.liters;
+      returnedCommission = back.amount;
+    }
     if (inv.salesman_id && (returnedLiters > 0 || returnedCommission > 0)) {
       await client.query(
         `INSERT INTO commission_transactions

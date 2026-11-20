@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { ruleFor, commissionForLines } from "../lib/commission";
 import { sql } from "drizzle-orm";
 import { pool, db, productsTable } from "@workspace/db";
 import { eq, and, inArray } from "drizzle-orm";
@@ -243,14 +244,14 @@ router.post("/customer-orders", async (req, res): Promise<void> => {
         );
         const salesmanName: string = smRes.rows[0]?.name ?? "";
 
-        let totalCommission = 0;
-        let totalLiters = 0;
-        for (const it of resolvedItems) {
-          const p = byId.get(it.productId);
-          const commPerLiter = Number((p as any)?.commissionPerLiter ?? 0);
-          totalLiters += it.qty;
-          totalCommission += it.qty * commPerLiter;
-        }
+        // The salesman's rule (Commission → Settings). Liters = qty × liters
+        // per unit when the product has it, else the qty itself (as before).
+        const rule = await ruleFor(client, companyId, Number(salesmanId));
+        const { amount: totalCommission, liters: totalLiters } = await commissionForLines(client, companyId, rule,
+          resolvedItems.map((it) => {
+            const lpu = Number((byId.get(it.productId) as any)?.litersPerBox ?? 0);
+            return { productId: it.productId, liters: lpu > 0 ? it.qty * lpu : it.qty, withGst: it.lineTotal, withoutGst: it.lineTotal };
+          }));
 
         if (totalCommission > 0 || totalLiters > 0) {
           await client.query(

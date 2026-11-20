@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { ruleFor } from "../lib/commission";
 import { pool } from "@workspace/db";
 import { getCompanyId } from "../lib/tenant";
 import { GST_ACCOUNTANT_ROLE, isGstAccountant } from "../lib/gst-access";
@@ -498,9 +499,10 @@ router.get("/reports/bill-wise-profit", async (req, res): Promise<void> => {
 });
 
 // ── GET /reports/commission ─────────────────────────────────────────
-// Salesman commission = sum of (liters sold x product commission-per-liter)
-// across that salesman's saved invoices. Admin/accountant see every salesman;
-// a salesman sees only their own attributed sales.
+// Salesman commission for the period, worked out by each salesman's rule
+// (Commission → Settings, lib/commission.ts): per liter, % of the bill, each
+// product's own %, or a fixed amount per bill. Admin/accountant see every
+// salesman; a salesman sees only their own attributed sales.
 router.get("/reports/commission", async (req, res): Promise<void> => {
   const role = (req as any).session?.role;
   const sessionEntityId = (req as any).session?.entityId ?? null;
@@ -537,7 +539,9 @@ router.get("/reports/commission", async (req, res): Promise<void> => {
             ii.product_id,
             MAX(ii.product_name) AS product_name,
             COALESCE(p.commission_per_liter, 0) AS commission_per_liter,
-            SUM(COALESCE(ii.total_liters, 0)) AS liters   
+            SUM(COALESCE(ii.total_liters, 0)) AS liters,
+            SUM(ii.amount) AS with_gst,
+            SUM(ii.amount / (1 + (COALESCE(ii.tax_pct, 0) + COALESCE(ii.cess_pct, 0)) / 100)) AS without_gst   
             FROM invoice_items ii
      JOIN invoices i ON i.id = ii.invoice_id
      JOIN products p ON p.id = ii.product_id
@@ -546,15 +550,45 @@ router.get("/reports/commission", async (req, res): Promise<void> => {
      ORDER BY i.salesman_id`, params
   );
 
+  // Bills per salesman (for the fixed-per-bill rule) and product % rates.
+  const billRows = await queryMany(
+    `SELECT i.salesman_id, COUNT(*) AS bills FROM invoices i WHERE ${where.join(" AND ")} GROUP BY i.salesman_id`, params,
+  );
+  const billsBy = new Map(billRows.map((b: any) => [Number(b.salesman_id), Number(b.bills)]));
+  const pctRows = await queryMany(`SELECT product_id, percent FROM product_commission_rates WHERE company_id = $1`, [companyId]);
+  const pctBy = new Map(pctRows.map((p: any) => [Number(p.product_id), Number(p.percent)]));
+  const rules = new Map<number, Awaited<ReturnType<typeof ruleFor>>>();
+  const inr = (n: number) => `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+
   const bySalesman = new Map<number, any>();
   for (const r of rows) {
     const sid = Number(r.salesman_id);
+    if (!rules.has(sid)) rules.set(sid, await ruleFor(pool, companyId, sid));
+    const rule = rules.get(sid)!;
     const liters = Number(r.liters ?? 0);
     const cpl = Number(r.commission_per_liter ?? 0);
-    const commission = liters * cpl;
+    const value = Number(rule.base === "with_gst" ? r.with_gst : r.without_gst) || 0;
+    let commission = 0;
+    let rate = "";
+    if (rule.method === "per_liter") { commission = liters * cpl; rate = `${inr(cpl)}/L`; }
+    else if (rule.method === "invoice_percent") { commission = (value * rule.rate) / 100; rate = `${rule.rate}%`; }
+    else if (rule.method === "product_percent") { const pct = pctBy.get(Number(r.product_id)) ?? 0; commission = (value * pct) / 100; rate = `${pct}%`; }
+    else if (rule.method === "per_invoice") rate = "per bill";
+    else rate = "—";
+    commission = Math.round(commission * 100) / 100;
     let s = bySalesman.get(sid);
     if (!s) {
-      s = { salesmanId: sid, salesmanName: r.salesman_name, liters: 0, commission: 0, productBreakdown: [] };
+      const bills = billsBy.get(sid) ?? 0;
+      const perBill = rule.method === "per_invoice" ? Math.round(bills * rule.rate * 100) / 100 : 0;
+      s = {
+        salesmanId: sid, salesmanName: r.salesman_name, liters: 0, commission: perBill, productBreakdown: [],
+        method: rule.method, bills, perBillCommission: perBill,
+        ruleLabel: rule.method === "per_liter" ? "Per liter"
+          : rule.method === "invoice_percent" ? `${rule.rate}% of bill ${rule.base === "with_gst" ? "with GST" : "before GST"}`
+          : rule.method === "product_percent" ? `Product-wise % ${rule.base === "with_gst" ? "(with GST)" : "(before GST)"}`
+          : rule.method === "per_invoice" ? `${inr(rule.rate)} per bill × ${bills} bill${bills === 1 ? "" : "s"}`
+          : "No commission",
+      };
       bySalesman.set(sid, s);
     }
     s.liters += liters;
@@ -563,10 +597,13 @@ router.get("/reports/commission", async (req, res): Promise<void> => {
       productId: Number(r.product_id),
       productName: r.product_name,
       liters,
-      commissionPerLiter: cpl,
+      commissionPerLiter: rule.method === "per_liter" ? cpl : 0,
       commission,
+      value: Math.round(value * 100) / 100,
+      rate,
     });
   }
+  for (const s of bySalesman.values()) s.commission = Math.round(s.commission * 100) / 100;
 
   const resultRows = Array.from(bySalesman.values()).sort((a, b) => b.commission - a.commission);
   const totalCommission = resultRows.reduce((acc, s) => acc + s.commission, 0);

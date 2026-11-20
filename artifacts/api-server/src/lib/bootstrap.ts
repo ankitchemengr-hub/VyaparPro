@@ -490,6 +490,56 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
     `ALTER TABLE workload_cards ADD COLUMN IF NOT EXISTS batches NUMERIC(12, 3)`,
     // Login code email for accounts whose username isn't an email (My Account).
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS otp_email TEXT`,
+    // Commission → Settings / TA-DA (lib/commission.ts). salesman_id 0 = the
+    // company default rule.
+    `CREATE TABLE IF NOT EXISTS commission_settings (
+      id          SERIAL PRIMARY KEY,
+      company_id  INTEGER NOT NULL,
+      salesman_id INTEGER NOT NULL DEFAULT 0,
+      method      TEXT NOT NULL DEFAULT 'per_liter',
+      rate        NUMERIC(12, 3) NOT NULL DEFAULT 0,
+      base        TEXT NOT NULL DEFAULT 'without_gst',
+      da_mode     TEXT NOT NULL DEFAULT 'none',
+      da_amount   NUMERIC(12, 2) NOT NULL DEFAULT 0,
+      da_basis    TEXT NOT NULL DEFAULT 'invoices',
+      ta_mode     TEXT NOT NULL DEFAULT 'none',
+      ta_rate     NUMERIC(12, 2) NOT NULL DEFAULT 0,
+      updated_at  TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+      UNIQUE (company_id, salesman_id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS product_commission_rates (
+      company_id INTEGER NOT NULL,
+      product_id INTEGER NOT NULL,
+      percent    NUMERIC(6, 3) NOT NULL DEFAULT 0,
+      PRIMARY KEY (company_id, product_id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS salesman_travel_claims (
+      id                 SERIAL PRIMARY KEY,
+      company_id         INTEGER NOT NULL,
+      salesman_id        INTEGER NOT NULL,
+      claim_date         DATE NOT NULL,
+      km                 NUMERIC(10, 2) NOT NULL DEFAULT 0,
+      amount             NUMERIC(12, 2) NOT NULL DEFAULT 0,
+      note               TEXT,
+      created_by_user_id INTEGER,
+      created_at         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    )`,
+    `CREATE INDEX IF NOT EXISTS salesman_travel_claims_company_idx ON salesman_travel_claims(company_id, salesman_id, claim_date)`,
+    `CREATE TABLE IF NOT EXISTS allowance_payments (
+      id                 SERIAL PRIMARY KEY,
+      company_id         INTEGER NOT NULL,
+      salesman_id        INTEGER NOT NULL,
+      salesman_name      TEXT NOT NULL DEFAULT '',
+      period_from        DATE NOT NULL,
+      period_to          DATE NOT NULL,
+      ta_amount          NUMERIC(12, 2) NOT NULL DEFAULT 0,
+      da_amount          NUMERIC(12, 2) NOT NULL DEFAULT 0,
+      reference          TEXT,
+      note               TEXT,
+      created_by_user_id INTEGER,
+      created_at         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    )`,
+    `CREATE INDEX IF NOT EXISTS allowance_payments_company_idx ON allowance_payments(company_id, salesman_id)`,
     // "Sign out everywhere" (lib/session-guard.ts): NULL = never used.
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS sessions_valid_after TIMESTAMP WITH TIME ZONE`,
     `CREATE TABLE IF NOT EXISTS auth_challenges (

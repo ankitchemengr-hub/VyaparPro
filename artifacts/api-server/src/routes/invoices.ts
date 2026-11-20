@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { refreshInvoiceCommission } from "../lib/commission";
 import { eq, and, ilike, sql, or, ne, inArray, isNull } from "drizzle-orm";
 import { db, pool } from "@workspace/db";
 import {
@@ -601,36 +602,8 @@ router.post("/invoices", async (req, res): Promise<void> => {
     // When an invoice has a salesman attributed, snapshot the commission
     // (liters × commission_per_liter per item) into commission_transactions.
     if (resolvedSalesmanId && !isQuotation) {
-      const commissionRows = await client.query(
-       `SELECT SUM(COALESCE(ii.total_liters, 0) * COALESCE(p.commission_per_liter, 0)) AS commission,
-                SUM(COALESCE(ii.total_liters, 0)) AS liters
-         FROM invoice_items ii
-         JOIN products p ON p.id = ii.product_id
-         WHERE ii.invoice_id = $1 AND ii.company_id = $2`,
-        [invRow.id, companyId]
-      );
-      const totalCommission = Number(commissionRows.rows[0]?.commission ?? 0);
-      const totalLiters = Number(commissionRows.rows[0]?.liters ?? 0);
-
-      if (totalCommission > 0 || totalLiters > 0) {
-        await client.query(
-          `INSERT INTO commission_transactions
-             (company_id, invoice_id, invoice_no, salesman_id, salesman_name,
-              customer_id, customer_name, total_liters, commission_amount, status)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending')`,
-          [
-            companyId,
-            invRow.id,
-            invoiceNo,
-            resolvedSalesmanId,
-            salesmanName ?? "",
-            data.customerId ?? null,
-            data.customerName ?? null,
-            String(totalLiters),
-            String(totalCommission),
-          ]
-        );
-      }
+      // Worked out by the salesman's rule (Commission → Settings).
+      await refreshInvoiceCommission(client, companyId, invRow.id);
     }
 
     // Snapshot each line's price-list rate and flag a below-rate sale by a
@@ -1194,6 +1167,8 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
 
     // Re-check against the price list; an admin's edit clears the flag.
     await applyListRateFlags(client, companyId, invoiceId, session?.role);
+    // Commission follows the edited bill (amount, items, salesman).
+    await refreshInvoiceCommission(client, companyId, invoiceId);
 
     await client.query("COMMIT");
 
@@ -1268,6 +1243,9 @@ router.delete("/invoices/:id", async (req, res): Promise<void> => {
       res.status(409).json({ error: "Invoice is already cancelled" });
       return;
     }
+    // A cancelled bill earns no commission: drop it while pending, or book
+    // it back if it was already paid.
+    await refreshInvoiceCommission(client, companyId, params.data.id);
     const inv = {
       invoiceNo: updated.rows[0].invoice_no,
       invoiceType: updated.rows[0].invoice_type,

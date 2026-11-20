@@ -14,6 +14,7 @@ import paymentsRouter from "./payments";
 import rewardsRouter from "./rewards";
 import manufacturingRouter from "./manufacturing";
 import assembliesRouter from "./assemblies";
+import commissionSettingsRouter from "./commission-settings";
 import materialTransfersRouter from "./material-transfers";
 import autoManufactureRouter from "./auto-manufacture";
 import dashboardRouter from "./dashboard";
@@ -90,6 +91,7 @@ router.use(customerOrdersRouter);
 router.use(customerFollowUpsRouter);
 router.use(reportsRouter);
 router.use(commissionsRouter);
+router.use(commissionSettingsRouter);
 // settings + gstin are mounted BEFORE subscriptions: the subscriptions router
 // installs a path-less super_admin guard, so anything mounted after it would be
 // 403'd for company-scoped users. Print/app settings must be readable by every

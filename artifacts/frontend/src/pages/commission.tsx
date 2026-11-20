@@ -28,8 +28,11 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useSectionNav, SectionCardGrid, SectionBackBar, type SectionCard } from "@/components/section-cards";
+import { CommissionSettings } from "@/components/commission-settings";
+import { TaDa } from "@/components/ta-da";
 import {
   IndianRupee, Droplets, Loader2, ChevronRight, ChevronDown, CheckCircle2, CreditCard, History, Users, BarChart3, ListChecks,
+  Settings2, Car,
 } from "lucide-react";
 
 const fmt = (n: number | null | undefined) =>
@@ -52,12 +55,14 @@ export default function Commission() {
   const isSalesman = user?.role === "salesman";
 
   // Sections as cards; Summary and Payment History are for admin / accountant.
-  type CommissionSection = "summary" | "report" | "transactions" | "payments";
+  type CommissionSection = "summary" | "report" | "transactions" | "payments" | "settings" | "tada";
   const sectionCards: SectionCard<CommissionSection>[] = [
     ...(isAdmin ? [{ key: "summary" as const, icon: Users, title: "Summary", description: "Each salesman's earned, paid and pending commission — pay all at once" }] : []),
     { key: "report", icon: BarChart3, title: "Report", description: "Commission by salesman and item for a date range" },
     { key: "transactions", icon: ListChecks, title: "Transactions", description: isSalesman ? "Your commission from each bill — paid or pending" : "Commission from each bill — mark paid" },
     ...(isAdmin ? [{ key: "payments" as const, icon: History, title: "Payment History", description: "Commission payments made, with reference" }] : []),
+    { key: "tada", icon: Car, title: "TA / DA", description: isSalesman ? "Your travel and daily allowance — add travel claims" : "Travel and daily allowance for a period — claims and payments" },
+    ...(isAdmin ? [{ key: "settings" as const, icon: Settings2, title: "Settings", description: "How each salesman gets commission (per liter, % of bill, product-wise %, per bill) and TA / DA" }] : []),
   ];
   const nav = useSectionNav("/commission", sectionCards);
 
@@ -236,7 +241,7 @@ export default function Commission() {
           <Card info={"Commission and litres per salesman, item by item, for the chosen dates."}>
             <CardHeader>
               <CardTitle>Commission by Salesman</CardTitle>
-              <CardDescription>Product-wise breakdown per salesman.</CardDescription>
+              <CardDescription>Worked out by each salesman's rule in Settings (per liter, % of bill, product-wise %, per bill). Tap a salesman for products.</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-3 items-end mb-4">
@@ -289,7 +294,10 @@ export default function Commission() {
                                 </button>
                               )}
                             </TableCell>
-                            <TableCell className="font-medium">{r.salesmanName}</TableCell>
+                            <TableCell className="font-medium">
+                              <div>{r.salesmanName}</div>
+                              {(r as any).ruleLabel && <div className="text-xs font-normal text-muted-foreground">{(r as any).ruleLabel}</div>}
+                            </TableCell>
                             <TableCell className="text-right tabular-nums">{fmtQty(r.liters)}</TableCell>
                             <TableCell className="text-right tabular-nums font-semibold">{fmt(r.commission)}</TableCell>
                           </TableRow>
@@ -302,7 +310,8 @@ export default function Commission() {
                                       <TableRow>
                                         <TableHead>Product</TableHead>
                                         <TableHead className="text-right">Liters</TableHead>
-                                        <TableHead className="text-right">₹/L</TableHead>
+                                        <TableHead className="text-right">Value</TableHead>
+                                        <TableHead className="text-right">Rate</TableHead>
                                         <TableHead className="text-right">Commission</TableHead>
                                       </TableRow>
                                     </TableHeader>
@@ -311,10 +320,17 @@ export default function Commission() {
                                         <TableRow key={b.productId}>
                                           <TableCell>{b.productName}</TableCell>
                                           <TableCell className="text-right tabular-nums">{fmtQty(b.liters)}</TableCell>
-                                          <TableCell className="text-right tabular-nums">{fmt(b.commissionPerLiter)}</TableCell>
+                                          <TableCell className="text-right tabular-nums">{fmt((b as any).value)}</TableCell>
+                                          <TableCell className="text-right tabular-nums">{(b as any).rate ?? fmt(b.commissionPerLiter)}</TableCell>
                                           <TableCell className="text-right tabular-nums font-medium">{fmt(b.commission)}</TableCell>
                                         </TableRow>
                                       ))}
+                                      {(r as any).perBillCommission > 0 && (
+                                        <TableRow>
+                                          <TableCell colSpan={4} className="text-muted-foreground">{(r as any).bills} bills × fixed amount</TableCell>
+                                          <TableCell className="text-right tabular-nums font-medium">{fmt((r as any).perBillCommission)}</TableCell>
+                                        </TableRow>
+                                      )}
                                     </TableBody>
                                   </Table>
                                 </div>
@@ -515,6 +531,15 @@ export default function Commission() {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+        )}
+        <TabsContent value="tada" className="space-y-4">
+          <TaDa />
+        </TabsContent>
+
+        {isAdmin && (
+          <TabsContent value="settings" className="space-y-4">
+            <CommissionSettings />
           </TabsContent>
         )}
       </Tabs>
