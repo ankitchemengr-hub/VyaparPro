@@ -25,7 +25,6 @@ export const PLAN_ROUTES: Array<[string, PlanFeature]> = [
   ["/commission", "commission"],
   ["/salesman-dashboard", "commission"],
   ["/rewards", "rewards"],
-  ["/books-audit", "books_audit"],
   ["/workers", "workers"],
   ["/payment-sync", "payment_sync"],
   ["/manufacturing", "manufacturing"],

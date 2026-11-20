@@ -110,6 +110,8 @@ test("Silver: only Silver features; Gold extras and manufacturing refused", asyn
     assert.equal(r.body.code, "PLAN_FEATURE", p);
   }
   assert.notEqual((await call("silver-admin", "GET", "/khatabook?type=customer")).status, 403);
+  // GSTR-1 is in every package.
+  assert.notEqual((await call("silver-admin", "GET", "/books/gstr1?from=2026-01-01&to=2026-01-31")).status, 403);
   assert.notEqual((await call("silver-admin", "GET", "/payments")).status, 403);
   // A salesman login isn't part of Silver.
   const s = await call("silver-salesman", "GET", "/products");

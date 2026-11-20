@@ -71,6 +71,8 @@ const API_FEATURES: Array<[string, PlanFeature]> = [
 ];
 
 export function featureForPath(path: string): PlanFeature | null {
+  // GSTR-1 (GST Returns) is in every package; the rest of /books is Gold+.
+  if (path === "/books/gstr1" || path.startsWith("/books/gstr1/") || path.startsWith("/books/gstr1?")) return null;
   for (const [prefix, feature] of API_FEATURES) {
     if (path === prefix || path.startsWith(prefix + "/") || path.startsWith(prefix + "?")) return feature;
   }

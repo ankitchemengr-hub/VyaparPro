@@ -31,6 +31,7 @@ import { ChequeRegisterTab } from "@/components/cheque-register";
 import { GodownsTab } from "@/components/godowns-tab";
 import { BatchesTab } from "@/components/batches-tab";
 import { InfoTip } from "@/components/info-tip";
+import { usePlan } from "@/lib/plan";
 
 // The page's sections, shown as searchable cards. writeOnly ones are hidden
 // from the read-only (GST Accountant / CA) login. keywords only feed search.
@@ -952,7 +953,11 @@ export default function BooksAudit() {
   // own screen, and the phone's Back button returns to the cards.
   const [, navigate] = useLocation();
   const section = new URLSearchParams(useSearch()).get("s");
-  const openSection = BOOK_SECTIONS.find((s) => s.key === section && !(readOnly && s.writeOnly));
+  // Silver / Diamond have only GST Returns (GSTR-1) here; the full books are Gold / Platinum.
+  const { has: planHas } = usePlan();
+  const fullBooks = planHas("books_audit");
+  const inPlan = (key: string) => fullBooks || key === "gst-returns";
+  const openSection = BOOK_SECTIONS.find((s) => s.key === section && !(readOnly && s.writeOnly) && inPlan(s.key));
   const open = !!openSection;
   const tab = openSection?.key ?? "trial-balance";
   const fromCards = React.useRef(false);
@@ -989,7 +994,7 @@ export default function BooksAudit() {
   const { data: ledgerData } = useQuery<{ groups: LedgerGroupInfo[]; ledgers: Ledger[] }>({
     queryKey: ["/api/books/ledgers"],
     queryFn: () => getJson("/api/books/ledgers"),
-    enabled: allowed,
+    enabled: allowed && fullBooks,
   });
 
   if (!allowed) return <Redirect to="/" />;
@@ -1004,7 +1009,7 @@ export default function BooksAudit() {
   const isAdmin = user?.role === "admin";
   const q = sectionSearch.trim().toLowerCase();
   const visibleSections = BOOK_SECTIONS
-    .filter((s) => !(readOnly && s.writeOnly))
+    .filter((s) => !(readOnly && s.writeOnly) && inPlan(s.key))
     .filter((s) => !q || `${s.title} ${s.description} ${s.keywords}`.toLowerCase().includes(q));
 
   return (
