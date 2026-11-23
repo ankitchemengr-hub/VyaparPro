@@ -11,12 +11,13 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { ShieldCheck, Save, Printer, Hash, RefreshCw, Loader2, Building2, PieChart, Database, Upload, ArrowLeft, ChevronRight } from "lucide-react";
+import { ShieldCheck, Save, Printer, Hash, RefreshCw, Loader2, Building2, PieChart, Database, Upload, ArrowLeft, ChevronRight, Barcode } from "lucide-react";
 import { PrintSettingsPanel } from "@/components/settings/PrintSettingsPanel";
 import { CompanyProfilePanel } from "@/components/settings/CompanyProfilePanel";
 import { DashboardChartsPanel } from "@/components/settings/DashboardChartsPanel";
 import { NonGstCleanupPanel } from "@/components/settings/NonGstCleanupPanel";
 import { DataImportPanel } from "@/components/settings/DataImportPanel";
+import { BarcodeGeneratorPanel } from "@/components/settings/BarcodeGeneratorPanel";
 import { InfoTip } from "@/components/info-tip";
 import { PaymentSyncPanel } from "@/pages/payment-sync";
 import { usePlan } from "@/lib/plan";
@@ -251,6 +252,7 @@ const SETTING_SECTIONS = [
   { key: "company", icon: Building2, title: "Company", description: "Company logo on the login screen and bills" },
   { key: "dashboard", icon: PieChart, title: "Dashboard", description: "Which charts show on the dashboard" },
   { key: "data-management", icon: Database, title: "Data Management", description: "Non-GST data cleanup" },
+  { key: "barcode", icon: Barcode, title: "Barcode Generator", description: "Print barcode / QR stickers for products on A4 sticker sheets or thermal rolls" },
   { key: "data-import", icon: Upload, title: "Data Import", description: "Bring parties and items from Excel (Vyapar, Busy, Marg…)" },
   { key: "payment-sync", icon: RefreshCw, title: "Bill Payment Sync", description: "Mark bills paid to match party balances (Khatabook / Cash Book payments)" },
 ] as const;
@@ -438,6 +440,10 @@ export default function Settings() {
 
         <TabsContent value="data-management" className="mt-4">
           <NonGstCleanupPanel />
+        </TabsContent>
+
+        <TabsContent value="barcode" className="mt-4">
+          <BarcodeGeneratorPanel />
         </TabsContent>
 
         <TabsContent value="data-import" className="mt-4">
