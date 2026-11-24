@@ -47,6 +47,7 @@ import portalRouter from "./portal";
 import nonGstCleanupRouter from "./non-gst-cleanup";
 import planOffersRouter from "./plan-offers";
 import myPlanRouter from "./my-plan";
+import seenRouter from "./seen";
 import { planGate } from "../lib/plan-features";
 import { requireAuth } from "../lib/tenant";
 import { restrictGstAccountant } from "../lib/gst-access";
@@ -73,6 +74,7 @@ router.use(requireAuth);
 // Subscription package: features and logins outside the company's plan → 403.
 router.use(planGate);
 router.use(myPlanRouter);
+router.use(seenRouter);
 
 router.use(usersRouter);
 router.use(productsRouter);

@@ -32,6 +32,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { GSTIN_RE } from "@/components/gstin-fetch";
 import { usePlan } from "@/lib/plan";
+import { useMarkSeen } from "@/lib/seen";
 
 type FilterType = EntityType | "all";
 
@@ -148,6 +149,9 @@ export default function Customers() {
     search: search || undefined,
     includeInactive: showInactive,
   });
+  // Opening Customers clears the Menu badge for salesman-added customers.
+  const newIds = (entities ?? []).filter((e: any) => e.isNewFromSalesman).map((e: any) => e.id as number);
+  useMarkSeen("customers", !search && newIds.length ? Math.max(...newIds) : null);
 
   const { data: salesmanEntities } = useListEntities({ type: "salesman" as EntityType });
 

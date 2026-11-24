@@ -12,6 +12,7 @@ import { moduleNavItems } from "@/lib/nav-items";
 import { useRoleFeature } from "@/lib/permissions";
 import { InfoTip } from "@/components/info-tip";
 import { usePlan } from "@/lib/plan";
+import { useSeen } from "@/lib/seen";
 
 // Cycled per tile so the module grid reads as colorful/scannable at a glance
 // instead of every icon box sharing one flat brand-orange tint. Each entry is
@@ -52,13 +53,27 @@ export default function Menu() {
   const { data: pendingOrders } = useListCustomerOrders(ordersParams, {
     query: { enabled: canSeeOrders, queryKey: getListCustomerOrdersQueryKey(ordersParams) },
   });
+  // Every order (same query the new-activity watcher polls), for "new since you last looked".
+  const allOrdersParams = {};
+  const { data: allOrders } = useListCustomerOrders(allOrdersParams, {
+    query: { enabled: canSeeOrders, queryKey: getListCustomerOrdersQueryKey(allOrdersParams) },
+  });
+  const seen = useSeen();
   const newCustomerParams = { type: "customer" as const, isNewFromSalesman: true };
   const { data: newCustomers } = useListEntities(newCustomerParams, {
     query: { enabled: isAdmin, queryKey: getListEntitiesQueryKey(newCustomerParams) },
   });
+  // Badges count only what came in after this user last opened the page
+  // (lib/seen.ts); until the first visit, the old counts are shown.
+  const seenOrders = seen?.orders ?? null;
+  const seenCustomers = seen?.customers ?? null;
   const badgeCounts: Record<string, number> = {
-    "/customer-orders": pendingOrders?.length ?? 0,
-    "/customers": newCustomers?.length ?? 0,
+    "/customer-orders": seenOrders == null
+      ? pendingOrders?.length ?? 0
+      : (allOrders ?? []).filter((o: any) => o.id > seenOrders).length,
+    "/customers": seenCustomers == null
+      ? newCustomers?.length ?? 0
+      : (newCustomers ?? []).filter((e: any) => e.id > seenCustomers).length,
   };
 
   return (

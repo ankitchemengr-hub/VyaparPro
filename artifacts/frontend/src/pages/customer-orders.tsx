@@ -32,8 +32,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Inbox, Eye, Loader2, FileText, Printer, X } from "lucide-react";
+import { Inbox, Eye, Loader2, FileText, Printer, X, Plus } from "lucide-react";
 import { useAuth } from "@/contexts/use-auth";
+import { useMarkSeen } from "@/lib/seen";
 
 const STATUSES = [
   "pending",
@@ -157,6 +158,10 @@ export default function CustomerOrdersAdmin() {
     query: { queryKey: getListCustomerOrdersQueryKey(pendingParams) },
   });
   const pendingCount = pendingOrders?.length ?? 0;
+  // Opening this page clears the Menu badge (orders seen up to the newest one).
+  useMarkSeen("orders", statusFilter === "all" && orders?.length ? Math.max(...orders.map((o: any) => o.id)) : null);
+  const [, goTo] = useLocation();
+  const canAddOrder = role === "admin" || role === "store";
 
   const trimmedCustomerFilter = customerFilter.trim().toLowerCase();
   const filteredOrders = (orders ?? []).filter((o: any) => {
@@ -249,6 +254,12 @@ export default function CustomerOrdersAdmin() {
           <Inbox className="w-6 h-6 text-primary" />
           <h1 className="text-2xl font-bold tracking-tight">Customer Orders</h1>
         </div>
+
+        {canAddOrder && (
+          <Button onClick={() => goTo("/salesman-orders?from=orders")} className="w-full sm:w-auto sm:ml-auto" data-testid="button-new-order">
+            <Plus className="w-4 h-4 mr-1.5" /> New Order
+          </Button>
+        )}
 
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-full sm:w-48" data-testid="select-status-filter">
