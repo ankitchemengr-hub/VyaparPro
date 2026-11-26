@@ -60,6 +60,38 @@ export function appPublicHost(): string | null {
   );
 }
 
+// On our own server (Utho) Caddy issues each customer domain's HTTPS
+// certificate on its first visit ("on-demand TLS"; Caddy first asks
+// GET /api/internal/tls-ask whether the domain is one of ours). So a domain
+// whose DNS is right goes live by itself, the same as with Railway.
+export function caddyOnDemand(): boolean {
+  return process.env["CADDY_ON_DEMAND_TLS"] === "true";
+}
+
+export function automaticHosting(): boolean {
+  return railwayConfigured() || caddyOnDemand();
+}
+
+// Our own zone ("shradhaerp.com"). A customer without a domain of their own
+// takes a subdomain of it (abc.shradhaerp.com); the wildcard DNS record
+// *.shradhaerp.com already points every such name at the server.
+function platformZone(): string | null {
+  const h = appPublicHost();
+  if (!h) return null;
+  return h.split(".").slice(-rootLabelCount(h)).join(".");
+}
+
+export function isPlatformSubdomain(domain: string): boolean {
+  const zone = platformZone();
+  return !!zone && domain.endsWith("." + zone);
+}
+
+// Names we keep for ourselves (website, ERP, mail …).
+const RESERVED_LABELS = new Set([
+  "www", "app", "erp", "test", "api", "admin", "mail", "smtp", "portal", "support",
+  "help", "status", "cdn", "static", "docs", "blog", "shop", "demo", "dev", "staging",
+]);
+
 function platformHosts(): string[] {
   return [
     appPublicHost(),
@@ -82,6 +114,13 @@ export function normalizeDomain(input: unknown): string {
   }
   if (d === "localhost" || /\.(railway\.app|up\.railway\.app|vercel\.app)$/.test(d) || platformHosts().includes(d)) {
     throw new DomainError("Please enter a domain you own — not one of our own addresses");
+  }
+  const zone = platformZone();
+  if (zone && d === zone) throw new DomainError("Please enter a domain you own — not one of our own addresses");
+  if (zone && isPlatformSubdomain(d)) {
+    const label = d.slice(0, -(zone.length + 1));
+    if (label.includes(".")) throw new DomainError(`Use one word before .${zone}, e.g. myshop.${zone}`);
+    if (RESERVED_LABELS.has(label)) throw new DomainError("That name is reserved — please choose another");
   }
   return d;
 }
@@ -226,7 +265,7 @@ export async function getDomainState(companyId: number) {
   return {
     active: present(active),
     pending: present(pending),
-    automatic: railwayConfigured(),
+    automatic: automaticHosting(),
     targetHost: appPublicHost(),
   };
 }
@@ -289,10 +328,18 @@ export async function requestDomain(companyId: number, rawDomain: unknown) {
       adminEmail,
       `Custom domain requested: ${domain}`,
       `<p><strong>${c[0]?.name ?? "A customer"}</strong> added the custom domain <strong>${domain}</strong>${active ? ` (replacing ${active.domain})` : ""}.</p>
-       <p>${railwayConfigured()
-        ? "It was attached to Railway automatically and will go live once the customer's DNS verifies."
+       <p>${automaticHosting()
+        ? "It will go live by itself once the customer's DNS verifies."
         : "Railway automation is not configured — add this domain to the Railway service by hand, then mark it Active in Subscriptions → Domain Requests once DNS verifies."}</p>`,
     );
+  }
+  // abc.shradhaerp.com: the wildcard DNS already covers it — live right away.
+  if (caddyOnDemand() && isPlatformSubdomain(domain)) {
+    try {
+      return await checkDomainNow(companyId);
+    } catch (err) {
+      logger.error({ err, domain }, "Immediate subdomain check failed");
+    }
   }
   return getDomainState(companyId);
 }
@@ -365,7 +412,14 @@ export async function checkDomainNow(companyId: number) {
       /* keep the stored records; our own DNS check below still runs */
     }
   }
-  const checked = await Promise.all(records.map(checkRecord));
+  // Our own subdomain: no record for the customer to add — it only has to
+  // resolve (through the wildcard *.zone record).
+  const checked = caddyOnDemand() && isPlatformSubdomain(target.domain)
+    ? await dns.resolve4(target.domain).then(
+        (ips) => records.map((r) => ({ ...r, current: ips.join(", ") || null, ok: ips.length > 0 })),
+        () => records.map((r) => ({ ...r, current: null, ok: false })),
+      )
+    : await Promise.all(records.map(checkRecord));
   const allOk = checked.length > 0 && checked.every((r) => r.ok);
   // A failed Railway attach (set by attachToRailway) outranks the DNS result.
   const lastError = railwayConfigured() && !target.railway_domain_id
@@ -385,7 +439,7 @@ export async function checkDomainNow(companyId: number) {
   );
 
   if (target.status === "pending" && allOk) {
-    if (railwayConfigured() && target.railway_domain_id) {
+    if ((railwayConfigured() && target.railway_domain_id) || caddyOnDemand()) {
       await activate(companyId, target, active);
     } else if (!target.dns_verified_at) {
       const adminEmail = adminNotifyEmail();
@@ -412,6 +466,16 @@ export async function removeDomain(companyId: number, which: "pending" | "active
 }
 
 // ── Platform admin ─────────────────────────────────────────────────────────
+
+// Caddy's on-demand TLS asks this before issuing a certificate: only domains
+// a company has added (pending or active) get one, so a random name under the
+// wildcard, or someone else's domain pointed at our IP, never does.
+export async function tlsAllowed(rawDomain: unknown): Promise<boolean> {
+  if (typeof rawDomain !== "string" || !rawDomain) return false;
+  const d = clean(rawDomain.trim());
+  const { rows } = await pool.query(`SELECT 1 FROM company_domains WHERE domain = $1`, [d]);
+  return rows.length > 0;
+}
 
 // One row per company: the pending request if there is one (that's what
 // needs attention), otherwise the active domain.
