@@ -10,7 +10,7 @@ import {
   getGetEntityQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,9 +32,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Inbox, Eye, Loader2, FileText, Printer, X, Plus } from "lucide-react";
+import { Inbox, Eye, Loader2, FileText, Printer, Plus, ClipboardList, Search } from "lucide-react";
 import { useAuth } from "@/contexts/use-auth";
 import { useMarkSeen } from "@/lib/seen";
+import { useSectionNav, SectionCardGrid, SectionBackBar, type SectionCard } from "@/components/section-cards";
+import { NewOrderForm } from "@/components/new-order-form";
 
 const STATUSES = [
   "pending",
@@ -48,7 +50,8 @@ const STATUSES = [
 ] as const;
 type Status = typeof STATUSES[number];
 
-const FILTER_STATUSES: Status[] = ["pending", "done", "cancelled"];
+// Finished orders (invoiced / cancelled) are not listed here.
+const CLOSED: string[] = ["done", "cancelled"];
 
 const STATUS_VARIANTS: Record<string, { label: string; className: string }> = {
   pending: { label: "Pending", className: "bg-amber-100 text-amber-800 hover:bg-amber-100" },
@@ -144,38 +147,25 @@ export default function CustomerOrdersAdmin() {
 
   const isAdminOrAccountant = role === "admin" || role === "accountant";
   const isWorker = role === "store" || role === "manufacturing";
-
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [customerFilter, setCustomerFilter] = useState("");
-  const { data: orders, isLoading } = useListCustomerOrders(
-    statusFilter !== "all" ? { status: statusFilter as Status } : undefined,
-  );
-
-  const pendingParams = { status: "pending" as Status };
-  const { data: pendingOrders } = useListCustomerOrders(pendingParams, {
-    query: { queryKey: getListCustomerOrdersQueryKey(pendingParams) },
-  });
-  const pendingCount = pendingOrders?.length ?? 0;
-  // Opening this page clears the Menu badge (orders seen up to the newest one).
-  useMarkSeen("orders", statusFilter === "all" && orders?.length ? Math.max(...orders.map((o: any) => o.id)) : null);
-  const [, goTo] = useLocation();
   const canAddOrder = role === "admin" || role === "store";
 
-  const trimmedCustomerFilter = customerFilter.trim().toLowerCase();
-  const filteredOrders = (orders ?? []).filter((o: any) => {
-    if (dateFrom || dateTo) {
-      const t = new Date(o.createdAt).getTime();
-      if (dateFrom && t < new Date(dateFrom + "T00:00:00").getTime()) return false;
-      if (dateTo && t > new Date(dateTo + "T23:59:59.999").getTime()) return false;
-    }
-    if (trimmedCustomerFilter && !(o.customerName ?? "").toLowerCase().includes(trimmedCustomerFilter)) {
-      return false;
-    }
-    return true;
-  });
-  const hasDateFilter = !!dateFrom || !!dateTo;
+  const { data: orders, isLoading } = useListCustomerOrders();
+  // Opening this page clears the Menu badge (orders seen up to the newest one).
+  useMarkSeen("orders", orders?.length ? Math.max(...orders.map((o: any) => o.id)) : null);
+  const pending = (orders ?? []).filter((o: any) => !CLOSED.includes(o.status) && !o.isDraft);
+
+  const cards: SectionCard<"new" | "pending">[] = [
+    ...(canAddOrder ? [{ key: "new" as const, icon: Plus, title: "New Order", description: "Take an order for a customer: first the customer's details, then the items." }] : []),
+    { key: "pending", icon: ClipboardList, title: `Pending Orders${pending.length ? ` (${pending.length})` : ""}`, description: "Orders not yet completed. Tap View to see what the customer ordered, update the status or make the invoice." },
+  ];
+  const { current, open, back } = useSectionNav("/customer-orders", cards);
+
+  const [search, setSearch] = useState("");
+  const q = search.trim().toLowerCase();
+  const shown = pending.filter((o: any) =>
+    !q || (o.customerName ?? "").toLowerCase().includes(q) || (o.customerMobile ?? "").includes(q) || (o.orderNo ?? "").toLowerCase().includes(q),
+  );
+
   const [openId, setOpenId] = useState<number | null>(null);
   const { data: detail, isLoading: detailLoading } = useGetCustomerOrder(openId ?? 0, {
     query: { enabled: openId != null, queryKey: getGetCustomerOrderQueryKey(openId ?? 0) },
@@ -247,174 +237,95 @@ export default function CustomerOrdersAdmin() {
     );
   };
 
+  const openOrder = (o: any) => {
+    setOpenId(o.id);
+    setNewStatus(o.status === "pending" ? "processing" : o.status);
+    setRemarks("");
+  };
+
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <Inbox className="w-6 h-6 text-primary" />
-          <h1 className="text-2xl font-bold tracking-tight">Customer Orders</h1>
-        </div>
+    <div className="p-4 sm:p-6 space-y-5">
+      {!current ? (
+        <>
+          <div className="flex items-center gap-3">
+            <Inbox className="w-6 h-6 text-primary" />
+            <h1 className="text-2xl font-bold tracking-tight">Customer Orders</h1>
+          </div>
+          <SectionCardGrid cards={cards} onOpen={open} testPrefix="orders" />
+        </>
+      ) : (
+        <SectionBackBar pageName="Customer Orders" card={current} onBack={back} testPrefix="orders" />
+      )}
 
-        {canAddOrder && (
-          <Button onClick={() => goTo("/salesman-orders?from=orders")} className="w-full sm:w-auto sm:ml-auto" data-testid="button-new-order">
-            <Plus className="w-4 h-4 mr-1.5" /> New Order
-          </Button>
-        )}
+      {current?.key === "new" && <NewOrderForm onDone={() => setLocation("/customer-orders?s=pending", { replace: true })} />}
 
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-full sm:w-48" data-testid="select-status-filter">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
-            <SelectItem value="pending">{`New${pendingCount > 0 ? ` (${pendingCount})` : ""}`}</SelectItem>
-            {FILTER_STATUSES.filter((s) => s !== "pending").map((s) => (
-              <SelectItem key={s} value={s}>
-                {STATUS_VARIANTS[s].label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <Card info={"Orders customers placed from the catalog, newest first."}>
-        <CardHeader>
-          <CardTitle>All Customer Orders</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="flex items-center justify-center p-12 text-muted-foreground">
-              <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading...
+      {current?.key === "pending" && (
+        <Card>
+          <CardContent className="p-3 sm:p-4 space-y-3">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search customer or mobile…"
+                className="pl-8"
+                data-testid="input-order-search"
+              />
             </div>
-          ) : filteredOrders.length === 0 ? (
-            <div className="text-center text-muted-foreground py-12">
-              {orders && orders.length > 0 ? "No orders match the current filters." : "No customer orders yet."}
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Order No</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Mobile</TableHead>
-                  <TableHead className="text-right">Items</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead></TableHead>
-                </TableRow>
-                <TableRow className="bg-muted/30 hover:bg-muted/30">
-                  <TableHead className="py-1.5"></TableHead>
-                  <TableHead className="py-1.5">
-                    <div className="flex items-center gap-1">
-                      <Input
-                        type="date"
-                        value={dateFrom}
-                        onChange={(e) => setDateFrom(e.target.value)}
-                        className="h-7 text-xs px-1.5 w-[7.5rem]"
-                        title="From date"
-                        data-testid="input-order-date-from"
-                      />
-                      <Input
-                        type="date"
-                        value={dateTo}
-                        onChange={(e) => setDateTo(e.target.value)}
-                        className="h-7 text-xs px-1.5 w-[7.5rem]"
-                        title="To date"
-                        data-testid="input-order-date-to"
-                      />
-                      {hasDateFilter && (
-                        <button
-                          type="button"
-                          onClick={() => { setDateFrom(""); setDateTo(""); }}
-                          className="text-muted-foreground hover:text-foreground shrink-0"
-                          title="Clear date filter"
-                          data-testid="button-clear-order-dates"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </TableHead>
-                  <TableHead className="py-1.5">
-                    <div className="flex items-center gap-1">
-                      <Input
-                        value={customerFilter}
-                        onChange={(e) => setCustomerFilter(e.target.value)}
-                        placeholder="Search customer…"
-                        className="h-7 text-xs px-1.5 w-full"
-                        data-testid="input-order-customer-filter"
-                      />
-                      {customerFilter && (
-                        <button
-                          type="button"
-                          onClick={() => setCustomerFilter("")}
-                          className="text-muted-foreground hover:text-foreground shrink-0"
-                          title="Clear customer filter"
-                          data-testid="button-clear-order-customer"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </TableHead>
-                  <TableHead className="py-1.5"></TableHead>
-                  <TableHead className="py-1.5"></TableHead>
-                  <TableHead className="py-1.5"></TableHead>
-                  <TableHead className="py-1.5"></TableHead>
-                  <TableHead className="py-1.5"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredOrders.map((o: any) => {
-                  const isNew = o.status === "pending";
-                  return (
-                  <TableRow
-                    key={o.id}
-                    data-testid={`order-row-${o.id}`}
-                    className={isNew ? "bg-amber-50/60 dark:bg-amber-950/20 hover:bg-amber-100/60 dark:hover:bg-amber-950/30 border-l-2 border-l-amber-500" : undefined}
-                  >
-                    <TableCell className={isNew ? "font-mono text-xs font-semibold text-amber-900 dark:text-amber-200" : "font-mono text-xs"}>
-                      {o.orderNo ?? `#${o.id}`}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap">
-                      {new Date(o.createdAt).toLocaleDateString("en-IN")}
-                      <div className="text-[10px] text-muted-foreground">
-                        {new Date(o.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
-                      </div>
-                    </TableCell>
-                    <TableCell>{o.customerName}</TableCell>
-                    <TableCell>{o.customerMobile ?? "-"}</TableCell>
-                    <TableCell className="text-right">{o.totalItems}</TableCell>
-                    <TableCell className="text-right font-medium">
-                      ₹{Number(o.totalAmount).toLocaleString("en-IN")}
-                    </TableCell>
-                    <TableCell><StatusBadge status={o.status} /></TableCell>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setOpenId(o.id);
-                          setNewStatus(o.status === "pending" ? "processing" : o.status);
-                          setRemarks("");
-                        }}
-                        data-testid={`button-view-${o.id}`}
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                    </TableCell>
+            {isLoading ? (
+              <div className="flex items-center justify-center p-10 text-muted-foreground">
+                <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading...
+              </div>
+            ) : shown.length === 0 ? (
+              <div className="text-center text-muted-foreground py-10">
+                {pending.length ? "No order matches the search." : "No pending orders."}
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[5.5rem] px-2">Order</TableHead>
+                    <TableHead className="px-2">Customer</TableHead>
+                    <TableHead className="px-2">Mobile</TableHead>
+                    <TableHead className="w-10 px-1"></TableHead>
                   </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                </TableHeader>
+                <TableBody>
+                  {shown.map((o: any) => {
+                    const isNew = o.status === "pending";
+                    return (
+                      <TableRow
+                        key={o.id}
+                        onClick={() => openOrder(o)}
+                        className={`cursor-pointer ${isNew ? "bg-amber-50/60 dark:bg-amber-950/20 border-l-2 border-l-amber-500" : ""}`}
+                        data-testid={`order-row-${o.id}`}
+                      >
+                        <TableCell className="px-2 font-mono text-[11px] text-muted-foreground whitespace-nowrap">{o.orderNo ?? `#${o.id}`}</TableCell>
+                        <TableCell className="px-2 font-medium">{o.customerName}</TableCell>
+                        <TableCell className="px-2 text-sm whitespace-nowrap">{o.customerMobile ?? "-"}</TableCell>
+                        <TableCell className="px-1 text-right">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2"
+                            onClick={(e) => { e.stopPropagation(); openOrder(o); }}
+                            data-testid={`button-view-${o.id}`}
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Dialog open={openId != null} onOpenChange={(o) => !o && setOpenId(null)}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               Order {detail?.orderNo ?? (openId ? `#${openId}` : "")}
@@ -426,7 +337,7 @@ export default function CustomerOrdersAdmin() {
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="grid grid-cols-3 gap-4 text-sm">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
                 <div>
                   <div className="text-muted-foreground">Customer</div>
                   <div className="font-medium">{detail.customerName}</div>
@@ -442,7 +353,7 @@ export default function CustomerOrdersAdmin() {
                 </div>
               </div>
 
-              <Table>
+              <div className="overflow-x-auto"><Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Product</TableHead>
@@ -468,13 +379,13 @@ export default function CustomerOrdersAdmin() {
                     </TableRow>
                   ))}
                 </TableBody>
-              </Table>
+              </Table></div>
               <div className="flex justify-end text-base font-bold">
                 Total: ₹{Number(detail.totalAmount).toLocaleString("en-IN")}
               </div>
 
               <div className="border-t pt-4 space-y-3">
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <Label>Update Status</Label>
                     <Select value={newStatus} onValueChange={(v) => setNewStatus(v as Status)}>
@@ -505,7 +416,7 @@ export default function CustomerOrdersAdmin() {
                     Moving to Processing will create workload cards in Manufacturing for each item.
                   </p>
                 )}
-                <div className="flex justify-end gap-2">
+                <div className="flex flex-wrap justify-end gap-2">
                   {isWorker && detail.status === "done" && (
                     <Button
                       variant="outline"
