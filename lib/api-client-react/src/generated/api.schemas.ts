@@ -842,6 +842,16 @@ export interface Product {
   group: string;
   brand: string;
   itemCode: string;
+  /**
+     * Barcode printed on the item (scanned in billing).
+     * @nullable
+     */
+  barcode?: string | null;
+  /**
+     * Manufacturer / supplier part number.
+     * @nullable
+     */
+  partNo?: string | null;
   unit: string;
   purchasePrice: number;
   /**
@@ -953,6 +963,16 @@ export interface ProductInput {
   group: string;
   brand: string;
   itemCode: string;
+  /**
+     * Barcode printed on the item (scanned in billing).
+     * @nullable
+     */
+  barcode?: string | null;
+  /**
+     * Manufacturer / supplier part number.
+     * @nullable
+     */
+  partNo?: string | null;
   unit: string;
   purchasePrice: number;
   retailPrice: number;
@@ -1011,6 +1031,16 @@ export interface ProductUpdate {
   group?: string;
   brand?: string;
   itemCode?: string;
+  /**
+     * Barcode printed on the item (scanned in billing).
+     * @nullable
+     */
+  barcode?: string | null;
+  /**
+     * Manufacturer / supplier part number.
+     * @nullable
+     */
+  partNo?: string | null;
   unit?: string;
   purchasePrice?: number;
   retailPrice?: number;

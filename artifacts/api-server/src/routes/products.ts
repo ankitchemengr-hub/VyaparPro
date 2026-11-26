@@ -47,6 +47,8 @@ router.get("/products", async (req, res): Promise<void> => {
       or(
         ilike(productsTable.name, `%${search}%`),
         ilike(productsTable.itemCode, `%${search}%`),
+        ilike(productsTable.partNo, `%${search}%`),
+        eq(productsTable.barcode, search.trim()),
         ilike(productsTable.brand, `%${search}%`),
         ilike(productsTable.group, `%${search}%`)
       )
@@ -108,6 +110,14 @@ router.post("/products", async (req, res): Promise<void> => {
     }
   }
 
+  // Barcode / Part No.: trimmed, empty = none; a barcode belongs to one product.
+  (data as any).barcode = cleanCode((data as any).barcode);
+  (data as any).partNo = cleanCode((data as any).partNo);
+  if ((data as any).barcode && (await barcodeTaken(companyId, (data as any).barcode))) {
+    res.status(409).json({ error: `Barcode "${(data as any).barcode}" is already on another product` });
+    return;
+  }
+
   // Compute prices based on pricing basis
   let retailPrice = data.retailPrice;
   let wholesalePrice = data.wholesalePrice;
@@ -167,6 +177,10 @@ router.post("/products", async (req, res): Promise<void> => {
     // Race backstop: the (company_id, item_code) unique index can still reject
     // a concurrent insert that slipped past the pre-check above.
     if (String(e?.message ?? "").toLowerCase().includes("unique")) {
+      if (String(e?.message ?? "").includes("barcode") || String(e?.cause?.message ?? "").includes("barcode")) {
+        res.status(409).json({ error: `Barcode "${(data as any).barcode}" is already on another product` });
+        return;
+      }
       res.status(409).json({ error: `Item code "${newItemCode ?? data.itemCode}" already exists` });
       return;
     }
@@ -660,6 +674,13 @@ router.patch("/products/:id", async (req, res): Promise<void> => {
     }
   }
 
+  if ((data as any).barcode !== undefined) (data as any).barcode = cleanCode((data as any).barcode);
+  if ((data as any).partNo !== undefined) (data as any).partNo = cleanCode((data as any).partNo);
+  if ((data as any).barcode && (await barcodeTaken(companyId, (data as any).barcode, params.data.id))) {
+    res.status(409).json({ error: `Barcode "${(data as any).barcode}" is already on another product` });
+    return;
+  }
+
   // Recompute prices if fixed margin
   if (data.pricingBasis === "fixed_margin") {
     const [existing] = await db
@@ -700,6 +721,10 @@ if ((data as any).nonGstPrice !== undefined) {
   } catch (e: any) {
     // Race backstop for the (company_id, item_code) unique index.
     if (String(e?.message ?? "").toLowerCase().includes("unique")) {
+      if (String(e?.message ?? "").includes("barcode") || String(e?.cause?.message ?? "").includes("barcode")) {
+        res.status(409).json({ error: `Barcode "${(data as any).barcode}" is already on another product` });
+        return;
+      }
       res.status(409).json({ error: `Item code "${data.itemCode}" already exists` });
       return;
     }
@@ -957,6 +982,19 @@ router.post("/products/:id/stock-movements", async (req, res): Promise<void> => 
   res.status(201).json(formatMovement(movement));
 });
 
+const cleanCode = (v: unknown): string | null => {
+  const t = String(v ?? "").trim();
+  return t ? t.slice(0, 80) : null;
+};
+
+async function barcodeTaken(companyId: number, barcode: string, exceptId = 0): Promise<boolean> {
+  const r = await pool.query(
+    `SELECT 1 FROM products WHERE company_id = $1 AND barcode = $2 AND deleted_at IS NULL AND id <> $3 LIMIT 1`,
+    [companyId, barcode, exceptId],
+  );
+  return r.rows.length > 0;
+}
+
 function formatProduct(p: any) {
   return {
     id: p.id,
@@ -966,6 +1004,8 @@ function formatProduct(p: any) {
     group: p.group,
     brand: p.brand,
     itemCode: p.itemCode,
+    barcode: p.barcode ?? null,
+    partNo: p.partNo ?? null,
     unit: p.unit,
     purchasePrice: Number(p.purchasePrice),
     retailPrice: Number(p.retailPrice),

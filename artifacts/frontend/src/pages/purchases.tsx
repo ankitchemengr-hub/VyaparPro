@@ -56,6 +56,7 @@ import {
   Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
+import { matchProducts } from "@/lib/product-match";
 import { GstinFetchButton, gstinPartyName } from "@/components/gstin-fetch";
 import { BillAge } from "@/components/bill-age";
 import { InfoTip } from "@/components/info-tip";
@@ -79,9 +80,8 @@ function ProductCombobox({
   const queryClient = useQueryClient();
   const selected = products.find((p) => p.id === value);
   const trimmedQuery = query.trim();
-  const filtered = trimmedQuery
-    ? products.filter((p) => p.name.toLowerCase().includes(trimmedQuery.toLowerCase()))
-    : products;
+  // Name, item code, part no. or barcode (a scan lands on top).
+  const filtered = trimmedQuery ? matchProducts(products, trimmedQuery) : products;
   const exactMatch = products.some((p) => p.name.toLowerCase() === trimmedQuery.toLowerCase());
 
   return (

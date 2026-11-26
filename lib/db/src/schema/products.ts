@@ -13,6 +13,10 @@ export const productsTable = pgTable("products", {
   group: text("group").notNull(),
   brand: text("brand").notNull(),
   itemCode: text("item_code").notNull(),
+  // Barcode printed on the item (scanned in billing; unique per company) and
+  // the manufacturer's / supplier's part number. Both optional.
+  barcode: text("barcode"),
+  partNo: text("part_no"),
   unit: text("unit").notNull().default("QTY"),
   purchasePrice: numeric("purchase_price", { precision: 12, scale: 2 }).notNull().default("0"),
   // GST % paid on the purchases behind purchasePrice (value-weighted; 0 for

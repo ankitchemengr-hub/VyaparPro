@@ -4559,6 +4559,12 @@ components:
           type: string
         itemCode:
           type: string
+        barcode:
+          type: ["string", "null"]
+          description: Barcode printed on the item (scanned in billing).
+        partNo:
+          type: ["string", "null"]
+          description: Manufacturer / supplier part number.
         unit:
           type: string
         purchasePrice:
@@ -4653,6 +4659,12 @@ components:
           type: string
         itemCode:
           type: string
+        barcode:
+          type: ["string", "null"]
+          description: Barcode printed on the item (scanned in billing).
+        partNo:
+          type: ["string", "null"]
+          description: Manufacturer / supplier part number.
         unit:
           type: string
         purchasePrice:
@@ -4730,6 +4742,12 @@ components:
           type: string
         itemCode:
           type: string
+        barcode:
+          type: ["string", "null"]
+          description: Barcode printed on the item (scanned in billing).
+        partNo:
+          type: ["string", "null"]
+          description: Manufacturer / supplier part number.
         unit:
           type: string
         purchasePrice:

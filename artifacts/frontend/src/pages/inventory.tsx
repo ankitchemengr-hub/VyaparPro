@@ -32,7 +32,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { getListProductsQueryKey } from "@workspace/api-client-react";
 import {
   PackageSearch, PackagePlus, Upload, X, ImageIcon, Loader2, ChevronRight,
-  Pencil, Trash2, Save, Eye, EyeOff, Check, ChevronsUpDown, Plus, Wand2, Receipt, Wrench,
+  Pencil, Trash2, Save, Eye, EyeOff, Check, ChevronsUpDown, Plus, Wand2, Receipt, Wrench, ScanBarcode,
 } from "lucide-react";
 import { ServiceDialog } from "@/components/service-dialog";
 import { usePlan } from "@/lib/plan";
@@ -318,7 +318,7 @@ export default function Inventory() {
         <div className="relative w-full max-w-sm">
           <PackageSearch className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search products / services by name or code..."
+            placeholder="Search by name, code, part no. or barcode..."
             className="pl-8"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -394,7 +394,11 @@ export default function Inventory() {
                         </div>
                       )}
                     </TableCell>
-                    <TableCell className="font-mono text-xs">{product.itemCode}</TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {product.itemCode}
+                      {product.partNo && <div className="text-[10px] text-muted-foreground" data-testid={`text-part-no-${product.id}`}>Part: {product.partNo}</div>}
+                      {product.barcode && <div className="text-[10px] text-muted-foreground flex items-center gap-0.5"><ScanBarcode className="w-3 h-3" />{product.barcode}</div>}
+                    </TableCell>
                     <TableCell className="font-medium">
                       {product.name}
                       {isService(product) && (
@@ -577,6 +581,8 @@ export type ProductForm = {
   group: string;
   brand: string;
   itemCode: string;
+  barcode: string;
+  partNo: string;
   unit: string;
   purchasePrice: string;
   mrp: string;
@@ -607,7 +613,7 @@ export type ProductForm = {
 };
 
 const emptyForm: ProductForm = {
-  name: "", printName: "", group: "", brand: "", itemCode: "",
+  name: "", printName: "", group: "", brand: "", itemCode: "", barcode: "", partNo: "",
   unit: "", purchasePrice: "", mrp: "", wholesalePrice: "", retailPrice: "",
   pricingMode: "direct",
   retailDiscountPct: "", retailNonGstDiscountPct: "", wholesaleDiscountPct: "", wholesaleNonGstDiscountPct: "",
@@ -684,6 +690,8 @@ export function ProductDialog({ open, onOpenChange, product, isAdmin, initialVal
         group: product.group ?? "",
         brand: product.brand ?? "",
         itemCode: product.itemCode ?? "",
+        barcode: product.barcode ?? "",
+        partNo: product.partNo ?? "",
         unit: product.unit ?? "",
         purchasePrice: product.purchasePrice != null ? String(product.purchasePrice) : "",
         mrp: product.mrp != null ? String(product.mrp) : "",
@@ -818,6 +826,9 @@ export function ProductDialog({ open, onOpenChange, product, isAdmin, initialVal
       group: form.group.trim(),
       brand: form.brand.trim(),
       itemCode: form.itemCode.trim(),
+      // Empty clears it on edit (the server stores null).
+      barcode: form.barcode.trim() || (isEdit ? null : undefined),
+      partNo: form.partNo.trim() || (isEdit ? null : undefined),
       unit: form.unit.trim(),
       purchasePrice: isManufactured ? 0 : Number(form.purchasePrice),
       mrp: Number(form.mrp) || 0,
@@ -983,6 +994,33 @@ export function ProductDialog({ open, onOpenChange, product, isAdmin, initialVal
                 {!isEdit && itemCodeAuto && (
                   <p className="text-[11px] text-muted-foreground">Auto-generated from Name + Liters per unit — edit to override.</p>
                 )}
+              </div>
+              <div className="space-y-1.5">
+                <Label className="flex items-center gap-1.5">
+                  <ScanBarcode className="w-3.5 h-3.5" />Barcode <span className="text-muted-foreground text-xs font-normal">(optional)</span>
+                </Label>
+                <Input
+                  value={form.barcode}
+                  onChange={(e) => set("barcode", e.target.value)}
+                  // A scanner types the code and presses Enter — keep that
+                  // Enter from submitting the form.
+                  onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
+                  placeholder="Scan or type the barcode"
+                  className="font-mono"
+                  autoComplete="off"
+                  data-testid="input-barcode"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Part No. <span className="text-muted-foreground text-xs font-normal">(optional)</span></Label>
+                <Input
+                  value={form.partNo}
+                  onChange={(e) => set("partNo", e.target.value)}
+                  placeholder="e.g. 15400-PLM-A02"
+                  className="font-mono"
+                  autoComplete="off"
+                  data-testid="input-part-no"
+                />
               </div>
               <div className="space-y-1.5">
                 <Label>Brand *</Label>

@@ -52,6 +52,7 @@ import { usePrintTitle } from "@/lib/print-with-title";
 import { useRoleFeature, FEATURE_BILLING_RATE_EDIT } from "@/lib/permissions";
 import { GstinFetchButton, gstinPartyName, type GstinDetails } from "@/components/gstin-fetch";
 import { usePlan } from "@/lib/plan";
+import { matchProducts } from "@/lib/product-match";
 
 type QtyMode = "unit" | "box";
 
@@ -676,8 +677,10 @@ export default function Billing() {
   }
 
   // ── Derived state ──
+  // Name, item code, part no. or barcode — a scanned barcode is an exact
+  // match and comes first, so the scanner's Enter adds that item.
   const filteredProducts = productSearch.trim()
-    ? (products ?? []).filter((p) => p.name.toLowerCase().includes(productSearch.toLowerCase().trim())).slice(0, 12)
+    ? matchProducts(products ?? [], productSearch).slice(0, 12)
     : (products ?? []).slice(0, 12);
 
   const updateItem = (idx: number, field: keyof BillingItem, value: any, extra?: Partial<BillingItem>) => {
@@ -1274,7 +1277,7 @@ export default function Billing() {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                 <Input value={productSearch} onChange={(e) => { setProductSearch(e.target.value); setSearchOpen(true); }}
-                  onFocus={() => setSearchOpen(true)} placeholder="Search product to add..." className="pl-9 pr-14 h-9" data-testid="input-product-search"
+                  onFocus={() => setSearchOpen(true)} placeholder="Search or scan barcode / part no..." className="pl-9 pr-14 h-9" data-testid="input-product-search"
                   role="combobox" aria-expanded={searchOpen} aria-controls="product-search-listbox" aria-autocomplete="list"
                   aria-activedescendant={searchOpen && filteredProducts[searchActiveIdx] ? `product-opt-${searchActiveIdx}` : undefined}
                   onKeyDown={(e) => {
@@ -1316,6 +1319,7 @@ export default function Billing() {
                           <div className={`text-xs ${active ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
                             ₹{getBaseRate(p, customer, invoiceType).toLocaleString()}
                             {isGstInvoiceType(invoiceType) && p.taxRate ? ` · GST ${p.taxRate}%` : ""}
+                            {p.partNo ? ` · Part ${p.partNo}` : ""}
                           </div>
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0 pt-0.5">

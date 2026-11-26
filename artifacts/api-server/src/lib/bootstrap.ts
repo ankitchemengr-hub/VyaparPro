@@ -652,6 +652,11 @@ async function applySchemaPatches(client: pg.Client): Promise<void> {
     `ALTER TABLE account_transactions ADD COLUMN IF NOT EXISTS discount NUMERIC(14, 2) NOT NULL DEFAULT 0`,
     // Product → "Show MRP on invoice" (an MRP column in the printed bill).
     `ALTER TABLE products ADD COLUMN IF NOT EXISTS show_mrp_on_invoice BOOLEAN NOT NULL DEFAULT false`,
+    // ── Barcode and Part No. on products (Inventory product form) ──
+    `ALTER TABLE products ADD COLUMN IF NOT EXISTS barcode TEXT`,
+    `ALTER TABLE products ADD COLUMN IF NOT EXISTS part_no TEXT`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS products_company_barcode_uq ON products(company_id, barcode)
+       WHERE barcode IS NOT NULL AND deleted_at IS NULL`,
     // ── Services (Inventory → Add Service) ──
     // A service is a products row with item_type 'service'. It never holds
     // stock: whatever path moves stock (sale, edit, cancel, return, purchase,
