@@ -39,7 +39,7 @@ const INFO: Record<string, PageInfo> = {
   "/payment-sync": { title: "Bill Payment Sync", text: "Marks bills as paid when the party balance shows they're already settled (payment taken in Khatabook / Cash Book, advance or sales return). Preview first, then apply." },
   "/recycle-bin": { title: "Recycle Bin", text: "Cancelled bills. Review them or delete one for good — that doesn't change stock or ledger entries it already made." },
   "/subscriptions": { title: "Platform Console", text: "For the platform owner: every company's subscription, analytics, alerts, domain requests, demo leads, notices, plans & offers and Refer & Earn." },
-  "/customer-orders": { title: "Customer Orders", text: "Orders placed by customers from the catalog — see each order and update its status." },
+  "/customer-orders": { title: "Customer Orders", text: "New Order takes an order (customer first, then items). Pending Orders lists open orders; tap one to open it like a bill." },
   "/salesman-dashboard": { title: "My Dashboard", text: "Your commission — pending, paid and total earned — and your recent commission entries." },
   "/my-orders": { title: "My Orders", text: "Your orders / bills with their totals and what is still to be paid." },
   "/my-statement": { title: "My Statement", text: "Your account: every bill and payment with the running balance." },

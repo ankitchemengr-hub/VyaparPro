@@ -43,6 +43,7 @@ import Expenses from "@/pages/expenses";
 import Bom from "@/pages/bom";
 import MyOrders from "@/pages/my-orders";
 import CustomerOrdersAdmin from "@/pages/customer-orders";
+import CustomerOrderDetail from "@/pages/customer-order-detail";
 import CustomerHome, { CustomerOrdersTrack } from "@/pages/customer-home";
 import Subscriptions from "@/pages/subscriptions";
 import Menu from "@/pages/menu";
@@ -133,6 +134,7 @@ function ProtectedRoutes() {
         <Route path="/my-orders" component={MyOrders} />
         <Route path="/my-statement" component={MyStatement} />
         <Route path="/customer-orders" component={CustomerOrdersAdmin} />
+        <Route path="/customer-orders/:id" component={CustomerOrderDetail} />
         <Route path="/subscriptions" component={Subscriptions} />
         <Route path="/transporters" component={Transporters} />
         <Route path="/vehicles" component={Vehicles} />

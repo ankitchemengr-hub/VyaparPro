@@ -47,7 +47,7 @@ export default function Menu() {
     ? modules.filter((item) => item.name.toLowerCase().includes(trimmed.toLowerCase()))
     : modules;
 
-  const canSeeOrders = hasRole(["admin", "store", "manufacturing"]);
+  const canSeeOrders = hasRole(["admin", "store", "manufacturing", "salesman"]);
   const isAdmin = hasRole(["admin"]);
   const ordersParams = { status: "pending" as const };
   const { data: pendingOrders } = useListCustomerOrders(ordersParams, {

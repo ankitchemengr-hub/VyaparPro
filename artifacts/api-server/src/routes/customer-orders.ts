@@ -305,17 +305,18 @@ router.get("/customer-orders", async (req, res): Promise<void> => {
     params.push(session.userId);
     where.push(`user_id = $${params.length}`);
   } else if (session.role === "salesman") {
-    // Show orders from customers assigned to this salesman (via entity.assigned_salesman_id)
+    // Orders the salesman took, plus orders from customers assigned to them
+    // (via entity.assigned_salesman_id).
+    params.push(session.userId);
+    const own = `user_id = $${params.length}`;
     const salesmanEntityId = session.entityId ?? null;
     if (salesmanEntityId) {
       params.push(salesmanEntityId);
       where.push(
-        `entity_id IN (SELECT id FROM entities WHERE assigned_salesman_id = $${params.length} AND company_id = $1)`
+        `(${own} OR entity_id IN (SELECT id FROM entities WHERE assigned_salesman_id = $${params.length} AND company_id = $1))`
       );
     } else {
-      // Fallback: salesman's own created orders
-      params.push(session.userId);
-      where.push(`user_id = $${params.length}`);
+      where.push(own);
     }
   } else if (session.role !== "admin" && session.role !== "manufacturing" && session.role !== "store") {
     // Manufacturing and store workers need to see all orders (dispatch queue etc.).
@@ -358,9 +359,11 @@ router.get("/customer-orders/:id", async (req, res): Promise<void> => {
       return;
     }
   } else if (session.role === "salesman") {
-    // Allow if order belongs to a customer assigned to this salesman
+    // Allow the salesman's own order, or one from a customer assigned to them
     const salesmanEntityId = session.entityId ?? null;
-    if (salesmanEntityId && order.entity_id) {
+    if (order.user_id === session.userId) {
+      // own order
+    } else if (salesmanEntityId && order.entity_id) {
       const check = await pool.query(
         `SELECT 1 FROM entities WHERE id = $1 AND assigned_salesman_id = $2 AND company_id = $3`,
         [order.entity_id, salesmanEntityId, companyId]
