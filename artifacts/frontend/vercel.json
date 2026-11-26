@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://vyaparpro-production.up.railway.app/api/:path*"
+      "destination": "https://app.shradhaerp.com/api/:path*"
     },
     {
       "source": "/(.*)",
